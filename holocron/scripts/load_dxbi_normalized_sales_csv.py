@@ -15,6 +15,7 @@ from load_dxbi_sales_units import (
     COLUMNS,
     CREATE_SALES_SQL,
     MATCH_ALTERS,
+    SALES_ALTERS,
     SALES_TABLE,
     refresh_matches,
 )
@@ -49,6 +50,8 @@ def event(row: dict[str, str], source_file: str) -> dict[str, object] | None:
             f"{transaction_date}|{unit}|{building}|{amount}|{size}".encode()
         ).hexdigest()[:24],
         "transaction_date": date.fromisoformat(transaction_date),
+        "dld_transaction_number": row.get("dld_transaction_number", "").strip(),
+        "address_normalization_version": 5,
         "unit_number": unit,
         "building_name": building,
         "building_key": location_key(building),
@@ -91,7 +94,7 @@ def main() -> None:
         password=args.password,
     )
     client.command(CREATE_SALES_SQL)
-    for statement in MATCH_ALTERS:
+    for statement in [*SALES_ALTERS, *MATCH_ALTERS]:
         client.command(statement)
     batch: list[list[object]] = []
     loaded = skipped = 0

@@ -116,6 +116,25 @@ def migrate(client) -> None:
             SETTINGS mutations_sync = 2
             """
         )
+        # Version 6: DXBI's whole-building type, which the parser did not know, so the type was
+        # lost and "Building" stayed glued to the place (rental_events._PROPERTY_TYPES). The
+        # area already dropped it (canonical_area_name) and the building and project come from
+        # the path's other parts, so only the type and the place change.
+        whole_building = "property_type = '' AND match(location_name, '(?i)\\s+Building\\s*$')"
+        client.command(
+            f"""
+            ALTER TABLE {table} UPDATE
+                location_name = if(
+                    {whole_building},
+                    trimBoth(replaceRegexpOne(location_name, '(?i)\\s+Building\\s*$', '')),
+                    location_name
+                ),
+                property_type = if({whole_building}, 'Building', property_type),
+                address_normalization_version = 6
+            WHERE address_normalization_version < 6
+            SETTINGS mutations_sync = 2
+            """
+        )
         logger.info("Normalized %s", table)
 
     client.command(

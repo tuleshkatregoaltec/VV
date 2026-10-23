@@ -16,6 +16,7 @@ import {
 	pointsToAttribute,
 	polygonArea
 } from '$lib/utils/plotGeometry'
+import { toSqft } from '$lib/utils/units'
 
 type Point = SvgPoint
 type Placement = { x: number; y: number; w: number; h: number; rotation: number }
@@ -383,7 +384,7 @@ function resetPlacements() {
 					<div class="rounded-2xl border border-slate-200 bg-white p-3">
 						<div class="flex items-center justify-between gap-3">
 							<p class="text-sm font-semibold text-slate-900">{building.label}</p>
-							<p class="text-xs font-medium text-teal-700">{fmt(building.footprintSqm)} sqm footprint</p>
+							<p class="text-xs font-medium text-teal-700">{fmt(toSqft(building.footprintSqm))} sq ft footprint</p>
 						</div>
 						<div class="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-600">
 							<div><span class="text-slate-400">Floors</span><br />{fmt(building.totalFloors)}</div>

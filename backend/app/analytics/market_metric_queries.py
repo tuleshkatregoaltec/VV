@@ -35,7 +35,9 @@ class Dataset:
 UNIFORM_PROPERTY_TYPES = {
     "apartment": "property_type = 'Apartment'",
     "hotel_apartment": "property_type = 'Hotel Apartment'",
-    "villa": "property_type = 'Villa'",
+    # DLD has no townhouse type: its villas, which this used to read, include them.
+    "villa": "property_type IN ('Villa', 'Townhouse')",
+    "townhouse": "property_type = 'Townhouse'",
     "office": "property_type = 'Office'",
     "shop": "property_type = 'Shop'",
     "land": "property_type = 'Plot'",
@@ -44,7 +46,8 @@ UNIFORM_PROPERTY_TYPES = {
 SALES = Dataset(
     table="ch_transactions",
     release_table="market_sale_events",
-    # DLD instance_date is the registration date as recorded (Dubai local time).
+    # Transaction date (decision 2026-10-07): DXBI's date where DXBI lists the sale, otherwise
+    # DLD's registration date as recorded (Dubai local time).
     event_date="toDate(instance_date)",
     value="toFloat64(actual_worth)",
     area_sqm="size_sqm",
@@ -58,7 +61,7 @@ SALES = Dataset(
 RENTALS = Dataset(
     table="ch_rent_contracts",
     release_table="market_rental_events",
-    # Rentals are dated by contract start on every page (uniform layer); DXBI has no
+    # A lease counts in the month it starts (decision 2026-10-07), on every page; DXBI has no
     # registration date. Leases starting after the requested period are not in it.
     event_date="toDate(contract_start_date)",
     # DLD annual_amount is the annualised rent; contract_amount is the whole-term value.
@@ -83,7 +86,8 @@ def _from(dataset: str) -> str:
 
 
 def _rate(ds: Dataset) -> str:
-    return f"{ds.value} / {ds.area_sqm}"
+    """AED per square foot of one record (sizes are stored in m²)."""
+    return f"{ds.value} / ({ds.area_sqm} * {SQM_TO_SQFT})"
 
 
 def metric_expressions(ds: Dataset) -> dict[str, str]:
@@ -98,14 +102,12 @@ def metric_expressions(ds: Dataset) -> dict[str, str]:
         "p25_aed": f"quantileExactInclusive(0.25)({ds.value})",
         "p75_aed": f"quantileExactInclusive(0.75)({ds.value})",
         "rated_count": f"toFloat64(countIf({rated}))",
-        "mean_aed_per_sqm": f"avgIf({_rate(ds)}, {rated})",
-        "median_aed_per_sqm": f"quantileExactInclusiveIf(0.5)({_rate(ds)}, {rated})",
-        "weighted_aed_per_sqm": f"sumIf({ds.value}, {rated}) / sumIf({ds.area_sqm}, {rated})",
+        "mean_aed_per_sqft": f"avgIf({_rate(ds)}, {rated})",
+        "median_aed_per_sqft": f"quantileExactInclusiveIf(0.5)({_rate(ds)}, {rated})",
+        "weighted_aed_per_sqft": (
+            f"sumIf({ds.value}, {rated}) / sumIf({ds.area_sqm} * {SQM_TO_SQFT}, {rated})"
+        ),
     }
-    for name in ("mean", "median", "weighted"):
-        expressions[f"{name}_aed_per_sqft"] = (
-            f"({expressions[f'{name}_aed_per_sqm']}) / {SQM_TO_SQFT}"
-        )
     if ds is RENTALS:
         expressions["total_contract_aed"] = "sum(toFloat64(contract_amount))"
         expressions["median_contract_aed"] = (

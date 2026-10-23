@@ -7,6 +7,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 
 from app.transaction import queries
+from app.transaction.models import RentalFilters, SalesFilters
 
 MAX_TRANSACTION_EXPORT_ROWS = 50_000
 
@@ -35,7 +36,7 @@ def _add_export_metadata(
 ) -> None:
     metadata = workbook.create_sheet("Metadata", 0)
     rows = [
-        ("Publisher", "Dubai Land Department"),
+        ("Publisher", "Vitevue"),
         ("Dataset", title),
         ("Generated at", generated_at.isoformat()),
         ("Data source", source),
@@ -56,7 +57,7 @@ def _add_export_header(
     generated_at: datetime,
     source: str,
 ) -> None:
-    worksheet.append(["Dubai Land Department"])
+    worksheet.append(["Vitevue"])
     worksheet.append([title])
     worksheet.append([f"Generated at {generated_at.isoformat()}"])
     worksheet.append([f"Source: {source}"])
@@ -93,286 +94,162 @@ def _rows_to_csv(headers: list[str], rows: list[list[object]]) -> BytesIO:
     return output
 
 
+def _workbook(
+    *,
+    title: str,
+    source: str,
+    filters: dict[str, object],
+    headers: list[str],
+    rows: list[list[object]],
+) -> BytesIO:
+    generated_at = datetime.now(UTC)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = title
+    _add_export_metadata(
+        wb,
+        title=title,
+        generated_at=generated_at,
+        row_count=len(rows),
+        filters=filters,
+        source=source,
+    )
+    _add_export_header(ws, title=title, generated_at=generated_at, source=source)
+    ws.append(headers)
+    for cell in ws[6]:
+        cell.font = Font(bold=True)
+    for row in rows:
+        ws.append(_sanitize_spreadsheet_row(row))
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
+SALES_EXPORT_HEADERS = [
+    "Transaction ID",
+    "Date",
+    "Unit",
+    "Building",
+    "Project",
+    "Master Project",
+    "DLD Area",
+    "Full Location",
+    "Map",
+    "Location",
+    "Property Type",
+    "Bedrooms",
+    "Status",
+    "Size (sq ft)",
+    "Price (AED)",
+    "Price/sq ft (AED)",
+]
+
+RENTAL_EXPORT_HEADERS = [
+    "Contract ID",
+    "Start Date",
+    "End Date",
+    "Unit",
+    "Building",
+    "Project",
+    "Master Project",
+    "DLD Area",
+    "Full Location",
+    "Map",
+    "Location",
+    "Property Type",
+    "Bedrooms",
+    "Size (sq ft)",
+    "Annual Rent (AED)",
+    "Contract Amount (AED)",
+    "Term (months)",
+    "Contract Type",
+]
+
+
 async def export_sales_transactions(
+    filters: SalesFilters,
     transaction_ids: Optional[str] = None,
-    property_usage: Optional[str] = None,
-    property_type: Optional[str] = None,
-    property_sub_type: Optional[str] = None,
-    rooms: Optional[str] = None,
-    registration_type: Optional[str] = None,
-    area: Optional[str] = None,
-    project: Optional[str] = None,
-    filter_type: str = "project",
-    building: Optional[str] = None,
-    timeframe_days: Optional[int] = None,
-    area_min: Optional[float] = None,
-    area_max: Optional[float] = None,
-    price_min: Optional[float] = None,
-    price_max: Optional[float] = None,
-    price_per_sqm_min: Optional[float] = None,
-    price_per_sqm_max: Optional[float] = None,
     file_format: Literal["xlsx", "csv"] = "xlsx",
 ) -> BytesIO:
-    """
-    Export sales transactions to Excel or CSV.
-
-    Limit: 50,000 rows max (or specific transaction_ids if provided).
-    """
-    filters = {
-        "transaction_ids": transaction_ids,
-        "property_usage": property_usage,
-        "property_type": property_type,
-        "property_sub_type": property_sub_type,
-        "rooms": rooms,
-        "registration_type": registration_type,
-        "area": area,
-        "project": project,
-        "filter_type": filter_type,
-        "building": building,
-        "timeframe_days": timeframe_days,
-        "area_min": area_min,
-        "area_max": area_max,
-        "price_min": price_min,
-        "price_max": price_max,
-        "price_per_sqm_min": price_per_sqm_min,
-        "price_per_sqm_max": price_per_sqm_max,
-    }
-
-    # If specific IDs provided, use them (no limit)
-    results = await queries.export_sales_transactions_rows(
-        MAX_TRANSACTION_EXPORT_ROWS,
-        area,
-        area_max,
-        area_min,
-        building,
-        filter_type,
-        price_max,
-        price_min,
-        price_per_sqm_max,
-        price_per_sqm_min,
-        project,
-        property_sub_type,
-        property_type,
-        property_usage,
-        registration_type,
-        rooms,
-        timeframe_days,
-        transaction_ids,
-    )
-
-    headers = [
-        "Transaction ID",
-        "Date",
-        "Usage",
-        "Trans Group",
-        "Procedure",
-        "Type",
-        "Sub Type",
-        "Rooms",
-        "Area (sqm)",
-        "Price",
-        "Price/sqm",
-        "Registration Type",
-        "Area",
-        "Project",
-        "Building",
-        "Landmark",
-        "Metro",
-        "Mall",
-    ]
+    """DXBI sales as Excel or CSV: the selected rows, else up to 50,000 filtered rows."""
+    results = await queries.export_sales_rows(filters, transaction_ids, MAX_TRANSACTION_EXPORT_ROWS)
     rows = [
         [
             row["transaction_id"],
-            row["instance_date"],
-            row["property_usage_en"],
-            row["trans_group_en"],
-            row["procedure_name_en"],
-            row["property_type_en"],
-            row["property_sub_type_en"],
-            row["rooms_en"],
-            float(row["procedure_area"]) if row["procedure_area"] else None,
-            float(row["actual_worth"]) if row["actual_worth"] else None,
-            float(row["meter_sale_price"]) if row["meter_sale_price"] else None,
-            row["reg_type_en"],
-            row["area_name_en"],
-            row["project_name_en"],
-            row["building_name_en"],
-            row["nearest_landmark_en"],
-            row["nearest_metro_en"],
-            row["nearest_mall_en"],
+            row["transaction_date"],
+            row["unit_number"],
+            row["building_name"],
+            row["project_name"],
+            row["master_project"],
+            row["dld_area"],
+            row["location"],
+            row["map_url"],
+            row["location_name"],
+            row["property_type"],
+            row["bedrooms"],
+            row["status"],
+            row["size_sqft"],
+            row["price_aed"],
+            row["price_per_sqft"],
         ]
         for row in results
     ]
-
     if file_format == "csv":
-        return _rows_to_csv(headers, rows)
-
-    generated_at = datetime.now(UTC)
-    source = "DLD transaction registry"
-
-    # Create Excel workbook
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Sales Transactions"
-    _add_export_metadata(
-        wb,
+        return _rows_to_csv(SALES_EXPORT_HEADERS, rows)
+    return _workbook(
         title="Sales Transactions",
-        generated_at=generated_at,
-        row_count=len(rows),
-        filters=filters,
-        source=source,
+        source="DXBInteract (DXBI) sold transactions",
+        filters=(
+            {"transaction_ids": ",".join(queries._ids(transaction_ids))}
+            if queries._ids(transaction_ids)
+            else filters.model_dump()
+        ),
+        headers=SALES_EXPORT_HEADERS,
+        rows=rows,
     )
-    _add_export_header(ws, title="Sales Transactions", generated_at=generated_at, source=source)
-    ws.append(headers)
-
-    # Style headers
-    for cell in ws[6]:
-        cell.font = Font(bold=True)
-
-    # Add data rows
-    for row in rows:
-        ws.append(_sanitize_spreadsheet_row(row))
-
-    # Save to BytesIO
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output
 
 
 async def export_rental_contracts(
+    filters: RentalFilters,
     contract_ids: Optional[str] = None,
-    property_usage: Optional[str] = None,
-    property_type: Optional[str] = None,
-    property_sub_type: Optional[str] = None,
-    tenant_type: Optional[str] = None,
-    contract_reg_type: Optional[str] = None,
-    area: Optional[str] = None,
-    project: Optional[str] = None,
-    filter_type: str = "project",
-    timeframe_days: Optional[int] = None,
-    area_min: Optional[float] = None,
-    area_max: Optional[float] = None,
-    rent_min: Optional[float] = None,
-    rent_max: Optional[float] = None,
     file_format: Literal["xlsx", "csv"] = "xlsx",
 ) -> BytesIO:
-    """
-    Export rental contracts to Excel or CSV.
-
-    Limit: 50,000 rows max (or specific contract_ids if provided).
-    """
-    filters = {
-        "contract_ids": contract_ids,
-        "property_usage": property_usage,
-        "property_type": property_type,
-        "property_sub_type": property_sub_type,
-        "tenant_type": tenant_type,
-        "contract_reg_type": contract_reg_type,
-        "area": area,
-        "project": project,
-        "filter_type": filter_type,
-        "timeframe_days": timeframe_days,
-        "area_min": area_min,
-        "area_max": area_max,
-        "rent_min": rent_min,
-        "rent_max": rent_max,
-    }
-
-    # If specific IDs provided, use them (no limit)
-    results = await queries.export_rental_contracts_rows(
-        MAX_TRANSACTION_EXPORT_ROWS,
-        area,
-        area_max,
-        area_min,
-        contract_ids,
-        contract_reg_type,
-        filter_type,
-        project,
-        property_sub_type,
-        property_type,
-        property_usage,
-        rent_max,
-        rent_min,
-        tenant_type,
-        timeframe_days,
-    )
-
-    headers = [
-        "Contract ID",
-        "Start Date",
-        "End Date",
-        "Usage",
-        "Reg Type",
-        "Type",
-        "Sub Type",
-        "Tenant Type",
-        "Area (sqm)",
-        "Annual Rent",
-        "Contract Amount",
-        "Area",
-        "Project",
-        "Landmark",
-        "Metro",
-        "Mall",
-        "No. Properties",
-        "Freehold",
-    ]
+    """DXBI leases as Excel or CSV: the selected rows, else up to 50,000 filtered rows."""
+    results = await queries.export_rental_rows(filters, contract_ids, MAX_TRANSACTION_EXPORT_ROWS)
     rows = [
         [
             row["contract_id"],
-            row["contract_start_date"],
-            row["contract_end_date"],
-            row["property_usage_en"],
-            row["contract_reg_type_en"],
-            row["ejari_property_type_en"],
-            row["ejari_property_sub_type_en"],
-            row["tenant_type_en"],
-            float(row["actual_area"]) if row["actual_area"] else None,
-            float(row["annual_amount"]) if row["annual_amount"] else None,
-            float(row["contract_amount"]) if row["contract_amount"] else None,
-            row["area_name_en"],
-            row["project_name_en"],
-            row["nearest_landmark_en"],
-            row["nearest_metro_en"],
-            row["nearest_mall_en"],
-            row["no_of_prop"],
-            "Yes" if row["is_free_hold"] else "No",
+            row["lease_start"],
+            row["lease_end"],
+            row["unit_number"],
+            row["building_name"],
+            row["project_name"],
+            row["master_project"],
+            row["dld_area"],
+            row["location"],
+            row["map_url"],
+            row["location_name"],
+            row["property_type"],
+            row["bedrooms"],
+            row["size_sqft"],
+            row["annual_rent_aed"],
+            row["contract_amount_aed"],
+            row["term_months"],
+            row["contract_type"],
         ]
         for row in results
     ]
-
     if file_format == "csv":
-        return _rows_to_csv(headers, rows)
-
-    generated_at = datetime.now(UTC)
-    source = "DLD Ejari rental contracts"
-
-    # Create Excel workbook
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Rental Contracts"
-    _add_export_metadata(
-        wb,
+        return _rows_to_csv(RENTAL_EXPORT_HEADERS, rows)
+    return _workbook(
         title="Rental Contracts",
-        generated_at=generated_at,
-        row_count=len(rows),
-        filters=filters,
-        source=source,
+        source="DXBInteract (DXBI) rental contracts",
+        filters=(
+            {"contract_ids": ",".join(queries._ids(contract_ids))}
+            if queries._ids(contract_ids)
+            else filters.model_dump()
+        ),
+        headers=RENTAL_EXPORT_HEADERS,
+        rows=rows,
     )
-    _add_export_header(ws, title="Rental Contracts", generated_at=generated_at, source=source)
-    ws.append(headers)
-
-    # Style headers
-    for cell in ws[6]:
-        cell.font = Font(bold=True)
-
-    # Add data rows
-    for row in rows:
-        ws.append(_sanitize_spreadsheet_row(row))
-
-    # Save to BytesIO
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output

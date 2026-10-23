@@ -53,6 +53,23 @@ def test_cleanup_never_drops_a_staging_name_that_holds_another_release() -> None
     assert client.commands == ["DROP TABLE IF EXISTS `market_sale_matches__staging_new`"]
 
 
+def test_only_named_failures_with_a_reason_are_accepted() -> None:
+    # A deliberate date correction moves leases between days and trips the day-loss guard;
+    # the operator accepts that one failure by name, and every other failure still blocks.
+    failures = [
+        "days_lost=1 (first: 2026-04-11: 69 of 352)",
+        "rental_dxbi_only_share=0.06 (needs <= 0.05)",
+    ]
+    blocking, accepted = release.accepted_failures(
+        failures, {"days_lost": "DLD dates corrected", "served_rows": "not failing"}
+    )
+    assert blocking == ["rental_dxbi_only_share=0.06 (needs <= 0.05)"]
+    assert accepted == ["accepted days_lost=1 (first: 2026-04-11: 69 of 352): DLD dates corrected"]
+    # No reason, no acceptance; no names, nothing accepted.
+    assert release.accepted_failures(failures, {"days_lost": "  "}) == (failures, [])
+    assert release.accepted_failures(failures, None) == (failures, [])
+
+
 # --- real ClickHouse -----------------------------------------------------------------------
 
 _LIVE = os.environ.get("HOLOCRON_CLICKHOUSE_INTEGRATION") == "1"
@@ -342,6 +359,25 @@ def test_crash_after_events_exchange_keeps_and_recovers_the_replaced_release(war
 
     assert release.rollback(warehouse, "market_sale_events") == r2
     assert _served(warehouse) == 51 and _tables(warehouse)["market_sale_events"] == r2
+
+
+@live
+def test_rollback_refuses_a_release_built_before_the_uniform_columns(warehouse) -> None:
+    """The first uniform publish keeps the pre-uniform release as __previous; its property_type
+    and location_name hold only their ALTER defaults. Served again, every type and location would
+    be blank, and the pages would look empty rather than broken."""
+    _dld_sales(warehouse, [(f"T{i}", "Sales", 1_000_000 + i) for i in range(50)])
+    release.materialize_market_sale_events(clickhouse=warehouse)
+    _dld_sales(warehouse, [("T50", "Sales", 2_000_000)])
+    r2 = str(release.materialize_market_sale_events(clickhouse=warehouse)["release_id"])
+    warehouse.command(
+        "ALTER TABLE market_sale_events__previous UPDATE property_type = '', location_name = '' "
+        "WHERE 1 SETTINGS mutations_sync = 2"
+    )
+
+    with pytest.raises(RuntimeError, match="before the uniform columns"):
+        release.rollback(warehouse, "market_sale_events")
+    assert _tables(warehouse)["market_sale_events"] == r2 and _served(warehouse) == 51
 
 
 @live

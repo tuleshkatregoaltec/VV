@@ -194,31 +194,31 @@ function roleLabel(role: string): string {
 			</div>
 		{:else}
 			<!-- Subscription Info -->
-			<div class="mb-5 rounded-lg border border-border bg-white shadow-sm">
-				<div class="border-b border-slate-200 p-5">
-					<h2 class="text-xl font-semibold text-slate-900">Subscription</h2>
+			<div class="mb-5 rounded-lg border border-border bg-card shadow-sm">
+				<div class="border-b border-border p-5">
+					<h2 class="text-xl font-semibold text-fg-1">Subscription</h2>
 				</div>
 				<div class="p-5">
 					{#if subscriptionQuery.isLoading}
 						<div class="animate-pulse space-y-3">
-							<div class="h-4 bg-slate-200 rounded w-1/3"></div>
-							<div class="h-4 bg-slate-200 rounded w-1/2"></div>
+							<div class="h-4 bg-panel rounded w-1/3"></div>
+							<div class="h-4 bg-panel rounded w-1/2"></div>
 						</div>
 					{:else if subscription}
 						<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
 							<div>
-								<p class="text-sm text-slate-600 mb-1">Status</p>
-								<p class="text-lg font-semibold text-slate-900 capitalize">{subscription.status}</p>
+								<p class="text-sm text-fg-3 mb-1">Status</p>
+								<p class="text-lg font-semibold text-fg-1 capitalize">{subscription.status}</p>
 							</div>
 							<div>
-								<p class="text-sm text-slate-600 mb-1">Seats used</p>
-								<p class="text-lg font-semibold text-slate-900">
+								<p class="text-sm text-fg-3 mb-1">Seats used</p>
+								<p class="text-lg font-semibold text-fg-1">
 									{subscription.current_members} / {subscription.seats} used
 								</p>
 							</div>
 							<div>
-								<p class="text-sm text-slate-600 mb-1">Billing period ends</p>
-								<p class="text-lg font-semibold text-slate-900">
+								<p class="text-sm text-fg-3 mb-1">Billing period ends</p>
+								<p class="text-lg font-semibold text-fg-1">
 									{formatDate(subscription.current_period_end)}
 								</p>
 							</div>
@@ -318,15 +318,15 @@ function roleLabel(role: string): string {
 							Manage subscription
 						</button>
 					{:else}
-						<p class="text-slate-600">No subscription information available</p>
+						<p class="text-fg-3">No subscription information available</p>
 					{/if}
 				</div>
 			</div>
 
 			<!-- Team Members -->
-			<div class="rounded-lg border border-border bg-white shadow-sm">
-				<div class="flex items-center justify-between border-b border-slate-200 p-5">
-					<h2 class="text-xl font-semibold text-slate-900">Team members</h2>
+			<div class="rounded-lg border border-border bg-card shadow-sm">
+				<div class="flex items-center justify-between border-b border-border p-5">
+					<h2 class="text-xl font-semibold text-fg-1">Team members</h2>
 					<button
 						onclick={() => (showInviteModal = true)}
 						disabled={subscription !== undefined && availableSeats <= 0}
@@ -339,14 +339,14 @@ function roleLabel(role: string): string {
 					{#if membersQuery.isLoading}
 						<div class="animate-pulse space-y-4">
 							{#each [1, 2, 3] as skeleton (skeleton)}
-								<div class="h-16 bg-slate-200 rounded"></div>
+								<div class="h-16 bg-panel rounded"></div>
 							{/each}
 						</div>
 					{:else if members.length > 0}
 						<div class="space-y-3">
 							{#each members as member (member.id)}
 								<div
-									class="flex items-center justify-between rounded-lg border border-slate-200 p-4 transition-colors hover:bg-slate-50"
+									class="flex items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-app"
 								>
 									<div class="flex items-center gap-4">
 										<div
@@ -357,11 +357,11 @@ function roleLabel(role: string): string {
 											</span>
 										</div>
 										<div>
-											<p class="font-medium text-slate-900">
+											<p class="font-medium text-fg-1">
 												{member.first_name}
 												{member.last_name}
 											</p>
-											<p class="text-sm text-slate-600">{member.email}</p>
+											<p class="text-sm text-fg-3">{member.email}</p>
 										</div>
 									</div>
 									<div class="flex items-center gap-3">
@@ -371,7 +371,7 @@ function roleLabel(role: string): string {
 											Active
 										</span>
 										<span
-											class="rounded-sm border border-border bg-slate-100 px-3 py-1 text-xs font-semibold capitalize text-fg-3"
+											class="rounded-sm border border-border bg-panel px-3 py-1 text-xs font-semibold capitalize text-fg-3"
 										>
 											{roleLabel(member.role)}
 										</span>
@@ -391,32 +391,32 @@ function roleLabel(role: string): string {
 							{/each}
 						</div>
 					{:else}
-						<p class="text-slate-600 text-center py-8">No team members found</p>
+						<p class="text-fg-3 text-center py-8">No team members found</p>
 					{/if}
 				</div>
 			</div>
 
 			<!-- Pending Invitations -->
-			<div class="mt-5 rounded-lg border border-border bg-white shadow-sm">
-				<div class="border-b border-slate-200 p-5">
-					<h2 class="text-xl font-semibold text-slate-900">Pending invitations</h2>
+			<div class="mt-5 rounded-lg border border-border bg-card shadow-sm">
+				<div class="border-b border-border p-5">
+					<h2 class="text-xl font-semibold text-fg-1">Pending invitations</h2>
 				</div>
 				<div class="p-5">
 					{#if invitationsQuery.isLoading}
 						<div class="animate-pulse space-y-4">
 							{#each [1, 2] as skeleton (skeleton)}
-								<div class="h-16 bg-slate-200 rounded"></div>
+								<div class="h-16 bg-panel rounded"></div>
 							{/each}
 						</div>
 					{:else if invitations.length > 0}
 						<div class="space-y-3">
 							{#each invitations as invitation (invitation.id)}
 								<div
-									class="flex items-center justify-between rounded-lg border border-slate-200 p-4"
+									class="flex items-center justify-between rounded-lg border border-border p-4"
 								>
 									<div>
-										<p class="font-medium text-slate-900">{invitation.email}</p>
-										<p class="text-sm text-slate-600">
+										<p class="font-medium text-fg-1">{invitation.email}</p>
+										<p class="text-sm text-fg-3">
 											Expires {formatDate(invitation.expires_at)}
 										</p>
 									</div>
@@ -447,7 +447,7 @@ function roleLabel(role: string): string {
 							{/each}
 						</div>
 					{:else}
-						<p class="text-slate-600 text-center py-8">No pending invitations</p>
+						<p class="text-fg-3 text-center py-8">No pending invitations</p>
 					{/if}
 				</div>
 			</div>

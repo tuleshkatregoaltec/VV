@@ -16,35 +16,34 @@ export type {
 	TransactionResponse
 }
 
+// Filters of the DXBI Transactions pages. Sizes in sq ft; range bounds are half-open (min
+// inclusive, max exclusive).
 interface BaseTransactionFilters {
-	trans_group?: string
 	property_usage?: string
-	timeframe_days?: number
-	project?: string
-	filter_type?: string
 	property_type?: string
-	property_sub_type?: string
-	area?: string
-	area_min?: number
-	area_max?: number
+	bedrooms?: string
+	location_search?: string
+	location?: string
+	building?: string
+	project?: string
+	timeframe_days?: number
+	size_min?: number
+	size_max?: number
 	limit?: number
 	offset?: number
 }
 
 export interface SalesTransactionFilters extends BaseTransactionFilters {
-	building?: string
-	rooms?: string
-	registration_type?: string
+	status?: string
 	price_min?: number
 	price_max?: number
-	price_per_sqm_min?: number
-	price_per_sqm_max?: number
+	price_per_sqft_min?: number
+	price_per_sqft_max?: number
 	transaction_ids?: string
 }
 
 export interface RentalTransactionFilters extends BaseTransactionFilters {
-	tenant_type?: string
-	contract_reg_type?: string
+	contract_type?: string
 	rent_min?: number
 	rent_max?: number
 	contract_ids?: string

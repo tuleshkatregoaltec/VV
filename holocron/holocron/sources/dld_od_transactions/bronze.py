@@ -6,6 +6,7 @@ from holocron.platform.bronze import (
     coerce_boolish_uint8,
     coerce_float,
     coerce_int,
+    coerce_money,
     iso_datetime_or_default,
 )
 from holocron.platform.raw_files import string_value
@@ -90,7 +91,7 @@ def _row_tuple(raw_row: dict[str, Any], *, fallback_run_id: str) -> tuple:
         string_value(d.get("PROCEDURE_AR")),
         coerce_float(d.get("PROCEDURE_AREA")),
         coerce_float(d.get("ACTUAL_AREA")),
-        coerce_int(d.get("TRANS_VALUE")),
+        coerce_money(d.get("TRANS_VALUE")),
         coerce_int(d.get("TOTAL_BUYER")),
         coerce_int(d.get("TOTAL_SELLER")),
         coerce_int(d.get("PROPERTY_ID")),

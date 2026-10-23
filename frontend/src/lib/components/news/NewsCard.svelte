@@ -60,9 +60,9 @@ const sourceLabel = $derived.by(() => {
 	{:else}
 		<div
 			aria-hidden="true"
-			class="w-36 h-24 rounded border border-border bg-panel flex-shrink-0 flex items-center justify-center text-xs font-semibold text-fg-4"
+			class="w-36 h-24 rounded border border-border bg-app flex-shrink-0 flex items-center justify-center px-2 text-xs font-semibold text-fg-4"
 		>
-			{sourceLabel ?? 'News'}
+			<span class="truncate">{sourceLabel ?? 'News'}</span>
 		</div>
 	{/if}
 	<div class="flex flex-col gap-2 flex-1">

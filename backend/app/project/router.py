@@ -80,7 +80,7 @@ async def list_projects(context: AuthContext = Depends(require_active_subscripti
 
 
 @router.get("/radar", response_model=ProjectRadarResponse)
-@cached_endpoint(prefix="project_radar_ph_box", expire=1800)
+@cached_endpoint(prefix="project_radar_ph_box_v2", expire=1800)
 async def project_radar(
     limit: int = Query(default=1400, ge=100, le=5000, description="Maximum mapped projects"),
     period_days: RadarPeriodDays = Query(
@@ -94,7 +94,7 @@ async def project_radar(
 
 
 @router.get("/radar/overview", response_model=ProjectRadarOverviewResponse)
-@cached_endpoint(prefix="project_radar_overview_ph_box", expire=1800)
+@cached_endpoint(prefix="project_radar_overview_ph_box_v2", expire=1800)
 async def project_radar_overview(
     period_days: RadarPeriodDays = Query(
         default=365,
@@ -107,7 +107,7 @@ async def project_radar_overview(
 
 
 @router.get("/radar/pins", response_model=List[ProjectRadarProject])
-@cached_endpoint(prefix="project_radar_pins_ph_box", expire=600)
+@cached_endpoint(prefix="project_radar_pins_ph_box_v2", expire=600)
 async def project_radar_pins(
     west: Optional[float] = Query(None, ge=54, le=57, description="Viewport west longitude"),
     south: Optional[float] = Query(None, ge=24, le=26, description="Viewport south latitude"),
@@ -170,7 +170,7 @@ async def radar_building_pins(
 
 
 @router.get("/master", response_model=MasterProjectResponse)
-@cached_endpoint(prefix="master_project", expire=1800)  # 30 minutes
+@cached_endpoint(prefix="master_project_v2", expire=1800)  # 30 minutes
 async def master_project(
     name: str = Query(..., description="master_project_en value"),
     context: AuthContext = Depends(require_active_subscription),
@@ -183,7 +183,7 @@ async def master_project(
 
 
 @router.get("/building/{property_id}", response_model=BuildingDetailResponse)
-@cached_endpoint(prefix="building_details", expire=1800)  # 30 minutes
+@cached_endpoint(prefix="building_details_v2", expire=1800)  # 30 minutes
 async def building_details(
     property_id: int, context: AuthContext = Depends(require_active_subscription)
 ):
@@ -246,7 +246,7 @@ async def get_dda_outlines(
 
 
 @router.get("/{project_id}", response_model=ProjectDetailResponse)
-@cached_endpoint(prefix="project_details_ph_box", expire=1800)  # 30 minutes
+@cached_endpoint(prefix="project_details_ph_box_v2", expire=1800)  # 30 minutes
 async def project_details(
     project_id: int, context: AuthContext = Depends(require_active_subscription)
 ):

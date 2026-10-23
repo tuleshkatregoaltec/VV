@@ -3,13 +3,13 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const { chromium } = require("/Users/eier/VV/vitevue-platform/frontend/node_modules/playwright");
+const { chromium } = require("../../e2e/node_modules/playwright");
 
-const CDP_ENDPOINT = process.env.DXBI_SALES_CDP_ENDPOINT || "http://127.0.0.1:9222";
-const OUTPUT_DIR = process.env.DXBI_SALES_OUTPUT_DIR || "/Users/eier/VV/DXBI-Backfill/sales-dynamic";
+const { browserEndpoint, ensureAuthenticated, isAuthenticated } = require("./dxbi_browser_session");
+const OUTPUT_DIR = process.env.DXBI_SALES_OUTPUT_DIR || path.resolve(__dirname, "../var/dxbi-sales");
 const STATE_PATH = process.env.DXBI_SALES_STATE_PATH || path.join(OUTPUT_DIR, "checkpoint.json");
 const COMPOSE_DIR =
-  process.env.DXBI_SALES_COMPOSE_DIR || "/Users/eier/VV/vitevue-platform-full-platform";
+  process.env.DXBI_SALES_COMPOSE_DIR || path.resolve(__dirname, "../..");
 const START_DATE = process.env.DXBI_SALES_START_DATE || "2007-01-01";
 const END_DATE = process.env.DXBI_SALES_END_DATE || new Date().toISOString().slice(0, 10);
 const ORDER = String(process.env.DXBI_SALES_ORDER || "desc").toLowerCase();
@@ -24,8 +24,6 @@ const DELAY_MAX_MS = Number(process.env.DXBI_SALES_DELAY_MAX_MS || 5500);
 const LOCATION_ID = process.env.DXBI_SALES_LOCATION_ID || "1";
 const LOCATION_TEXT = process.env.DXBI_SALES_LOCATION_TEXT || "Dubai";
 const LOCATION_SLUG = process.env.DXBI_SALES_LOCATION_SLUG || "dubai";
-const CREDENTIALS_PATH =
-  process.env.DXBI_CREDENTIALS_PATH || "/Users/eier/VV/DXBI-Backfill/dxbi-credentials.json";
 
 const REPORT = {
   name: "sales",
@@ -57,18 +55,6 @@ function loadState() {
     return { version: 1, completed_buckets: {}, fallback_pages: {}, failed_buckets: {} };
   }
   return JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
-}
-
-function loadCredentials() {
-  const email = process.env.DXBI_EMAIL || process.env.DXBI_USERNAME || "";
-  const password = process.env.DXBI_PASSWORD || "";
-  if (email && password) return { email, password, source: "env" };
-  if (!fs.existsSync(CREDENTIALS_PATH)) return null;
-  const parsed = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, "utf8"));
-  if (!parsed.email || !parsed.password) {
-    throw new Error(`${CREDENTIALS_PATH} must contain email and password fields`);
-  }
-  return { email: parsed.email, password: parsed.password, source: CREDENTIALS_PATH };
 }
 
 function saveState(state) {
@@ -136,8 +122,9 @@ function parsePaginateHref(href) {
 function parseUnitNumber(text) {
   const matches = [...clean(text).matchAll(/\bNo\.\s*([^,]+)/gi)]
     .map((match) => clean(match[1]))
-    .filter((value) => value && !/^u-hidden$/i.test(value));
-  return matches.at(-1) || "";
+    .filter(Boolean);
+  const unit = matches.at(-1) || "";
+  return /^u-hidden$/i.test(unit) ? "" : unit;
 }
 
 async function findDxbPage(browser) {
@@ -146,7 +133,8 @@ async function findDxbPage(browser) {
   const pages = context.pages().filter((candidate) => !candidate.isClosed());
   let page = pages.find(
     (candidate) =>
-      candidate.url().includes("dxbinteract.com") && !candidate.url().includes("/valuation/"),
+      new URL(candidate.url()).origin === "https://dxbinteract.com" &&
+      new URL(candidate.url()).pathname === "/",
   );
   page ||= await context.newPage();
   if (!page.url().includes("dxbinteract.com") || page.url().includes("/valuation/")) {
@@ -169,75 +157,6 @@ async function ensureTransactionRegion(page) {
   await page.waitForTimeout(3000);
   const retry = await page.evaluate(() => Boolean(document.querySelector("#report_soldhistory")));
   if (!retry) throw new Error("DXB sales report not found after reload");
-}
-
-async function isLoginPage(page) {
-  return page.evaluate(() => {
-    const html = document.documentElement?.innerHTML || "";
-    return Boolean(
-      document.querySelector("#P9999_USERNAME, input[name='P9999_USERNAME'], input[type='password']") ||
-        /P9999_USERNAME|apex_authentication|sign\s*in|log\s*in/i.test(html),
-    );
-  });
-}
-
-async function ensureAuthenticated(page, reason = "session check") {
-  if (await page.evaluate(() => Boolean(document.querySelector("#report_soldhistory")))) return;
-
-  await page.goto("https://dxbinteract.com/", { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(2500);
-  if (await page.evaluate(() => Boolean(document.querySelector("#report_soldhistory")))) return;
-
-  const credentials = loadCredentials();
-  if (!credentials) {
-    throw new Error(`${reason}: login required but no DXBI credentials are configured`);
-  }
-  if (!(await isLoginPage(page))) {
-    throw new Error(`${reason}: DXB sales report not found and current page is not a recognized login page`);
-  }
-
-  console.error(`${reason}: login required; attempting credential login using ${credentials.source}`);
-  await page.evaluate(({ email, password }) => {
-    const visible = (el) => {
-      const style = window.getComputedStyle(el);
-      return style.visibility !== "hidden" && style.display !== "none";
-    };
-    const usernameInput =
-      document.querySelector("#P9999_USERNAME, input[name='P9999_USERNAME'], input[type='email']") ||
-      [...document.querySelectorAll("input[type='text'], input:not([type])")].find(visible);
-    const passwordInput =
-      document.querySelector("#P9999_PASSWORD, input[name='P9999_PASSWORD'], input[type='password']");
-    if (!usernameInput || !passwordInput) throw new Error("login form inputs not found");
-    usernameInput.focus();
-    usernameInput.value = email;
-    usernameInput.dispatchEvent(new Event("input", { bubbles: true }));
-    usernameInput.dispatchEvent(new Event("change", { bubbles: true }));
-    passwordInput.focus();
-    passwordInput.value = password;
-    passwordInput.dispatchEvent(new Event("input", { bubbles: true }));
-    passwordInput.dispatchEvent(new Event("change", { bubbles: true }));
-  }, credentials);
-
-  await Promise.all([
-    page.waitForLoadState("domcontentloaded", { timeout: 20000 }).catch(() => {}),
-    page.evaluate(() => {
-      const submit =
-        document.querySelector("#BLOGIN, button[type='submit'], input[type='submit']") ||
-        [...document.querySelectorAll("button, a")].find((el) => /sign\s*in|log\s*in/i.test(el.textContent || ""));
-      if (!submit) throw new Error("login submit button not found");
-      submit.click();
-    }),
-  ]);
-  await page.waitForTimeout(5000);
-
-  if (!(await page.evaluate(() => Boolean(document.querySelector("#report_soldhistory"))))) {
-    await page.goto("https://dxbinteract.com/", { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(3000);
-  }
-  if (!(await page.evaluate(() => Boolean(document.querySelector("#report_soldhistory"))))) {
-    throw new Error(`${reason}: credential login did not restore the DXB sales report`);
-  }
-  console.error(`${reason}: credential login restored DXB session`);
 }
 
 async function applyFilters(page, bucket) {
@@ -357,6 +276,7 @@ async function fetchRows(page, template, bucket, { minRow = 1, maxRows = PAGE_SI
                 label: headers[header] || "",
                 text: (td.innerText || td.textContent || "").replace(/\s+/g, " ").trim(),
                 html: td.innerHTML || "",
+                location_titles: [...new Set([...td.querySelectorAll('span.bold-title[title]')].map(el => el.getAttribute('title').trim()).filter(Boolean))],
                 links: [...td.querySelectorAll("a[href]")].map((a) => ({
                   text: (a.innerText || a.textContent || "").replace(/\s+/g, " ").trim(),
                   href: a.href || a.getAttribute("href") || "",
@@ -396,8 +316,11 @@ function rowToRecord({ bucket, row }) {
     bucket_min_price: bucket.min_price,
     bucket_max_price: bucket.max_price,
     bucket_local_rows: bucket.local_rows,
+    dld_transaction_number: clean(byId.TRANSACTION_NUMBER?.text),
     unit_number: parseUnitNumber(locationText),
     location_text: clean(locationText),
+    ...(byId.PATH_NAME?.location_titles?.length === 1
+      ? { location_title: clean(byId.PATH_NAME.location_titles[0]) } : {}),
     amount_text: clean(amountText),
     specs_text: clean(specsText),
     date_text: clean(dateText),
@@ -407,6 +330,19 @@ function rowToRecord({ bucket, row }) {
 }
 
 async function run() {
+  if (process.argv.includes("--sample")) {
+    const browser = await chromium.connectOverCDP(browserEndpoint());
+    const page = await browser.contexts()[0].newPage();
+    try {
+      await page.goto("https://dxbinteract.com/", { waitUntil: "domcontentloaded" });
+      await ensureAuthenticated(page);
+      console.log(JSON.stringify(await captureSalesSample(page, OUTPUT_DIR)));
+    } finally {
+      await page.close();
+      await browser.close(); // Disconnects this CDP client; leaves the user's browser running.
+    }
+    return;
+  }
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const state = loadState();
   const buckets = queryBucketPlan();
@@ -426,7 +362,7 @@ async function run() {
     stopped_reason: "",
   };
 
-  const browser = await chromium.connectOverCDP(CDP_ENDPOINT);
+  const browser = await chromium.connectOverCDP(browserEndpoint());
   try {
     let page = await findDxbPage(browser);
 
@@ -590,9 +526,44 @@ async function run() {
   }
 }
 
-run()
+async function captureSalesSample(page, outputDir) {
+  await ensureAuthenticated(page);
+  await page.locator("#report_table_soldhistory tbody tr").first().waitFor({ timeout: 30000 });
+  const rows = await page.locator("#report_table_soldhistory tbody tr").evaluateAll(trs =>
+    trs.slice(0, 13).map(tr => ({ columns: [...tr.querySelectorAll("td")].map(td => ({
+      id: td.getAttribute("headers") || "",
+      text: (td.innerText || "").replace(/\s+/g, " ").trim(),
+      html: td.innerHTML,
+      location_titles: [...new Set([...td.querySelectorAll('span.bold-title[title]')].map(el => el.getAttribute('title').trim()).filter(Boolean))],
+      links: [...td.querySelectorAll("a[href]")].map(a => ({ href: a.href, text: a.innerText })),
+    })) })),
+  );
+  // A sample of the current report, not a completed date/price bucket or checkpoint.
+  const records = rows.map(row => ({
+    ...rowToRecord({ bucket: {}, row }),
+    scraped_at: new Date().toISOString(),
+    source_url: page.url(),
+    authenticated: true,
+    sample_only: true,
+  }));
+  if (!records.length || records.some(row => !row.location_text || !row.amount_text)) {
+    throw new Error("DXBI sample is empty or lacks expected sale columns");
+  }
+  if (!(await isAuthenticated(page))) throw new Error("DXBI session expired during sampling");
+  fs.mkdirSync(outputDir, { recursive: true });
+  const output = path.join(outputDir, `dxbi_sales_sample_${nowStamp()}.jsonl`);
+  fs.writeFileSync(output, records.map(row => JSON.stringify(row)).join("\n") + "\n", { mode: 0o600, flag: "wx" });
+  return { output, authenticated: true, sample_only: true, rows: records.length,
+    with_detail_url: records.filter(row => row.detail_url).length,
+    with_unit_number: records.filter(row => row.unit_number).length,
+    with_registration_number: records.filter(row => row.dld_transaction_number).length };
+}
+
+if (require.main === module) run()
   .then(() => process.exit(0))
   .catch((error) => {
     console.error(error);
     process.exit(1);
   });
+
+module.exports = { rowToRecord, findDxbPage, captureSalesSample };

@@ -3,7 +3,7 @@ import { createQuery } from '@tanstack/svelte-query'
 import { analyticsQueries } from '$lib/queries/analytics'
 
 type TimeRange = '30d' | '90d' | '6mo' | '1yr'
-type Metric = 'price_sqm' | 'avg_price'
+type Metric = 'price_sqft' | 'avg_price'
 
 const RANGE_TO_DAYS: Record<TimeRange, number> = {
 	'30d': 30,
@@ -13,15 +13,20 @@ const RANGE_TO_DAYS: Record<TimeRange, number> = {
 }
 
 let selectedRange = $state<TimeRange>('6mo')
-let selectedMetric = $state<Metric>('price_sqm')
+let selectedMetric = $state<Metric>('price_sqft')
 
 const trendQuery = createQuery(() => analyticsQueries.marketTrend(RANGE_TO_DAYS[selectedRange]))
 
-const chartData = $derived(trendQuery.data?.data ?? [])
+type TrendPoint = NonNullable<typeof trendQuery.data>['data'][number]
 
-const values = $derived(
-	chartData.map((d) => (selectedMetric === 'price_sqm' ? d.avg_price_sqm : d.avg_price))
-)
+function metricOf(point: TrendPoint): number | null {
+	return (selectedMetric === 'price_sqft' ? point.avg_price_sqft : point.avg_price) ?? null
+}
+
+// A period with no sale of a known size has no price per sq ft: it is not plotted.
+const chartData = $derived((trendQuery.data?.data ?? []).filter((d) => metricOf(d) !== null))
+
+const values = $derived(chartData.map((d) => metricOf(d) as number))
 const minValue = $derived(Math.min(...values))
 const maxValue = $derived(Math.max(...values))
 const valueRange = $derived(maxValue - minValue || 1)
@@ -29,8 +34,8 @@ const valueRange = $derived(maxValue - minValue || 1)
 const currentValue = $derived(values[values.length - 1] ?? 0)
 const percentChange = $derived(() => {
 	const pct =
-		selectedMetric === 'price_sqm'
-			? trendQuery.data?.avg_price_sqm_change_pct
+		selectedMetric === 'price_sqft'
+			? trendQuery.data?.avg_price_sqft_change_pct
 			: trendQuery.data?.avg_price_change_pct
 	return pct != null ? pct.toFixed(1) : null
 })
@@ -44,9 +49,9 @@ const PERIOD_LABEL: Record<TimeRange, string> = {
 }
 
 const metricLabel = $derived(
-	selectedMetric === 'price_sqm' ? 'Price per sq.m' : 'Average transaction price'
+	selectedMetric === 'price_sqft' ? 'Price per sq ft' : 'Average transaction price'
 )
-const metricUnit = $derived(selectedMetric === 'price_sqm' ? 'AED/sq.m' : 'AED')
+const metricUnit = $derived(selectedMetric === 'price_sqft' ? 'AED/sq ft' : 'AED')
 
 const chartWidth = 1000
 const chartHeight = 200
@@ -58,7 +63,7 @@ function generatePath(data: typeof chartData): string {
 	if (data.length < 2) return ''
 	const points = data.map((point, i) => {
 		const x = padding.left + (i / (data.length - 1)) * innerWidth
-		const value = selectedMetric === 'price_sqm' ? point.avg_price_sqm : point.avg_price
+		const value = metricOf(point) as number
 		const normalizedValue = (value - minValue) / valueRange
 		const y = padding.top + (1 - normalizedValue) * innerHeight
 		return { x, y }
@@ -133,10 +138,10 @@ function formatNumber(num: number): string {
 	<div class="flex gap-2">
 		<div class="inline-flex rounded-md bg-panel p-0.5">
 			<button
-				class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedMetric === 'price_sqm' ? 'bg-card text-fg-1 shadow-[var(--shadow-xs)]' : 'text-fg-3 hover:text-fg-1'}"
-				onclick={() => (selectedMetric = 'price_sqm')}
+				class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedMetric === 'price_sqft' ? 'bg-card text-fg-1 shadow-[var(--shadow-xs)]' : 'text-fg-3 hover:text-fg-1'}"
+				onclick={() => (selectedMetric = 'price_sqft')}
 			>
-				Price/sq.m
+				Price/sq ft
 			</button>
 			<button
 				class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedMetric === 'avg_price' ? 'bg-card text-fg-1 shadow-[var(--shadow-xs)]' : 'text-fg-3 hover:text-fg-1'}"
@@ -255,3 +260,27 @@ function formatNumber(num: number): string {
 		Based on {formatNumber(trendQuery.data?.total_transactions ?? 0)} transactions
 	</p>
 </div>
+
+<style>
+	/* Chart/trend tokens are missing from app.css; scoped here so only this chart is affected. */
+	svg {
+		--color-chart-line: var(--color-navy-900);
+		--color-chart-grid: #e2e8f0;
+		--color-chart-axis: #cbd5e1;
+		--color-chart-muted: #94a3b8;
+	}
+
+	:global(:root[data-theme='dark']) svg {
+		--color-chart-line: #d9e1ea;
+		--color-chart-grid: rgba(148, 163, 184, 0.17);
+		--color-chart-axis: rgba(148, 163, 184, 0.32);
+	}
+
+	.text-trend-up {
+		color: var(--color-success);
+	}
+
+	.text-trend-down {
+		color: var(--color-error);
+	}
+</style>

@@ -1,0 +1,15 @@
+[Unit]
+Description=Schedule the ViteVue DXBI rentals location sweep nightly (Dubai time)
+
+[Timer]
+# 06:30 Dubai (GST, UTC+4, no daylight saving) = 02:30 UTC. Runs after the 04:30 Dubai rentals
+# scrape on the same account, which can take up to its 3-hour timeout (the shared lock makes the
+# sweep wait); about an hour, so done by ~07:30-08:30 Dubai, before Holocron loads DXBI evidence
+# at 10:00 Dubai.
+OnCalendar=*-*-* 06:30:00 Asia/Dubai
+Persistent=true
+RandomizedDelaySec=5min
+Unit=dxbi-rentals-sweep.service
+
+[Install]
+WantedBy=timers.target

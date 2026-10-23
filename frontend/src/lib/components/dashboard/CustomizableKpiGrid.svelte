@@ -22,7 +22,6 @@ import { analytics } from '$lib/api/analytics'
 import { supply } from '$lib/api/supply'
 import { transactions } from '$lib/api/transactions'
 import { analyticsQueries } from '$lib/queries/analytics'
-import { SQM_TO_SQFT } from '$lib/utils/units'
 
 type CardId =
 	| 'mtd-transactions'
@@ -83,7 +82,7 @@ const CARD_CATALOG: CardDefinition[] = [
 	},
 	{
 		id: 'avg-price-sqft',
-		title: 'Avg price/sqft',
+		title: 'Avg price/sq ft',
 		description: 'Dubai-wide residential sale price converted to square feet.',
 		isDefault: true
 	},
@@ -277,7 +276,9 @@ let selectedCardIds = $state<CardId[]>(loadCardIds())
 const marketTrendQuery = createQuery(() => analyticsQueries.marketTrend(365))
 const latestSalesTransactionQuery = createQuery(() => ({
 	queryKey: ['dashboard', 'latest-sales-transaction', 'Residential'] as const,
-	queryFn: () => transactions.sales({ property_usage: 'Residential', limit: 1 }),
+	// The last 90 days: an unbounded request de-duplicates all DXBI history for one date.
+	queryFn: () =>
+		transactions.sales({ property_usage: 'Residential', limit: 1, timeframe_days: 90 }),
 	staleTime: 30 * 60 * 1000
 }))
 const marketTrendLastPoint = $derived(
@@ -286,7 +287,7 @@ const marketTrendLastPoint = $derived(
 		: null
 )
 const latestSalesDate = $derived(
-	latestSalesTransactionQuery.data?.transactions[0]?.instance_date ??
+	latestSalesTransactionQuery.data?.transactions[0]?.transaction_date ??
 		marketTrendLastPoint?.date ??
 		null
 )
@@ -379,14 +380,15 @@ function buildCard(id: CardId): KpiCard {
 	}
 
 	if (id === 'avg-price-sqft') {
+		// The API returns AED per sq ft already (dividing again showed a value 10.76x too low).
 		const priceSqft = monthlySalesQuery.data?.summary.avg_price_sqft
-			? monthlySalesQuery.data.summary.avg_price_sqft / SQM_TO_SQFT
+			? monthlySalesQuery.data.summary.avg_price_sqft
 			: null
 		return {
 			...base,
 			value: priceSqft ? `AED ${formatWhole(priceSqft)}` : '—',
 			subtitle: 'per sq.ft',
-			trend: trendFromPct(marketTrendQuery.data?.avg_price_sqm_change_pct),
+			trend: trendFromPct(marketTrendQuery.data?.avg_price_sqft_change_pct),
 			loading:
 				latestSalesTransactionQuery.isPending ||
 				(Boolean(latestSalesMonthRange) && monthlySalesQuery.isPending)

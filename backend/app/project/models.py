@@ -75,7 +75,7 @@ class ProjectUnitComposition(BaseModel):
     property_sub_type: str  # "Studio", "1 B/R", "2 B/R", "3 B/R", "Penthouse"
     count: int
     percentage: float  # 0-100
-    avg_area_sqm: Optional[float]
+    avg_area_sqft: Optional[float]
 
 
 class BuildingUnitType(BaseModel):
@@ -84,7 +84,7 @@ class BuildingUnitType(BaseModel):
     rooms_en: str  # "Studio", "1 B/R", "2 B/R", etc.
     count: int
     percentage: float
-    avg_area_sqm: Optional[float]
+    avg_area_sqft: Optional[float]
 
 
 class BuildingDetailResponse(BaseModel):
@@ -156,8 +156,8 @@ class ProjectMarketSnapshotResponse(BaseModel):
     median_sale_price: Optional[float]
     median_annual_rent: Optional[float]
     gross_yield_pct: Optional[float]
-    avg_sale_price_sqm_12m: Optional[float]
-    avg_rent_price_sqm_12m: Optional[float]
+    avg_sale_price_sqft_12m: Optional[float]
+    avg_rent_price_sqft_12m: Optional[float]
 
 
 class ProjectRadarStats(BaseModel):
@@ -173,8 +173,8 @@ class ProjectRadarStats(BaseModel):
     rental_contract_count_12m: int
     total_sales_volume_12m: float
     dda_plot_count: int
-    dda_total_plot_area_sqm: float
-    dda_total_gfa_sqm: float
+    dda_total_plot_area_sqft: float
+    dda_total_gfa_sqft: float
     activity_period_days: int = 365
     activity_period_start: Optional[date] = None
     activity_period_end: Optional[date] = None
@@ -220,13 +220,13 @@ class ProjectRadarProject(BaseModel):
     median_sale_price: Optional[float]
     median_annual_rent: Optional[float]
     gross_yield_pct: Optional[float]
-    avg_sale_price_sqm_12m: Optional[float]
-    avg_rent_price_sqm_12m: Optional[float]
+    avg_sale_price_sqft_12m: Optional[float]
+    avg_rent_price_sqft_12m: Optional[float]
     sales_transaction_count: int = 0
     rental_contract_count: int = 0
     total_sales_volume: float = 0.0
-    avg_sale_price_sqm: Optional[float] = None
-    avg_rent_price_sqm: Optional[float] = None
+    avg_sale_price_sqft: Optional[float] = None
+    avg_rent_price_sqft: Optional[float] = None
 
 
 class RadarBuildingPin(BaseModel):
@@ -272,20 +272,20 @@ class ProjectRadarArea(BaseModel):
     total_sales_volume_12m: float
     median_sale_price: Optional[float]
     median_annual_rent: Optional[float]
-    avg_sale_price_sqm_12m: Optional[float]
-    avg_rent_price_sqm_12m: Optional[float]
+    avg_sale_price_sqft_12m: Optional[float]
+    avg_rent_price_sqft_12m: Optional[float]
     gross_yield_pct: Optional[float]
     top_developers: List[str]
     top_master_projects: List[str]
     dda_plot_count: int
-    dda_total_plot_area_sqm: float
-    dda_total_gfa_sqm: float
+    dda_total_plot_area_sqft: float
+    dda_total_gfa_sqft: float
     dda_dominant_land_uses: List[str]
     sales_transaction_count: int = 0
     rental_contract_count: int = 0
     total_sales_volume: float = 0.0
-    avg_sale_price_sqm: Optional[float] = None
-    avg_rent_price_sqm: Optional[float] = None
+    avg_sale_price_sqft: Optional[float] = None
+    avg_rent_price_sqft: Optional[float] = None
 
 
 class ProjectRadarResponse(BaseModel):

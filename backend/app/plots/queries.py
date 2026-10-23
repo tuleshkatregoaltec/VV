@@ -128,7 +128,8 @@ async def fetch_plot_details(parameters):
 async def fetch_land_sale_evidence(*, area_name, days, limit, plot_area_sqm, usage):
     base_where = [
         "trans_group_en = 'Sales'",
-        "property_type_en = 'Land'",
+        # DLD registers off-plan villas against their land ('Land'); the uniform type keeps plots.
+        "property_type = 'Plot'",
         "actual_worth > 0",
         "procedure_area > 0",
         "lower(area_name_en) = lower({area_name:String})",
@@ -136,8 +137,9 @@ async def fetch_land_sale_evidence(*, area_name, days, limit, plot_area_sqm, usa
     ]
     if plot_area_sqm and plot_area_sqm > 0:
         base_where.append("procedure_area BETWEEN {min_area:Float64} AND {max_area:Float64}")
-        min_area = plot_area_sqm * 10.764 * 0.5
-        max_area = plot_area_sqm * 10.764 * 1.75
+        # procedure_area is in m², like the plot (the DDA valuation below reads it the same way).
+        min_area = plot_area_sqm * 0.5
+        max_area = plot_area_sqm * 1.75
     else:
         min_area = None
         max_area = None
@@ -146,7 +148,7 @@ async def fetch_land_sale_evidence(*, area_name, days, limit, plot_area_sqm, usa
         "area_name": area_name,
         "days": days,
         "limit": limit,
-        "target_area": (plot_area_sqm or 0) * 10.764,
+        "target_area": plot_area_sqm or 0,
     }
     if min_area is not None and max_area is not None:
         params["min_area"] = min_area
@@ -161,9 +163,9 @@ async def fetch_land_sale_evidence(*, area_name, days, limit, plot_area_sqm, usa
             project_name_en,
             procedure_name_en,
             property_usage_en,
-            round(toFloat64(procedure_area) * 0.092903, 1) AS plot_area_sqm,
+            round(toFloat64(procedure_area), 1) AS plot_area_sqm,
             toFloat64(actual_worth) AS price_aed,
-            round(toFloat64(actual_worth) / greatest(toFloat64(procedure_area) * 0.092903, 1), 0) AS price_sqm,
+            round(toFloat64(actual_worth) / greatest(toFloat64(procedure_area), 1), 0) AS price_sqm,
             nullIf(nearest_landmark_en, '') AS nearest_landmark
         FROM ch_transactions
         WHERE {" AND ".join(where)}
@@ -209,7 +211,7 @@ async def _dda_land_transaction_rows(communities: set[str]) -> list[dict[str, An
             toFloat64(actual_worth) AS price_aed
         FROM ch_transactions
         WHERE trans_group_en = 'Sales'
-          AND property_type_en = 'Land'
+          AND property_type = 'Plot'
           AND actual_worth > {min_transaction_aed:Float64}
           AND procedure_area > 0
           AND instance_date >= today() - {lookback_days:Int32}

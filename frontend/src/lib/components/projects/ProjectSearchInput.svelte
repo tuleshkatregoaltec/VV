@@ -102,9 +102,9 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 <div class="w-full">
 	<div class="relative">
 		<div
-			class="relative rounded-md border bg-white transition-all duration-200 {isFocused
+			class="relative rounded-md border bg-card transition-all duration-200 {isFocused
 				? 'border-primary-light'
-				: 'border-border hover:border-slate-300'}"
+				: 'border-strong hover:border-fg-5'}"
 		>
 			<input
 				type="text"
@@ -113,10 +113,10 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 				onfocus={handleFocus}
 				onblur={handleBlur}
 				placeholder="Search projects, areas, developers..."
-				class="w-full rounded-md bg-transparent px-4 py-3 pr-10 text-sm text-slate-800 outline-none placeholder-slate-400"
+				class="w-full rounded-md bg-transparent px-4 py-3 pr-10 text-sm text-fg-1 outline-none placeholder-fg-5"
 			/>
 			<div class="absolute right-3 top-1/2 -translate-y-1/2">
-				<Search class="text-slate-400" size={16} strokeWidth={1.8} />
+				<Search class="text-fg-5" size={16} strokeWidth={1.8} />
 			</div>
 		</div>
 
@@ -125,26 +125,26 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 				onmousedown={(e) => e.preventDefault()}
 				role="listbox"
 				tabindex="-1"
-				class="absolute z-50 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+				class="ui-menu absolute z-50 mt-1 max-h-80 w-full overflow-y-auto"
 			>
 				<!-- Master projects first -->
 				{#each searchResults.masters as master (master.name)}
 					<button
 						onclick={() => selectMaster(master.name)}
-						class="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-100"
+						class="w-full text-left px-4 py-2.5 hover:bg-panel transition-colors border-b border-border"
 					>
 						<div class="flex items-start justify-between gap-2">
 							<div class="min-w-0">
-								<div class="text-sm font-semibold text-slate-900 truncate">{master.name}</div>
-								<div class="text-xs text-slate-500 mt-0.5">{master.areaName}</div>
+								<div class="text-sm font-semibold text-fg-1 truncate">{master.name}</div>
+								<div class="text-xs text-fg-3 mt-0.5">{master.areaName}</div>
 							</div>
 							<div class="flex flex-col items-end gap-1 flex-shrink-0">
 								<span
-									class="text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-slate-100 text-fg-4"
+									class="text-[10px] font-medium px-1.5 py-0.5 rounded-sm border border-border bg-panel text-fg-3"
 								>
 									Master
 								</span>
-								<span class="text-[10px] text-slate-400">{master.count} projects</span>
+								<span class="text-[10px] text-fg-4">{master.count} projects</span>
 							</div>
 						</div>
 					</button>
@@ -154,14 +154,14 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 				{#each searchResults.projects as result, index (getProjectResultKey(result, index))}
 					<button
 						onclick={() => selectProject(result.project_id)}
-						class="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0"
+						class="w-full text-left px-4 py-2.5 hover:bg-panel transition-colors border-b border-border last:border-b-0"
 					>
 						<div class="flex items-start justify-between gap-2">
 							<div class="min-w-0">
-								<div class="text-sm font-semibold text-slate-900 truncate">
+								<div class="text-sm font-semibold text-fg-1 truncate">
 									{result.project_name}
 								</div>
-								<div class="text-xs text-slate-500 mt-0.5 truncate">
+								<div class="text-xs text-fg-3 mt-0.5 truncate">
 									{result.master_project_en || result.area_name}
 									{#if result.developer_name}
 										· {result.developer_name}
@@ -169,7 +169,7 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 								</div>
 							</div>
 							<span
-								class="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-slate-100 text-fg-4 mt-0.5"
+								class="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-sm border border-border bg-panel text-fg-3 mt-0.5"
 							>
 								Project
 							</span>

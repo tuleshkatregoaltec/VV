@@ -363,7 +363,9 @@ async function handleResendForgotPasswordOTP() {
 	sideTitle="One place for transactions, feasibility work, and commercial decisions."
 	sideCopy="Vitevue keeps market signals, project analysis, and commercial context in one workspace so teams can move with more confidence and less friction."
 	cardViewportFill={false}
-	panelClass="lg:h-[calc(100vh-2rem)] lg:max-h-[49rem]"
+	panelClass="lg:min-h-[min(calc(100vh-2rem),49rem)]"
+	sectionWidthClass="lg:max-w-xl xl:max-w-2xl lg:h-auto"
+	cardClass="lg:self-stretch"
 	headerClass="min-h-[7.25rem] sm:min-h-[6.5rem]"
 >
 	<svelte:fragment slot="side">

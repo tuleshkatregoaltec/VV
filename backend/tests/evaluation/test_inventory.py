@@ -26,6 +26,8 @@ def test_actual_chat_registration_links_to_public_capabilities_and_warehouse():
     } <= reachable
     assert "app.listings.service.list_listings_from_clickhouse" not in reachable
     pulse = inventory["functions"]["app.analytics.queries.fetch_market_pulse"]
+    # Chat's market pulse reads the combined market layer, as the rest of chat does; the
+    # Analytics page reads the DXBI records.
     assert pulse["sql_source_candidates"] == ["ch_transactions"]
 
 
@@ -89,3 +91,12 @@ def test_direct_crm_model_calls_are_visible_outside_agent_instrumentation():
     assert functions["app.core.openrouter.create_openrouter_model"][
         "model_configuration_references"
     ] == ["settings.DEFAULT_CHAT_MODEL"]
+
+
+def test_interpolated_sql_source_is_unknown_instead_of_a_where_table(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "queries.py").write_text(
+        'from somewhere import SOURCE\nfrom app.clickhouse.client import query\nasync def fetch():\n    return await query(f"SELECT * FROM {SOURCE} WHERE active = 1")\n'
+    )
+    assert build_inventory(app)["functions"]["app.queries.fetch"]["sql_source_candidates"] == []

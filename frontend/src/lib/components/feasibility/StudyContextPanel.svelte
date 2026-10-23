@@ -3,6 +3,7 @@ import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
 import { formatCurrency, formatNumber, titleCase } from '$lib/feasibility/workbook/utils'
 import { feasibilityWorkspace } from '$lib/stores/feasibilityWorkspace.svelte'
 import { type ResearchTab, researchPanelStore } from '$lib/stores/researchPanel.svelte'
+import { toSqft } from '$lib/utils/units'
 import PlotAnnotationSandbox from './PlotAnnotationSandbox.svelte'
 
 const context = $derived(workbookStore.study_context)
@@ -63,11 +64,11 @@ const tabs: Array<{ id: ResearchTab; label: string }> = [
 					</div>
 					<div class="rounded-md bg-slate-50 p-3">
 						<p class="text-xs uppercase tracking-[0.16em] text-slate-400">Plot Area</p>
-						<p class="mt-1 text-slate-900">{formatNumber(plotData?.plot_area_sqm)} sqm</p>
+						<p class="mt-1 text-slate-900">{formatNumber(plotData?.plot_area_sqm == null ? null : toSqft(plotData.plot_area_sqm))} sq ft</p>
 					</div>
 					<div class="rounded-md bg-slate-50 p-3">
 						<p class="text-xs uppercase tracking-[0.16em] text-slate-400">Max GFA</p>
-						<p class="mt-1 text-slate-900">{formatNumber(plotData?.max_gfa_sqm)} sqm</p>
+						<p class="mt-1 text-slate-900">{formatNumber(plotData?.max_gfa_sqm == null ? null : toSqft(plotData.max_gfa_sqm))} sq ft</p>
 					</div>
 				</div>
 			</div>

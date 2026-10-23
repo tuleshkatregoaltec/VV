@@ -93,11 +93,32 @@ _DLD_RENT_TYPE = _uniform_type(
 
 
 def _prefer(primary: str, fallback: str) -> str:
-    """primary unless it names no specific type, then fallback (if that one does)."""
+    """primary unless it names no specific type, then fallback (if that one does).
+
+    A hotel apartment stays one: DXBI calls most of them "Apartment" where DLD's sub-type names
+    them (3,379 of DLD's 3,617 hotel-apartment sales in 2025), and they trade at other prices.
+    """
     return (
-        f"if({primary} NOT IN {_GENERIC_TYPES} OR {fallback} IN {_GENERIC_TYPES}, "
+        f"multiIf({primary} = 'Apartment' AND {fallback} = 'Hotel Apartment', {fallback}, "
+        f"{primary} NOT IN {_GENERIC_TYPES} OR {fallback} IN {_GENERIC_TYPES}, "
         f"{primary}, {fallback})"
     )
+
+
+# The smallest size a home of each uniform type can have, in sq ft (decision 2026-10-07).
+# DXBI writes 11 sq ft as a placeholder on 18,394 leases (other leases of the same units are
+# ~1,100 sq ft at the same rent) and both sources list hotel rooms such as Ciel at ~9 m^2; their
+# price or rent per area was 4-40x the building's. A smaller size is no size: on a matched row
+# DLD's size fills it when that one is real, else the event has no size and no price per area.
+MIN_HOME_SQFT = {"Apartment": 108, "Hotel Apartment": 108, "Villa": 500, "Townhouse": 500}
+
+
+def _real_sqm(sqm: str, uniform_type: str) -> str:
+    """``sqm`` (m^2) when a home of ``uniform_type`` can have that size, else 0."""
+    names = ", ".join(f"'{name}'" for name in MIN_HOME_SQFT)
+    floors = ", ".join(f"{sqft} / {SQFT_PER_SQM}" for sqft in MIN_HOME_SQFT.values())
+    floor = f"transform({uniform_type}, [{names}], [{floors}], 0.0)"
+    return f"if({sqm} > 0 AND {sqm} >= {floor}, {sqm}, 0)"
 
 
 def _audit(*entries: tuple[str, str]) -> str:
@@ -389,16 +410,19 @@ DLD_SALES_BASE = f"""
     )
 """
 
-# DLD rents after cut-over (by registration date, as the silver layer) and exact-duplicate
-# collapse. Open-data rows carry no contract_number, so identity is the business content.
-_DLD_RENT_KEY = """cityHash64(
+# DLD rents after cut-over (by registration date, as the silver layer). Open-data rows carry no
+# contract_number, so identity is the business content plus the row's place in its scrape run:
+# DLD lists a multi-unit contract as one identical-looking row per unit (106k open-data rows from
+# 2025 on) and those are separate leases, which a content-only key collapsed. Window loads replace
+# their dates, so the same row is not held by two runs (measured: 55 of 786,073 contents).
+_DLD_RENT_CONTENT = """cityHash64(
         contract_number, line_number, registration_date, start_date, end_date, property_id,
         land_property_id, prop_type_en, prop_sub_type_en, usage_en, rooms, parking, actual_area,
         annual_amount, contract_amount, total_properties, version_number, version_en, parcel_id,
         area_id, project_en, master_project_en, tenant_type_en, contract_reg_type_en,
         ejari_bus_property_type_en, is_free_hold)"""
 _DLD_RENTS_BASE_TEMPLATE = f"""
-    SELECT *, {_DLD_RENT_KEY} AS dld_rent_key
+    SELECT *, cityHash64({_DLD_RENT_CONTENT}, run_id, page_index, row_index) AS dld_rent_key
     FROM dld_od_rents_bronze
     WHERE (source_system = 'dld_open_data'
        OR toDate(registration_date) < ifNull(
@@ -424,81 +448,218 @@ DXBI_SALES_BASE = """
     LIMIT 1 BY sale_key
 """
 
-_SALE_MATCHES_SQL = f"""
+# A DXBI sale and a DLD sale are the same registration when the price agrees to the dirham and
+# the dates are within 3 days, or within 30 days with the same size (±1%). The price may differ
+# by one dirham: DLD sends fils (723,726.89) and DXBI shows the rounded price, while bronze rows
+# loaded before coerce_money hold the truncated one.
+_SALE_MATCH_INPUTS = f"""
+    dld_sales AS (
+        SELECT line_id AS dld_key, toDate(instance_date) AS d,
+               toInt64(trans_value) AS price, procedure_area * {SQFT_PER_SQM} AS sqft,
+               lowerUTF8(trimBoth(project_en)) AS dld_project
+        FROM ({DLD_SALES_BASE})
+        WHERE group_en = 'Sales' AND trans_value > 0
+    ),
+    -- The DLD project most of a DXBI building's paired sales sit in (previous profile build,
+    -- >= 80% of >= 10, the Analytics rule for a building's project). Among equally good
+    -- candidates the one in that project wins: sister phases launched together at one price
+    -- list (Damac Lagoons Nice 1 / Nice 2) otherwise swap their sales.
+    building_projects AS (
+        SELECT building_key, argMax(project_key, n) AS project_key
+        FROM (
+            SELECT concat(lowerUTF8(trimBoth(x.building_name)), '|', x.area_key) AS building_key,
+                   lowerUTF8(trimBoth(p.project_name)) AS project_key, count() AS n
+            FROM dxbi_sale_profile AS p
+            INNER JOIN (SELECT sale_key, building_name, area_key FROM dxbi_sales_unit_events FINAL)
+                AS x ON x.sale_key = p.sale_key
+            WHERE p.project_source = 'dld_pair' AND p.project_name != ''
+            GROUP BY building_key, project_key
+        )
+        GROUP BY building_key
+        HAVING max(n) / sum(n) >= 0.8 AND sum(n) >= 10
+    ),
+    dx AS (
+        SELECT b.sale_key AS sale_key, b.transaction_date AS transaction_date,
+               toInt64(b.sale_amount_aed) AS sale_amount_aed, b.size_sqft AS size_sqft,
+               bp.project_key AS building_project
+        FROM ({DXBI_SALES_BASE}) AS b
+        LEFT JOIN building_projects AS bp
+            ON bp.building_key = concat(lowerUTF8(trimBoth(b.building_name)), '|', b.area_key)
+    ),
+    -- Every DLD sale within a dirham of the price and 30 days of the date.
+    same_price AS (
+        SELECT x.sale_key AS sale_key, s.dld_key AS dld_key,
+               toInt32(abs(x.offset_days)) AS day_gap,
+               toInt32(abs(s.price - x.sale_amount_aed)) AS price_gap,
+               toUInt8(x.building_project != '' AND s.dld_project != x.building_project)
+                   AS project_gap,
+               abs(x.size_sqft - s.sqft) / greatest(s.sqft, 1.0) AS size_gap
+        FROM (
+            SELECT sale_key, transaction_date + toIntervalDay(offset_days) AS probe_date,
+                   sale_amount_aed + price_offset AS probe_price,
+                   offset_days, sale_amount_aed, size_sqft, building_project
+            FROM dx
+            ARRAY JOIN arrayMap(i -> toInt32(i) - 30, range(61)) AS offset_days
+            ARRAY JOIN [0, -1, 1] AS price_offset
+        ) AS x
+        INNER JOIN dld_sales AS s ON s.d = x.probe_date AND s.price = x.probe_price
+    )"""
+
+# The candidates are computed once per release into a work table that every round reads (the
+# release lock keeps one build at a time; the name is not a staged table's, so it is not renamed).
+SALE_CANDIDATES_TABLE = "market_sale_pair_candidates__work"
+_SALE_CANDIDATES_SQL = (
+    f"DROP TABLE IF EXISTS {SALE_CANDIDATES_TABLE}",
+    f"""CREATE TABLE {SALE_CANDIDATES_TABLE} (
+    sale_key String, dld_key String, day_gap Int32, price_gap Int32, project_gap UInt8,
+    size_gap Float64
+) ENGINE = MergeTree ORDER BY (sale_key, price_gap, project_gap, day_gap, size_gap, dld_key)""",
+    f"""
+INSERT INTO {SALE_CANDIDATES_TABLE}
+WITH {_SALE_MATCH_INPUTS}
+SELECT sale_key, dld_key, day_gap, price_gap, project_gap, size_gap FROM same_price
+{_HEAVY_QUERY_SETTINGS}
+""",
+)
+_SALE_CANDIDATES = f"""candidates AS (
+        SELECT * FROM {SALE_CANDIDATES_TABLE} WHERE day_gap <= 3 OR size_gap <= 0.01
+    )"""
+
+# Pairing is one-to-one and runs in rounds: each round gives every still-unpaired DXBI sale its
+# best still-unpaired DLD candidate (exact price first, then the nearest date, then the nearest
+# size) and keeps the best claimant of each DLD sale. A sale whose first choice went to another
+# DXBI sale tries its next choice in the following round, so a launch day with dozens of identical
+# sales at one price pairs them all instead of one.
+SALE_MATCH_ROUNDS = 24
+
+
+def _sale_pairing_round_sql() -> str:
+    return f"""
+INSERT INTO `market_sale_matches`
+    (dxbi_sale_key, dld_transaction_number, day_gap, size_gap, has_dld_candidate,
+     loose_dld_key, built_at)
+WITH {_SALE_CANDIDATES},
+    open_candidates AS (
+        SELECT * FROM candidates
+        WHERE sale_key NOT IN (SELECT dxbi_sale_key FROM `market_sale_matches`)
+          AND dld_key NOT IN (
+              SELECT dld_transaction_number FROM `market_sale_matches`
+              WHERE dld_transaction_number != '')
+    ),
+    best_per_dxbi AS (
+        SELECT * FROM open_candidates
+        ORDER BY sale_key, price_gap, project_gap, day_gap, size_gap, dld_key
+        LIMIT 1 BY sale_key
+    )
+SELECT sale_key, dld_key, toInt16(day_gap), size_gap, 1, '', now64(3)
+FROM best_per_dxbi
+ORDER BY dld_key, price_gap, project_gap, day_gap, size_gap, sale_key
+LIMIT 1 BY dld_key
+{_HEAVY_QUERY_SETTINGS}
+"""
+
+
+# Older DXBI sales can carry a date weeks before DLD's registration (measured: 4,674 leftovers
+# have a DLD sale at the same price and floor area 31-90 days later, mean +45). After the rounds
+# above, a leftover pairs with a leftover DLD sale at the same price (to the dirham) and the same
+# floor area (to the square foot) up to a year apart, nearest date first: that combination is a
+# fingerprint, and both rows are ones no closer candidate claimed.
+SALE_LATE_ROUNDS = 3
+
+
+def _sale_late_round_sql() -> str:
+    return f"""
 INSERT INTO `market_sale_matches`
     (dxbi_sale_key, dld_transaction_number, day_gap, size_gap, has_dld_candidate,
      loose_dld_key, built_at)
 WITH
-    dld_sales AS (
-        SELECT line_id AS dld_key, toDate(instance_date) AS d,
-               toUInt64(trans_value) AS price, procedure_area * {SQFT_PER_SQM} AS sqft
+    dld_open AS (
+        SELECT line_id AS dld_key, toDate(instance_date) AS d, toInt64(trans_value) AS price,
+               toUInt32(round(procedure_area * {SQFT_PER_SQM})) AS size_key,
+               procedure_area * {SQFT_PER_SQM} AS sqft
         FROM ({DLD_SALES_BASE})
-        WHERE group_en = 'Sales' AND trans_value > 0
+        WHERE group_en = 'Sales' AND trans_value > 0 AND procedure_area > 0
+          AND line_id NOT IN (
+              SELECT dld_transaction_number FROM `market_sale_matches`
+              WHERE dld_transaction_number != '')
     ),
-    dx AS (
-        SELECT sale_key, transaction_date, sale_amount_aed, size_sqft
+    dx_open AS (
+        SELECT sale_key, transaction_date, toInt64(sale_amount_aed) + price_offset AS price,
+               abs(price_offset) AS price_gap, toUInt32(round(size_sqft)) AS size_key, size_sqft
         FROM ({DXBI_SALES_BASE})
+        ARRAY JOIN [0, -1, 1] AS price_offset
+        WHERE size_sqft > 0
+          AND sale_key NOT IN (SELECT dxbi_sale_key FROM `market_sale_matches`)
     ),
-    -- Every DLD sale at the same price within 30 days: any of these makes a DXBI record a
-    -- probable duplicate if it is not paired, so it is never served on top of DLD.
-    same_price AS (
-        SELECT x.sale_key AS sale_key, s.dld_key AS dld_key, toInt32(abs(x.offset_days)) AS day_gap,
-               abs(x.size_sqft - s.sqft) / greatest(s.sqft, 1.0) AS size_gap
-        FROM (
-            SELECT sale_key, transaction_date + toIntervalDay(offset_days) AS probe_date,
-                   offset_days, sale_amount_aed, size_sqft
-            FROM dx
-            ARRAY JOIN arrayMap(i -> toInt32(i) - 30, range(61)) AS offset_days
-        ) AS x
-        INNER JOIN dld_sales AS s ON s.d = x.probe_date AND s.price = x.sale_amount_aed
-    ),
-    -- Pairing needs more: within 3 days, or within 30 days with the same size (±1%).
-    candidates AS (SELECT * FROM same_price WHERE day_gap <= 3 OR size_gap <= 0.01),
     best_per_dxbi AS (
-        SELECT sale_key, dld_key, day_gap, size_gap FROM candidates
-        ORDER BY sale_key, day_gap, size_gap, dld_key
+        SELECT x.sale_key AS sale_key, s.dld_key AS dld_key, x.price_gap AS price_gap,
+               toInt32(abs(dateDiff('day', x.transaction_date, s.d))) AS day_gap,
+               abs(x.size_sqft - s.sqft) / greatest(s.sqft, 1.0) AS size_gap
+        FROM dx_open AS x
+        INNER JOIN dld_open AS s ON s.price = x.price AND s.size_key = x.size_key
+        WHERE abs(dateDiff('day', x.transaction_date, s.d)) <= 365
+        ORDER BY sale_key, price_gap, day_gap, dld_key
         LIMIT 1 BY sale_key
+    )
+SELECT sale_key, dld_key, toInt16(day_gap), size_gap, 1, '', now64(3)
+FROM best_per_dxbi
+ORDER BY dld_key, price_gap, day_gap, sale_key
+LIMIT 1 BY dld_key
+{_HEAVY_QUERY_SETTINGS}
+"""
+
+
+_SALE_UNPAIRED_SQL = f"""
+INSERT INTO `market_sale_matches`
+    (dxbi_sale_key, dld_transaction_number, day_gap, size_gap, has_dld_candidate,
+     loose_dld_key, built_at)
+WITH {_SALE_MATCH_INPUTS},
+    paired_dxbi AS (SELECT dxbi_sale_key FROM `market_sale_matches`),
+    paired_dld AS (
+        SELECT dld_transaction_number FROM `market_sale_matches`
+        WHERE dld_transaction_number != ''
     ),
-    pairs AS (
-        SELECT sale_key, dld_key, day_gap, size_gap FROM best_per_dxbi
-        ORDER BY dld_key, day_gap, size_gap, sale_key
-        LIMIT 1 BY dld_key
-    ),
-    with_candidate AS (SELECT DISTINCT sale_key FROM same_price),
+    with_candidate AS (SELECT DISTINCT sale_key FROM {SALE_CANDIDATES_TABLE}),
     -- DXBI period only: a DXBI sale left unpaired that shares its price (within 30 days) with
     -- a DLD sale also left unpaired is very probably the same registration. It is paired
     -- loosely, one-to-one, only so the DLD row is not served beside it: values are never
     -- copied across a loose pair (the units may differ).
     loose_candidates AS (
         SELECT c.sale_key AS sale_key, c.dld_key AS dld_key, c.day_gap AS day_gap,
-               c.size_gap AS size_gap
-        FROM same_price AS c
+               c.price_gap AS price_gap, c.project_gap AS project_gap, c.size_gap AS size_gap
+        FROM {SALE_CANDIDATES_TABLE} AS c
         INNER JOIN dx AS lx ON lx.sale_key = c.sale_key
         WHERE lx.transaction_date >= toDate('{SALES_DXBI_FROM}')
-          AND c.sale_key NOT IN (SELECT sale_key FROM pairs)
-          AND c.dld_key NOT IN (SELECT dld_key FROM pairs)
+          AND c.sale_key NOT IN (SELECT dxbi_sale_key FROM paired_dxbi)
+          AND c.dld_key NOT IN (SELECT dld_transaction_number FROM paired_dld)
     ),
     loose_pairs AS (
         SELECT sale_key, dld_key FROM (
             SELECT * FROM loose_candidates
-            ORDER BY sale_key, day_gap, size_gap, dld_key
+            ORDER BY sale_key, price_gap, project_gap, day_gap, size_gap, dld_key
             LIMIT 1 BY sale_key
         )
-        ORDER BY dld_key, day_gap, size_gap, sale_key
+        ORDER BY dld_key, sale_key
         LIMIT 1 BY dld_key
     )
 SELECT
-    dx.sale_key,
-    p.dld_key,
-    toInt16(if(p.dld_key != '', p.day_gap, -1)),
-    if(p.dld_key != '', p.size_gap, -1.0),
+    dx.sale_key, '', toInt16(-1), -1.0,
     toUInt8(dx.sale_key IN (SELECT sale_key FROM with_candidate)),
     lp.dld_key,
     now64(3)
 FROM dx
-LEFT JOIN pairs AS p ON p.sale_key = dx.sale_key
 LEFT JOIN loose_pairs AS lp ON lp.sale_key = dx.sale_key
+WHERE dx.sale_key NOT IN (SELECT dxbi_sale_key FROM paired_dxbi)
+{_HEAVY_QUERY_SETTINGS}
 """
+
+SALE_MATCH_STATEMENTS = (
+    *_SALE_CANDIDATES_SQL,
+    *(_sale_pairing_round_sql() for _ in range(SALE_MATCH_ROUNDS)),
+    *(_sale_late_round_sql() for _ in range(SALE_LATE_ROUNDS)),
+    _SALE_UNPAIRED_SQL,
+    f"DROP TABLE IF EXISTS {SALE_CANDIDATES_TABLE}",
+)
 
 _ROOMS_FROM_BEDROOMS = """multiIf(
     {beds} = 'Studio', 'Studio',
@@ -530,6 +691,9 @@ _DXBI_OFFPLAN_EN = (
     "multiIf(x.market_status = 'Offplan', 'Off-Plan', x.market_status = 'Ready', 'Ready', '')"
 )
 _DXBI_SALE_TYPE = _uniform_type("x.property_type")
+# Sizes as served on a DLD row: each source's size only when it is real for the served type.
+_DXBI_SALE_REAL_SQM = _real_sqm(_DXBI_SALE_SQM, "_type")
+_DLD_SALE_REAL_SQM = _real_sqm("d.procedure_area", "_type")
 
 
 def _location_map(
@@ -604,6 +768,45 @@ _DXBI_ROW_LOCATION = _spelled(
     " _geo_district)"
 )
 
+# Project and master project a DXBI record's profile (holocron.market.dxbi_profile) found where
+# the row's own source left them empty: DLD's 2026 open data names no master project, and a
+# DXBI-only row had none at all. The profile is rebuilt after each release, so a record added
+# today is filled by the next release. A project comes from DLD, its evidence, DXBI's own path
+# or a standalone building (``own_building``, "HDS Tower"); a place name in DXBI's building slot
+# (``place_name``, "Jumeirah Village Circle (JVC)") would add a project no source names.
+_PROFILE_PROJECT_SOURCES = (
+    "('dld_pair', 'dld_evidence', 'building', 'dxbi_sale', 'dld_unit', 'dxbi', 'own_building')"
+)
+_SALE_PROFILE_FILL = f"""(
+    SELECT sale_key AS prof_key,
+           if(project_source IN {_PROFILE_PROJECT_SOURCES}, project_name, '') AS prof_project,
+           master_project AS prof_master
+    FROM dxbi_sale_profile
+)"""
+_RENTAL_PROFILE_FILL = f"""(
+    SELECT contract_key AS prof_key,
+           if(project_source IN {_PROFILE_PROJECT_SOURCES}, project_name, '') AS prof_project,
+           master_project AS prof_master
+    FROM dxbi_rental_profile
+)"""
+
+# Project -> master project as the DXBI profiles resolved it (the most frequent per project), for
+# DLD rows of the same project that carry no master project themselves.
+_PROFILE_PROJECT_MASTERS = """(
+    SELECT project_key AS ppm_key, argMax(master_project, n) AS ppm_master
+    FROM (
+        SELECT lowerUTF8(trimBoth(project_name)) AS project_key, master_project, count() AS n
+        FROM (
+            SELECT project_name, master_project FROM dxbi_sale_profile
+            UNION ALL
+            SELECT project_name, master_project FROM dxbi_rental_profile
+        )
+        WHERE project_name != '' AND master_project != ''
+        GROUP BY project_key, master_project
+    )
+    GROUP BY project_key
+)"""
+
 _SALE_EVENTS_DLD_SQL = f"""
 INSERT INTO `market_sale_events` ({
     ", ".join(SALE_COLUMNS + GEO_COLUMNS + UNIFORM_COLUMNS + SALE_AUDIT_COLUMNS)
@@ -627,7 +830,7 @@ SELECT
        toDateTime(x.transaction_date), d.instance_date),
     d.group_id, if(d.group_en = 'Mortgage', 'Mortgages', d.group_en), d.group_ar,
     d.procedure_id, d.procedure_en, d.procedure_ar,
-    if(_dxw AND {_DXBI_SALE_SQM} > 0, {_DXBI_SALE_SQM}, d.procedure_area) AS _size_sqm,
+    if(_dxw AND {_DXBI_SALE_REAL_SQM} > 0, {_DXBI_SALE_SQM}, {_DLD_SALE_REAL_SQM}) AS _size_sqm,
     d.actual_area,
     if(_dxw AND x.sale_amount_aed > 0, toInt64(x.sale_amount_aed), d.trans_value) AS _price,
     _price,
@@ -638,7 +841,11 @@ SELECT
             {_DLD_SALE_ROOMS} != '', {_DLD_SALE_ROOMS},
             {_DXBI_SALE_ROOMS}) AS _rooms,
     d.rooms_ar, d.parking, d.parking != '', d.building_age, d.parcel_id, d.area_id,
-    d.area_en, d.area_ar, d.project_en, d.project_ar, d.master_project_en, d.master_project_ar,
+    d.area_en, d.area_ar,
+    if(d.project_en != '', d.project_en, ifNull(prof.prof_project, '')), d.project_ar,
+    multiIf(d.master_project_en != '', d.master_project_en, ifNull(prof.prof_master, '') != '',
+            prof.prof_master, ifNull(ppm.ppm_master, '')),
+    d.master_project_ar,
     d.is_free_hold, d.is_free_hold_en, d.is_free_hold_ar,
     toUInt8(_offplan = 'Off-Plan'),
     multiIf(_dxw AND {_DXBI_OFFPLAN_EN} != '', {_DXBI_OFFPLAN_EN},
@@ -674,7 +881,7 @@ SELECT
     {_DLD_ROW_LOCATION},
     if(_dxw, {
     _audit(
-        ("size_sqm", f"{_DXBI_SALE_SQM} = 0 AND d.procedure_area > 0"),
+        ("size_sqm", f"{_DXBI_SALE_REAL_SQM} = 0 AND _size_sqm > 0"),
         (
             "property_type",
             f"{_DXBI_SALE_TYPE} IN {_GENERIC_TYPES} AND _type NOT IN {_GENERIC_TYPES}",
@@ -690,7 +897,7 @@ SELECT
         ("actual_worth", "x.sale_amount_aed > 0 AND d.trans_value != toInt64(x.sale_amount_aed)"),
         (
             "size_sqm",
-            f"{_DXBI_SALE_SQM} > 0 AND d.procedure_area > 0"
+            f"{_DXBI_SALE_REAL_SQM} > 0 AND {_DLD_SALE_REAL_SQM} > 0"
             f" AND abs({_DXBI_SALE_SQM} - d.procedure_area) / d.procedure_area > 0.01",
         ),
         (
@@ -719,6 +926,8 @@ LEFT JOIN (SELECT dxbi_sale_key, dld_transaction_number FROM market_sale_matches
 LEFT JOIN (SELECT loose_dld_key FROM market_sale_matches WHERE loose_dld_key != '') AS lp
     ON lp.loose_dld_key = d.line_id
 LEFT JOIN ({DXBI_SALES_BASE}) AS x ON x.sale_key = m.dxbi_sale_key
+LEFT JOIN {_SALE_PROFILE_FILL} AS prof ON prof.prof_key = m.dxbi_sale_key AND m.dxbi_sale_key != ''
+LEFT JOIN {_PROFILE_PROJECT_MASTERS} AS ppm ON ppm.ppm_key = lowerUTF8(trimBoth(d.project_en))
 {_geo_joins(area="d.area_en", master="d.master_project_en", project="d.project_en")}
 {_LOCATION_MAP_JOIN}
 """
@@ -767,7 +976,7 @@ SELECT
     concat('dxbi:', x.sale_key), '', '', concat('dxbi:', x.sale_key), '',
     toDateTime(x.transaction_date),
     0, 'Sales', '', 0, '', '',
-    x.size_sqft / {SQFT_PER_SQM}, x.size_sqft / {SQFT_PER_SQM},
+    {_real_sqm(_DXBI_SALE_SQM, _DXBI_SALE_TYPE)} AS _size_sqm, _size_sqm,
     toInt64(x.sale_amount_aed), toInt64(x.sale_amount_aed),
     0, 0, 0, 0,
     multiIf(x.property_type IN ('Villa', 'Townhouse'), 'Villa', x.property_type = 'Plot', 'Land',
@@ -781,7 +990,9 @@ SELECT
     '',
     {_ROOMS_FROM_BEDROOMS.format(beds="x.bedrooms")}, '', '', 0, 0, '', 0,
     if(am.dld_name != '', am.dld_name, x.area_name), '',
-    if(pm.dld_name != '', pm.dld_name, x.project_name), '', '', '',
+    multiIf(pm.dld_name != '', pm.dld_name, x.project_name != '', x.project_name,
+            ifNull(prof.prof_project, '')), '',
+    ifNull(prof.prof_master, ''), '',
     0, '', '',
     toUInt8(x.market_status = 'Offplan'),
     multiIf(x.market_status = 'Offplan', 'Off-Plan', x.market_status = 'Ready', 'Ready', ''), '',
@@ -791,7 +1002,7 @@ SELECT
     multiIf(x.market_status = 'Offplan', 'Off-Plan Properties',
             x.market_status = 'Ready', 'Existing Properties', ''),
     '',
-    x.sale_amount_aed / nullIf(x.size_sqft / {SQFT_PER_SQM}, 0),
+    x.sale_amount_aed / nullIf(_size_sqm, 0),
     0, 0, 0, 0, 0,
     x.unit_number, x.bedrooms, x.market_status, x.sale_key, x.building_name, x.transaction_date,
     'dxbi', 'dxbi',
@@ -806,7 +1017,7 @@ SELECT
     now64(3),
     {_geo_values()},
     {_DXBI_SALE_TYPE},
-    {_DXBI_SALE_SQM},
+    _size_sqm,
     {_DXBI_ROW_LOCATION},
     [], [],
     NULL
@@ -814,6 +1025,7 @@ FROM market_sale_matches AS m
 INNER JOIN ({DXBI_SALES_BASE}) AS x ON x.sale_key = m.dxbi_sale_key
 LEFT JOIN area_name_map AS am ON am.dxbi_name = x.area_name
 LEFT JOIN project_name_map AS pm ON pm.dxbi_name = x.project_name
+LEFT JOIN {_SALE_PROFILE_FILL} AS prof ON prof.prof_key = x.sale_key
 {
     _geo_joins(
         area="if(am.dld_name != '', am.dld_name, x.area_name)",
@@ -865,14 +1077,40 @@ _RENTAL_AREA_CTES = f"""
     )"""
 
 
+def _registry_place(alias: str) -> str:
+    """The last place in DXBI's lease location text.
+
+    DXBI ends a lease's location with the DLD area it took from the registry ("District 7,
+    Jumeirah Park, Al Thanyah Fifth") while its area name is the community ("Jumeirah Park"),
+    which DLD names differently ("Al Quoz Industrial 4" is DLD's "Al Goze Industrial Fourth").
+    """
+    return f"trimBoth(arrayElement(splitByChar(',', {alias}.location_name), -1))"
+
+
 def _rental_area_joins(alias: str) -> str:
     return (
+        f"LEFT JOIN dld_area_names AS rp ON rp.name_key = {_area_name_key(_registry_place(alias))}\n"
         f"LEFT JOIN sales_area_map AS sm ON sm.dxbi_area = {alias}.area_name\n"
         f"LEFT JOIN dld_area_names AS n ON n.name_key = {_area_name_key(f'{alias}.area_name')}"
     )
 
 
-_RENTAL_DLD_AREA = "multiIf(sm.dld_area != '', sm.dld_area, n.dld_area != '', n.dld_area, '')"
+# A DXBI lease's DLD area: the registry area its own text names, else the DLD area its
+# community's matched sales carry, else its area name when DLD uses the same one.
+_RENTAL_DLD_AREA = (
+    "multiIf(rp.dld_area != '', rp.dld_area, sm.dld_area != '', sm.dld_area,"
+    " n.dld_area != '', n.dld_area, '')"
+)
+
+# A lease and a DLD contract with the same area, dates and rent are one lease only when their floor
+# areas agree (within 5%, where both have one). Rents are round numbers many leases share: of the
+# pairs whose areas differed by more, 70-77% named another project than the lease's building
+# (measured 2026-10-22: Oberoi Centre's 787 sqft lease had taken a 312 sqft Tamani Arts office).
+RENTAL_SIZE_TOLERANCE = 0.05
+_RENTAL_SIZE_OK = (
+    "(a.size_sqft <= 0 OR b.sqft <= 0"
+    f" OR abs(a.size_sqft - b.sqft) <= {RENTAL_SIZE_TOLERANCE} * b.sqft)"
+)
 
 _RENTAL_MATCH_INPUTS = f"""{_RENTAL_AREA_CTES},
     dld AS (
@@ -881,14 +1119,14 @@ _RENTAL_MATCH_INPUTS = f"""{_RENTAL_AREA_CTES},
                toUInt64(greatest(annual_amount, 0)) AS annual_amt,
                actual_area * {SQFT_PER_SQM} AS sqft,
                toInt64(round(actual_area)) AS sqm,
-               area_en AS loc
+               area_en AS loc, lowerUTF8(trimBoth(project_en)) AS proj
         FROM ({_DLD_RENTS_MATCH_BASE})
     ),
     dx AS (
         SELECT r.contract_key AS contract_key, r.lease_start AS lease_start, r.lease_end AS lease_end,
                r.contract_amount_aed AS contract_amount_aed, r.annual_rent_aed AS annual_rent_aed,
                r.size_sqft AS size_sqft, toInt64(round(r.size_sqft / {SQFT_PER_SQM})) AS sqm,
-               {_RENTAL_DLD_AREA} AS loc
+               {_RENTAL_DLD_AREA} AS loc, r.area_name AS dxbi_area
         FROM dxbi_rental_events AS r FINAL
         {_rental_area_joins("r")}
     )"""
@@ -932,11 +1170,100 @@ INNER JOIN (
     WHERE {dld_filter}
       AND dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches`)
 ) AS b ON {join_on} AND a.rn = b.rn
+WHERE {_RENTAL_SIZE_OK}
+{_HEAVY_QUERY_SETTINGS}
+"""
+
+
+# The DLD project most of a DXBI building's paired sales and leases sit in (previous profile
+# build, >= 80% of >= 10, the Analytics rule for a building's project), per lease of that
+# building. Built once per rental release and dropped after.
+RENTAL_BUILDING_PROJECTS_TABLE = "market_rental_building_projects__work"
+_RENTAL_BUILDING_PROJECTS_SQL = (
+    f"DROP TABLE IF EXISTS {RENTAL_BUILDING_PROJECTS_TABLE}",
+    f"""CREATE TABLE {RENTAL_BUILDING_PROJECTS_TABLE} (contract_key String, project_key String)
+ENGINE = MergeTree ORDER BY contract_key""",
+    f"""
+INSERT INTO {RENTAL_BUILDING_PROJECTS_TABLE}
+WITH
+    leases AS (
+        SELECT contract_key, any(building_name) AS building_name, any(area_name) AS area_name
+        FROM dxbi_rental_events FINAL GROUP BY contract_key
+    ),
+    votes AS (
+        SELECT building_key, project_key, sum(n) AS n FROM (
+            SELECT concat(lowerUTF8(trimBoth(x.building_name)), '|',
+                          lowerUTF8(trimBoth(x.area_name))) AS building_key,
+                   lowerUTF8(trimBoth(p.project_name)) AS project_key, count() AS n
+            FROM dxbi_sale_profile AS p
+            INNER JOIN (SELECT sale_key, building_name, area_name FROM ({DXBI_SALES_BASE}))
+                AS x ON x.sale_key = p.sale_key
+            WHERE p.project_source = 'dld_pair' AND p.project_name != '' AND x.building_name != ''
+            GROUP BY building_key, project_key
+            UNION ALL
+            SELECT concat(lowerUTF8(trimBoth(x.building_name)), '|',
+                          lowerUTF8(trimBoth(x.area_name))),
+                   lowerUTF8(trimBoth(p.project_name)), count()
+            FROM dxbi_rental_profile AS p
+            INNER JOIN leases AS x ON x.contract_key = p.contract_key
+            WHERE p.project_source = 'dld_pair' AND p.project_name != '' AND x.building_name != ''
+            GROUP BY 1, 2
+        )
+        GROUP BY building_key, project_key
+    ),
+    building_projects AS (
+        SELECT building_key, argMax(project_key, n) AS project_key FROM votes
+        GROUP BY building_key HAVING max(n) / sum(n) >= 0.8 AND sum(n) >= 10
+    )
+SELECT l.contract_key, bp.project_key
+FROM leases AS l
+INNER JOIN building_projects AS bp
+    ON bp.building_key = concat(lowerUTF8(trimBoth(l.building_name)), '|',
+                                lowerUTF8(trimBoth(l.area_name)))
+WHERE l.building_name != ''
+{_HEAVY_QUERY_SETTINGS}
+""",
+)
+
+
+def _rental_building_pairing_sql(*, tier: int) -> str:
+    """Tier 0's keys plus the project: a lease whose building's project is known pairs first with
+    a DLD contract of that project. Sister buildings let at one rent on one day (Damac Lagoons
+    Nice 1 / Nice 2) otherwise swap their leases by floor-area order."""
+    return f"""
+INSERT INTO `market_rental_matches`
+    (dxbi_contract_key, dld_rent_key, match_tier, end_day_gap, size_gap, has_dld_candidate, built_at)
+WITH {_RENTAL_MATCH_INPUTS}
+SELECT a.contract_key, b.dld_rent_key, {tier}, toInt32(abs(dateDiff('day', b.e, a.lease_end))),
+       abs(a.size_sqft - b.sqft) / greatest(b.sqft, 1.0), 1, now64(3)
+FROM (
+    SELECT x.contract_key AS contract_key, x.lease_end AS lease_end, x.size_sqft AS size_sqft,
+           x.loc AS k0, x.lease_start AS k1, x.lease_end AS k2, x.contract_amount_aed AS k3,
+           bp.project_key AS k4,
+           row_number() OVER (PARTITION BY k0, k1, k2, k3, k4
+                              ORDER BY size_sqft, contract_key) AS rn
+    FROM dx AS x
+    INNER JOIN {RENTAL_BUILDING_PROJECTS_TABLE} AS bp ON bp.contract_key = x.contract_key
+    WHERE x.loc != '' AND x.contract_amount_aed > 0
+      AND x.contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_matches`)
+) AS a
+INNER JOIN (
+    SELECT dld_rent_key, e, sqft, loc AS k0, s AS k1, e AS k2, contract_amt AS k3, proj AS k4,
+           row_number() OVER (PARTITION BY k0, k1, k2, k3, k4 ORDER BY sqft, dld_rent_key) AS rn
+    FROM dld
+    WHERE loc != '' AND contract_amt > 0 AND proj != ''
+      AND dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches`)
+) AS b ON a.k0 = b.k0 AND a.k1 = b.k1 AND a.k2 = b.k2 AND a.k3 = b.k3 AND a.k4 = b.k4
+      AND a.rn = b.rn
+WHERE {_RENTAL_SIZE_OK}
 {_HEAVY_QUERY_SETTINGS}
 """
 
 
 _RENTAL_MATCH_STATEMENTS = (
+    *_RENTAL_BUILDING_PROJECTS_SQL,
+    # Tier 0 first within the lease's building's project, then without it.
+    _rental_building_pairing_sql(tier=0),
     # Tier 0: same lease period and contract amount (99% of pairs agree on the end date).
     _rental_rank_pairing_sql(
         tier=0,
@@ -1018,6 +1345,251 @@ WHERE dx.contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_match
 )
 
 
+# The tiers above need the DXBI lease's DLD area, and DXBI and DLD name areas differently
+# ("Discovery Gardens" is DLD's "Jabal Ali First"; "Al Barsha South 3" is "Al Barshaa South
+# Third"), so a lease DLD holds with the same dates and rent could stay unpaired. The steps below
+# pair a lease in another DLD area only when there is evidence the DXBI area lies in it:
+#  * the names are spellings of one place: the same ordinal (if both have one) and an n-gram
+#    distance <= 0.3 without it ("Umm Suqeim 2" / "Um Suqaim Second", not "Trade Center 2" /
+#    "Trade Center First");
+#  * DLD registers a project or master project of the DXBI area's name mostly (>= 30%) in that
+#    area (n-gram distance <= 0.4: "Villanova" / "Villanova Amaranta" in Wadi Al Safa 5); or
+#  * >= 20 matched sales of the DXBI area (>= 5% of them) are registered in that area.
+# Without it, a lease whose dates, rent and size merely recur elsewhere would pair across the city
+# (measured before this rule: "Al Thanyah 1" to "Mankhool", "Dubai Marina" to "Al Mamzer").
+# Web checks (2026-10-13) confirmed Villanova -> Wadi Al Safa 5, Green Community West -> Dubai
+# Investment Park First, Jumeirah Village Circle -> Al Barsha South Fourth.
+#  1. Anchors: a lease whose start, end, contract amount and floor area (m²) occur exactly once
+#     among the unpaired DXBI and the unpaired DLD leases, in an evidenced area.
+#  2. Evidenced areas: the remaining leases pair inside any evidenced area by the same keys as
+#     tiers 0-3, preferring the strongest evidence.
+RENTAL_AREA_SET_ROUNDS = 2
+
+_ORDINALS = "(first|second|third|fourth|fifth|sixth)"
+
+
+def _ordinal(expr: str) -> str:
+    """The area's ordinal ("Al Barsha South 3" and "... Third" -> "third"), else ''."""
+    return f"extract({_area_name_key(expr)}, ' {_ORDINALS}$')"
+
+
+def _area_base(expr: str) -> str:
+    """The area name without its ordinal, for comparing spellings ("um suqaim")."""
+    return f"trimBoth(replaceRegexpOne({_area_name_key(expr)}, ' {_ORDINALS}$', ''))"
+
+
+_RENTAL_AREA_EVIDENCE = f"""
+    dxbi_areas AS (SELECT DISTINCT dxbi_area FROM dx WHERE dxbi_area != ''),
+    dld_areas AS (SELECT DISTINCT loc FROM dld WHERE loc != ''),
+    communities AS (
+        SELECT c, dla FROM (
+            SELECT lowerUTF8(trimBoth(c)) AS c, area_en AS dla, count() AS n,
+                   n / sum(n) OVER (PARTITION BY c) AS share
+            FROM (
+                SELECT arrayJoin([master_project_en, project_en]) AS c, area_en
+                FROM dld_od_units_bronze
+                UNION ALL
+                SELECT arrayJoin([master_project_en, project_en]) AS c, area_en
+                FROM dld_od_transactions_bronze
+            )
+            WHERE lengthUTF8(trimBoth(c)) >= 4 AND area_en != ''
+            GROUP BY c, dla
+        )
+        WHERE share >= 0.3
+    ),
+    community_evidence AS (
+        SELECT a.dxbi_area AS dxbi_area, c.dla AS dld_area,
+               min(ngramDistanceUTF8({_area_name_key("a.dxbi_area")}, c.c)) AS distance
+        FROM dxbi_areas AS a CROSS JOIN communities AS c
+        GROUP BY dxbi_area, dld_area
+    ),
+    sales_evidence AS (
+        SELECT dxbi_area, dld_area, n / sum(n) OVER (PARTITION BY dxbi_area) AS share, n
+        FROM (
+            SELECT x.area_name AS dxbi_area, e.area_name_en AS dld_area, count() AS n
+            FROM market_sale_events AS e
+            INNER JOIN ({DXBI_SALES_BASE}) AS x ON x.sale_key = e.dxbi_sale_key
+            WHERE e.match_status = 'matched' AND e.area_name_en != '' AND x.area_name != ''
+            GROUP BY dxbi_area, dld_area
+        )
+    ),
+    area_sets AS (
+        SELECT dxbi_area, dld_area, greatest(1 - name_d, 1 - comm_d, sales_share) AS share
+        FROM (
+            SELECT a.dxbi_area AS dxbi_area, l.loc AS dld_area,
+                   if({_ordinal("a.dxbi_area")} = '' OR {_ordinal("l.loc")} = ''
+                          OR {_ordinal("a.dxbi_area")} = {_ordinal("l.loc")},
+                      ngramDistanceUTF8({_area_base("a.dxbi_area")}, {_area_base("l.loc")}), 1)
+                       AS name_d,
+                   -- An unmatched LEFT JOIN yields defaults (0), not NULL.
+                   if(ce.dld_area = '', 1, ce.distance) AS comm_d,
+                   if(se.n >= 20, se.share, 0) AS sales_share
+            FROM dxbi_areas AS a CROSS JOIN dld_areas AS l
+            LEFT JOIN community_evidence AS ce
+                ON ce.dxbi_area = a.dxbi_area AND ce.dld_area = l.loc
+            LEFT JOIN sales_evidence AS se ON se.dxbi_area = a.dxbi_area AND se.dld_area = l.loc
+        )
+        WHERE name_d <= 0.3 OR comm_d <= 0.4 OR sales_share >= 0.05
+    )"""
+
+# The evidence does not change between tiers: it is computed once per release into a work table
+# that the anchor and every area-set tier read (one build at a time under the release lock).
+RENTAL_AREA_SETS_TABLE = "market_rental_area_sets__work"
+_RENTAL_AREA_SETS_SQL = (
+    f"DROP TABLE IF EXISTS {RENTAL_AREA_SETS_TABLE}",
+    f"""CREATE TABLE {RENTAL_AREA_SETS_TABLE} (dxbi_area String, dld_area String, share Float64)
+ENGINE = MergeTree ORDER BY (dxbi_area, dld_area)""",
+    f"""
+INSERT INTO {RENTAL_AREA_SETS_TABLE}
+WITH {_RENTAL_MATCH_INPUTS},
+    {_RENTAL_AREA_EVIDENCE}
+SELECT dxbi_area, dld_area, share FROM area_sets
+{_HEAVY_QUERY_SETTINGS}
+""",
+)
+_RENTAL_AREA_SETS = f"area_sets AS (SELECT * FROM {RENTAL_AREA_SETS_TABLE})"
+
+
+def _rental_anchor_pairing_sql(*, tier: int) -> str:
+    keys = "lease_start, lease_end, contract_amount_aed, sqm"
+    dld_keys = "s, e, contract_amt, sqm"
+    return f"""
+INSERT INTO `market_rental_matches`
+    (dxbi_contract_key, dld_rent_key, match_tier, end_day_gap, size_gap, has_dld_candidate, built_at)
+WITH {_RENTAL_MATCH_INPUTS},
+    {_RENTAL_AREA_SETS},
+    a AS (
+        SELECT contract_key, lease_end, size_sqft, dxbi_area, loc, lease_start AS k0,
+               lease_end AS k1, contract_amount_aed AS k2, sqm AS k3
+        FROM dx
+        WHERE contract_amount_aed > 0 AND sqm > 0
+          AND contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_matches`)
+          AND ({keys}) IN (
+              SELECT {keys} FROM dx
+              WHERE contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_matches`)
+              GROUP BY {keys} HAVING count() = 1)
+    ),
+    b AS (
+        SELECT dld_rent_key, e, sqft, loc, s AS k0, e AS k1, contract_amt AS k2, sqm AS k3
+        FROM dld
+        WHERE contract_amt > 0 AND sqm > 0
+          AND dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches`)
+          AND ({dld_keys}) IN (
+              SELECT {dld_keys} FROM dld
+              WHERE dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches`)
+              GROUP BY {dld_keys} HAVING count() = 1)
+    )
+SELECT a.contract_key, b.dld_rent_key, {tier}, toInt32(abs(dateDiff('day', b.e, a.lease_end))),
+       abs(a.size_sqft - b.sqft) / greatest(b.sqft, 1.0), 1, now64(3)
+FROM a INNER JOIN b ON a.k0 = b.k0 AND a.k1 = b.k1 AND a.k2 = b.k2 AND a.k3 = b.k3
+WHERE (b.loc = a.loc OR (a.dxbi_area, b.loc) IN (SELECT dxbi_area, dld_area FROM area_sets))
+  AND {_RENTAL_SIZE_OK}
+{_HEAVY_QUERY_SETTINGS}
+"""
+
+
+def _rental_area_set_pairing_sql(
+    *,
+    tier: int,
+    dx_keys: tuple[str, ...],
+    dld_keys: tuple[str, ...],
+    dx_filter: str,
+    dld_filter: str,
+) -> str:
+    """Rank pairing as in tiers 0-3, inside each DLD area evidenced for the DXBI area name."""
+    dx_cols = ", ".join(f"{key} AS k{i}" for i, key in enumerate(dx_keys))
+    dld_cols = ", ".join(f"{key} AS k{i}" for i, key in enumerate(dld_keys))
+    partition = ", ".join(f"k{i}" for i in range(len(dx_keys)))
+    join_on = " AND ".join(f"a.k{i} = b.k{i}" for i in range(len(dx_keys)))
+    return f"""
+INSERT INTO `market_rental_matches`
+    (dxbi_contract_key, dld_rent_key, match_tier, end_day_gap, size_gap, has_dld_candidate, built_at)
+WITH {_RENTAL_MATCH_INPUTS},
+    {_RENTAL_AREA_SETS},
+    candidates AS (
+        SELECT a.contract_key AS contract_key, b.dld_rent_key AS dld_rent_key, a.share AS share,
+               toInt32(abs(dateDiff('day', b.e, a.lease_end))) AS end_day_gap,
+               abs(a.size_sqft - b.sqft) / greatest(b.sqft, 1.0) AS size_gap
+        FROM (
+            SELECT contract_key, lease_end, size_sqft, share, {dx_cols}, kloc,
+                   row_number() OVER (PARTITION BY {partition}, kloc
+                                      ORDER BY size_sqft, contract_key) AS rn
+            FROM (
+                SELECT x.*, s.dld_area AS kloc, s.share AS share
+                FROM dx AS x INNER JOIN area_sets AS s ON s.dxbi_area = x.dxbi_area
+            )
+            WHERE {dx_filter}
+              AND contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_matches`)
+        ) AS a
+        INNER JOIN (
+            SELECT dld_rent_key, e, sqft, {dld_cols}, loc AS kloc,
+                   row_number() OVER (PARTITION BY {partition}, kloc
+                                      ORDER BY sqft, dld_rent_key) AS rn
+            FROM dld
+            WHERE {dld_filter}
+              AND dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches`)
+        ) AS b ON {join_on} AND a.kloc = b.kloc AND a.rn = b.rn
+        WHERE {_RENTAL_SIZE_OK}
+    )
+SELECT contract_key, dld_rent_key, {tier}, end_day_gap, size_gap, 1, now64(3)
+FROM (
+    SELECT * FROM candidates
+    ORDER BY contract_key, share DESC, size_gap, dld_rent_key
+    LIMIT 1 BY contract_key
+)
+ORDER BY dld_rent_key, share DESC, size_gap, contract_key
+LIMIT 1 BY dld_rent_key
+{_HEAVY_QUERY_SETTINGS}
+"""
+
+
+_RENTAL_AREA_SET_TIERS = (
+    (
+        5,
+        ("lease_start", "lease_end", "contract_amount_aed"),
+        ("s", "e", "contract_amt"),
+        "contract_amount_aed > 0",
+        "contract_amt > 0",
+    ),
+    (
+        6,
+        ("lease_start", "lease_end", "annual_rent_aed"),
+        ("s", "e", "annual_amt"),
+        "annual_rent_aed > 0",
+        "annual_amt > 0",
+    ),
+    (7, ("lease_start", "lease_end", "sqm"), ("s", "e", "sqm"), "sqm > 0", "sqm > 0"),
+    (
+        8,
+        ("lease_start", "contract_amount_aed"),
+        ("s", "contract_amt"),
+        "contract_amount_aed > 0",
+        "contract_amt > 0",
+    ),
+)
+
+# The unpaired ledger stays the last statement.
+_RENTAL_MATCH_STATEMENTS = (
+    *_RENTAL_MATCH_STATEMENTS[:-1],
+    *_RENTAL_AREA_SETS_SQL,
+    _rental_anchor_pairing_sql(tier=4),
+    *(
+        _rental_area_set_pairing_sql(
+            tier=tier,
+            dx_keys=dx_keys,
+            dld_keys=dld_keys,
+            dx_filter=dx_filter,
+            dld_filter=dld_filter,
+        )
+        for _ in range(RENTAL_AREA_SET_ROUNDS)
+        for tier, dx_keys, dld_keys, dx_filter, dld_filter in _RENTAL_AREA_SET_TIERS
+    ),
+    f"DROP TABLE IF EXISTS {RENTAL_BUILDING_PROJECTS_TABLE}",
+    f"DROP TABLE IF EXISTS {RENTAL_AREA_SETS_TABLE}",
+    _RENTAL_MATCH_STATEMENTS[-1],
+)
+
+
 # DLD puts one row per unit of a multi-unit contract and repeats the whole contract's rent on
 # each (measured: 224,466 of 224,543 Pulse multi-unit contracts have exactly one row per unit;
 # those rows held 74-80% of DLD's annual rent value). Each row is served its unit's share, so
@@ -1034,6 +1606,8 @@ _DXBI_RENT_ROOMS = _ROOMS_FROM_BEDROOMS.format(beds="x.bedrooms")
 _DLD_RENT_ROOMS = "if(d.prop_type_en = 'Studio' OR d.prop_sub_type_en = 'Studio', 'Studio', '')"
 _DXBI_RENT_SQM = f"if(x.size_sqft > 0, x.size_sqft / {SQFT_PER_SQM}, 0)"
 _DXBI_RENT_TYPE = _uniform_type("x.property_type")
+_DXBI_RENT_REAL_SQM = _real_sqm(_DXBI_RENT_SQM, "_type")
+_DLD_RENT_REAL_SQM = _real_sqm("d.actual_area", "_type")
 
 _RENTAL_EVENTS_DLD_SQL = f"""
 INSERT INTO `market_rental_events` ({", ".join(RENTAL_COLUMNS + GEO_COLUMNS + UNIFORM_COLUMNS)})
@@ -1065,14 +1639,17 @@ SELECT
             {_DLD_RENT_ROOMS} != '', {_DLD_RENT_ROOMS},
             {_DXBI_RENT_ROOMS}) AS _rooms,
     d.parking,
-    if(_dxw AND {_DXBI_RENT_SQM} > 0, {_DXBI_RENT_SQM}, d.actual_area) AS _size_sqm,
+    if(_dxw AND {_DXBI_RENT_REAL_SQM} > 0, {_DXBI_RENT_SQM}, {_DLD_RENT_REAL_SQM}) AS _size_sqm,
     if(_dxw AND x.annual_rent_aed > 0, toInt64(x.annual_rent_aed), {_DLD_ANNUAL}) AS _annual,
     if(_dxw AND x.contract_amount_aed > 0, toInt64(x.contract_amount_aed), {_DLD_CONTRACT}),
     d.total_properties, d.version_number,
     multiIf(_dxw AND x.contract_state IN ('New', 'Renewed'), x.contract_state,
             d.version_en = 'Renew', 'Renewed', d.version_en) AS _version,
-    d.version_ar, d.parcel_id, d.area_id, d.area_en, d.area_ar, d.project_en, d.project_ar,
-    d.master_project_en, d.master_project_ar, d.is_free_hold, d.is_free_hold_en, d.is_free_hold_ar,
+    d.version_ar, d.parcel_id, d.area_id, d.area_en, d.area_ar,
+    if(d.project_en != '', d.project_en, ifNull(prof.prof_project, '')), d.project_ar,
+    multiIf(d.master_project_en != '', d.master_project_en, ifNull(prof.prof_master, '') != '',
+            prof.prof_master, ifNull(ppm.ppm_master, '')),
+    d.master_project_ar, d.is_free_hold, d.is_free_hold_en, d.is_free_hold_ar,
     d.nearest_metro_en, d.nearest_metro_ar, d.nearest_mall_en, d.nearest_mall_ar,
     d.nearest_landmark_en, d.nearest_landmark_ar, d.project_number,
     d.tenant_type_id, d.tenant_type_en, d.tenant_type_ar,
@@ -1095,7 +1672,7 @@ SELECT
     {_DLD_ROW_LOCATION},
     if(_dxw, {
     _audit(
-        ("size_sqm", f"{_DXBI_RENT_SQM} = 0 AND d.actual_area > 0"),
+        ("size_sqm", f"{_DXBI_RENT_REAL_SQM} = 0 AND _size_sqm > 0"),
         (
             "property_type",
             f"{_DXBI_RENT_TYPE} IN {_GENERIC_TYPES} AND _type NOT IN {_GENERIC_TYPES}",
@@ -1114,7 +1691,7 @@ SELECT
         ),
         (
             "size_sqm",
-            f"{_DXBI_RENT_SQM} > 0 AND d.actual_area > 0"
+            f"{_DXBI_RENT_REAL_SQM} > 0 AND {_DLD_RENT_REAL_SQM} > 0"
             f" AND abs({_DXBI_RENT_SQM} - d.actual_area) / d.actual_area > 0.05",
         ),
         (
@@ -1133,6 +1710,9 @@ LEFT JOIN (SELECT loose_dld_rent_key FROM market_rental_matches
            WHERE loose_dld_rent_key != 0) AS lp
     ON lp.loose_dld_rent_key = d.dld_rent_key
 LEFT JOIN (SELECT * FROM dxbi_rental_events FINAL) AS x ON x.contract_key = m.dxbi_contract_key
+LEFT JOIN {_RENTAL_PROFILE_FILL} AS prof
+    ON prof.prof_key = m.dxbi_contract_key AND m.dxbi_contract_key != ''
+LEFT JOIN {_PROFILE_PROJECT_MASTERS} AS ppm ON ppm.ppm_key = lowerUTF8(trimBoth(d.project_en))
 {_geo_joins(area="d.area_en", master="d.master_project_en", project="d.project_en")}
 {_LOCATION_MAP_JOIN}
 {_HEAVY_QUERY_SETTINGS}
@@ -1161,17 +1741,20 @@ SELECT
             x.property_type = 'Commercial', 'Commercial', ''),
     -- usage_ar, rooms, rooms_en (DXBI's bedroom count; it was left empty before), parking
     '', '', {_DXBI_RENT_ROOMS}, '',
-    x.size_sqft / {SQFT_PER_SQM}, toInt64(x.annual_rent_aed), toInt64(x.contract_amount_aed),
+    {_real_sqm(_DXBI_RENT_SQM, _DXBI_RENT_TYPE)} AS _size_sqm,
+    toInt64(x.annual_rent_aed), toInt64(x.contract_amount_aed),
     1, 0, x.contract_state, '', '', 0,
     -- Same area resolution as pairing, then the rental-learned map, else DXBI's own name.
     multiIf({_RENTAL_DLD_AREA} != '', {
     _RENTAL_DLD_AREA
 }, am.dld_name != '', am.dld_name, x.area_name),
     '',
-    if(pm.dld_name != '', pm.dld_name, x.project_name), '', '', '',
+    multiIf(pm.dld_name != '', pm.dld_name, x.project_name != '', x.project_name,
+            ifNull(prof.prof_project, '')), '',
+    ifNull(prof.prof_master, ''), '',
     0, '', '', '', '', '', '', '', '', '',
     0, '', '', 0, '', '', 0, '', '',
-    x.annual_rent_aed / nullIf(x.size_sqft / {SQFT_PER_SQM}, 0),
+    x.annual_rent_aed / nullIf(_size_sqm, 0),
     x.unit_number, x.bedrooms, x.contract_key, x.building_name,
     'dxbi', 'dxbi',
     -- Same rule as sales (loose pairs exist only inside the DXBI period). DXBI lists a
@@ -1184,13 +1767,14 @@ SELECT
     now64(3),
     {_geo_values()},
     {_DXBI_RENT_TYPE},
-    {_DXBI_RENT_SQM},
+    _size_sqm,
     {_DXBI_ROW_LOCATION},
     [], []
 FROM market_rental_matches AS m
 INNER JOIN (SELECT * FROM dxbi_rental_events FINAL) AS x ON x.contract_key = m.dxbi_contract_key
 LEFT JOIN area_name_map AS am ON am.dxbi_name = x.area_name
 LEFT JOIN project_name_map AS pm ON pm.dxbi_name = x.project_name
+LEFT JOIN {_RENTAL_PROFILE_FILL} AS prof ON prof.prof_key = x.contract_key
 {_rental_area_joins("x")}
 {
     _geo_joins(
