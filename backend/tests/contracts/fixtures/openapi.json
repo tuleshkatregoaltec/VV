@@ -2407,6 +2407,87 @@
 				}
 			}
 		},
+		"/api/v1/crm/contact-imports/{import_id}/properties": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Contact Import Properties",
+				"description": "Distinct properties (building + unit) of one import, each with its kept rows.",
+				"operationId": "crm-crm_contact_import_properties",
+				"parameters": [
+					{
+						"name": "import_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Import Id"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmImportPropertiesResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/contact-lists": {
 			"get": {
 				"tags": ["crm", "crm"],
@@ -5558,7 +5639,12 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["developer", "delivery_status", "delivery_year", "project"],
+							"enum": [
+								"developer",
+								"delivery_status",
+								"delivery_year",
+								"project"
+							],
 							"type": "string",
 							"default": "developer",
 							"title": "Group By"
@@ -10088,7 +10174,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["property_id", "building_number", "building_name", "floors"],
+				"required": [
+					"property_id",
+					"building_number",
+					"building_name",
+					"floors"
+				],
 				"title": "BuildingInfo",
 				"description": "Building with property_id for drilldown"
 			},
@@ -10439,7 +10530,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["project_id", "project_name", "area_name", "comparison_type", "score"],
+				"required": [
+					"project_id",
+					"project_name",
+					"area_name",
+					"comparison_type",
+					"score"
+				],
 				"title": "ComparableProject"
 			},
 			"ConversationListResponse": {
@@ -10569,7 +10666,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["email", "password", "first_name", "last_name", "org_mode"],
+				"required": [
+					"email",
+					"password",
+					"first_name",
+					"last_name",
+					"org_mode"
+				],
 				"title": "CreateUserRequest"
 			},
 			"CreateUserResponse": {
@@ -10592,7 +10695,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["user_id", "email", "organization_id", "organization_name"],
+				"required": [
+					"user_id",
+					"email",
+					"organization_id",
+					"organization_name"
+				],
 				"title": "CreateUserResponse"
 			},
 			"CrmAreaPreferencesResponse": {
@@ -10824,6 +10932,13 @@
 					"property_type": {
 						"type": "string",
 						"title": "Property Type"
+					},
+					"property_details": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Property Details"
 					},
 					"transaction_date": {
 						"anyOf": [
@@ -11068,7 +11183,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "name", "original_filename", "status", "summary", "created_at"],
+				"required": [
+					"id",
+					"name",
+					"original_filename",
+					"status",
+					"summary",
+					"created_at"
+				],
 				"title": "CrmContactImportResponse"
 			},
 			"CrmContactImportSummary": {
@@ -11082,6 +11204,49 @@
 						"type": "integer",
 						"title": "Candidate Rows",
 						"default": 0
+					},
+					"distinct_properties": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Distinct Properties"
+					},
+					"source_property_counts": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmSourcePropertyCounts"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"rows_with_sales_history": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Rows With Sales History"
+					},
+					"plot_only_rows": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Plot Only Rows"
 					},
 					"duplicate_rows_collapsed": {
 						"type": "integer",
@@ -11489,7 +11654,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["available", "total", "offset", "limit", "by_reason", "rows"],
+				"required": [
+					"available",
+					"total",
+					"offset",
+					"limit",
+					"by_reason",
+					"rows"
+				],
 				"title": "CrmDroppedRowsResponse"
 			},
 			"CrmFilters": {
@@ -11525,6 +11697,208 @@
 				},
 				"type": "object",
 				"title": "CrmFilters"
+			},
+			"CrmImportPropertiesResponse": {
+				"properties": {
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"rows": {
+						"items": {
+							"$ref": "#/components/schemas/CrmImportProperty"
+						},
+						"type": "array",
+						"title": "Rows"
+					}
+				},
+				"type": "object",
+				"required": ["total", "offset", "limit", "rows"],
+				"title": "CrmImportPropertiesResponse"
+			},
+			"CrmImportProperty": {
+				"properties": {
+					"property_key": {
+						"type": "string",
+						"title": "Property Key"
+					},
+					"area": {
+						"type": "string",
+						"title": "Area"
+					},
+					"project": {
+						"type": "string",
+						"title": "Project"
+					},
+					"building": {
+						"type": "string",
+						"title": "Building"
+					},
+					"unit": {
+						"type": "string",
+						"title": "Unit"
+					},
+					"property_type": {
+						"type": "string",
+						"title": "Property Type"
+					},
+					"rows": {
+						"type": "integer",
+						"title": "Rows"
+					},
+					"buyers": {
+						"type": "integer",
+						"title": "Buyers"
+					},
+					"sellers": {
+						"type": "integer",
+						"title": "Sellers"
+					},
+					"current_owner": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Current Owner"
+					},
+					"latest_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Latest Date"
+					},
+					"latest_price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Latest Price Aed"
+					},
+					"records": {
+						"items": {
+							"$ref": "#/components/schemas/CrmImportPropertyRecord"
+						},
+						"type": "array",
+						"title": "Records"
+					}
+				},
+				"type": "object",
+				"required": [
+					"property_key",
+					"area",
+					"project",
+					"building",
+					"unit",
+					"property_type",
+					"rows",
+					"buyers",
+					"sellers",
+					"records"
+				],
+				"title": "CrmImportProperty",
+				"description": "One distinct property (building + unit) of an import, with its kept rows."
+			},
+			"CrmImportPropertyRecord": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"sale_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sale Date"
+					},
+					"price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Aed"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"sheet": {
+						"type": "string",
+						"title": "Sheet"
+					},
+					"row": {
+						"type": "integer",
+						"title": "Row"
+					},
+					"procedure": {
+						"type": "string",
+						"title": "Procedure",
+						"default": ""
+					},
+					"event_family": {
+						"type": "string",
+						"title": "Event Family",
+						"default": ""
+					},
+					"identifiers": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Identifiers"
+					},
+					"match_reason": {
+						"type": "string",
+						"title": "Match Reason",
+						"default": ""
+					},
+					"property_details": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Property Details"
+					}
+				},
+				"type": "object",
+				"required": ["name", "role", "status", "sheet", "row"],
+				"title": "CrmImportPropertyRecord",
+				"description": "One retained source event; sale_date is the legacy API name for its date."
 			},
 			"CrmLead": {
 				"properties": {
@@ -11972,7 +12346,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["lead", "timeline", "next_best_actions", "match_explanation", "generated_at"],
+				"required": [
+					"lead",
+					"timeline",
+					"next_best_actions",
+					"match_explanation",
+					"generated_at"
+				],
 				"title": "CrmLeadDetailResponse"
 			},
 			"CrmLeadImportedContact": {
@@ -12752,7 +13132,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["owner_key", "pipeline_status", "highlight_color", "updated_at"],
+				"required": [
+					"owner_key",
+					"pipeline_status",
+					"highlight_color",
+					"updated_at"
+				],
 				"title": "CrmOwnerWorkspaceSummary"
 			},
 			"CrmPriceIndex": {
@@ -13101,7 +13486,15 @@
 					}
 				},
 				"type": "object",
-				"required": ["items", "total", "limit", "offset", "entered_today", "preferences", "as_of"],
+				"required": [
+					"items",
+					"total",
+					"limit",
+					"offset",
+					"entered_today",
+					"preferences",
+					"as_of"
+				],
 				"title": "CrmRenewalLeadsResponse"
 			},
 			"CrmRenewalOwner": {
@@ -13433,7 +13826,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["sales_selection_basis", "rental_selection_basis", "confidence"],
+				"required": [
+					"sales_selection_basis",
+					"rental_selection_basis",
+					"confidence"
+				],
 				"title": "CrmReportAnalysis"
 			},
 			"CrmSaleComparable": {
@@ -13585,6 +13982,73 @@
 					"confidence"
 				],
 				"title": "CrmSheetMapping"
+			},
+			"CrmSourcePropertyCounts": {
+				"properties": {
+					"total_rows": {
+						"type": "integer",
+						"title": "Total Rows",
+						"default": 0
+					},
+					"distinct_unit_numbers": {
+						"type": "integer",
+						"title": "Distinct Unit Numbers",
+						"default": 0
+					},
+					"distinct_building_numbers_without_unit": {
+						"type": "integer",
+						"title": "Distinct Building Numbers Without Unit",
+						"default": 0
+					},
+					"distinct_identifiers": {
+						"type": "integer",
+						"title": "Distinct Identifiers",
+						"default": 0
+					},
+					"distinct_property_numbers_without_unit": {
+						"type": "integer",
+						"title": "Distinct Property Numbers Without Unit",
+						"default": 0
+					},
+					"source_property_references": {
+						"type": "integer",
+						"title": "Source Property References",
+						"default": 0
+					},
+					"identifiers_in_both_columns": {
+						"type": "integer",
+						"title": "Identifiers In Both Columns",
+						"default": 0
+					},
+					"location_scoped_units": {
+						"type": "integer",
+						"title": "Location Scoped Units",
+						"default": 0
+					},
+					"unit_rows": {
+						"type": "integer",
+						"title": "Unit Rows",
+						"default": 0
+					},
+					"building_fallback_rows": {
+						"type": "integer",
+						"title": "Building Fallback Rows",
+						"default": 0
+					},
+					"rows_without_identifiers": {
+						"type": "integer",
+						"title": "Rows Without Identifiers",
+						"default": 0
+					},
+					"unit_rows_without_location": {
+						"type": "integer",
+						"title": "Unit Rows Without Location",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"title": "CrmSourcePropertyCounts",
+				"description": "File inventory before owner filtering; identifiers are not verified properties."
 			},
 			"CrmSummary": {
 				"properties": {
@@ -14406,7 +14870,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["group", "project_count", "units", "projects_without_units"],
+				"required": [
+					"group",
+					"project_count",
+					"units",
+					"projects_without_units"
+				],
 				"title": "DeliveryGroupRow"
 			},
 			"DeliverySummaryResponse": {
@@ -14841,7 +15310,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["dimension_value", "transaction_count", "total_volume", "avg_price_sqft"],
+				"required": [
+					"dimension_value",
+					"transaction_count",
+					"total_volume",
+					"avg_price_sqft"
+				],
 				"title": "DimensionBreakdown",
 				"description": "Breakdown by a specific dimension (property_type, rooms, etc.)"
 			},
@@ -17232,7 +17706,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "name", "original_filename", "status", "summary", "created_at"],
+				"required": [
+					"id",
+					"name",
+					"original_filename",
+					"status",
+					"summary",
+					"created_at"
+				],
 				"title": "InboundImportResponse"
 			},
 			"InboundImportSummary": {
@@ -18354,7 +18835,12 @@
 					},
 					"market_position": {
 						"type": "string",
-						"enum": ["below_market", "near_market", "above_market", "insufficient_data"],
+						"enum": [
+							"below_market",
+							"near_market",
+							"above_market",
+							"insufficient_data"
+						],
 						"title": "Market Position",
 						"default": "insufficient_data"
 					},
@@ -18772,7 +19258,12 @@
 					},
 					"market_position": {
 						"type": "string",
-						"enum": ["below_market", "near_market", "above_market", "insufficient_data"],
+						"enum": [
+							"below_market",
+							"near_market",
+							"above_market",
+							"insufficient_data"
+						],
 						"title": "Market Position",
 						"default": "insufficient_data"
 					},
@@ -19764,7 +20255,14 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["apartment", "hotel_apartment", "villa", "office", "shop", "land"]
+								"enum": [
+									"apartment",
+									"hotel_apartment",
+									"villa",
+									"office",
+									"shop",
+									"land"
+								]
 							},
 							{
 								"type": "null"
@@ -20273,7 +20771,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["start", "end", "label", "type", "reference_date", "timezone"],
+				"required": [
+					"start",
+					"end",
+					"label",
+					"type",
+					"reference_date",
+					"timezone"
+				],
 				"title": "MarketResolvedPeriod"
 			},
 			"MarketTrendPoint": {
@@ -20612,7 +21117,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "url", "headline", "thumbnail_url", "thumbnail_base64", "publish_date"],
+				"required": [
+					"id",
+					"url",
+					"headline",
+					"thumbnail_url",
+					"thumbnail_base64",
+					"publish_date"
+				],
 				"title": "NewsArticleResponse"
 			},
 			"NewsArticleUploadRequest": {
@@ -21091,7 +21603,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "email", "role", "status", "expires_at", "created_at"],
+				"required": [
+					"id",
+					"email",
+					"role",
+					"status",
+					"expires_at",
+					"created_at"
+				],
 				"title": "OrganizationInvitationResponse",
 				"description": "Pending invitation response for organization settings."
 			},
@@ -21714,7 +22233,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["plot_number", "usage", "market_area", "headline", "assumptions"],
+				"required": [
+					"plot_number",
+					"usage",
+					"market_area",
+					"headline",
+					"assumptions"
+				],
 				"title": "PlotResearch"
 			},
 			"PlotResearch-Output": {
@@ -21871,7 +22396,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["plot_number", "usage", "market_area", "headline", "assumptions"],
+				"required": [
+					"plot_number",
+					"usage",
+					"market_area",
+					"headline",
+					"assumptions"
+				],
 				"title": "PlotResearch"
 			},
 			"PriceDistributionBucket": {
@@ -22595,7 +23126,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["period", "existing_stock_units", "carried_stock_units", "new_pipeline_units"],
+				"required": [
+					"period",
+					"existing_stock_units",
+					"carried_stock_units",
+					"new_pipeline_units"
+				],
 				"title": "ProjectPipelinePoint"
 			},
 			"ProjectPipelineResponse": {
@@ -23589,7 +24125,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["property_sub_type", "count", "percentage", "avg_area_sqm"],
+				"required": [
+					"property_sub_type",
+					"count",
+					"percentage",
+					"avg_area_sqm"
+				],
 				"title": "ProjectUnitComposition",
 				"description": "Unit type breakdown"
 			},
@@ -24158,7 +24699,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["dimension_value", "contract_count", "total_annual_value", "avg_rent_sqft"],
+				"required": [
+					"dimension_value",
+					"contract_count",
+					"total_annual_value",
+					"avg_rent_sqft"
+				],
 				"title": "RentalDimensionBreakdown",
 				"description": "Breakdown by a specific dimension for rentals"
 			},
@@ -25913,7 +26459,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["type", "count", "percentage", "avg_size_sqm", "avg_price_sqm"],
+				"required": [
+					"type",
+					"count",
+					"percentage",
+					"avg_size_sqm",
+					"avg_price_sqm"
+				],
 				"title": "UnitTypeData"
 			},
 			"UpcomingProjectResponse": {
@@ -25998,7 +26550,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["project_id", "project_name", "developer_name", "area_name"],
+				"required": [
+					"project_id",
+					"project_name",
+					"developer_name",
+					"area_name"
+				],
 				"title": "UpcomingProjectResponse"
 			},
 			"UpcomingProjectsResponse": {
@@ -26406,7 +26963,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "email", "first_name", "last_name", "role", "joined_at"],
+				"required": [
+					"id",
+					"email",
+					"first_name",
+					"last_name",
+					"role",
+					"joined_at"
+				],
 				"title": "OrganizationMemberResponse"
 			},
 			"app__organization__router__OrganizationMemberResponse": {

@@ -17,6 +17,7 @@ from app.crm.ownership import (
     _apply_evidence,
     _recover_property_identity_from_near_transaction,
     _recover_property_identity_from_transaction,
+    _reuse_mortgage_property_from_sale_anchors,
 )
 
 
@@ -163,3 +164,42 @@ async def test_financing_amount_is_never_looked_up_as_sale_signature(monkeypatch
     await _recover_property_identity_from_transaction(rows)
     await _recover_property_identity_from_near_transaction(rows)
     query.assert_not_awaited()
+
+
+@pytest.mark.parametrize("procedure,linked", [("Sell", True), ("Grant on Delayed Sell", False)])
+def test_mortgage_can_borrow_property_identity_only_from_a_sale_without_proving_ownership(
+    procedure, linked
+):
+    rows = parse(
+        "NameEn,Regis,ProcedureValue,ProcedureNameEn,ProcedurePartyTypeNameEn,UnitNumber\n"
+        f"Seller,2025-01-01,2000000,{procedure},Seller,101\n"
+        "Borrower,2025-01-01,1500000,Mortgage Registration,Buyer,101\n"
+    )
+    anchor, mortgage = rows
+    for row in rows:
+        row.area_name = "Area"
+        row.project_name = "Project"
+        row.building_name = "Tower"
+    source = {
+        "area_name": "Area",
+        "project_name": "Project",
+        "building_name": "Tower",
+        "unit_number": "101",
+    }
+    anchor.evidence["property_identity_resolution"] = {
+        "method": "unique_transaction_signature",
+        "source": source,
+        "resolved": {**source, "building_name": "Registry Tower", "sale_key": "sale-1"},
+    }
+    assert _reuse_mortgage_property_from_sale_anchors(rows) == int(linked)
+    assert bool(mortgage.evidence.get("mortgage_property_resolution")) is linked
+    _apply_evidence(
+        mortgage,
+        sales={
+            mortgage.property_key: [
+                {"transaction_date": date(2025, 1, 1), "sale_amount_aed": 2000000}
+            ]
+        },
+        rentals={},
+    )
+    assert mortgage.ownership_status == "unit_linked_unverified"

@@ -93,9 +93,11 @@ async def fetch_unit_sales(parameters):
                 project_name,
                 area_name,
                 area_key,
+                property_type,
+                bedrooms,
+                size_sqft,
                 transaction_date,
                 sale_amount_aed,
-                property_type,
                 market_status,
                 sale_key,
                 detail_url
