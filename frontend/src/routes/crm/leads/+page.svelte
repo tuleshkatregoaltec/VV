@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import Search from 'lucide-svelte/icons/search'
+import Upload from 'lucide-svelte/icons/upload'
 import { crm } from '$lib/crm/api'
 import type { LeadListParams, LeadRow, LeadStage, LeadType, Source } from '$lib/crm/api/types'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
@@ -134,6 +135,9 @@ const typeLine = (l: LeadRow) =>
 		: ''}
 >
 	{#snippet right()}
+		<button type="button" class="btn ghost" onclick={() => panel.open({ kind: 'new-import', leadsOnly: true })}>
+			<Upload size={15} /><span>Import leads</span>
+		</button>
 		<Seg
 			label="View"
 			items={[

@@ -20,14 +20,16 @@ import Seg from '../ui/Seg.svelte'
  * Import a file: Owners or Leads, CSV or XLSX → preview → import. A manager imports directly
  * (owners are checked against DLD; leads land in the Inbox); an agent is told to send the file
  * to their manager (approval requests are open question 9). The backend reads the file and
- * picks the columns; this screen only shows what it found. From the Owners page it imports owners only.
+ * picks the columns; this screen only shows what it found. From the Owners page it imports owners only,
+ * from the Leads page leads only.
  *
  * An owners file is read in the browser first (header row, row count, five rows); the backend
  * then matches it against DLD before it answers, and the panel shows its counts. Below sits the
  * import history: rename a file (its saved list follows) or delete it, which removes its saved
  * list and claims (no undo), not owner notes.
  */
-let { ownersOnly = false }: { ownersOnly?: boolean } = $props()
+let { ownersOnly = false, leadsOnly = false }: { ownersOnly?: boolean; leadsOnly?: boolean } =
+	$props()
 let kind = $state<'Owners' | 'Leads'>('Owners')
 let areas = $state('')
 /** Owners: the name of the import and its saved list; empty uses the file name. */
@@ -42,7 +44,7 @@ let sending = $state(false)
 let drag = $state(false)
 let input: HTMLInputElement | undefined = $state()
 
-const owners = $derived(ownersOnly || kind === 'Owners')
+const owners = $derived(ownersOnly || (!leadsOnly && kind === 'Owners'))
 const history = createQuery(() => crmQueries.ownerImports())
 let confirming = $state<number | null>(null)
 let deleting = $state<number | null>(null)
@@ -170,7 +172,9 @@ async function send() {
 	title="Import a file"
 	sub={ownersOnly
 		? 'Managers import · owners are checked against DLD'
-		: 'Managers import · owners are checked against DLD, leads go to the Inbox'}
+		: leadsOnly
+			? 'Managers import · leads go to the Inbox'
+			: 'Managers import · owners are checked against DLD, leads go to the Inbox'}
 	footer={result ? done : undefined}
 >
 	<div class="form">
@@ -207,7 +211,7 @@ async function send() {
 				</section>
 			{/if}
 		{:else}
-			{#if !ownersOnly}
+			{#if !ownersOnly && !leadsOnly}
 				<div class="fld">
 					<span class="fl">What is in the file</span>
 					<Seg

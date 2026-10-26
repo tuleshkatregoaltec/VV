@@ -38,7 +38,7 @@ export type PanelState =
 	| { kind: 'new-deal'; leadId?: number }
 	| { kind: 'new-task'; date?: string }
 	| { kind: 'new-owner' }
-	| { kind: 'new-import'; ownersOnly?: boolean }
+	| { kind: 'new-import'; ownersOnly?: boolean; leadsOnly?: boolean }
 	| { kind: 'areas' }
 	| { kind: 'owner-lead'; id: string }
 	| { kind: 'add-record'; ownerId: string }
