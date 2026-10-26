@@ -116,7 +116,9 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 	it('reads criteria into the buyer brief the Leads table shows', async () => {
 		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry() })
 		const lead = await backend.getLead(7)
-		expect(lead.fields.wants).toBe('2 bed Apartment in JVC')
+		// Wants is the property type the matcher filters on; the table line keeps the full brief.
+		expect(lead.fields.wants).toBe('Apartment')
+		expect(lead.summary.line).toBe('2 bed Apartment in JVC')
 		expect(lead.fields.budget_aed).toBe(1_500_000)
 		expect(lead.area).toBe('JVC')
 		expect(lead.agent).toBe('Sara Ali')
@@ -136,6 +138,76 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 			status: 501
 		})
 		expect(patch).not.toHaveBeenCalled()
+	})
+
+	it('gives the Edit form the saved areas, so the area matching uses can be seen and changed', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries/7': enquiry({
+				criteria: { ...enquiry().criteria, locations: ['Dubai Marina', 'JBR'] }
+			})
+		})
+		expect((await backend.getLead(7)).fields.areas).toBe('Dubai Marina, JBR')
+	})
+
+	it('saves Bedrooms as the bedroom range matching reads', async () => {
+		// Matching filters listings on bedrooms_min/max; the forms had no way to set them.
+		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry() })
+		const patch = vi.spyOn(client, 'patch').mockResolvedValue(enquiry())
+		const sent = async (bedrooms: string) => {
+			patch.mockClear()
+			await backend.patchLead(7, { fields: { bedrooms } })
+			return (patch.mock.calls[0][1] as { criteria: Record<string, unknown> }).criteria
+		}
+		expect(await sent('2')).toMatchObject({ bedrooms_min: 2, bedrooms_max: 2 })
+		expect(await sent('Studio')).toMatchObject({ bedrooms_min: 0, bedrooms_max: 0 })
+		const many = await sent('7+')
+		expect(many.bedrooms_min).toBe(7)
+		expect(many).not.toHaveProperty('bedrooms_max')
+	})
+
+	it('shows the saved bedroom range as the Bedrooms option', async () => {
+		for (const [range, shown] of [
+			[{ bedrooms_min: 2, bedrooms_max: 2 }, '2'],
+			[{ bedrooms_min: 0, bedrooms_max: 0 }, 'Studio'],
+			[{ bedrooms_min: 7 }, '7+']
+		] as const) {
+			const { bedrooms_min: _m, bedrooms_max: _x, ...rest } = enquiry().criteria
+			serve({ '/api/v1/crm/inbound/enquiries/7': enquiry({ criteria: { ...rest, ...range } }) })
+			expect((await backend.getLead(7)).fields.bedrooms).toBe(shown)
+		}
+	})
+
+	it('saves the Wants choice as the property type matching filters on', async () => {
+		// Wants used to be free text under its own key, which matching never read: "Villa" typed
+		// there still matched apartments. The dropdown writes property_type and drops the old text.
+		serve({
+			'/api/v1/crm/inbound/enquiries/7': enquiry({
+				criteria: { ...enquiry().criteria, wants: '2 bed apartment' }
+			})
+		})
+		const patch = vi.spyOn(client, 'patch').mockResolvedValue(enquiry())
+		await backend.patchLead(7, { fields: { wants: 'Villa' } })
+		const sent = (patch.mock.calls[0][1] as { criteria: Record<string, unknown> }).criteria
+		expect(sent.property_type).toBe('Villa')
+		expect(sent).not.toHaveProperty('wants')
+	})
+
+	it('shows older type names from imports as the matching dropdown option', async () => {
+		for (const [stored, shown] of [
+			['Flat', 'Apartment'],
+			['Residential Flats', 'Apartment'],
+			['Unit', 'Apartment'],
+			['Villas', 'Villa'],
+			['villa', 'Villa'],
+			['Office Space', 'Office Space']
+		]) {
+			serve({
+				'/api/v1/crm/inbound/enquiries/7': enquiry({
+					criteria: { ...enquiry().criteria, property_type: stored }
+				})
+			})
+			expect((await backend.getLead(7)).fields.wants).toBe(shown)
+		}
 	})
 
 	it('writes edited fields back under the criteria keys the backend matcher reads', async () => {
@@ -159,14 +231,17 @@ describe('New Lead form saves every field of every lead type (POST /api/v1/crm/i
 			type: 'buyer',
 			intent: 'buy',
 			fields: {
-				wants: '2 bed apartment',
+				wants: 'Villa',
+				bedrooms: '4',
 				budget_aed: 1_500_000,
 				finance: 'Mortgage',
 				purpose: 'Invest',
 				timeline: '3 months'
 			},
 			criteria: {
-				wants: '2 bed apartment',
+				property_type: 'Villa',
+				bedrooms_min: 4,
+				bedrooms_max: 4,
 				budget_max_aed: 1_500_000,
 				financing: 'Mortgage',
 				purpose: 'Invest',
@@ -196,8 +271,13 @@ describe('New Lead form saves every field of every lead type (POST /api/v1/crm/i
 		{
 			type: 'tenant',
 			intent: 'rent',
-			fields: { wants: 'Studio', budget_aed: 65_000, cheques: '4', move_in: 'December' },
-			criteria: { wants: 'Studio', budget_max_aed: 65_000, cheques: '4', move_in: 'December' }
+			fields: { wants: 'Apartment', budget_aed: 65_000, cheques: '4', move_in: 'December' },
+			criteria: {
+				property_type: 'Apartment',
+				budget_max_aed: 65_000,
+				cheques: '4',
+				move_in: 'December'
+			}
 		},
 		{
 			type: 'landlord',

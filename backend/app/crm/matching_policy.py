@@ -31,6 +31,65 @@ def _budget_fit(criteria: dict[str, Any], value: int | None) -> tuple[int, str]:
     return 0, "Outside budget"
 
 
+# Portal listings: the buyer's budget is a band, not a ceiling (matching call, 26 Oct).
+# Anything outside it is not shown; inside it, closer prices earn more of the 25 points.
+LISTING_BUDGET_BELOW = 0.30
+LISTING_BUDGET_ABOVE = 0.20
+LISTING_BUDGET_POINTS = 25
+
+
+def _listing_budget_band(criteria: dict[str, Any]) -> tuple[int, int] | None:
+    maximum = int(criteria.get("budget_max_aed") or 0)
+    minimum = int(criteria.get("budget_min_aed") or 0)
+    if not maximum and not minimum:
+        return None
+    low = minimum or maximum
+    high = maximum or minimum
+    return round(low * (1 - LISTING_BUDGET_BELOW)), round(high * (1 + LISTING_BUDGET_ABOVE))
+
+
+def _listing_budget_fit(criteria: dict[str, Any], value: int | None) -> tuple[int, str] | None:
+    """Budget points for a listing, or None when its price is outside the budget band."""
+    band = _listing_budget_band(criteria)
+    if band is None:
+        return 0, "Budget is missing"
+    if not value:
+        return 5, "Price requires verification"
+    if not band[0] <= value <= band[1]:
+        return None
+    low = int(criteria.get("budget_min_aed") or 0) or int(criteria.get("budget_max_aed"))
+    high = int(criteria.get("budget_max_aed") or 0) or low
+    if value < low:
+        gap = (low - value) / (low * LISTING_BUDGET_BELOW)
+        percent, side = round((low - value) / low * 100), "below"
+    elif value > high:
+        gap = (value - high) / (high * LISTING_BUDGET_ABOVE)
+        percent, side = round((value - high) / high * 100), "over"
+    else:
+        return LISTING_BUDGET_POINTS, "Within stated budget"
+    reason = f"{percent}% {side} budget" if percent else "Within 1% of budget"
+    return round(LISTING_BUDGET_POINTS * (1 - gap)), reason
+
+
+def _listing_type_matches(criteria: dict[str, Any], value: str) -> bool:
+    """A requested property type is a hard rule for listings: other or unknown types are out."""
+    requested = _canonical_property_type(criteria.get("property_type"))
+    return not requested or requested == _canonical_property_type(value)
+
+
+def _listing_bedrooms(criteria: dict[str, Any]) -> list[str] | None:
+    """The listing bedroom values to search: listings say "studio", "1"…"7" and "7+"."""
+    requested = criteria.get("bedrooms_min")
+    if requested is None:
+        return None
+    beds = int(requested)
+    if beds == 0:
+        return ["studio"]
+    if beds >= 7 and criteria.get("bedrooms_max") is None:
+        return ["7", "7+"]
+    return [str(beds)]
+
+
 def _bedroom_fit(criteria: dict[str, Any], value: str) -> tuple[int, str]:
     requested = criteria.get("bedrooms_min")
     if requested is None:
@@ -72,8 +131,13 @@ def _canonical_property_type(value: Any) -> str:
 
 
 def _listing_property_type(value: Any) -> str | None:
-    normalized = _canonical_property_type(value)
-    return normalized.title() if normalized else None
+    """The type name the listing search matches exactly: a synonym maps to its portal name,
+    and a portal name chosen in the Wants dropdown passes through as written."""
+    raw = str(value or "").strip()
+    normalized = _canonical_property_type(raw)
+    if not normalized:
+        return None
+    return raw if normalized == raw.casefold() and raw != raw.casefold() else normalized.title()
 
 
 def _violates_strict_fields(

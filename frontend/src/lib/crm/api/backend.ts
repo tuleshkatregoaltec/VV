@@ -37,7 +37,7 @@ import type {
 	InboundMatchResponse
 } from '$lib/api/generated/hey-api/types.gen'
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
-import { groupOf, LEAD_TYPES, ownerPropertyKind, SOURCE_OPTIONS } from '../config'
+import { groupOf, LEAD_TYPES, ownerPropertyKind, PROPERTY_TYPES, SOURCE_OPTIONS } from '../config'
 import { aed, fmt, fullDate, plural, short } from '../format'
 import {
 	type ClaimStatus,
@@ -236,6 +236,7 @@ function statusOf(stage: LeadStage): Status {
 
 /** UI field → backend criteria key, where the backend already names it (matching reads these). */
 const CRITERIA_KEY: Partial<Record<LeadFieldKey, string>> = {
+	wants: 'property_type',
 	budget_aed: 'budget_max_aed',
 	target_price_aed: 'expected_price_aed',
 	finance: 'financing',
@@ -261,6 +262,34 @@ function wantsOf(c: Criteria): string | null {
 	return parts.length ? parts.join(' ') : null
 }
 
+/** Imported synonyms, shown as the portal type the Wants dropdown offers. */
+const TYPE_SYNONYMS: Record<string, string> = {
+	flat: 'Apartment',
+	unit: 'Apartment',
+	residential: 'Apartment',
+	'residential flat': 'Apartment',
+	'residential flats': 'Apartment',
+	apartments: 'Apartment',
+	villas: 'Villa',
+	townhouses: 'Townhouse'
+}
+
+/** The Wants option for a stored property type; an unknown name is kept as it is. */
+function wantsOption(v: unknown): string | null {
+	const raw = text(v)
+	if (!raw) return null
+	const key = raw.trim().toLowerCase()
+	return PROPERTY_TYPES.find((t) => t.toLowerCase() === key) ?? TYPE_SYNONYMS[key] ?? raw
+}
+
+/** The Bedrooms option for a saved range: 0 is a studio, 7 with no upper bound is 7+. */
+function bedroomsOption(c: Criteria): string | null {
+	const beds = num(c.bedrooms_min)
+	if (beds === null) return null
+	if (beds === 0) return 'Studio'
+	return beds >= 7 && num(c.bedrooms_max) === null ? '7+' : String(beds)
+}
+
 function fieldsOf(c: Criteria): LeadFields {
 	const out: LeadFields = {}
 	const keys = Object.keys(LEAD_TYPES).flatMap((t) =>
@@ -271,7 +300,9 @@ function fieldsOf(c: Criteria): LeadFields {
 		const v = k.endsWith('_aed') ? num(raw) : text(raw)
 		if (v !== null) out[k] = v
 	}
-	out.wants ??= wantsOf(c)
+	// Wants is the property type matching filters on, not the older free text under `wants`.
+	out.wants = wantsOption(c.property_type)
+	out.bedrooms = bedroomsOption(c)
 	out.budget_aed ??= num(c.budget_min_aed)
 	if (!out.unit) {
 		const unit = [text(c.building), text(c.unit_number)].filter(Boolean).join(' #')
@@ -283,7 +314,19 @@ function fieldsOf(c: Criteria): LeadFields {
 
 function criteriaWith(current: Criteria, fields: LeadFields): Criteria {
 	const next = { ...current }
+	// Wants now saves as property_type; drop the older free text so it cannot drift from it.
+	if ('wants' in fields) delete next.wants
 	for (const [k, v] of Object.entries(fields)) {
+		if (k === 'bedrooms') {
+			// One choice is a range for matching: Studio = 0, "7+" = 7 and up, else exactly that.
+			delete next.bedrooms_min
+			delete next.bedrooms_max
+			if (v === null || v === undefined || v === '') continue
+			const beds = v === 'Studio' ? 0 : Number.parseInt(String(v), 10)
+			next.bedrooms_min = beds
+			if (v !== '7+') next.bedrooms_max = beds
+			continue
+		}
 		const key = CRITERIA_KEY[k as LeadFieldKey] ?? k
 		if (v === null || v === undefined || v === '') delete next[key]
 		else if (key === 'locations')
@@ -302,12 +345,12 @@ const sourceOf = (label: string): Source =>
 		: (SOURCE_OPTIONS.find((o) => o.label.toLowerCase() === label.toLowerCase())?.source ??
 			'inbound')
 
-function summaryOf(type: LeadType, f: LeadFields): { line: string; sub: string } {
+function summaryOf(type: LeadType, f: LeadFields, c: Criteria): { line: string; sub: string } {
 	const money = (v: unknown) => (num(v) ? `AED ${short(Number(v))}` : null)
 	const join = (xs: (string | number | null | undefined)[]) => xs.filter(Boolean).join(' · ')
 	if (groupOf(type) === 'bt') {
 		return {
-			line: String(f.wants ?? 'Not stated'),
+			line: wantsOf(c) ?? text(c.wants) ?? 'Not stated',
 			sub: join([money(f.budget_aed), f.finance, f.timeline, f.move_in])
 		}
 	}
@@ -362,7 +405,8 @@ function leadRow(e: InboundEnquiryResponse, u: AuthMeResponse): LeadRow {
 		gated: false,
 		owner_id: null,
 		fields,
-		summary: lease && type === 'owner' ? vitevueSummary(lease) : summaryOf(type, fields),
+		summary:
+			lease && type === 'owner' ? vitevueSummary(lease) : summaryOf(type, fields, e.criteria),
 		known: knownOf(e),
 		source_short: e.source,
 		listing: null,
@@ -1846,7 +1890,7 @@ const BAND: Record<string, string> = {
 function inboxItem(e: InboundEnquiryResponse, u: AuthMeResponse): InboxItem {
 	const type = typeOf(e)
 	const typed = e.intent !== 'unknown'
-	const summary = summaryOf(type, fieldsOf(e.criteria))
+	const summary = summaryOf(type, fieldsOf(e.criteria), e.criteria)
 	const name = e.contact.full_name || 'Unnamed contact'
 	const dismissed = e.status === 'disqualified'
 	const mine = e.assigned_user_id === u.id

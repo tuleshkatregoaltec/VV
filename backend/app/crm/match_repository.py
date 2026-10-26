@@ -69,6 +69,15 @@ async def mark_refreshable_matches_stale(db: AsyncSession, enquiry_id):
     )
 
 
+async def mark_algorithm_version(db: AsyncSession, enquiry_id, version):
+    """Every stored match of the lead was considered by this run, kept or not."""
+    return await db.exec(
+        CrmInboundMatch.__table__.update()
+        .where(CrmInboundMatch.enquiry_id == enquiry_id)
+        .values(algorithm_version=version)
+    )
+
+
 async def list_matches_by_score(db: AsyncSession, enquiry_id):
     return (
         await db.exec(

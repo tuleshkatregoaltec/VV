@@ -76,6 +76,8 @@ export interface NavCounts {
 
 export type LeadFieldKey =
 	| 'wants'
+	/** Studio, 1…6 or 7+; saved as bedrooms_min / bedrooms_max, which matching reads. */
+	| 'bedrooms'
 	| 'budget_aed'
 	| 'finance'
 	| 'purpose'

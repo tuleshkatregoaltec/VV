@@ -173,7 +173,10 @@ async def get_crm_inbound_enquiry(db: AsyncSession, key):
 async def mark_enquiry_matches_stale(db: AsyncSession, enquiry, enquiry_id):
     return await db.exec(
         CrmInboundMatch.__table__.update()
-        .where(CrmInboundMatch.enquiry_id == enquiry_id)
+        .where(
+            CrmInboundMatch.enquiry_id == enquiry_id,
+            CrmInboundMatch.state.notin_(["saved", "dismissed"]),
+        )
         .values(state="stale", updated_at=enquiry.updated_at)
     )
 

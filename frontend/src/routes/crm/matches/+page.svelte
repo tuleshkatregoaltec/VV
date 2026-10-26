@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import type { MatchClient } from '$lib/crm/api/types'
+import BudgetRange from '$lib/crm/components/ui/BudgetRange.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
@@ -111,10 +112,9 @@ const EMPTY: Record<MatchTabId, [string, string]> = {
 							</dl>
 							{#if m.tab !== 'sell'}
 								<span class="row-chips">
-									<label class="check">
-										<input type="checkbox" bind:checked={ui.matchOver} />
-										Up to 10% over budget
-									</label>
+									{#if Number(m.lead.fields.budget_aed)}
+										<BudgetRange budget={Number(m.lead.fields.budget_aed)} rent={m.lead.lead_type === 'tenant'} />
+									{/if}
 									{#if m.tab === 'ready'}<span class="small muted">Shortlist: {m.shortlist}</span>{/if}
 								</span>
 							{/if}

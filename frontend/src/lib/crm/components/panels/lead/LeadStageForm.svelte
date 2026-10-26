@@ -10,7 +10,7 @@ import type {
 	LeadStage,
 	LeadStageMove
 } from '../../../api/types'
-import { CONTACT_OUTCOMES, LEAD_TYPES, LOST_REASONS, stageOf } from '../../../config'
+import { CONTACT_OUTCOMES, fieldShown, LEAD_TYPES, LOST_REASONS, stageOf } from '../../../config'
 import { addDays, fileSize } from '../../../format'
 import { crmQueries } from '../../../queries'
 import { panel } from '../../../stores/panel.svelte'
@@ -108,7 +108,8 @@ async function submit(e: SubmitEvent) {
 		const fields: LeadFields = {}
 		for (const f of type.fields) {
 			const k = f.key as LeadFieldKey
-			if (f.money) fields[k] = money[k] ?? null
+			if (!fieldShown(f, draft)) fields[k] = null
+			else if (f.money) fields[k] = money[k] ?? null
 			else fields[k] = String(draft[k] ?? '').trim() || null
 		}
 		ok = Boolean(await move({ ...base, fields }))
@@ -210,7 +211,7 @@ function onPicked() {
 			<input id="sf-next" required bind:value={nextAction} />
 		</div>
 	{:else if stage === 'qualified'}
-		{#each type.fields as f (f.key)}
+		{#each type.fields.filter((x) => fieldShown(x, draft)) as f (f.key)}
 			<div class="fld">
 				<label for="sf-{f.key}">{f.label}{f.money ? ' (AED)' : ''}</label>
 				{#if f.money}

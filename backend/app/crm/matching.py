@@ -24,7 +24,11 @@ from app.crm.matching_policy import (
     _bedroom_fit,
     _budget_fit,
     _json_snapshot,
+    _listing_bedrooms,
+    _listing_budget_band,
+    _listing_budget_fit,
     _listing_property_type,
+    _listing_type_matches,
     _location_fit,
     _property_fit,
     _violates_strict_fields,
@@ -34,10 +38,15 @@ from app.crm.opportunities import (
     list_matching_rental_opportunities,
     list_sales_inventory,
 )
+from app.listings.models import ListingCardResponse
 from app.listings.service import get_inventory_freshness, list_listings_from_clickhouse
 from app.supply.service import get_catalog_freshness, list_matching_inventory
 
-_ALGORITHM_VERSION = "inbound-v1"
+# Bump when scoring rules change: stored matches from an older version re-run on next load.
+# v2 (26 Oct): portal listings use a budget band, closeness points and a hard property type.
+# v3 (26 Oct): listing details show the property type; "0% below budget" reads "Within 1%".
+# v4 (26 Oct): studio and 7+ bedroom buyers are searched with the values listings use.
+_ALGORITHM_VERSION = "inbound-v4"
 
 
 def _match_response(item: CrmInboundMatch) -> InboundMatchResponse:
@@ -53,6 +62,74 @@ def _match_response(item: CrmInboundMatch) -> InboundMatchResponse:
         missing_fields=item.missing_fields,
         snapshot=item.snapshot,
         generated_at=item.generated_at,
+    )
+
+
+def _needs_refresh(items: list[CrmInboundMatch]) -> bool:
+    """Re-run matching when nothing is stored or the brief changed after the last run.
+
+    A brief change marks suggested matches stale (saved and dismissed keep their state), so a
+    stale match touched after the newest generated one means the stored list is out of date.
+    """
+    if not items or any(item.algorithm_version != _ALGORITHM_VERSION for item in items):
+        return True
+    last_run = max(item.generated_at for item in items)
+    return any(item.state == "stale" and item.updated_at > last_run for item in items)
+
+
+def _listing_subtitle(listing: ListingCardResponse) -> str:
+    """Where, what type and how much: the type lets agents check Villa vs Apartment at a glance."""
+    parts = [
+        listing.tower_name or listing.area_name or "Dubai",
+        listing.property_type,
+        f"AED {listing.price_value:,}" if listing.price_value else None,
+    ]
+    return " · ".join(part for part in parts if part)
+
+
+def _score_listing(
+    criteria: dict[str, Any],
+    strict_fields: list[str],
+    intent: str,
+    listing: ListingCardResponse,
+) -> tuple[int, list[str], dict[str, int]] | None:
+    """Score one portal listing, or None when its type or price rules it out."""
+    if not _listing_type_matches(criteria, listing.property_type or ""):
+        return None
+    location, location_reason = _location_fit(
+        criteria,
+        listing.area_name or "",
+        listing.subcommunity_name or "",
+        listing.tower_name or "",
+    )
+    listing_price = listing.price_value
+    if intent == "rent" and listing_price:
+        period = (listing.price_period or "").casefold()
+        if "month" in period:
+            listing_price *= 12
+        elif "week" in period:
+            listing_price *= 52
+        elif "day" in period:
+            listing_price *= 365
+    budget_fit = _listing_budget_fit(criteria, listing_price)
+    if budget_fit is None:
+        return None
+    budget, budget_reason = budget_fit
+    bedroom, bedroom_reason = _bedroom_fit(criteria, listing.bedrooms or "")
+    property_points = _property_fit(criteria, listing.property_type or "")
+    if _violates_strict_fields(
+        strict_fields,
+        location_points=location,
+        budget_points=budget,
+        bedroom_points=bedroom,
+        property_points=property_points,
+    ):
+        return None
+    requirements = location + budget + bedroom + property_points
+    return (
+        min(100, requirements + 20 + 10),
+        [location_reason, budget_reason, bedroom_reason],
+        {"requirements": requirements, "actionability": 20, "timing": 10},
     )
 
 
@@ -416,44 +493,22 @@ async def refresh_inbound_matches(
 
     if listing_last_refresh and enquiry.intent in {"buy", "rent"}:
         requested_locations = _locations(criteria)
+        band = _listing_budget_band(criteria)
         listings = await list_listings_from_clickhouse(
             mode="sale" if enquiry.intent == "buy" else "rent",
             limit=60,
             area=requested_locations[0] if requested_locations else None,
             property_type=_listing_property_type(criteria.get("property_type")),
-            bedrooms=str(criteria.get("bedrooms_min"))
-            if criteria.get("bedrooms_min") is not None
-            else None,
-            price_max=criteria.get("budget_max_aed"),
+            bedrooms_in=_listing_bedrooms(criteria),
+            price_min=band[0] if band else None,
+            price_max=band[1] if band else None,
+            price_basis="annual" if enquiry.intent == "rent" else "raw",
         )
         for listing in listings.listings:
-            location, location_reason = _location_fit(
-                criteria,
-                listing.area_name or "",
-                listing.subcommunity_name or "",
-                listing.tower_name or "",
-            )
-            listing_price = listing.price_value
-            if enquiry.intent == "rent" and listing_price:
-                period = (listing.price_period or "").casefold()
-                if "month" in period:
-                    listing_price *= 12
-                elif "week" in period:
-                    listing_price *= 52
-                elif "day" in period:
-                    listing_price *= 365
-            budget, budget_reason = _budget_fit(criteria, listing_price)
-            bedroom, bedroom_reason = _bedroom_fit(criteria, listing.bedrooms or "")
-            property_points = _property_fit(criteria, listing.property_type or "")
-            if _violates_strict_fields(
-                enquiry.strict_fields,
-                location_points=location,
-                budget_points=budget,
-                bedroom_points=bedroom,
-                property_points=property_points,
-            ):
+            scored = _score_listing(criteria, enquiry.strict_fields, enquiry.intent, listing)
+            if scored is None:
                 continue
-            score = min(100, location + budget + bedroom + property_points + 20 + 10)
+            score, reasons, breakdown = scored
             item = await _upsert_match(
                 db,
                 enquiry=enquiry,
@@ -461,22 +516,14 @@ async def refresh_inbound_matches(
                 target_key=listing.listing_id,
                 score=score,
                 title=listing.title,
-                subtitle=f"{listing.tower_name or listing.area_name or 'Dubai'} · AED {listing.price_value:,}"
-                if listing.price_value
-                else listing.tower_name or "Dubai",
+                subtitle=_listing_subtitle(listing),
                 reasons=[
-                    location_reason,
-                    budget_reason,
-                    bedroom_reason,
+                    *reasons,
                     "Fresh active listing"
                     if listing_fresh
                     else "Listing catalog candidate; availability requires confirmation",
                 ],
-                breakdown={
-                    "requirements": location + budget + bedroom + property_points,
-                    "actionability": 20,
-                    "timing": 10,
-                },
+                breakdown=breakdown,
                 snapshot=listing.model_dump(mode="json"),
             )
             if item:
@@ -545,6 +592,7 @@ async def refresh_inbound_matches(
                 if len(matched_projects) >= 20:
                     break
 
+    await match_repository.mark_algorithm_version(db, enquiry_id, _ALGORITHM_VERSION)
     await db.commit()
     stored = await match_repository.list_matches_by_score(db, enquiry_id)
     lanes: dict[str, list[InboundMatchResponse]] = {
@@ -591,7 +639,7 @@ async def get_inbound_matches(
         )
     result = await match_repository.list_matches_by_score(db, enquiry_id)
     items = result
-    if not any(item.state != "stale" for item in items):
+    if _needs_refresh(items):
         return await refresh_inbound_matches(
             db, enquiry_id=enquiry_id, organization_id=organization_id
         )

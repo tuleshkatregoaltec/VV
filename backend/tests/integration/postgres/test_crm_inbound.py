@@ -9,6 +9,7 @@ from app.crm.inbound_models import (
     CrmInboundEnquiry,
     CrmInboundMatch,
     InboundEnquiryCreate,
+    InboundEnquiryUpdate,
 )
 
 
@@ -64,6 +65,56 @@ async def test_manual_enquiry_scope_history_and_match_state_survive_refresh(pg_s
     loaded = await inbound.get_inbound_enquiry(pg_session, response.id, org)
     assert loaded.criteria == criteria
     assert loaded.activities[0].activity_type == "created"
+
+
+async def test_changing_the_budget_keeps_saved_and_dismissed_matches(pg_session):
+    # Dragging the budget bar edits the brief; an agent's saved and dismissed choices must survive it.
+    org, user = str(uuid4()), str(uuid4())
+    response = await inbound.create_inbound_enquiry(
+        pg_session,
+        payload=InboundEnquiryCreate(
+            full_name="Budget buyer",
+            intent="buy",
+            record_kind="opportunity",
+            criteria={"locations": ["JBR"], "budget_max_aed": 3000000, "bedrooms_min": 2},
+        ),
+        user_id=user,
+        organization_id=org,
+    )
+    enquiry = await pg_session.get(CrmInboundEnquiry, response.id)
+    states = {}
+    for key, state in (("kept", "saved"), ("hidden", "dismissed"), ("plain", "suggested")):
+        item = await matching._upsert_match(
+            pg_session,
+            enquiry=enquiry,
+            target_type="listing",
+            target_key=key,
+            score=85,
+            title=key,
+            subtitle="",
+            reasons=[],
+            breakdown={},
+            snapshot={},
+        )
+        await pg_session.commit()
+        if state != "suggested":
+            await matching.update_inbound_match_state(
+                pg_session, match_id=item.id, organization_id=org, state=state
+            )
+        states[key] = item.id
+
+    await inbound.update_inbound_enquiry(
+        pg_session,
+        enquiry_id=response.id,
+        organization_id=org,
+        user_id=user,
+        payload=InboundEnquiryUpdate(
+            criteria={"locations": ["JBR"], "budget_max_aed": 2500000, "bedrooms_min": 2}
+        ),
+    )
+    pg_session.expire_all()
+    after = {key: (await pg_session.get(CrmInboundMatch, i)).state for key, i in states.items()}
+    assert after == {"kept": "saved", "hidden": "dismissed", "plain": "stale"}
 
 
 async def test_high_score_without_requirements_cannot_be_exact(pg_session):

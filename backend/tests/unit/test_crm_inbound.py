@@ -18,6 +18,9 @@ from app.crm.inbound_policy import (
 from app.crm.matching_policy import (
     _bedroom_fit,
     _budget_fit,
+    _listing_budget_band,
+    _listing_budget_fit,
+    _listing_type_matches,
     _location_fit,
     _property_fit,
     _violates_strict_fields,
@@ -147,6 +150,109 @@ def test_match_scoring_distinguishes_exact_flexible_and_outside():
     assert _budget_fit(criteria, 2_900_000)[0] == 15
     assert _budget_fit(criteria, 3_150_000)[0] == 9
     assert _budget_fit(criteria, 4_000_000)[0] == 0
+
+
+def test_listing_budget_band_is_thirty_percent_below_and_twenty_percent_above():
+    # Agreed on the matching call: a buyer's budget is a band, not just a ceiling.
+    assert _listing_budget_band({"budget_max_aed": 3_000_000}) == (2_100_000, 3_600_000)
+    assert _listing_budget_band({"budget_min_aed": 2_000_000, "budget_max_aed": 3_000_000}) == (
+        1_400_000,
+        3_600_000,
+    )
+    assert _listing_budget_band({}) is None
+
+
+def test_listing_far_below_or_above_budget_is_disqualified():
+    # A 2M villa must never be offered to a 20M buyer just because it is "under budget".
+    assert _listing_budget_fit({"budget_max_aed": 20_000_000}, 2_000_000) is None
+    criteria = {"budget_max_aed": 3_000_000}
+    assert _listing_budget_fit(criteria, 2_000_000) is None
+    assert _listing_budget_fit(criteria, 3_700_000) is None
+    assert _listing_budget_fit(criteria, 2_200_000) is not None
+    assert _listing_budget_fit(criteria, 3_500_000) is not None
+
+
+def test_listing_budget_points_rank_by_closeness_to_budget():
+    # Budget carries 25 points and closer prices rank higher, so listings no longer tie at 85.
+    criteria = {"budget_max_aed": 3_000_000}
+    on_budget = _listing_budget_fit(criteria, 3_000_000)[0]
+    near_below = _listing_budget_fit(criteria, 2_900_000)[0]
+    far_below = _listing_budget_fit(criteria, 2_300_000)[0]
+    over = _listing_budget_fit(criteria, 3_300_000)[0]
+    assert on_budget == 25
+    assert on_budget > near_below > far_below
+    assert on_budget > over
+    assert (
+        _listing_budget_fit({"budget_min_aed": 2_500_000, "budget_max_aed": 3_000_000}, 2_700_000)[
+            0
+        ]
+        == 25
+    )
+
+
+def test_listing_with_a_different_property_type_is_disqualified():
+    # Someone who asks for a villa should never be shown apartments.
+    assert not _listing_type_matches({"property_type": "Villa"}, "Apartment")
+    assert not _listing_type_matches({"property_type": "Villa"}, "")
+    assert _listing_type_matches({"property_type": "Villa"}, "Villas")
+    assert _listing_type_matches({"property_type": "Residential Flats"}, "Apartment")
+    assert _listing_type_matches({}, "Apartment")
+
+
+def _listing(price: int, property_type: str = "Villa", period: str | None = None):
+    from app.listings.models import ListingCardResponse
+
+    return ListingCardResponse(
+        listing_id=f"L-{price}-{property_type}",
+        listing_mode="rent" if period else "sale",
+        asset_class="residential",
+        title="Listing",
+        property_type=property_type,
+        price_value=price,
+        price_period=period,
+        bedrooms="4",
+        area_name="Dubai Hills Estate",
+    )
+
+
+def test_listing_lane_drops_wrong_type_and_out_of_band_prices():
+    from app.crm.matching import _score_listing
+
+    buyer = {
+        "locations": ["Dubai Hills Estate"],
+        "property_type": "Villa",
+        "bedrooms_min": 4,
+        "budget_max_aed": 20_000_000,
+    }
+    assert _score_listing(buyer, [], "buy", _listing(19_000_000, "Apartment")) is None
+    assert _score_listing(buyer, [], "buy", _listing(2_000_000)) is None
+    assert _score_listing(buyer, [], "buy", _listing(19_500_000)) is not None
+
+
+def test_listing_lane_scores_differ_by_price_closeness():
+    from app.crm.matching import _score_listing
+
+    buyer = {
+        "locations": ["Dubai Hills Estate"],
+        "property_type": "Villa",
+        "bedrooms_min": 4,
+        "budget_max_aed": 10_000_000,
+    }
+    close = _score_listing(buyer, [], "buy", _listing(9_800_000))[0]
+    far = _score_listing(buyer, [], "buy", _listing(7_500_000))[0]
+    assert close > far
+
+
+def test_listing_lane_compares_monthly_rent_as_annual():
+    from app.crm.matching import _score_listing
+
+    tenant = {
+        "locations": ["Dubai Hills Estate"],
+        "property_type": "Villa",
+        "budget_max_aed": 600_000,
+    }
+    assert _score_listing(tenant, [], "rent", _listing(50_000, period="monthly")) is not None
+    assert _score_listing(tenant, [], "rent", _listing(90_000, period="monthly")) is None
 
 
 def test_generic_residential_owner_types_do_not_block_apartment_inventory():
@@ -416,3 +522,95 @@ def test_new_lead_form_required_fields_are_enough_to_qualify(intent, criteria):
     if intent in {"sell", "let"}:
         enquiry.criteria = {"unit": f"{criteria['building']} #{criteria['unit_number']}"}
         assert not _qualification_complete(enquiry)
+
+
+def _stored_match(
+    state: str, generated_at: datetime, updated_at: datetime, version: str | None = None
+):
+    from app.crm.inbound_models import CrmInboundMatch
+    from app.crm.matching import _ALGORITHM_VERSION
+
+    return CrmInboundMatch(
+        algorithm_version=version or _ALGORITHM_VERSION,
+        enquiry_id=1,
+        organization_id="org",
+        target_type="listing",
+        target_key=f"{state}-{generated_at.isoformat()}",
+        score=85,
+        title="Listing",
+        subtitle="",
+        state=state,
+        generated_at=generated_at,
+        updated_at=updated_at,
+    )
+
+
+def test_matches_rerun_when_the_brief_changed_after_the_last_run():
+    # A budget change marks suggested matches stale but keeps saved ones; the next load must
+    # re-run matching instead of showing the old list because a saved match still exists.
+    from app.crm.matching import _needs_refresh
+
+    run = datetime(2026, 10, 26, 9, 0, tzinfo=timezone.utc)
+    edit = run + timedelta(minutes=5)
+    saved = _stored_match("saved", run, run)
+    assert _needs_refresh([])
+    assert not _needs_refresh([saved, _stored_match("suggested", run, run)])
+    assert _needs_refresh([saved, _stored_match("stale", run, edit)])
+    assert not _needs_refresh(
+        [
+            _stored_match("suggested", edit + timedelta(seconds=1), edit),
+            _stored_match("stale", run, edit),
+        ]
+    )
+
+
+def test_matches_scored_by_an_older_algorithm_rerun_on_next_load():
+    # After a scoring change, leads must not keep showing results scored by the old rules
+    # (a 15m listing for a 19m buyer still reading "Within stated budget").
+    from app.crm.matching import _ALGORITHM_VERSION, _needs_refresh
+
+    run = datetime(2026, 10, 26, 9, 0, tzinfo=timezone.utc)
+    assert _ALGORITHM_VERSION != "inbound-v1"
+    assert _needs_refresh([_stored_match("suggested", run, run, version="inbound-v1")])
+    assert not _needs_refresh([_stored_match("suggested", run, run)])
+
+
+def test_listing_details_show_the_property_type():
+    # Agents check the type at a glance (Villa vs Apartment) without opening the listing.
+    from app.crm.matching import _listing_subtitle
+
+    listing = _listing(2_490_000, "Apartment")
+    listing.tower_name = "Cayan Tower"
+    assert _listing_subtitle(listing) == "Cayan Tower · Apartment · AED 2,490,000"
+    listing.property_type = None
+    assert _listing_subtitle(listing) == "Cayan Tower · AED 2,490,000"
+
+
+def test_a_price_just_under_budget_never_reads_zero_percent():
+    criteria = {"budget_max_aed": 2_500_000}
+    assert _listing_budget_fit(criteria, 2_490_000)[1] == "Within 1% of budget"
+    assert _listing_budget_fit(criteria, 2_470_000)[1] == "1% below budget"
+    assert _listing_budget_fit(criteria, 2_510_000)[1] == "Within 1% of budget"
+
+
+def test_listing_search_uses_the_portal_type_name_as_chosen():
+    # The Wants dropdown offers the portal's own type names; the listing search matches them
+    # exactly, so a chosen name must reach it unchanged. Imported synonyms still map to Apartment.
+    from app.crm.matching_policy import _listing_property_type
+
+    assert _listing_property_type("Co-working space") == "Co-working space"
+    assert _listing_property_type("Hotel & Hotel Apartment") == "Hotel & Hotel Apartment"
+    assert _listing_property_type("Residential Flats") == "Apartment"
+    assert _listing_property_type("Villas") == "Villa"
+    assert _listing_property_type("") is None
+
+
+def test_listing_search_asks_for_the_bedroom_values_listings_use():
+    # Listings record studios as "studio" and large homes as "7" or "7+"; a studio buyer saved
+    # as 0 was searched as "0" and never saw a listing.
+    from app.crm.matching_policy import _listing_bedrooms
+
+    assert _listing_bedrooms({"bedrooms_min": 0, "bedrooms_max": 0}) == ["studio"]
+    assert _listing_bedrooms({"bedrooms_min": 2, "bedrooms_max": 2}) == ["2"]
+    assert _listing_bedrooms({"bedrooms_min": 7}) == ["7", "7+"]
+    assert _listing_bedrooms({}) is None

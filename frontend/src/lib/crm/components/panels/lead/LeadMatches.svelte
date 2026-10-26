@@ -6,6 +6,7 @@ import { crmQueries } from '../../../queries'
 import { panel } from '../../../stores/panel.svelte'
 import { type MatchTabId, ui } from '../../../stores/ui.svelte'
 import { errorText } from '../../../write'
+import BudgetRange from '../../ui/BudgetRange.svelte'
 import ErrorLine from '../../ui/ErrorLine.svelte'
 import MatchTiers from '../../ui/MatchTiers.svelte'
 import Skeleton from '../../ui/Skeleton.svelte'
@@ -33,11 +34,8 @@ function openInMatches() {
 </script>
 
 <div class="filters">
-	{#if tab !== 'sell'}
-		<label class="check small">
-			<input type="checkbox" bind:checked={ui.matchOver} />
-			Up to 10% over budget
-		</label>
+	{#if tab !== 'sell' && Number(lead.fields.budget_aed)}
+		<BudgetRange budget={Number(lead.fields.budget_aed)} rent={lead.lead_type === 'tenant'} />
 	{/if}
 	<span class="count">
 		<button type="button" class="btn ghost sm" onclick={openInMatches}>Open in Matches</button>

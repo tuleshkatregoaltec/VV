@@ -3,7 +3,7 @@ import { untrack } from 'svelte'
 import { goto } from '$app/navigation'
 import { crm } from '../../api'
 import type { LeadFieldKey, LeadFields, LeadType } from '../../api/types'
-import { LEAD_TYPE_ORDER, LEAD_TYPES, SOURCE_OPTIONS } from '../../config'
+import { fieldShown, LEAD_TYPE_ORDER, LEAD_TYPES, SOURCE_OPTIONS } from '../../config'
 import { phoneProblem } from '../../format'
 import { clearLeadFilters, ui } from '../../stores/ui.svelte'
 import { write } from '../../write'
@@ -53,6 +53,7 @@ async function submit(e: SubmitEvent) {
 	const out: LeadFields = {}
 	for (const f of fields) {
 		const k = f.key as LeadFieldKey
+		if (!fieldShown(f, draft)) continue
 		if (f.money) {
 			if (money[k]) out[k] = money[k]
 		} else {
@@ -123,7 +124,7 @@ async function submit(e: SubmitEvent) {
 				</select>
 			</div>
 		</div>
-		{#each fields as f (f.key)}
+		{#each fields.filter((x) => fieldShown(x, draft)) as f (f.key)}
 			<div class="fld">
 				<label for="nl-{f.key}">{f.label}{f.money ? ' (AED)' : ''}</label>
 				{#if f.money}
