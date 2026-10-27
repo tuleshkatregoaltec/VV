@@ -234,3 +234,98 @@ async def test_new_lead_form_fields_persist_for_every_lead_type(pg_session, inte
     loaded = await inbound.get_inbound_enquiry(pg_session, response.id, org)
     assert loaded.criteria == criteria
     assert loaded.activities[0].activity_type == "created"
+
+
+async def test_a_rerun_keeps_matches_found_again_visible_when_they_were_loaded_first(pg_session):
+    # Opening the Matches tab loads the stored matches, then may re-run matching (rule version
+    # or brief change). A match found again must end up suggested in the database, not stale.
+    from app.crm import match_repository
+
+    org, user = str(uuid4()), str(uuid4())
+    response = await inbound.create_inbound_enquiry(
+        pg_session,
+        payload=InboundEnquiryCreate(
+            full_name="Rerun buyer",
+            intent="buy",
+            record_kind="opportunity",
+            criteria={"locations": ["JBR"], "budget_max_aed": 3000000, "bedrooms_min": 2},
+        ),
+        user_id=user,
+        organization_id=org,
+    )
+    enquiry = await pg_session.get(CrmInboundEnquiry, response.id)
+    arguments = dict(
+        enquiry=enquiry,
+        target_type="listing",
+        target_key="found-again",
+        title="Listing",
+        subtitle="",
+        reasons=[],
+        breakdown={},
+        snapshot={},
+    )
+    item = await matching._upsert_match(pg_session, score=85, **arguments)
+    await pg_session.commit()
+
+    await match_repository.list_matches_by_score(pg_session, response.id)
+    await match_repository.mark_refreshable_matches_stale(pg_session, response.id)
+    await matching._upsert_match(pg_session, score=80, **arguments)
+    await pg_session.commit()
+
+    pg_session.expire_all()
+    assert (await pg_session.get(CrmInboundMatch, item.id)).state == "suggested"
+
+
+async def test_company_listings_query_keeps_to_the_agency_deal_type_area_and_band(pg_session):
+    # Only the agency's own active listings of the right deal type, area and price are matched.
+    from datetime import datetime, timezone
+
+    from app.crm import match_repository
+    from app.crm.models import CrmCompanyListing
+
+    org, other = str(uuid4()), str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    def listing(
+        ref,
+        *,
+        organization_id=org,
+        mode="sale",
+        area="Dubai Marina",
+        price=2_500_000,
+        status="active",
+    ):
+        return CrmCompanyListing(
+            organization_id=organization_id,
+            reference=ref,
+            agent_name="Sara Ali",
+            mode=mode,
+            title=ref,
+            property_type="Apartment",
+            bedrooms=2,
+            price_aed=price,
+            area_name=area,
+            status=status,
+            listed_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+
+    pg_session.add_all(
+        [
+            listing("kept"),
+            listing("other-agency", organization_id=other),
+            listing("rent", mode="rent", price=150_000),
+            listing("other-area", area="Business Bay"),
+            listing("too-cheap", price=1_000_000),
+            listing("sold", status="sold"),
+            listing("under-offer", status="under_offer"),
+            listing("pocket", status="pocket"),
+        ]
+    )
+    await pg_session.commit()
+
+    rows = await match_repository.find_company_listings(
+        pg_session, org, mode="sale", locations=["Dubai Marina"], band=(1_750_000, 3_000_000)
+    )
+    assert sorted(row.reference for row in rows) == ["kept", "pocket"]

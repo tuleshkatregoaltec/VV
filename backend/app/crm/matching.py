@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.crm import match_repository
+from app.crm import company_listings, match_repository
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import (
     CrmInboundEnquiry,
@@ -33,6 +33,7 @@ from app.crm.matching_policy import (
     _property_fit,
     _violates_strict_fields,
 )
+from app.crm.models import CrmCompanyListing
 from app.crm.opportunities import (
     get_instruction_evidence,
     list_matching_rental_opportunities,
@@ -46,7 +47,11 @@ from app.supply.service import get_catalog_freshness, list_matching_inventory
 # v2 (26 Oct): portal listings use a budget band, closeness points and a hard property type.
 # v3 (26 Oct): listing details show the property type; "0% below budget" reads "Within 1%".
 # v4 (26 Oct): studio and 7+ bedroom buyers are searched with the values listings use.
-_ALGORITHM_VERSION = "inbound-v4"
+# v5 (26 Oct): units on record use the budget band; a unit with no price is review-only.
+# v7 (27 Oct): company matches use the organization's selected Property Finder broker.
+_ALGORITHM_VERSION = "inbound-v7"
+# Highest score a match can have and still read "Review" (Near starts at 65 in _upsert_match).
+_REVIEW_ONLY_SCORE = 64
 
 
 def _match_response(item: CrmInboundMatch) -> InboundMatchResponse:
@@ -75,6 +80,85 @@ def _needs_refresh(items: list[CrmInboundMatch]) -> bool:
         return True
     last_run = max(item.generated_at for item in items)
     return any(item.state == "stale" and item.updated_at > last_run for item in items)
+
+
+def _score_unit(
+    criteria: dict[str, Any],
+    strict_fields: list[str],
+    *,
+    price: int | None,
+    bedrooms: str,
+    property_type: str,
+    places: tuple[str, ...],
+    fixed: int,
+) -> tuple[int, list[str], int] | None:
+    """Score a unit on record (score, reasons, requirement points), or None outside the budget.
+
+    Units use the portal-listing budget band. A unit with no price cannot be checked against the
+    budget, so it earns no budget points and is capped below Near fit: shown only for review.
+    """
+    location, location_reason = _location_fit(criteria, *places)
+    if price:
+        budget_fit = _listing_budget_fit(criteria, price)
+        if budget_fit is None:
+            return None
+        budget, budget_reason = budget_fit
+    else:
+        budget, budget_reason = 0, "Price unknown, verify"
+    bedroom, bedroom_reason = _bedroom_fit(criteria, bedrooms)
+    property_points = _property_fit(criteria, property_type)
+    if _violates_strict_fields(
+        strict_fields,
+        location_points=location,
+        budget_points=budget if price else 1,
+        bedroom_points=bedroom,
+        property_points=property_points,
+    ):
+        return None
+    requirements = location + budget + bedroom + property_points
+    score = min(100, requirements + fixed)
+    if not price:
+        score = min(score, _REVIEW_ONLY_SCORE)
+    return score, [location_reason, budget_reason, bedroom_reason], requirements
+
+
+def _company_listing_card(row: CrmCompanyListing) -> ListingCardResponse:
+    """A company listing in the portal-listing shape, so both are scored by the same rules."""
+    beds = None if row.bedrooms is None else "studio" if row.bedrooms == 0 else str(row.bedrooms)
+    return ListingCardResponse(
+        listing_id=row.reference,
+        listing_mode="rent" if row.mode == "rent" else "sale",
+        asset_class="residential",
+        title=row.title,
+        property_type=row.property_type,
+        price_value=row.price_aed,
+        # Company rents are stored yearly, like tenant budgets: never multiplied up.
+        price_period="yearly" if row.mode == "rent" else None,
+        size_value=row.size_sqft,
+        bedrooms=beds,
+        area_name=row.area_name,
+        tower_name=row.building_name,
+    )
+
+
+def _score_company_listing(
+    criteria: dict[str, Any],
+    strict_fields: list[str],
+    intent: str,
+    row: CrmCompanyListing,
+) -> tuple[int, list[str], dict[str, int]] | None:
+    """Score an agency listing like a portal listing, and name the agent who holds it."""
+    card = _company_listing_card(row)
+    # Portal listings are searched with the requested bedroom values; hold these to the same.
+    wanted = _listing_bedrooms(criteria)
+    if wanted and card.bedrooms not in wanted:
+        return None
+    scored = _score_listing(criteria, strict_fields, intent, card)
+    if scored is None:
+        return None
+    score, reasons, breakdown = scored
+    contact = " · ".join(part for part in (f"Listed by {row.agent_name}", row.agent_phone) if part)
+    return score, [*reasons, contact], breakdown
 
 
 def _listing_subtitle(listing: ListingCardResponse) -> str:
@@ -295,32 +379,29 @@ async def refresh_inbound_matches(
         for lead in await list_matching_rental_opportunities(
             next(iter(_locations(criteria)), ""), str(criteria.get("property_type") or "")
         ):
-            location, location_reason = _location_fit(
-                criteria,
-                str(lead.get("area_name") or ""),
-                str(lead.get("project_name") or ""),
-                str(lead.get("building_name") or ""),
-            )
             price = (
                 int(lead.get("annual_rent_aed") or 0) or None
                 if enquiry.intent == "rent"
                 else int(lead.get("matched_sale_price") or lead.get("purchase_price_aed") or 0)
                 or None
             )
-            budget, budget_reason = _budget_fit(criteria, price)
             bedrooms = str(lead.get("bedrooms") or "")
-            bedroom, bedroom_reason = _bedroom_fit(criteria, bedrooms)
-            property_type = str(lead.get("property_type") or "")
-            property_points = _property_fit(criteria, property_type)
-            if _violates_strict_fields(
+            scored = _score_unit(
+                criteria,
                 enquiry.strict_fields,
-                location_points=location,
-                budget_points=budget,
-                bedroom_points=bedroom,
-                property_points=property_points,
-            ):
+                price=price,
+                bedrooms=bedrooms,
+                property_type=str(lead.get("property_type") or ""),
+                places=(
+                    str(lead.get("area_name") or ""),
+                    str(lead.get("project_name") or ""),
+                    str(lead.get("building_name") or ""),
+                ),
+                fixed=7 + 10 + 10,
+            )
+            if scored is None:
                 continue
-            score = min(100, location + budget + bedroom + property_points + 7 + 10 + 10)
+            score, reasons, requirements = scored
             item = await _upsert_match(
                 db,
                 enquiry=enquiry,
@@ -331,17 +412,8 @@ async def refresh_inbound_matches(
                 subtitle=f"{bedrooms or 'Layout pending'} · AED {price:,}"
                 if price
                 else f"{bedrooms or 'Layout pending'} · value pending",
-                reasons=[
-                    location_reason,
-                    budget_reason,
-                    bedroom_reason,
-                    f"Lease ends {lead.get('lease_end')}",
-                ],
-                breakdown={
-                    "requirements": location + budget + bedroom + property_points,
-                    "actionability": 7,
-                    "timing": 10,
-                },
+                reasons=[*reasons, f"Lease ends {lead.get('lease_end')}"],
+                breakdown={"requirements": requirements, "actionability": 7, "timing": 10},
                 snapshot=_json_snapshot(lead),
             )
             if item:
@@ -358,22 +430,19 @@ async def refresh_inbound_matches(
                 )
                 if target_key in existing_keys:
                     continue
-                location, location_reason = _location_fit(
-                    criteria, str(row.get("area_name") or ""), str(row.get("building_name") or "")
-                )
                 price = int(row.get("sale_amount_aed") or 0) or None
-                budget, budget_reason = _budget_fit(criteria, price)
-                bedroom, bedroom_reason = _bedroom_fit(criteria, str(row.get("bedrooms") or ""))
-                property_points = _property_fit(criteria, str(row.get("property_type") or ""))
-                if _violates_strict_fields(
+                scored = _score_unit(
+                    criteria,
                     enquiry.strict_fields,
-                    location_points=location,
-                    budget_points=budget,
-                    bedroom_points=bedroom,
-                    property_points=property_points,
-                ):
+                    price=price,
+                    bedrooms=str(row.get("bedrooms") or ""),
+                    property_type=str(row.get("property_type") or ""),
+                    places=(str(row.get("area_name") or ""), str(row.get("building_name") or "")),
+                    fixed=5 + 5 + 10,
+                )
+                if scored is None:
                     continue
-                score = min(100, location + budget + bedroom + property_points + 5 + 5 + 10)
+                score, reasons, requirements = scored
                 latest_sale_date = row.get("latest_sale_date")
                 item = await _upsert_match(
                     db,
@@ -383,17 +452,8 @@ async def refresh_inbound_matches(
                     score=score,
                     title=f"{row.get('building_name') or 'Building'} · Unit {row.get('unit_number')}",
                     subtitle=f"{row.get('bedrooms') or 'Layout pending'} · {f'AED {price:,}' if price else 'value pending'}",
-                    reasons=[
-                        location_reason,
-                        budget_reason,
-                        bedroom_reason,
-                        "Expanded sales-registry universe",
-                    ],
-                    breakdown={
-                        "requirements": location + budget + bedroom + property_points,
-                        "actionability": 5,
-                        "timing": 5,
-                    },
+                    reasons=[*reasons, "Expanded sales-registry universe"],
+                    breakdown={"requirements": requirements, "actionability": 5, "timing": 5},
                     snapshot={
                         **row,
                         "latest_sale_date": latest_sale_date.isoformat()
@@ -484,6 +544,37 @@ async def refresh_inbound_matches(
                     "phone": contact.phone,
                     "email": contact.email,
                 },
+            )
+            if item:
+                generated.append(item)
+
+    if enquiry.intent in {"buy", "rent"}:
+        now = _utcnow()
+        for row in await company_listings.find_matching_company_listings(
+            db,
+            organization_id,
+            mode="rent" if enquiry.intent == "rent" else "sale",
+            locations=_locations(criteria),
+            band=_listing_budget_band(criteria),
+            property_type=_listing_property_type(criteria.get("property_type")),
+            bedrooms=_listing_bedrooms(criteria),
+        ):
+            scored = _score_company_listing(criteria, enquiry.strict_fields, enquiry.intent, row)
+            if scored is None:
+                continue
+            score, reasons, breakdown = scored
+            days = max(0, (now - row.listed_at).days)
+            item = await _upsert_match(
+                db,
+                enquiry=enquiry,
+                target_type="company",
+                target_key=row.reference,
+                score=score,
+                title=row.title,
+                subtitle=_listing_subtitle(_company_listing_card(row)),
+                reasons=[*reasons, f"Listed {days} day{'' if days == 1 else 's'} ago"],
+                breakdown=breakdown,
+                snapshot=row.model_dump(mode="json"),
             )
             if item:
                 generated.append(item)
@@ -596,6 +687,7 @@ async def refresh_inbound_matches(
     await db.commit()
     stored = await match_repository.list_matches_by_score(db, enquiry_id)
     lanes: dict[str, list[InboundMatchResponse]] = {
+        "company": [],
         "owners": [],
         "units": [],
         "listings": [],
@@ -603,6 +695,7 @@ async def refresh_inbound_matches(
         "demand": [],
     }
     lane_names = {
+        "company": "company",
         "owner": "owners",
         "unit": "units",
         "listing": "listings",
@@ -635,7 +728,14 @@ async def get_inbound_matches(
             listing_last_refresh=None,
             offplan_catalog_available=False,
             offplan_last_refresh=None,
-            lanes={"owners": [], "units": [], "listings": [], "offplan": [], "demand": []},
+            lanes={
+                "company": [],
+                "owners": [],
+                "units": [],
+                "listings": [],
+                "offplan": [],
+                "demand": [],
+            },
         )
     result = await match_repository.list_matches_by_score(db, enquiry_id)
     items = result
@@ -646,6 +746,7 @@ async def get_inbound_matches(
     listing_last_refresh, listing_fresh = await get_inventory_freshness()
     offplan_last_refresh = await get_catalog_freshness()
     lanes: dict[str, list[InboundMatchResponse]] = {
+        "company": [],
         "owners": [],
         "units": [],
         "listings": [],
@@ -653,6 +754,7 @@ async def get_inbound_matches(
         "demand": [],
     }
     lane_names = {
+        "company": "company",
         "owner": "owners",
         "unit": "units",
         "listing": "listings",

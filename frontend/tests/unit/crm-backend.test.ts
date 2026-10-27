@@ -800,3 +800,11 @@ describe('CRM areas with no backend yet', () => {
 		expect((await crm.counts()).new_leads).toBe(1)
 	})
 })
+
+describe('CRM company listing source', () => {
+	it('stops buyer matching against a company by clearing the source', async () => {
+		const del = vi.spyOn(client, 'delete').mockResolvedValue(undefined as never)
+		await backend.clearCompanyListingSource()
+		expect(del).toHaveBeenCalledWith('/api/v1/crm/company-listings/source')
+	})
+})

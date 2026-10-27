@@ -57,6 +57,7 @@ export interface Me {
 	name: string
 	initials: string
 	role: 'agent'
+	is_owner: boolean
 	today: string
 	areas: string[]
 }
@@ -617,6 +618,39 @@ export interface ListingDetail extends ListingCard {
 export interface ListingListResponse {
 	items: ListingCard[]
 	counts: { live: number; pocket: number; expired: number }
+	company?: CompanyListingCompany | null
+	matching_company?: CompanyListingCompany | null
+	companies?: CompanyListingCompany[]
+	agent_inventory?: CompanyListingAgentInventory[]
+	total?: number
+	limit?: number
+	offset?: number
+}
+
+export interface CompanyListingCompany {
+	broker_id: string
+	broker_name: string
+	listings: number
+	agents: number
+	last_scraped_at: string | null
+}
+
+export interface CompanyListingAgentInventory {
+	agent_id: string | null
+	agent_name: string
+	listings: number
+	/** As published on the agent's Property Finder listings. */
+	phone?: string | null
+	email?: string | null
+}
+
+export interface CompanyListingFilter {
+	brokerId?: string
+	allCompanies?: boolean
+	agentId?: string
+	agentName?: string
+	/** Property name: matches a listing's title, building or area. */
+	search?: string
 }
 
 export interface ListingCreate {

@@ -13,6 +13,18 @@
       "CREATE INDEX ix_crm_agent_area_preferences_user_id ON crm_agent_area_preferences (user_id)"
     ]
   },
+  "crm_company_listing_sources": {
+    "ddl": "\nCREATE TABLE crm_company_listing_sources (\n\torganization_id VARCHAR NOT NULL, \n\tbroker_id VARCHAR NOT NULL, \n\tbroker_name VARCHAR NOT NULL, \n\tselected_by_user_id VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (organization_id), \n\tFOREIGN KEY(organization_id) REFERENCES organizations (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": []
+  },
+  "crm_company_listings": {
+    "ddl": "\nCREATE TABLE crm_company_listings (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\treference VARCHAR NOT NULL, \n\tagent_user_id VARCHAR, \n\tagent_name VARCHAR NOT NULL, \n\tagent_phone VARCHAR, \n\tmode VARCHAR NOT NULL, \n\ttitle VARCHAR NOT NULL, \n\tproperty_type VARCHAR NOT NULL, \n\tbedrooms INTEGER, \n\tsize_sqft INTEGER, \n\tprice_aed INTEGER NOT NULL, \n\tarea_name VARCHAR NOT NULL, \n\tbuilding_name VARCHAR, \n\tunit_number VARCHAR, \n\tstatus VARCHAR NOT NULL, \n\tis_synthetic BOOLEAN NOT NULL, \n\tlisted_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_company_listing_reference UNIQUE (organization_id, reference)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_company_listings_match ON crm_company_listings (organization_id, status, mode, area_name)",
+      "CREATE INDEX ix_crm_company_listings_organization_id ON crm_company_listings (organization_id)",
+      "CREATE INDEX ix_crm_company_listings_price_aed ON crm_company_listings (price_aed)"
+    ]
+  },
   "crm_contact_imports": {
     "ddl": "\nCREATE TABLE crm_contact_imports (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\toriginal_filename VARCHAR NOT NULL, \n\tsha256 VARCHAR NOT NULL, \n\tsize_bytes INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tmapping JSON NOT NULL, \n\tsummary JSON NOT NULL, \n\terror_message TEXT, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcompleted_at TIMESTAMP WITH TIME ZONE, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_contact_import_organization_hash UNIQUE (organization_id, sha256)\n)\n\n",
     "indexes": [

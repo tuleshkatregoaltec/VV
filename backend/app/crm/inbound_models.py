@@ -427,7 +427,7 @@ class InboundEnquiryListResponse(BaseModel):
 
 class InboundMatchResponse(BaseModel):
     id: int
-    target_type: Literal["owner", "unit", "listing", "project", "demand"]
+    target_type: Literal["company", "owner", "unit", "listing", "project", "demand"]
     target_key: str
     state: InboundMatchState
     fit: Literal["exact", "near", "review", "outside"]

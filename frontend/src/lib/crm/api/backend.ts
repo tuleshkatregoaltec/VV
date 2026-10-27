@@ -48,6 +48,9 @@ import {
 } from '../ownerImportReport'
 import type {
 	Chip,
+	CompanyListingAgentInventory,
+	CompanyListingCompany,
+	CompanyListingFilter,
 	FeedArea,
 	FeedPreferences,
 	FeedSummary,
@@ -69,6 +72,9 @@ import type {
 	LeadStage,
 	LeadStageMove,
 	LeadType,
+	ListingCard,
+	ListingListResponse,
+	ListingStatus,
 	MarketListing,
 	MarketListingDetail,
 	MatchClient,
@@ -169,7 +175,7 @@ export async function me(): Promise<Me> {
 		.join('')
 		.slice(0, 2)
 		.toUpperCase()
-	return { name, initials, role: 'agent', today: localToday(), areas: [] }
+	return { name, initials, role: 'agent', is_owner: u.is_owner, today: localToday(), areas: [] }
 }
 
 /* ── leads ── */
@@ -682,9 +688,12 @@ const LANES: Record<
 	'bt' | 'sl',
 	{ lane: string; title: string; kind: MatchRow['kind']; line: MatchRow['line'] }[]
 > = {
+	// 26 Oct call: the agency's own listings first (it can earn both sides), then the owner
+	// file, then portal listings.
 	bt: [
-		{ lane: 'listings', title: 'Portal listings', kind: 'public', line: 'in' },
+		{ lane: 'company', title: 'Company listings', kind: 'colleague_listing', line: 'own' },
 		{ lane: 'owners', title: 'Owners on your file', kind: 'owner', line: 'vv' },
+		{ lane: 'listings', title: 'Portal listings', kind: 'public', line: 'in' },
 		{ lane: 'units', title: 'Units on record', kind: 'owner', line: 'vv' },
 		{ lane: 'offplan', title: 'Off-plan projects', kind: 'allocation', line: 'own' }
 	],
@@ -2021,3 +2030,103 @@ export async function matchClients(): Promise<MatchClients> {
 
 /** A write (or a single record) the backend has no endpoint for yet: a 501, never a fake success. */
 export const notOnBackend = <T>(what: string): Promise<T> => Promise.reject(notSaved(what))
+
+/* ── company listings (/company-listings) ── */
+
+/** GET /crm/company-listings row (not in the generated client yet). */
+interface CompanyListingResponse {
+	reference: string
+	agent_name: string
+	agent_phone: string | null
+	mode: string
+	title: string
+	property_type: string
+	bedrooms: number | null
+	size_sqft: number | null
+	price_aed: number
+	area_name: string
+	building_name: string | null
+	unit_number: string | null
+	status: string
+	listed_at: string
+}
+
+interface CompanyListingsResponse {
+	company: CompanyListingCompany | null
+	matching_company: CompanyListingCompany | null
+	companies: CompanyListingCompany[]
+	agents: CompanyListingAgentInventory[]
+	items: CompanyListingResponse[]
+	total: number
+	limit: number
+	offset: number
+}
+
+/** Active or under offer is live; pocket is off-market (not advertised); sold or withdrawn is expired. */
+const companyStatus = (s: string): ListingStatus =>
+	s === 'active' || s === 'under_offer' ? 'live' : s === 'pocket' ? 'pocket' : 'expired'
+
+function companyCard(r: CompanyListingResponse): ListingCard {
+	return {
+		id: r.reference,
+		unit: r.title,
+		area: r.area_name,
+		bedrooms: r.bedrooms ?? 0,
+		size_sqft: r.size_sqft ?? 0,
+		price_aed: r.price_aed,
+		deal_type: r.mode === 'rent' ? 'rent' : 'sale',
+		status: companyStatus(r.status),
+		scope: 'company',
+		agent: r.agent_name,
+		owner: '',
+		portals: '',
+		days_live: Math.max(0, Math.floor((Date.now() - Date.parse(r.listed_at)) / 86_400_000)),
+		enquiries: 0,
+		permit: null,
+		// No permit is recorded for company listings yet; the card's chip shows the type instead.
+		permit_chip: { tone: 'neutral', label: r.property_type },
+		form_a_expires: null,
+		form_a_chip: null,
+		comparables_note: '',
+		from_lead_id: null
+	}
+}
+
+export async function listCompanyListings(
+	status?: ListingStatus,
+	limit = 100,
+	offset = 0,
+	filter?: CompanyListingFilter
+): Promise<ListingListResponse> {
+	const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+	if (filter?.brokerId) params.set('broker_id', filter.brokerId)
+	if (filter?.allCompanies) params.set('all_companies', 'true')
+	if (filter?.agentId) params.set('agent_id', filter.agentId)
+	else if (filter?.agentName) params.set('agent_name', filter.agentName)
+	if (filter?.search) params.set('search', filter.search)
+	const r = await client.get<CompanyListingsResponse>(`${CRM}/company-listings?${params}`)
+	const cards = r.items.map(companyCard)
+	const count = (s: ListingStatus) => (s === 'live' ? r.total : 0)
+	return {
+		items: status ? cards.filter((c) => c.status === status) : cards,
+		counts: { live: count('live'), pocket: count('pocket'), expired: count('expired') },
+		company: r.company,
+		matching_company: r.matching_company,
+		companies: r.companies,
+		agent_inventory: r.agents,
+		total: r.total,
+		limit: r.limit,
+		offset: r.offset
+	}
+}
+
+/** Stop matching buyers and tenants against any company's listings (owners only). */
+export async function clearCompanyListingSource() {
+	return client.delete<void>(`${CRM}/company-listings/source`)
+}
+
+export async function selectCompanyListingSource(broker_id: string) {
+	return client.put<{ broker_id: string; broker_name: string }>(`${CRM}/company-listings/source`, {
+		broker_id
+	})
+}

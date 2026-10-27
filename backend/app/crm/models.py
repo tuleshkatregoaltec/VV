@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Text, UniqueConstraint
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
@@ -402,6 +402,113 @@ class CrmAgentAreaPreference(SQLModel, table=True):
     lookback_days: int = SQLField(default=RENEWAL_LOOKBACK_DAYS_DEFAULT)
     created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmCompanyListing(SQLModel, table=True):
+    """A listing the agency holds the mandate for, owned by one of its agents.
+
+    Matched first for buyers (sale) and tenants (rent): the agency knows it is available and can
+    earn both sides of the deal. Rent prices are yearly, like tenant budgets. Bedrooms use the
+    lead brief's numbers (0 = studio). Synthetic rows are test data and can be removed as a set.
+    """
+
+    __tablename__ = "crm_company_listings"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "reference", name="uq_crm_company_listing_reference"),
+        Index("ix_crm_company_listings_match", "organization_id", "status", "mode", "area_name"),
+    )
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    organization_id: str = SQLField(index=True)
+    reference: str
+    agent_user_id: str | None = None
+    agent_name: str
+    agent_phone: str | None = None
+    mode: str
+    title: str
+    property_type: str
+    bedrooms: int | None = None
+    size_sqft: int | None = None
+    price_aed: int = SQLField(index=True)
+    area_name: str
+    building_name: str | None = None
+    unit_number: str | None = None
+    status: str = SQLField(default="active")
+    is_synthetic: bool = SQLField(default=False)
+    listed_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmCompanyListingSource(SQLModel, table=True):
+    """The Property Finder broker selected for an organization's company inventory."""
+
+    __tablename__ = "crm_company_listing_sources"
+
+    organization_id: str = SQLField(
+        primary_key=True, foreign_key="organizations.id", ondelete="CASCADE"
+    )
+    broker_id: str
+    broker_name: str
+    selected_by_user_id: str
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmCompanyListingResponse(BaseModel):
+    """A company listing as Assets › Company listings shows it."""
+
+    reference: str
+    agent_name: str
+    agent_phone: str | None
+    mode: str
+    title: str
+    property_type: str
+    bedrooms: int | None
+    size_sqft: int | None
+    price_aed: int
+    area_name: str
+    building_name: str | None
+    unit_number: str | None
+    status: str
+    listed_at: datetime
+
+
+class CrmCompanyListingCompany(BaseModel):
+    broker_id: str
+    broker_name: str
+    listings: int
+    agents: int
+    last_scraped_at: datetime | None = None
+
+
+class CrmCompanyListingAgentInventory(BaseModel):
+    agent_id: str | None = None
+    agent_name: str
+    listings: int
+    # As published on the agent's Property Finder listings.
+    phone: str | None = None
+    email: str | None = None
+
+
+class CrmCompanyListingsResponse(BaseModel):
+    company: CrmCompanyListingCompany | None
+    matching_company: CrmCompanyListingCompany | None = None
+    companies: list[CrmCompanyListingCompany] = Field(default_factory=list)
+    agents: list[CrmCompanyListingAgentInventory] = Field(default_factory=list)
+    items: list[CrmCompanyListingResponse] = Field(default_factory=list)
+    total: int = 0
+    limit: int
+    offset: int
+
+
+class CrmCompanyListingSourceUpdate(BaseModel):
+    broker_id: str = Field(min_length=1, max_length=80)
+
+
+class CrmCompanyListingSourceResponse(BaseModel):
+    broker_id: str
+    broker_name: str
 
 
 class CrmAreaPreferencesUpdate(BaseModel):

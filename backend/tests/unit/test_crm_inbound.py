@@ -614,3 +614,152 @@ def test_listing_search_asks_for_the_bedroom_values_listings_use():
     assert _listing_bedrooms({"bedrooms_min": 2, "bedrooms_max": 2}) == ["2"]
     assert _listing_bedrooms({"bedrooms_min": 7}) == ["7", "7+"]
     assert _listing_bedrooms({}) is None
+
+
+def test_units_on_record_use_the_budget_band():
+    # A 20,000 budget still showed 40 "Near fit" units: unknown or far-off prices were not
+    # held to the budget. Units now follow the same band as portal listings.
+    from app.crm.matching import _score_unit
+
+    buyer = {
+        "locations": ["Dubai Marina"],
+        "property_type": "Apartment",
+        "bedrooms_min": 2,
+        "budget_max_aed": 2_500_000,
+    }
+    unit = dict(bedrooms="2 Bed", property_type="Apartment", places=("Dubai Marina", "", ""))
+    assert _score_unit(buyer, [], price=1_000_000, fixed=27, **unit) is None
+    assert _score_unit(buyer, [], price=3_200_000, fixed=27, **unit) is None
+    on_budget = _score_unit(buyer, [], price=2_500_000, fixed=27, **unit)
+    lower = _score_unit(buyer, [], price=1_900_000, fixed=27, **unit)
+    assert on_budget[1][1] == "Within stated budget"
+    assert on_budget[0] > lower[0]
+
+
+def test_a_unit_with_no_price_is_shown_only_for_review():
+    # It cannot be checked against the budget, so it is never Near or Exact: the agent verifies it.
+    from app.crm.matching import _score_unit
+
+    buyer = {
+        "locations": ["Dubai Marina"],
+        "property_type": "Apartment",
+        "bedrooms_min": 2,
+        "budget_max_aed": 2_500_000,
+    }
+    score, reasons, _ = _score_unit(
+        buyer,
+        [],
+        price=None,
+        fixed=27,
+        bedrooms="2 Bed",
+        property_type="Apartment",
+        places=("Dubai Marina", "", ""),
+    )
+    assert 50 <= score < 65
+    assert "Price unknown, verify" in reasons
+
+
+def _company_listing(
+    price: int, property_type: str = "Apartment", bedrooms: int | None = 2, mode="sale"
+):
+    from app.crm.models import CrmCompanyListing
+
+    now = datetime(2026, 10, 27, tzinfo=timezone.utc)
+    return CrmCompanyListing(
+        organization_id="org",
+        reference=f"SYN-{price}",
+        agent_name="Sara Ali",
+        agent_phone="+971500000001",
+        mode=mode,
+        title="Marina Gate 2 · Unit 1504",
+        property_type=property_type,
+        bedrooms=bedrooms,
+        price_aed=price,
+        area_name="Dubai Marina",
+        building_name="Marina Gate 2",
+        unit_number="1504",
+        listed_at=now - timedelta(days=12),
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def test_company_listings_follow_the_portal_listing_rules():
+    # Company listings are matched first, with the same type, bedroom and budget-band rules.
+    from app.crm.matching import _score_company_listing
+
+    buyer = {
+        "locations": ["Dubai Marina"],
+        "property_type": "Apartment",
+        "bedrooms_min": 2,
+        "bedrooms_max": 2,
+        "budget_max_aed": 2_500_000,
+    }
+    assert _score_company_listing(buyer, [], "buy", _company_listing(2_450_000, "Villa")) is None
+    assert _score_company_listing(buyer, [], "buy", _company_listing(1_000_000)) is None
+    close = _score_company_listing(buyer, [], "buy", _company_listing(2_450_000))
+    far = _score_company_listing(buyer, [], "buy", _company_listing(1_900_000))
+    assert close[0] > far[0]
+    assert close[0] >= 85
+
+
+def test_a_company_listing_names_the_agent_who_holds_it():
+    # The agent asks the colleague with the mandate, so the card says who that is.
+    from app.crm.matching import _score_company_listing
+
+    buyer = {
+        "locations": ["Dubai Marina"],
+        "property_type": "Apartment",
+        "budget_max_aed": 2_500_000,
+    }
+    reasons = _score_company_listing(buyer, [], "buy", _company_listing(2_500_000))[1]
+    assert "Listed by Sara Ali · +971500000001" in reasons
+    assert not any("availability requires confirmation" in r for r in reasons)
+
+
+def test_company_rents_are_yearly_and_studios_match_studio_tenants():
+    from app.crm.matching import _score_company_listing
+
+    tenant = {
+        "locations": ["Dubai Marina"],
+        "property_type": "Apartment",
+        "bedrooms_min": 0,
+        "bedrooms_max": 0,
+        "budget_max_aed": 80_000,
+    }
+    studio = _company_listing(80_000, bedrooms=0, mode="rent")
+    scored = _score_company_listing(tenant, [], "rent", studio)
+    assert scored is not None
+    assert "Exact bedroom match" in scored[1]
+
+
+def test_company_listings_need_the_requested_bedrooms_like_portal_listings():
+    # Portal listings are searched with the exact bedroom count; company listings must not let
+    # a 1-bed through for a 4-bed buyer just because it scores fewer points.
+    from app.crm.matching import _score_company_listing
+
+    buyer = {
+        "locations": ["Dubai Marina"],
+        "property_type": "Apartment",
+        "bedrooms_min": 4,
+        "bedrooms_max": 4,
+        "budget_max_aed": 2_500_000,
+    }
+    assert _score_company_listing(buyer, [], "buy", _company_listing(2_450_000, bedrooms=1)) is None
+    assert _score_company_listing(buyer, [], "buy", _company_listing(2_450_000, bedrooms=4))
+    any_size = {**buyer, "bedrooms_min": None, "bedrooms_max": None}
+    assert _score_company_listing(any_size, [], "buy", _company_listing(2_450_000, bedrooms=1))
+
+
+def test_pocket_listings_are_matched_and_marked_off_market():
+    # A pocket listing is not advertised; it is the agency's exclusive stock, so it is matched and
+    # the card says so, letting the agent pitch it as off-market.
+    from app.crm.matching import _score_company_listing
+
+    buyer = {"locations": ["Dubai Marina"], "property_type": "Apartment", "budget_max_aed": 2_500_000}
+    pocket = _company_listing(2_500_000)
+    pocket.status = "pocket"
+    reasons = _score_company_listing(buyer, [], "buy", pocket)[1]
+    assert "Off-market (pocket listing)" in reasons
+    live = _score_company_listing(buyer, [], "buy", _company_listing(2_500_000))[1]
+    assert "Off-market (pocket listing)" not in live

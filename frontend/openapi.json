@@ -2131,6 +2131,190 @@
 				}
 			}
 		},
+		"/api/v1/crm/company-listings": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Company Listings",
+				"description": "Current Property Finder listings for the connected or requested company.\n\n`search` matches a listing's title, building or area (property name).",
+				"operationId": "crm-crm_company_listings",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 1000,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					},
+					{
+						"name": "broker_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 80
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Broker Id"
+						}
+					},
+					{
+						"name": "all_companies",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"default": false,
+							"title": "All Companies"
+						}
+					},
+					{
+						"name": "agent_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Agent Id"
+						}
+					},
+					{
+						"name": "agent_name",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 200
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Agent Name"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmCompanyListingsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/company-listings/source": {
+			"put": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Select Company Listing Source",
+				"description": "Set the Property Finder broker whose inventory belongs in the organization CRM.",
+				"operationId": "crm-crm_select_company_listing_source",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CrmCompanyListingSourceUpdate"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmCompanyListingSourceResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Clear Company Listing Source",
+				"description": "Stop using a Property Finder company for buyer and tenant matching.",
+				"operationId": "crm-crm_clear_company_listing_source",
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					}
+				}
+			}
+		},
 		"/api/v1/crm/inbound/imports/{import_id}": {
 			"delete": {
 				"tags": ["crm", "crm"],
@@ -10835,6 +11019,293 @@
 				],
 				"title": "CrmBreakdownItem"
 			},
+			"CrmCompanyListingAgentInventory": {
+				"properties": {
+					"agent_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Id"
+					},
+					"agent_name": {
+						"type": "string",
+						"title": "Agent Name"
+					},
+					"listings": {
+						"type": "integer",
+						"title": "Listings"
+					},
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					}
+				},
+				"type": "object",
+				"required": ["agent_name", "listings"],
+				"title": "CrmCompanyListingAgentInventory"
+			},
+			"CrmCompanyListingCompany": {
+				"properties": {
+					"broker_id": {
+						"type": "string",
+						"title": "Broker Id"
+					},
+					"broker_name": {
+						"type": "string",
+						"title": "Broker Name"
+					},
+					"listings": {
+						"type": "integer",
+						"title": "Listings"
+					},
+					"agents": {
+						"type": "integer",
+						"title": "Agents"
+					},
+					"last_scraped_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Scraped At"
+					}
+				},
+				"type": "object",
+				"required": ["broker_id", "broker_name", "listings", "agents"],
+				"title": "CrmCompanyListingCompany"
+			},
+			"CrmCompanyListingResponse": {
+				"properties": {
+					"reference": {
+						"type": "string",
+						"title": "Reference"
+					},
+					"agent_name": {
+						"type": "string",
+						"title": "Agent Name"
+					},
+					"agent_phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Phone"
+					},
+					"mode": {
+						"type": "string",
+						"title": "Mode"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"property_type": {
+						"type": "string",
+						"title": "Property Type"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"size_sqft": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Sqft"
+					},
+					"price_aed": {
+						"type": "integer",
+						"title": "Price Aed"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"building_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building Name"
+					},
+					"unit_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Unit Number"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"listed_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Listed At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"reference",
+					"agent_name",
+					"agent_phone",
+					"mode",
+					"title",
+					"property_type",
+					"bedrooms",
+					"size_sqft",
+					"price_aed",
+					"area_name",
+					"building_name",
+					"unit_number",
+					"status",
+					"listed_at"
+				],
+				"title": "CrmCompanyListingResponse",
+				"description": "A company listing as Assets \u203a Company listings shows it."
+			},
+			"CrmCompanyListingSourceResponse": {
+				"properties": {
+					"broker_id": {
+						"type": "string",
+						"title": "Broker Id"
+					},
+					"broker_name": {
+						"type": "string",
+						"title": "Broker Name"
+					}
+				},
+				"type": "object",
+				"required": ["broker_id", "broker_name"],
+				"title": "CrmCompanyListingSourceResponse"
+			},
+			"CrmCompanyListingSourceUpdate": {
+				"properties": {
+					"broker_id": {
+						"type": "string",
+						"maxLength": 80,
+						"minLength": 1,
+						"title": "Broker Id"
+					}
+				},
+				"type": "object",
+				"required": ["broker_id"],
+				"title": "CrmCompanyListingSourceUpdate"
+			},
+			"CrmCompanyListingsResponse": {
+				"properties": {
+					"company": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmCompanyListingCompany"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"matching_company": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmCompanyListingCompany"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"companies": {
+						"items": {
+							"$ref": "#/components/schemas/CrmCompanyListingCompany"
+						},
+						"type": "array",
+						"title": "Companies"
+					},
+					"agents": {
+						"items": {
+							"$ref": "#/components/schemas/CrmCompanyListingAgentInventory"
+						},
+						"type": "array",
+						"title": "Agents"
+					},
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/CrmCompanyListingResponse"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total",
+						"default": 0
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": ["company", "limit", "offset"],
+				"title": "CrmCompanyListingsResponse"
+			},
 			"CrmContactClaimResponse": {
 				"properties": {
 					"id": {
@@ -17747,7 +18218,7 @@
 					},
 					"target_type": {
 						"type": "string",
-						"enum": ["owner", "unit", "listing", "project", "demand"],
+						"enum": ["company", "owner", "unit", "listing", "project", "demand"],
 						"title": "Target Type"
 					},
 					"target_key": {

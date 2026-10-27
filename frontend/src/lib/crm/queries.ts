@@ -1,6 +1,7 @@
 import { keepPreviousData } from '@tanstack/svelte-query'
 import { crm } from './api'
 import type {
+	CompanyListingFilter,
 	DealTab,
 	DealType,
 	InboxFilter,
@@ -38,8 +39,13 @@ export const crmKeys = {
 	deals: (tab: DealTab, type: DealType | '' = '') => [...crmKeys.all, 'deals', tab, type] as const,
 	deal: (id: string) => [...crmKeys.all, 'deal', id] as const,
 	dealForm: (id: string, code: string) => [...crmKeys.all, 'deal', id, 'form', code] as const,
-	listings: (scope: ListingScope, status?: ListingStatus) =>
-		[...crmKeys.all, 'listings', scope, status ?? 'all'] as const,
+	listings: (
+		scope: ListingScope,
+		status?: ListingStatus,
+		limit = 100,
+		offset = 0,
+		companyAgent?: CompanyListingFilter
+	) => [...crmKeys.all, 'listings', scope, status ?? 'all', limit, offset, companyAgent] as const,
 	listing: (id: string) => [...crmKeys.all, 'listing', id] as const,
 	portfolio: () => [...crmKeys.all, 'portfolio'] as const,
 	renewals: (p: RenewalListParams) => [...crmKeys.all, 'renewals', p] as const,
@@ -119,9 +125,15 @@ export const crmQueries = {
 		queryKey: crmKeys.dealForm(id, code),
 		queryFn: () => crm.deals.form(id, code)
 	}),
-	listings: (scope: ListingScope, status?: ListingStatus) => ({
-		queryKey: crmKeys.listings(scope, status),
-		queryFn: () => crm.listings.list(scope, status),
+	listings: (
+		scope: ListingScope,
+		status?: ListingStatus,
+		limit = 100,
+		offset = 0,
+		companyAgent?: CompanyListingFilter
+	) => ({
+		queryKey: crmKeys.listings(scope, status, limit, offset, companyAgent),
+		queryFn: () => crm.listings.list(scope, status, limit, offset, companyAgent),
 		placeholderData: keepPreviousData
 	}),
 	listing: (id: string) => ({ queryKey: crmKeys.listing(id), queryFn: () => crm.listings.get(id) }),
