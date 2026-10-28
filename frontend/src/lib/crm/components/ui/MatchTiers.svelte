@@ -151,6 +151,15 @@ const OPEN_LABEL: Partial<Record<MatchRow['kind'], string>> = {
 	</div>
 {/snippet}
 
+{#if data.needs_brief}
+	<!-- No brief yet (e.g. a buyer approved from a recent sale): matching waits for one. -->
+	<section class="card tier" aria-label="Matches">
+		<div class="nomatch">
+			Add an area and a budget, bedrooms or property type, then qualify the lead to see matches.
+		</div>
+	</section>
+{/if}
+
 {#each data.tiers as t (t.id)}
 	<section class="card tier" aria-label={t.title}>
 		<div class="ch">

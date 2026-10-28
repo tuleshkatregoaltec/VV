@@ -100,6 +100,7 @@ import type {
 	OwnerRow,
 	OwnerTab,
 	OwnerUnit,
+	RecentSale,
 	Renewal,
 	RenewalDetail,
 	RenewalListParams,
@@ -118,6 +119,8 @@ const LIST_LIMIT = 500
 const OFF_PLAN_TAG = 'off-plan'
 /** Source of the leads Vitevue supplies from lease data (backend VITEVUE_LEASE_SOURCE). */
 const VITEVUE_SOURCE = 'Vitevue lease lead'
+/** Owners on the agency file whose unit just resold (backend SOLD_OWNER_SOURCE). */
+const SOLD_OWNER_SOURCE = 'Owner file · recently sold'
 
 type Intent = InboundEnquiryResponse['intent']
 type Status = InboundEnquiryResponse['status']
@@ -348,8 +351,10 @@ function criteriaWith(current: Criteria, fields: LeadFields): Criteria {
 const sourceOf = (label: string): Source =>
 	label === VITEVUE_SOURCE
 		? 'vitevue'
-		: (SOURCE_OPTIONS.find((o) => o.label.toLowerCase() === label.toLowerCase())?.source ??
-			'inbound')
+		: label === SOLD_OWNER_SOURCE
+			? 'file'
+			: (SOURCE_OPTIONS.find((o) => o.label.toLowerCase() === label.toLowerCase())?.source ??
+				'inbound')
 
 function summaryOf(type: LeadType, f: LeadFields, c: Criteria): { line: string; sub: string } {
 	const money = (v: unknown) => (num(v) ? `AED ${short(Number(v))}` : null)
@@ -416,7 +421,8 @@ function leadRow(e: InboundEnquiryResponse, u: AuthMeResponse): LeadRow {
 		known: knownOf(e),
 		source_short: e.source,
 		listing: null,
-		lease
+		lease,
+		recent_sales: recentSales(e)
 	}
 }
 
@@ -473,7 +479,12 @@ const isVilla = (propertyType: unknown) => /villa|townhouse/i.test(String(proper
 export async function listLeads(p: LeadListParams): Promise<LeadListResponse> {
 	const [res, u, leaseResult] = await Promise.all([
 		client.get<InboundEnquiryListResponse>(
-			client.withQuery(`${CRM}/inbound/enquiries`, { search: p.q || undefined, limit: LIST_LIMIT })
+			// Leads only: Inbox contacts (e.g. recently sold owners) would take the page's places.
+			client.withQuery(`${CRM}/inbound/enquiries`, {
+				search: p.q || undefined,
+				leads_only: true,
+				limit: LIST_LIMIT
+			})
 		),
 		whoAmI(),
 		// The agency's own leads still show when the lease data cannot load; the page says so.
@@ -710,9 +721,31 @@ async function loadMatches(id: number): Promise<InboundMatchesResponse> {
 }
 
 export async function leadMatches(id: number): Promise<LeadMatches> {
-	const [e, res, u] = await Promise.all([getEnquiry(id), loadMatches(id), whoAmI()])
+	const [e, u] = await Promise.all([getEnquiry(id), whoAmI()])
 	const lead = leadRow(e, u)
 	const side = groupOf(lead.lead_type)
+	const brief = LEAD_TYPES[lead.lead_type].fields
+		.filter((f) => lead.fields[f.key])
+		.map((f) => ({
+			k: f.label,
+			v: f.money ? aed(Number(lead.fields[f.key])) : String(lead.fields[f.key])
+		}))
+	const tab = side === 'sl' ? 'sell' : lead.off_plan ? 'offplan' : 'ready'
+	// Matching needs a qualified brief (the backend refuses otherwise): ask the agent for one.
+	if (!e.qualification_complete) {
+		return {
+			tab,
+			lead,
+			brief,
+			move_by: null,
+			shortlist: 0,
+			tiers: [],
+			status: null,
+			own_listing: null,
+			needs_brief: true
+		}
+	}
+	const res = await loadMatches(id)
 	const live = (lane: string) => (res.lanes[lane] ?? []).filter((m) => m.state !== 'dismissed')
 
 	const tiers: MatchTier[] = LANES[side].map((t, i) => ({
@@ -762,21 +795,17 @@ export async function leadMatches(id: number): Promise<LeadMatches> {
 	}))
 
 	return {
-		tab: side === 'sl' ? 'sell' : lead.off_plan ? 'offplan' : 'ready',
+		tab,
 		lead,
-		brief: LEAD_TYPES[lead.lead_type].fields
-			.filter((f) => lead.fields[f.key])
-			.map((f) => ({
-				k: f.label,
-				v: f.money ? aed(Number(lead.fields[f.key])) : String(lead.fields[f.key])
-			})),
+		brief,
 		move_by: null,
 		shortlist: Object.values(res.lanes)
 			.flat()
 			.filter((m) => m.state === 'saved').length,
 		tiers,
 		status: null,
-		own_listing: null
+		own_listing: null,
+		needs_brief: false
 	}
 }
 
@@ -1868,7 +1897,8 @@ function unopenedVitevueLead(item: CrmRenewalLeadsResponse['items'][number]): Le
 			: 'Owner not identified yet',
 		source_short: VITEVUE_SOURCE,
 		listing: null,
-		lease
+		lease,
+		recent_sales: null
 	}
 }
 
@@ -1876,6 +1906,15 @@ function unopenedVitevueLead(item: CrmRenewalLeadsResponse['items'][number]): Le
 export async function openVitevueLead(leaseId: string): Promise<Written<LeadDetail>> {
 	const [e, u] = await Promise.all([
 		client.post<InboundEnquiryResponse>(`${CRM}/renewal-leads/${encodeURIComponent(leaseId)}/lead`),
+		whoAmI()
+	])
+	return done(leadDetail(e, u))
+}
+
+/** Approve a recently sold owner in the Inbox as a possible buyer lead (no brief yet). */
+export async function approveRecentSeller(id: number): Promise<Written<LeadDetail>> {
+	const [e, u] = await Promise.all([
+		client.post<InboundEnquiryResponse>(`${CRM}/inbound/enquiries/${id}/approve-buyer`),
 		whoAmI()
 	])
 	return done(leadDetail(e, u))
@@ -1894,6 +1933,43 @@ const BAND: Record<string, string> = {
 	high: 'High',
 	medium: 'Medium',
 	standard: 'Standard'
+}
+
+/** A recently sold owner's sales, newest first: "Recently sold · 2 sales · latest 5 Oct · AED 2.4M". */
+/** The sales stored on a recently sold owner (Inbox item or the lead approved from it). */
+function recentSales(e: InboundEnquiryResponse): RecentSale[] | null {
+	if (e.source !== SOLD_OWNER_SOURCE) return null
+	return (e.observed_data?.recent_sales ?? []) as RecentSale[]
+}
+
+function soldLine(e: InboundEnquiryResponse): string | null {
+	if (e.source !== SOLD_OWNER_SOURCE) return null
+	const sales = (e.observed_data?.recent_sales ?? []) as {
+		sold_on: string
+		price_aed: number | null
+		bought_price_aed?: number | null
+		est_cash_in_hand_aed?: number | null
+	}[]
+	const latest = sales[0]
+	if (!latest) return 'Recently sold'
+	// What the latest sale made over the owner's purchase: the cash the seller freed up.
+	const gain =
+		latest.price_aed && latest.bought_price_aed ? latest.price_aed - latest.bought_price_aed : null
+	return [
+		'Recently sold',
+		`${sales.length} ${sales.length === 1 ? 'sale' : 'sales'}`,
+		`latest ${dayMonth(latest.sold_on)}`,
+		latest.price_aed ? `AED ${short(latest.price_aed)}` : null,
+		gain === null ? null : gain < 0 ? `Loss −AED ${short(-gain)}` : `Profit +AED ${short(gain)}`,
+		// Sale less the loan DLD recorded at purchase; repayments since are unknown, so "≈".
+		latest.est_cash_in_hand_aed != null
+			? `Est. cash in hand ≈ AED ${short(latest.est_cash_in_hand_aed)}`
+			: latest.price_aed
+				? 'Cash in hand: mortgage unknown'
+				: null
+	]
+		.filter(Boolean)
+		.join(' · ')
 }
 
 function inboxItem(e: InboundEnquiryResponse, u: AuthMeResponse): InboxItem {
@@ -1929,31 +2005,40 @@ function inboxItem(e: InboundEnquiryResponse, u: AuthMeResponse): InboxItem {
 		requests: [],
 		want_line: typed
 			? [LEAD_TYPES[type].label, summary.line, summary.sub].filter(Boolean).join(' · ')
-			: 'Not yet qualified as a buyer, seller, tenant or landlord',
+			: (soldLine(e) ?? 'Not yet qualified as a buyer, seller, tenant or landlord'),
 		// Only a typed enquiry opens as a lead; an unqualified contact has no lead type yet.
 		lead_id: typed ? e.id : null,
 		conversation: e.raw_notes
 			? [{ from: 'client', who: name, at: stamp(e.enquiry_date), text: e.raw_notes }]
 			: [],
-		can: { ask: false, withdraw: false, release: false, dismiss: false, restore: false },
+		can: {
+			ask: false,
+			withdraw: false,
+			release: false,
+			dismiss: false,
+			restore: false,
+			approve: e.source === SOLD_OWNER_SOURCE && e.intent === 'unknown'
+		},
 		my_request: null
 	}
 }
 
 /**
  * Inbox: typed enquiries still waiting for a first response (the backend's inbox rule) and
- * contacts not yet qualified; Not real lists disqualified ones. Vitevue lease leads live in Leads.
+ * contacts not yet qualified. Vitevue lease leads live in Leads. Dismissed (disqualified) items are
+ * left out: the Not real tab was removed (28 Oct), nothing on the backend marks items not real.
  * Read only: asking for, releasing and dismissing enquiries need the handout system.
  */
-export async function listInbox(filter: InboxFilter): Promise<InboxResponse> {
-	const get = (q: Record<string, string>) =>
+export async function listInbox(filter: InboxFilter, days = 30): Promise<InboxResponse> {
+	// Inbox window ("Last 30 days"): items dated within `days`; a recent seller by the sale date.
+	const get = (q: Record<string, string>, limit = LIST_LIMIT) =>
 		client.get<InboundEnquiryListResponse>(
-			client.withQuery(`${CRM}/inbound/enquiries`, { ...q, limit: LIST_LIMIT })
+			client.withQuery(`${CRM}/inbound/enquiries`, { ...q, within_days: days, limit })
 		)
-	const [inbox, unqualified, disqualified, u] = await Promise.all([
+	const [inbox, unqualified, u] = await Promise.all([
 		get({ workspace: 'inbox' }),
-		get({ workspace: 'unqualified' }),
-		get({ status: 'disqualified' }),
+		// Recent sellers are unqualified contacts: up to 1,000, so 90 days fits.
+		get({ workspace: 'unqualified' }, 1000),
 		whoAmI()
 	])
 	const seen = new Set<number>()
@@ -1962,20 +2047,18 @@ export async function listInbox(filter: InboxFilter): Promise<InboxResponse> {
 		.filter((e) => !seen.has(e.id) && Boolean(seen.add(e.id)))
 		.sort((a, b) => b.enquiry_date.localeCompare(a.enquiry_date))
 		.map((e) => inboxItem(e, u))
-	const dismissed = disqualified.enquiries.filter((e) => !isVitevue(e)).map((e) => inboxItem(e, u))
 	const lists: Record<InboxFilter, InboxItem[]> = {
 		all: open,
 		mine: open.filter((x) => x.agent === fullName(u)),
-		waiting: open.filter((x) => x.state === 'waiting'),
-		dismissed
+		waiting: open.filter((x) => x.state === 'waiting')
 	}
 	return {
 		items: lists[filter],
+		lists,
 		counts: {
 			all: lists.all.length,
 			mine: lists.mine.length,
-			waiting: lists.waiting.length,
-			dismissed: lists.dismissed.length
+			waiting: lists.waiting.length
 		},
 		today: open.filter((x) => x.ago === 'today').length,
 		waiting: lists.waiting.length,

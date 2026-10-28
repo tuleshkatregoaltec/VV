@@ -27,6 +27,7 @@ from app.crm.import_models import (
     CrmContactImportSummary,
 )
 from app.crm.owners import _invalidate_owner_summary_cache
+from app.crm.recently_sold import sync_after_ownership_change
 from app.crm.registry_fallback import _apply_registry_unit_fallbacks
 
 logger = logging.getLogger(__name__)
@@ -1262,6 +1263,7 @@ async def rematch_property_contact_claims(
     )
     await db.commit()
     _invalidate_owner_summary_cache(organization_id)
+    await sync_after_ownership_change(db, organization_id=organization_id)
     return {
         "claims": len(claims),
         **{f"transaction_{key}": value for key, value in resolution_counts.items()},

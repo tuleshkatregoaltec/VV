@@ -29,7 +29,7 @@ export const crmKeys = {
 	leadMatches: (id: number, o: MatchOptions = {}) =>
 		[...crmKeys.all, 'lead', id, 'matches', Boolean(o.over ?? true), Boolean(o.after)] as const,
 	matchClients: () => [...crmKeys.all, 'matches', 'clients'] as const,
-	inbox: (filter: InboxFilter) => [...crmKeys.all, 'inbox', filter] as const,
+	inbox: (filter: InboxFilter, days = 30) => [...crmKeys.all, 'inbox', filter, days] as const,
 	handout: () => [...crmKeys.all, 'settings', 'handout'] as const,
 	leadConversation: (id: number) => [...crmKeys.all, 'lead', id, 'conversation'] as const,
 	feedSummary: () => [...crmKeys.all, 'feed', 'summary'] as const,
@@ -97,9 +97,9 @@ export const crmQueries = {
 		placeholderData: keepPreviousData
 	}),
 	matchClients: () => ({ queryKey: crmKeys.matchClients(), queryFn: crm.matches.clients }),
-	inbox: (filter: InboxFilter) => ({
-		queryKey: crmKeys.inbox(filter),
-		queryFn: () => crm.inbox.list(filter),
+	inbox: (filter: InboxFilter, days = 30) => ({
+		queryKey: crmKeys.inbox(filter, days),
+		queryFn: () => crm.inbox.list(filter, days),
 		placeholderData: keepPreviousData
 	}),
 	handout: () => ({ queryKey: crmKeys.handout(), queryFn: crm.settings.handout }),

@@ -50,13 +50,14 @@ from app.crm.import_parsing import (
 )
 from app.crm.owners import _invalidate_owner_summary_cache
 from app.crm.ownership import (
-     _apply_companion_ownership,
+    _apply_companion_ownership,
     _apply_evidence,
     _recover_property_identity_from_near_transaction,
     _recover_property_identity_from_transaction,
     _rental_evidence,
     _sales_evidence,
 )
+from app.crm.recently_sold import sync_after_ownership_change
 from app.crm.registry_fallback import _apply_registry_unit_fallbacks
 from app.crm.workspaces import _enrich_workspaces
 
@@ -304,6 +305,7 @@ async def process_contact_import(
         import_repository.save(db, record)
         await db.commit()
         _invalidate_owner_summary_cache(organization_id)
+        await sync_after_ownership_change(db, organization_id=organization_id)
         return await _import_response(db, record)
     except HTTPException:
         raise

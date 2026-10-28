@@ -74,6 +74,13 @@ function serve(routes: Record<string, unknown>) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('CRM leads from /api/v1/crm/inbound', () => {
+	it('asks only for leads, so Inbox contacts cannot crowd them out of the page', async () => {
+		const get = serve({ '/api/v1/crm/inbound/enquiries': { enquiries: [], total: 0, summary: {} } })
+		await backend.listLeads({})
+		const url = get.mock.calls.map(([u]) => String(u)).find((u) => u.includes('/inbound/enquiries'))
+		expect(url).toContain('leads_only=true')
+	})
+
 	it('keeps unqualified contacts (intent unknown) out of Leads: they are Inbox work, not a typed lead', async () => {
 		serve({
 			'/api/v1/crm/inbound/enquiries': {
@@ -683,8 +690,20 @@ describe('Inbox from /api/v1/crm/inbound/enquiries', () => {
 		const { crm } = await import('$lib/crm/api')
 		const res = await crm.inbox.list('all')
 		expect(res.items.map((x) => x.id).sort()).toEqual(['1', '2'])
-		expect(res.counts.dismissed).toBe(1)
-		expect((await crm.inbox.list('dismissed')).items.map((x) => x.id)).toEqual(['4'])
+	})
+
+	it('has no Not real tab: the Inbox never asks for or lists dismissed enquiries', async () => {
+		const get = serveInbox({
+			inbox: [],
+			unqualified: [enquiry({ id: 5, intent: 'unknown', status: 'disqualified' })],
+			disqualified: []
+		})
+		const { crm } = await import('$lib/crm/api')
+		const res = await crm.inbox.list('all')
+		// The client removed the tab: nothing could be marked not real, so it was always empty.
+		expect(Object.keys(res.lists).sort()).toEqual(['all', 'mine', 'waiting'])
+		expect(get.mock.calls.some(([u]) => String(u).includes('status=disqualified'))).toBe(false)
+		expect(res.items).toEqual([])
 	})
 
 	it('opens only a typed enquiry as a lead: an unqualified contact has no lead type yet', async () => {
@@ -697,6 +716,155 @@ describe('Inbox from /api/v1/crm/inbound/enquiries', () => {
 		const byId = Object.fromEntries((await crm.inbox.list('all')).items.map((x) => [x.id, x]))
 		expect(byId['1'].lead_id).toBe(1)
 		expect(byId['2'].lead_id).toBeNull()
+	})
+
+	const soldOwner = (id: number, soldOn: string, sales: number) =>
+		enquiry({
+			id,
+			intent: 'unknown',
+			record_kind: 'unqualified_contact',
+			source: 'Owner file · recently sold',
+			// The sync leaves recent sellers unassigned, for a manager to route.
+			assigned_user_id: null,
+			enquiry_date: `${soldOn}T00:00:00+00:00`,
+			raw_notes:
+				'Sold Marina Gate 1 unit 1204 on 05 Oct 2026 for AED 2,400,000. (+1 more recent sales)',
+			criteria: {},
+			observed_data: {
+				recent_sales: Array.from({ length: sales }, (_, i) => ({
+					property_key: `p${i}`,
+					building: 'Marina Gate 1',
+					unit: String(1204 - i),
+					area: 'Dubai Marina',
+					property_type: 'Apartment',
+					sold_on: soldOn,
+					price_aed: 2_400_000
+				}))
+			}
+		})
+
+	it('shows a recently sold owner in the Inbox with their sale', async () => {
+		serveInbox({ inbox: [], unqualified: [soldOwner(9, '2026-10-05', 2)], disqualified: [] })
+		const { crm } = await import('$lib/crm/api')
+		const [item] = (await crm.inbox.list('all')).items
+		expect(item.text).toMatch(/^Sold Marina Gate 1 unit 1204 on 05 Oct 2026/)
+		expect(item.want_line).toBe(
+			'Recently sold · 2 sales · latest 5 Oct · AED 2.4m · Cash in hand: mortgage unknown'
+		)
+		// From the agency's owner file, not an inbound enquiry.
+		expect(item.line).toBe('vv')
+	})
+
+	it('loads every Inbox tab at once, so switching tabs needs no new request', async () => {
+		const get = serveInbox({
+			inbox: [enquiry({ id: 1 })],
+			unqualified: [soldOwner(2, '2026-10-07', 1)],
+			disqualified: [enquiry({ id: 3, status: 'disqualified' })]
+		})
+		const { crm } = await import('$lib/crm/api')
+		const res = await crm.inbox.list('all')
+		const calls = get.mock.calls.length
+		expect(res.lists.all.map((x) => x.id)).toEqual(['1', '2'])
+		// Enquiry 1 is assigned to the signed-in agent; the recent seller waits for a manager.
+		expect(res.lists.mine.map((x) => x.id)).toEqual(['1'])
+		expect(res.lists.waiting.map((x) => x.id)).toEqual(['2'])
+		expect(get.mock.calls.length).toBe(calls)
+	})
+
+	it('asks for Inbox items within the chosen window, recent sellers up to 1,000', async () => {
+		const get = serveInbox({ inbox: [], unqualified: [], disqualified: [] })
+		const { crm } = await import('$lib/crm/api')
+		await crm.inbox.list('all', 60)
+		const unqualified = get.mock.calls
+			.map(([url]) => String(url))
+			.find((u) => u.includes('workspace=unqualified'))
+		expect(unqualified).toContain('within_days=60')
+		expect(unqualified).toContain('limit=1000')
+	})
+
+	it('shows what a recent seller made on the sale, from their purchase price', async () => {
+		const sold = soldOwner(9, '2026-09-30', 1)
+		sold.observed_data = {
+			recent_sales: [
+				{
+					sold_on: '2026-09-30',
+					price_aed: 1_085_000,
+					bought_on: '2024-10-04',
+					bought_price_aed: 650_000,
+					est_cash_in_hand_aed: 695_000
+				}
+			]
+		}
+		const lost = soldOwner(10, '2026-10-08', 1)
+		lost.observed_data = {
+			recent_sales: [
+				{
+					sold_on: '2026-10-08',
+					price_aed: 1_390_000,
+					bought_on: '2024-09-26',
+					bought_price_aed: 1_472_828
+				}
+			]
+		}
+		serveInbox({ inbox: [], unqualified: [sold, lost], disqualified: [] })
+		const { crm } = await import('$lib/crm/api')
+		const byId = Object.fromEntries((await crm.inbox.list('all')).items.map((x) => [x.id, x]))
+		expect(byId['9'].want_line).toBe(
+			'Recently sold · 1 sale · latest 30 Sep · AED 1.08m · Profit +AED 435,000 · Est. cash in hand ≈ AED 695,000'
+		)
+		expect(byId['10'].want_line).toBe(
+			'Recently sold · 1 sale · latest 8 Oct · AED 1.39m · Loss −AED 82,828 · Cash in hand: mortgage unknown'
+		)
+	})
+
+	it('lets a recently sold owner be approved as a buyer, but not a normal enquiry', async () => {
+		serveInbox({
+			inbox: [enquiry({ id: 1, intent: 'unknown', record_kind: 'unqualified_contact' })],
+			unqualified: [soldOwner(9, '2026-10-09', 1)],
+			disqualified: []
+		})
+		const { crm } = await import('$lib/crm/api')
+		const byId = Object.fromEntries((await crm.inbox.list('all')).items.map((x) => [x.id, x]))
+		expect(byId['9'].can.approve).toBe(true)
+		expect(byId['9'].lead_id).toBeNull()
+		expect(byId['1'].can.approve).toBe(false)
+	})
+
+	it('approves through the backend into a buyer lead that keeps the recent sale', async () => {
+		serve({})
+		const approved = soldOwner(9, '2026-10-09', 1)
+		approved.intent = 'buy'
+		approved.record_kind = 'opportunity'
+		const post = vi.spyOn(client, 'post').mockResolvedValue(approved)
+		const { crm } = await import('$lib/crm/api')
+		const res = await crm.inbox.approve('9')
+		expect(post).toHaveBeenCalledWith('/api/v1/crm/inbound/enquiries/9/approve-buyer')
+		expect(res.data.lead_type).toBe('buyer')
+		expect(res.data.recent_sales?.[0].price_aed).toBe(2_400_000)
+	})
+
+	it('asks for a brief instead of matching a lead without one', async () => {
+		const approved = soldOwner(9, '2026-10-09', 1)
+		approved.intent = 'buy'
+		approved.record_kind = 'opportunity'
+		approved.qualification_complete = false
+		serve({ '/api/v1/crm/inbound/enquiries/9': approved })
+		const post = vi.spyOn(client, 'post')
+		const res = await backend.leadMatches(9)
+		// No budget, area or type yet: matching would be refused, so it is not asked for.
+		expect(res.needs_brief).toBe(true)
+		expect(res.tiers).toEqual([])
+		expect(post).not.toHaveBeenCalled()
+	})
+
+	it('lists recent sellers newest sale first', async () => {
+		serveInbox({
+			inbox: [],
+			unqualified: [soldOwner(1, '2026-08-20', 1), soldOwner(2, '2026-10-07', 1)],
+			disqualified: []
+		})
+		const { crm } = await import('$lib/crm/api')
+		expect((await crm.inbox.list('all')).items.map((x) => x.id)).toEqual(['2', '1'])
 	})
 
 	it('offers no Ask, Release or Dismiss: the handout system is not on the backend yet', async () => {

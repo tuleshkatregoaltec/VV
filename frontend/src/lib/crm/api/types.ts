@@ -102,6 +102,17 @@ export type LeadFieldKey =
 
 export type LeadFields = Partial<Record<LeadFieldKey, string | number | null>>
 
+/** One sale by a recently sold owner, as the Inbox sync stored it. */
+export interface RecentSale {
+	building: string
+	unit: string
+	sold_on: string
+	price_aed: number | null
+	bought_on: string | null
+	bought_price_aed: number | null
+	est_cash_in_hand_aed: number | null
+}
+
 export interface LeadRow {
 	id: number
 	name: string
@@ -137,6 +148,8 @@ export interface LeadRow {
 	listing: RecordRef | null
 	/** Vitevue lease lead: the unit's lease behind it. */
 	lease: VitevueLease | null
+	/** A lead approved from a recent sale: the owner's sales, newest first (else null). */
+	recent_sales: RecentSale[] | null
 }
 
 /**
@@ -405,6 +418,8 @@ export interface LeadMatches {
 	/** Off-plan and seller-side matching are planned (status chip). */
 	status: Chip | null
 	own_listing: RecordRef | null
+	/** No budget, area or property type yet (e.g. approved from a recent sale): no matching. */
+	needs_brief: boolean
 }
 
 export interface MatchOptions {
@@ -1293,7 +1308,7 @@ export interface FeedPreferences {
 
 /** Manager assigns · First to ask gets it · Agents ask, manager confirms. Default not decided. */
 export type HandoutMode = 'manager' | 'request' | 'both'
-export type InboxFilter = 'all' | 'mine' | 'waiting' | 'dismissed'
+export type InboxFilter = 'all' | 'mine' | 'waiting'
 
 export interface InboxItem {
 	id: string
@@ -1323,13 +1338,23 @@ export interface InboxItem {
 	lead_id: number | null
 	conversation: ConversationMessage[]
 	/** What I can do here, decided by the backend from the handout mode. */
-	can: { ask: boolean; withdraw: boolean; release: boolean; dismiss: boolean; restore: boolean }
+	can: {
+		ask: boolean
+		withdraw: boolean
+		release: boolean
+		dismiss: boolean
+		restore: boolean
+		/** A recently sold owner can be approved into Leads as a possible buyer. */
+		approve: boolean
+	}
 	/** "Asked 10:05 · the manager confirms" when I asked. */
 	my_request: string | null
 }
 
 export interface InboxResponse {
 	items: InboxItem[]
+	/** Every tab's items from the same load: switching tabs needs no new request. */
+	lists: Record<InboxFilter, InboxItem[]>
 	counts: Record<InboxFilter, number>
 	today: number
 	waiting: number

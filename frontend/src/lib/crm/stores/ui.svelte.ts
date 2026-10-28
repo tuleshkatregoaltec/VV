@@ -73,7 +73,9 @@ export const ui = $state({
 	matchOver: true,
 	matchAfter: false,
 	/** Inbox: filter and the selected enquiry. */
-	inboxFilter: 'all' as 'all' | 'mine' | 'waiting' | 'dismissed',
+	inboxFilter: 'all' as 'all' | 'mine' | 'waiting',
+	/** Inbox window: items dated within this many days (a recent seller by its sale date). */
+	inboxDays: '30' as '30' | '60' | '90',
 	inboxSel: ''
 })
 

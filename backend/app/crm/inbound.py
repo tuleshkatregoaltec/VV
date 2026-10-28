@@ -12,6 +12,7 @@ from app.crm import inbound_repository, owner_queries
 from app.crm.identity import _normalize_email, _normalize_phone
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import (
+    SOLD_OWNER_SOURCE,
     VITEVUE_LEASE_SOURCE,
     CrmInboundActivity,
     CrmInboundContact,
@@ -173,19 +174,68 @@ def _ownership_enrichment(
     )
 
 
+def _is_lead(enquiry: CrmInboundEnquiry) -> bool:
+    """What the Leads list shows: a typed enquiry, or a Vitevue lease lead (seller or landlord).
+
+    Unqualified contacts, such as recently sold owners, stay in the Inbox until approved.
+    """
+    return enquiry.intent != "unknown" or enquiry.source == VITEVUE_LEASE_SOURCE
+
+
+def _within_window(enquiry: CrmInboundEnquiry, days: int | None, today: date) -> bool:
+    """Inbox window ("Last 30 days"): the item's date within `days`; no window keeps all.
+
+    The date is when an enquiry arrived, or for a recently sold owner the day of the sale.
+    """
+    if days is None:
+        return True
+    return enquiry.enquiry_date.date() >= today - timedelta(days=days)
+
+
+def _sold_owner_keys(enquiries: list[CrmInboundEnquiry]) -> dict[int, str]:
+    """Contact id → owner key for Inbox items created from the owner file (recently sold)."""
+    return {
+        item.contact_id: item.source_lead_id
+        for item in enquiries
+        if item.source == SOLD_OWNER_SOURCE and item.source_lead_id
+    }
+
+
 async def _bulk_ownership_enrichments(
     db: AsyncSession,
     *,
     organization_id: str,
     contacts: list[CrmInboundContact],
+    owner_keys: dict[int, str] | None = None,
 ) -> dict[int, InboundOwnershipEnrichmentResponse]:
+    """What the owner file knows about each contact.
+
+    `owner_keys` (contact id → owner key) marks contacts that came from the owner file itself,
+    such as recently sold owners: they are read by owner key, exactly and from an index, instead
+    of the name search, which scans every owner-file row.
+    """
     if not contacts:
         return {}
+    owner_keys = owner_keys or {}
+    matches: dict[int, list[tuple[CrmPropertyContactClaim, str]]] = {}
+    by_owner_key: dict[str, set[int]] = {}
+    known = [contact for contact in contacts if (contact.id or 0) in owner_keys]
+    for contact in known:
+        by_owner_key.setdefault(owner_keys[contact.id or 0], set()).add(contact.id or 0)
+    for claim in await inbound_repository.list_claims_by_owner_keys(
+        db, organization_id, set(by_owner_key)
+    ):
+        for contact in known:
+            if (contact.id or 0) in by_owner_key.get(claim.owner_key, set()):
+                basis = "phone" if contact.phone else "email" if contact.email else "name"
+                matches.setdefault(contact.id or 0, []).append((claim, basis))
     name_to_ids: dict[str, set[int]] = {}
     phone_to_ids: dict[str, set[int]] = {}
     email_to_ids: dict[str, set[int]] = {}
     for contact in contacts:
         contact_id = contact.id or 0
+        if contact_id in owner_keys:
+            continue
         name = contact.full_name.strip().casefold()
         if name:
             name_to_ids.setdefault(name, set()).add(contact_id)
@@ -193,10 +243,13 @@ async def _bulk_ownership_enrichments(
             phone_to_ids.setdefault(contact.phone, set()).add(contact_id)
         if contact.email:
             email_to_ids.setdefault(contact.email.casefold(), set()).add(contact_id)
-    result = await inbound_repository.find_identity_claims(
-        db, email_to_ids, name_to_ids, organization_id, phone_to_ids
+    result = (
+        await inbound_repository.find_identity_claims(
+            db, email_to_ids, name_to_ids, organization_id, phone_to_ids
+        )
+        if name_to_ids or phone_to_ids or email_to_ids
+        else []
     )
-    matches: dict[int, list[tuple[CrmPropertyContactClaim, str]]] = {}
     for claim in result:
         claim_phone_values = {claim.phone_primary, claim.phone_alternate} - {None, ""}
         phone_ids = {
@@ -570,6 +623,7 @@ async def _enquiry_response(
                 db,
                 organization_id=enquiry.organization_id,
                 contacts=[contact],
+                owner_keys=_sold_owner_keys([enquiry]),
             )
         ).get(contact.id or 0, InboundOwnershipEnrichmentResponse())
     return InboundEnquiryResponse(
@@ -637,9 +691,17 @@ async def list_inbound_enquiries(
     search: str | None,
     limit: int,
     offset: int,
+    within_days: int | None = None,
+    leads_only: bool = False,
 ) -> InboundEnquiryListResponse:
     result = await inbound_repository.list_enquiries(db, organization_id)
-    enquiries = list(result)
+    today = date.today()
+    # Items outside the chosen window are left out entirely (lists and counts).
+    enquiries = [
+        item
+        for item in result
+        if _within_window(item, within_days, today) and (not leads_only or _is_lead(item))
+    ]
     all_enquiries = enquiries[:]
     all_contacts: dict[int, CrmInboundContact] = {}
     if all_enquiries:
@@ -649,6 +711,7 @@ async def list_inbound_enquiries(
         db,
         organization_id=organization_id,
         contacts=list(all_contacts.values()),
+        owner_keys=_sold_owner_keys(all_enquiries),
     )
     all_priorities = {
         item.id or 0: _lead_priority(

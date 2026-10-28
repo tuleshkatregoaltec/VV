@@ -108,6 +108,24 @@ async def fetch_unit_sales(parameters):
     )
 
 
+async def fetch_purchase_ltv(parameters):
+    """DLD sales of these units that record a mortgage (loan-to-value at the sale)."""
+    return await query(
+        """
+            SELECT
+                replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '') AS unit_key,
+                transaction_date,
+                sale_amount_aed,
+                ltv_pct
+            FROM dxbi_sales_unit_events FINAL
+            WHERE replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '')
+                IN {unit_keys:Array(String)}
+                AND ltv_pct IS NOT NULL
+            """,
+        parameters,
+    )
+
+
 async def fetch_rental_source_columns():
     return await query(
         "SELECT count() AS has_unit FROM system.columns WHERE database=currentDatabase() "

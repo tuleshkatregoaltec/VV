@@ -5,8 +5,10 @@ import type { InboxFilter, InboxItem } from '$lib/crm/api/types'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
+import FilterMenu from '$lib/crm/components/ui/FilterMenu.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
+import { fmt } from '$lib/crm/format'
 import { crmQueries } from '$lib/crm/queries'
 import { openLead } from '$lib/crm/stores/panel.svelte'
 import { ui } from '$lib/crm/stores/ui.svelte'
@@ -17,8 +19,10 @@ import { errorText, write } from '$lib/crm/write'
  * conversation, owner check, wants, priority, suggested agent, who asked for it and the handout
  * mode. What Ask does depends on the agency's handout setting (Manager › Settings).
  */
-const inbox = createQuery(() => crmQueries.inbox(ui.inboxFilter))
-const items = $derived(inbox.data?.items ?? [])
+// One load holds every tab (the backend calls are the same for each), so a tab switch is
+// instant and never shows the previous tab while a new request runs.
+const inbox = createQuery(() => crmQueries.inbox('all', Number(ui.inboxDays)))
+const items = $derived(inbox.data?.lists[ui.inboxFilter] ?? [])
 const sel = $derived<InboxItem | null>(items.find((x) => x.id === ui.inboxSel) ?? items[0] ?? null)
 const sources = $derived(inbox.data?.sources ?? [])
 
@@ -28,11 +32,18 @@ const LINE: Record<InboxItem['line'], string> = {
 	own: 'var(--l-own)',
 	a2a: 'var(--l-a2a)'
 }
-const FILTERS: [InboxFilter, string][] = [
-	['all', 'All'],
-	['mine', 'Assigned to me'],
-	['waiting', 'Waiting'],
-	['dismissed', 'Not real']
+/** Inbox window for every tab: an item's date (received, or a recent seller's sale). */
+const WINDOWS: { id: '30' | '60' | '90'; label: string }[] = [
+	{ id: '30', label: 'Last 30 days' },
+	{ id: '60', label: 'Last 60 days' },
+	{ id: '90', label: 'Last 90 days' }
+]
+
+/** Tab, short label (the list column is narrow) and its full name for the tooltip. */
+const FILTERS: [InboxFilter, string, string][] = [
+	['all', 'All', 'All enquiries'],
+	['mine', 'Mine', 'Assigned to me'],
+	['waiting', 'Waiting', 'Waiting for a manager']
 ]
 
 const facts = $derived(
@@ -40,6 +51,15 @@ const facts = $derived(
 		? `${inbox.data.today} today · ${inbox.data.waiting} waiting to assign · Handout: ${inbox.data.handout_label.toLowerCase()} · colour = source`
 		: ''
 )
+
+/** Recently sold owner → a possible buyer lead; open it so the agent can start the brief. */
+async function approve(item: InboxItem) {
+	const r = await write({
+		call: () => crm.inbox.approve(item.id),
+		success: (res) => `${res.data.name} is now a buyer lead`
+	})
+	if (r) openLead(r.data.id)
+}
 
 function act(
 	call: () => Promise<{ data: InboxItem; undo_token: string | null }>,
@@ -57,13 +77,29 @@ function act(
 	<div class="inbox">
 		<section class="card ib-list" aria-label="Enquiries">
 			<div class="ch">
-				<div class="seg" role="tablist" aria-label="Filter">
-					{#each FILTERS as [id, label] (id)}
-						<button type="button" role="tab" aria-selected={ui.inboxFilter === id} onclick={() => (ui.inboxFilter = id)}>
-							{label}
+				<div class="seg ib-tabs" role="tablist" aria-label="Filter">
+					{#each FILTERS as [id, label, full] (id)}
+						<button
+							type="button"
+							role="tab"
+							title={full}
+							aria-label="{full}: {inbox.data.counts[id]}"
+							aria-selected={ui.inboxFilter === id}
+							onclick={() => (ui.inboxFilter = id)}
+						>
+							<!-- Counts follow the Last N days window, so a window change shows at a glance. -->
+							<span class="n">{fmt(inbox.data.counts[id])}</span>
+							<span class="l">{label}</span>
 						</button>
 					{/each}
 				</div>
+				<FilterMenu
+					label="Show"
+					value={ui.inboxDays}
+					options={WINDOWS}
+					onselect={(v) => (ui.inboxDays = v || '30')}
+					alwaysOn
+				/>
 			</div>
 			<div class="list scroll">
 				{#each items as x (x.id)}
@@ -141,6 +177,10 @@ function act(
 							</div>
 						</div>
 						<div class="form-actions">
+							{#if sel.can.approve}
+								{@const item = sel}
+								<button type="button" class="btn" onclick={() => approve(item)}>Approve as buyer</button>
+							{/if}
 							{#if sel.lead_id}
 								{@const leadId = sel.lead_id}
 								<button type="button" class="btn" onclick={() => openLead(leadId)}>Open lead</button>
@@ -216,3 +256,32 @@ function act(
 		<div class="card"><Skeleton rows={4} /></div>
 	</div>
 {/if}
+
+<style>
+	/* Equal tabs that always fit the narrow list column: count above, label below. */
+	.ib-tabs {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		width: 100%;
+	}
+	.ib-tabs button {
+		display: grid;
+		justify-items: center;
+		gap: 1px;
+		height: auto;
+		min-width: 0;
+		padding: 5px 4px;
+	}
+	.ib-tabs .n {
+		font-size: 15px;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+	.ib-tabs .l {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		font-size: 12px;
+		font-weight: 500;
+	}
+</style>

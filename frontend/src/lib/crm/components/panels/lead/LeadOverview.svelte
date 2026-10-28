@@ -133,6 +133,37 @@ const chain = $derived.by((): ChainPart[] => {
 	</div>
 </section>
 
+{#if lead.recent_sales?.length}
+	<!-- Approved from a recent sale: what they sold, what they paid and roughly what they hold now. -->
+	<section class="sec">
+		<h3>Recent sale</h3>
+		{#each lead.recent_sales as s, i (i)}
+			{@const gain = s.price_aed && s.bought_price_aed ? s.price_aed - s.bought_price_aed : null}
+			<div class="kv">
+				<Kv
+					k="Sold"
+					v={s.price_aed ? aed(s.price_aed) : 'Price not recorded'}
+					o={[[s.building, s.unit].filter(Boolean).join(' unit '), fullDate(s.sold_on)].filter(Boolean).join(' · ')}
+				/>
+				<Kv
+					k="Bought"
+					v={s.bought_price_aed ? aed(s.bought_price_aed) : s.bought_on ? 'Price not recorded' : 'Not on record'}
+					o={s.bought_on ? fullDate(s.bought_on) : ''}
+				/>
+				{#if gain !== null}
+					<Kv k={gain < 0 ? 'Loss' : 'Profit'} v={aed(Math.abs(gain))} />
+				{/if}
+				<Kv
+					k="Est. cash in hand"
+					v={s.est_cash_in_hand_aed != null ? `≈ ${aed(s.est_cash_in_hand_aed)}` : 'Mortgage unknown'}
+					o={s.est_cash_in_hand_aed != null ? 'Sale less the loan at purchase' : ''}
+				/>
+			</div>
+		{/each}
+		<p class="small muted">Their budget, area and property type are not known yet: add them after the first call.</p>
+	</section>
+{/if}
+
 {#if lead.lease}
 	{@const l = lead.lease}
 	<section class="sec">

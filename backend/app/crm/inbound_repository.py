@@ -6,6 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import (
+    SOLD_OWNER_SOURCE,
     VITEVUE_LEASE_SOURCE,
     CrmInboundActivity,
     CrmInboundContact,
@@ -144,6 +145,46 @@ async def list_vitevue_lease_enquiries(db: AsyncSession, organization_id, unit_k
             )
         )
     ).all()
+
+
+async def list_recent_former_owner_claims(db: AsyncSession, organization_id, since):
+    """Owner-file claims whose unit sold again on or after `since`."""
+    return (
+        await db.exec(
+            select(CrmPropertyContactClaim).where(
+                CrmPropertyContactClaim.organization_id == organization_id,
+                CrmPropertyContactClaim.ownership_status == "former_owner",
+                CrmPropertyContactClaim.later_sale_date >= since,  # type: ignore[operator]
+            )
+        )
+    ).all()
+
+
+async def list_claims_by_owner_keys(db: AsyncSession, organization_id, owner_keys):
+    """Every owner-file claim of these owners (indexed on organization and owner key)."""
+    if not owner_keys:
+        return []
+    return (
+        await db.exec(
+            select(CrmPropertyContactClaim).where(
+                CrmPropertyContactClaim.organization_id == organization_id,
+                CrmPropertyContactClaim.owner_key.in_(list(owner_keys)),  # type: ignore[attr-defined]
+            )
+        )
+    ).all()
+
+
+async def list_sold_owner_enquiries(db: AsyncSession, organization_id):
+    """The recently-sold Inbox items, by owner key."""
+    rows = (
+        await db.exec(
+            select(CrmInboundEnquiry).where(
+                CrmInboundEnquiry.organization_id == organization_id,
+                CrmInboundEnquiry.source == SOLD_OWNER_SOURCE,
+            )
+        )
+    ).all()
+    return {row.source_lead_id: row for row in rows if row.source_lead_id}
 
 
 async def list_enquiry_contacts(db: AsyncSession, all_enquiries):

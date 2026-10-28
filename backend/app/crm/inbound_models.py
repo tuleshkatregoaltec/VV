@@ -28,6 +28,8 @@ InboundMatchState = Literal["suggested", "saved", "dismissed", "contacted", "sta
 
 # Leads Vitevue supplies from the lease data; source_lead_id holds the unit's candidate key.
 VITEVUE_LEASE_SOURCE = "Vitevue lease lead"
+# Owners on the agency file whose unit just resold; source_lead_id holds the owner key.
+SOLD_OWNER_SOURCE = "Owner file · recently sold"
 
 
 class CrmInboundImport(SQLModel, table=True):
@@ -80,6 +82,14 @@ class CrmInboundEnquiry(SQLModel, table=True):
             "source_lead_id",
             unique=True,
             postgresql_where=text(f"source = '{VITEVUE_LEASE_SOURCE}'"),
+        ),
+        # One recently-sold Inbox item per owner, however often the sync runs.
+        Index(
+            "uq_crm_inbound_sold_owner",
+            "organization_id",
+            "source_lead_id",
+            unique=True,
+            postgresql_where=text(f"source = '{SOLD_OWNER_SOURCE}'"),
         ),
     )
 

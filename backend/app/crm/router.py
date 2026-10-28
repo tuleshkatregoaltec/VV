@@ -99,6 +99,7 @@ from app.crm.owners import (
     list_contact_lists,
     list_lead_imported_contacts,
 )
+from app.crm.recently_sold import approve_recent_seller
 from app.crm.renewal_leads import (
     get_area_preferences,
     list_renewal_areas,
@@ -149,12 +150,19 @@ async def crm_inbound_enquiries(
     workspace: str | None = Query(default=None, pattern="^(inbox|unqualified|qualified|closed)$"),
     status: str | None = Query(default=None, max_length=40),
     search: str | None = Query(default=None, max_length=160),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    within_days: int | None = Query(default=None, ge=1, le=365),
+    leads_only: bool = Query(default=False),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """List organization-visible inbound enquiries and review exceptions."""
+    """List organization-visible inbound enquiries and review exceptions.
+
+    `within_days` keeps items dated within that many days (Inbox "Last 30 days"); a recently
+    sold owner is dated by the sale. `leads_only` leaves out contacts that are not leads yet
+    (the Leads list), so Inbox contacts cannot crowd leads out of a page.
+    """
     _, organization_id = _auth_ids(context)
     return await list_inbound_enquiries(
         db,
@@ -165,6 +173,21 @@ async def crm_inbound_enquiries(
         search=search,
         limit=limit,
         offset=offset,
+        within_days=within_days,
+        leads_only=leads_only,
+    )
+
+
+@router.post("/inbound/enquiries/{enquiry_id}/approve-buyer", response_model=InboundEnquiryResponse)
+async def crm_approve_recent_seller(
+    enquiry_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Approve a recently sold owner from the Inbox as a possible buyer lead (no brief yet)."""
+    user_id, organization_id = _auth_ids(context)
+    return await approve_recent_seller(
+        db, enquiry_id=enquiry_id, user_id=user_id, organization_id=organization_id
     )
 
 
