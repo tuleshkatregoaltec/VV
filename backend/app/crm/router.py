@@ -20,6 +20,34 @@ from app.crm.company_listings import (
     list_company_listings,
     select_company_source,
 )
+from app.crm.email_models import (
+    EmailInboundListResponse,
+    EmailLeadListResponse,
+    EmailSendBatchResponse,
+    EmailSendCreate,
+    EmailSendListResponse,
+    EmailStatusResponse,
+    EmailSyncResponse,
+    EmailTemplateResponse,
+    EmailTemplateWrite,
+    EmailThreadItem,
+)
+from app.crm.email_pipeline import (
+    create_template,
+    delete_send,
+    delete_template,
+    email_status,
+    lead_thread,
+    list_email_leads,
+    list_inbound,
+    list_sends,
+    list_templates,
+    receive_inbound,
+    receive_webhook,
+    send_emails,
+    sync_events,
+    update_template,
+)
 from app.crm.import_models import (
     CrmContactImportRename,
     CrmContactImportResponse,
@@ -1025,3 +1053,179 @@ async def crm_delete_saved_lead(
         organization_id=organization_id,
     )
     return Response(status_code=204)
+
+
+# ── Connectors › Email (Brevo) ──
+
+
+@router.get("/email/status", response_model=EmailStatusResponse)
+async def crm_email_status(context: AuthContext = Depends(require_active_subscription)):
+    """Whether Brevo is configured on the server, and the sender leads see."""
+    return email_status()
+
+
+@router.get("/email/leads", response_model=EmailLeadListResponse)
+async def crm_email_leads(
+    search: str | None = Query(default=None, max_length=160),
+    intent: str | None = Query(default=None, pattern="^(unknown|buy|rent|sell|let)$"),
+    source: str | None = Query(default=None, max_length=120),
+    ids: list[int] | None = Query(default=None, max_length=100),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Leads of any type whose contact has an email, each with its latest email status.
+
+    `ids` narrows to those leads (Compose showing who it will send to).
+    """
+    _, organization_id = _auth_ids(context)
+    return await list_email_leads(
+        db,
+        organization_id=organization_id,
+        search=search,
+        intent=intent,
+        source=source,
+        limit=limit,
+        offset=offset,
+        ids=ids,
+    )
+
+
+@router.get("/email/templates", response_model=list[EmailTemplateResponse])
+async def crm_email_templates(
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """The organization's email templates, shared by every agent."""
+    _, organization_id = _auth_ids(context)
+    return await list_templates(organization_id=organization_id)
+
+
+@router.post("/email/templates", response_model=EmailTemplateResponse, status_code=201)
+async def crm_create_email_template(
+    payload: EmailTemplateWrite,
+    context: AuthContext = Depends(require_active_subscription),
+):
+    user_id, organization_id = _auth_ids(context)
+    return await create_template(organization_id=organization_id, user_id=user_id, payload=payload)
+
+
+@router.put("/email/templates/{template_id}", response_model=EmailTemplateResponse)
+async def crm_update_email_template(
+    template_id: int,
+    payload: EmailTemplateWrite,
+    context: AuthContext = Depends(require_active_subscription),
+):
+    user_id, organization_id = _auth_ids(context)
+    return await update_template(
+        organization_id=organization_id,
+        user_id=user_id,
+        template_id=template_id,
+        payload=payload,
+    )
+
+
+@router.delete("/email/templates/{template_id}", status_code=204)
+async def crm_delete_email_template(
+    template_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+):
+    _, organization_id = _auth_ids(context)
+    await delete_template(organization_id=organization_id, template_id=template_id)
+    return Response(status_code=204)
+
+
+@router.post("/email/send", response_model=EmailSendBatchResponse)
+async def crm_send_email(
+    payload: EmailSendCreate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Send one personalised email per lead through Brevo; each lands on the lead's history."""
+    user_id, organization_id = _auth_ids(context)
+    return await send_emails(db, organization_id=organization_id, user_id=user_id, payload=payload)
+
+
+@router.get("/email/sends", response_model=EmailSendListResponse)
+async def crm_email_sends(
+    status: str | None = Query(default=None, max_length=40),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Tracking: every send, newest first, with its delivery events."""
+    _, organization_id = _auth_ids(context)
+    return await list_sends(
+        organization_id=organization_id, status=status, limit=limit, offset=offset
+    )
+
+
+@router.delete("/email/sends/{send_id}", status_code=204)
+async def crm_delete_email_send(
+    send_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Remove one sent email from Tracking (and from the lead's Conversation tab)."""
+    _, organization_id = _auth_ids(context)
+    await delete_send(organization_id=organization_id, send_id=send_id)
+    return Response(status_code=204)
+
+
+@router.post("/email/tracking/sync", response_model=EmailSyncResponse)
+async def crm_sync_email_events(
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Pull delivery events from Brevo (the webhook cannot reach localhost)."""
+    _, organization_id = _auth_ids(context)
+    return await sync_events(organization_id=organization_id)
+
+
+@router.post("/email/brevo-webhook")
+async def crm_brevo_webhook(
+    request: Request,
+    secret: str | None = Query(default=None),
+):
+    """Public: Brevo pushes delivery events here. The secret in the query string is the gate."""
+    try:
+        payload = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from None
+    applied = await receive_webhook(secret=secret, payload=payload)
+    return {"ok": True, "applied": applied}
+
+
+@router.get("/email/inbound", response_model=EmailInboundListResponse)
+async def crm_email_inbound(
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Received emails, newest first, with the lead each landed on (or the lead it created)."""
+    _, organization_id = _auth_ids(context)
+    return await list_inbound(db, organization_id=organization_id, limit=limit, offset=offset)
+
+
+@router.get("/email/leads/{enquiry_id}/thread", response_model=list[EmailThreadItem])
+async def crm_email_lead_thread(
+    enquiry_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Every email sent to and received from one lead, oldest first."""
+    _, organization_id = _auth_ids(context)
+    return await lead_thread(organization_id=organization_id, enquiry_id=enquiry_id)
+
+
+@router.post("/email/brevo-inbound")
+async def crm_brevo_inbound(
+    request: Request,
+    secret: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Public: Brevo inbound parsing posts received emails here. The secret is the gate."""
+    try:
+        payload = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from None
+    stored = await receive_inbound(db, secret=secret, payload=payload)
+    return {"ok": True, "stored": stored}

@@ -11,12 +11,13 @@ import MoneyInput from '../ui/MoneyInput.svelte'
 import Panel from '../ui/Panel.svelte'
 import Seg from '../ui/Seg.svelte'
 
-/** Type switch first; name, phone, source and area survive a type switch. */
+/** Type switch first; name, phone, email, source and area survive a type switch. */
 let { leadType }: { leadType?: LeadType } = $props()
 
 let type = $state<LeadType>(untrack(() => leadType ?? 'buyer'))
 let name = $state('')
 let phone = $state('')
+let email = $state('')
 let sourceLabel = $state(SOURCE_OPTIONS[0].label)
 let area = $state('')
 let draft = $state<Record<string, string>>({})
@@ -67,6 +68,7 @@ async function submit(e: SubmitEvent) {
 			crm.leads.create({
 				name: name.trim(),
 				phone,
+				email,
 				source: option.source,
 				source_detail: option.label,
 				lead_type: type,
@@ -123,6 +125,10 @@ async function submit(e: SubmitEvent) {
 					{#each SOURCE_OPTIONS as s (s.label)}<option value={s.label}>{s.label}</option>{/each}
 				</select>
 			</div>
+		</div>
+		<div class="fld">
+			<label for="nl-email">Email (optional)</label>
+			<input id="nl-email" type="email" autocomplete="off" placeholder="name@example.com" bind:value={email} />
 		</div>
 		{#each fields.filter((x) => fieldShown(x, draft)) as f (f.key)}
 			<div class="fld">

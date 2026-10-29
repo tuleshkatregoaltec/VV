@@ -4,6 +4,8 @@ import type {
 	CompanyListingFilter,
 	DealTab,
 	DealType,
+	EmailLeadParams,
+	EmailSendStatus,
 	InboxFilter,
 	LeadListParams,
 	ListingScope,
@@ -31,6 +33,13 @@ export const crmKeys = {
 	matchClients: () => [...crmKeys.all, 'matches', 'clients'] as const,
 	inbox: (filter: InboxFilter, days = 30) => [...crmKeys.all, 'inbox', filter, days] as const,
 	handout: () => [...crmKeys.all, 'settings', 'handout'] as const,
+	connectors: () => [...crmKeys.all, 'settings', 'connectors'] as const,
+	emailStatus: () => [...crmKeys.all, 'email', 'status'] as const,
+	emailLeads: (p: EmailLeadParams) => [...crmKeys.all, 'email', 'leads', p] as const,
+	emailSends: (status: EmailSendStatus | '') => [...crmKeys.all, 'email', 'sends', status] as const,
+	emailTemplates: () => [...crmKeys.all, 'email', 'templates'] as const,
+	emailInbound: () => [...crmKeys.all, 'email', 'inbound'] as const,
+	emailThread: (id: number) => [...crmKeys.all, 'lead', id, 'email-thread'] as const,
 	leadConversation: (id: number) => [...crmKeys.all, 'lead', id, 'conversation'] as const,
 	feedSummary: () => [...crmKeys.all, 'feed', 'summary'] as const,
 	feedAreas: () => [...crmKeys.all, 'feed', 'areas'] as const,
@@ -103,6 +112,24 @@ export const crmQueries = {
 		placeholderData: keepPreviousData
 	}),
 	handout: () => ({ queryKey: crmKeys.handout(), queryFn: crm.settings.handout }),
+	connectors: () => ({ queryKey: crmKeys.connectors(), queryFn: crm.connectors.list }),
+	emailStatus: () => ({ queryKey: crmKeys.emailStatus(), queryFn: crm.email.status }),
+	emailLeads: (p: EmailLeadParams = {}) => ({
+		queryKey: crmKeys.emailLeads(p),
+		queryFn: () => crm.email.leads(p),
+		placeholderData: keepPreviousData
+	}),
+	emailTemplates: () => ({ queryKey: crmKeys.emailTemplates(), queryFn: crm.email.templates }),
+	emailInbound: () => ({ queryKey: crmKeys.emailInbound(), queryFn: crm.email.inbound }),
+	emailThread: (id: number) => ({
+		queryKey: crmKeys.emailThread(id),
+		queryFn: () => crm.email.thread(id)
+	}),
+	emailSends: (status: EmailSendStatus | '') => ({
+		queryKey: crmKeys.emailSends(status),
+		queryFn: () => crm.email.sends(status),
+		placeholderData: keepPreviousData
+	}),
 	leadConversation: (id: number) => ({
 		queryKey: crmKeys.leadConversation(id),
 		queryFn: () => crm.leads.conversation(id)

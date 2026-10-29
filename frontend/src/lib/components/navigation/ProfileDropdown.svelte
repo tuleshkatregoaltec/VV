@@ -7,6 +7,7 @@ import { LogOut, Settings, User } from 'lucide-svelte'
 import { getContext } from 'svelte'
 import { quintOut } from 'svelte/easing'
 import { fade, fly } from 'svelte/transition'
+import { page } from '$app/state'
 import { logout } from '$lib/api/auth'
 import { currentUser } from '$lib/stores/user.svelte'
 
@@ -31,6 +32,11 @@ let avatarUrl = $derived(
 		return url && url !== failedAvatarUrl ? url : ''
 	})()
 )
+
+// From the CRM, open profile and settings inside the CRM shell so the sidebar stays on CRM.
+const inCrm = $derived(page.url.pathname === '/crm' || page.url.pathname.startsWith('/crm/'))
+const profileHref = $derived(inCrm ? '/crm/profile' : '/profile')
+const settingsHref = $derived(inCrm ? '/crm/organization' : '/settings/organization')
 
 const HOVER_DELAY = 150
 
@@ -112,14 +118,14 @@ function handleAvatarError() {
 			</div>
 			<div class="p-1.5">
 				<a
-					href="/profile"
+					href={profileHref}
 					class="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-fg-3 transition-colors hover:bg-elevated hover:text-fg-1"
 				>
 					<User size={15} strokeWidth={1.9} />
 					My profile
 				</a>
 				<a
-					href="/settings/organization"
+					href={settingsHref}
 					class="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-fg-3 transition-colors hover:bg-elevated hover:text-fg-1"
 				>
 					<Settings size={15} strokeWidth={1.9} />

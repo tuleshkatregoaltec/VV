@@ -78,6 +78,19 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_LAST_NAME: str = "User"
     FIRST_SUPERUSER_AVATAR_URL: str | None = None
 
+    # Brevo (CRM › Connectors › Email). One Vitevue account; names match the CVBuilder pipeline.
+    BREVO_API_KEY: str | None = None
+    BREVO_SENDER_EMAIL: str | None = None  # must be a verified sender in Brevo
+    BREVO_SENDER_NAME: str | None = None
+    BREVO_REPLY_TO: str | None = None
+    BREVO_WEBHOOK_SECRET: str | None = None  # POST /api/v1/crm/email/brevo-webhook?secret=...
+    # Inbound parsing: mail to this subdomain (MX → Brevo) is posted to /email/brevo-inbound.
+    BREVO_INBOUND_DOMAIN: str | None = None
+    # Phase 1 has one company: an email from an unknown sender becomes its lead.
+    BREVO_INBOUND_ORGANIZATION_ID: str | None = None
+    # Connectors › Email keeps sends, templates and received emails in this JSON file (no tables).
+    CRM_EMAIL_STORE_PATH: str | None = None
+
     # PostHog
     POSTHOG_API_KEY: str | None = None
     POSTHOG_HOST: AnyUrl | None = None

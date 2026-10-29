@@ -127,6 +127,11 @@ function logCall(name: string) {
 				<button type="button" class="btn ghost" onclick={() => panel.setTab('stage:won')}>Move to deal</button>
 			{/if}
 			<button type="button" class="btn ghost" onclick={() => logCall(l.name)}>Log a call</button>
+			{#if l.email}
+				<button type="button" class="btn ghost" onclick={() => panel.open({ kind: 'email-compose', leadIds: [l.id] })}>
+					Email
+				</button>
+			{/if}
 			{/if}
 		{/snippet}
 	</Panel>

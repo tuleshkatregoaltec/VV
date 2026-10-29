@@ -19,6 +19,7 @@ import type {
 	CommissionPatch,
 	CompanyListingFilter,
 	Connection,
+	Connector,
 	ConversationMessage,
 	DealCreate,
 	DealDetail,
@@ -27,6 +28,9 @@ import type {
 	DealTab,
 	DealType,
 	DocumentUploadResult,
+	EmailLeadParams,
+	EmailSendStatus,
+	EmailTemplateInput,
 	EventCreate,
 	FeedArea,
 	FeedPreferences,
@@ -90,6 +94,26 @@ import type {
 type Ok = { ok: boolean }
 
 const notOnBackend = backend.notOnBackend
+
+/** Connectors shown on the page, in build order. Calendar is left off until its spec is done. */
+const CONNECTORS: Connector[] = [
+	{
+		kind: 'email',
+		name: 'Email',
+		provider: 'Brevo',
+		line: 'Email your leads: marketing, reports and updates, with delivery, opens and clicks tracked.',
+		status: 'available',
+		href: '/crm/connectors/email'
+	},
+	{
+		kind: 'whatsapp',
+		name: 'WhatsApp',
+		provider: 'WhatsApp Business',
+		line: 'New chats become leads, and the conversation shows on the lead.',
+		status: 'coming_soon',
+		href: null
+	}
+]
 
 /** Conveyancing steps of a Dubai sale and a let: the process, not stored records. */
 const DEAL_STAGES: DealStages = {
@@ -211,6 +235,33 @@ export const crm = {
 		release: (_id: string) => notOnBackend<Written<InboxItem>>('Releasing an enquiry'),
 		dismiss: (_id: string) => notOnBackend<Written<InboxItem>>('Dismissing an enquiry'),
 		restore: (_id: string) => notOnBackend<Written<InboxItem>>('Restoring an enquiry')
+	},
+
+	/** Manager › Connectors: Email is ready once Brevo is configured on the server; WhatsApp is next. */
+	connectors: {
+		list: async (): Promise<Connector[]> => {
+			const email = await backend.emailStatus()
+			return CONNECTORS.map((c) =>
+				c.kind === 'email' ? { ...c, status: email.configured ? 'ready' : 'available' } : c
+			)
+		}
+	},
+
+	/** Connectors › Email: the Brevo pipeline (Leads, Tracking, Templates). */
+	email: {
+		status: backend.emailStatus,
+		leads: (p: EmailLeadParams = {}) => backend.emailLeads(p),
+		send: (body: { enquiry_ids: number[]; subject: string; body: string }) =>
+			backend.sendEmails(body),
+		sends: (status: EmailSendStatus | '' = '') => backend.emailSends(status),
+		sync: backend.syncEmailEvents,
+		removeSend: (id: number) => backend.deleteEmailSend(id),
+		templates: backend.emailTemplates,
+		inbound: backend.emailInbound,
+		thread: (enquiryId: number) => backend.emailThread(enquiryId),
+		createTemplate: (body: EmailTemplateInput) => backend.createEmailTemplate(body),
+		updateTemplate: (id: number, body: EmailTemplateInput) => backend.updateEmailTemplate(id, body),
+		removeTemplate: (id: number) => backend.deleteEmailTemplate(id)
 	},
 
 	settings: {

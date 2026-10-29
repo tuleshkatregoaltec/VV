@@ -6,6 +6,10 @@ import BrochurePanel from './BrochurePanel.svelte'
 import ClientPanel from './ClientPanel.svelte'
 import DayPanel from './DayPanel.svelte'
 import DealPanel from './DealPanel.svelte'
+import EmailComposePanel from './EmailComposePanel.svelte'
+import EmailInboundPanel from './EmailInboundPanel.svelte'
+import EmailSendPanel from './EmailSendPanel.svelte'
+import EmailTemplatePanel from './EmailTemplatePanel.svelte'
 import EventPanel from './EventPanel.svelte'
 import ImportPanel from './ImportPanel.svelte'
 import LeadPanel from './LeadPanel.svelte'
@@ -45,6 +49,12 @@ const key = $derived.by(() => {
 			return `owner-lead:${p.id}`
 		case 'add-record':
 			return `add-record:${p.ownerId}`
+		case 'email-send':
+			return `email-send:${p.id}`
+		case 'email-inbound':
+			return `email-inbound:${p.id}`
+		case 'email-template':
+			return `email-template:${p.id ?? 'new'}`
 		case 'which-doc':
 			return `which-doc:${p.dealId}:${p.index}`
 		case 'send':
@@ -98,6 +108,14 @@ const key = $derived.by(() => {
 		<ImportPanel ownersOnly={p.ownersOnly} leadsOnly={p.leadsOnly} />
 	{:else if p.kind === 'areas'}
 		<AreasPanel />
+	{:else if p.kind === 'email-compose'}
+		<EmailComposePanel leadIds={p.leadIds} />
+	{:else if p.kind === 'email-send'}
+		<EmailSendPanel id={p.id} />
+	{:else if p.kind === 'email-inbound'}
+		<EmailInboundPanel id={p.id} />
+	{:else if p.kind === 'email-template'}
+		<EmailTemplatePanel id={p.id} />
 	{:else if p.kind === 'add-record'}
 		<AddRecordPanel ownerId={p.ownerId} />
 	{:else if p.kind === 'owner-lead'}
