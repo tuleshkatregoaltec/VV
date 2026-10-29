@@ -4,16 +4,20 @@ import { SEND_STATUS, stamp } from '../../../email'
 import { crmQueries } from '../../../queries'
 import Chip from '../../ui/Chip.svelte'
 import QueryView from '../../ui/QueryView.svelte'
+import LeadWhatsApp from './LeadWhatsApp.svelte'
 
 /**
- * Messages with the lead. Email (Connectors › Email): every email sent from Vitevue and every
- * reply or email received, oldest first. Portal / WhatsApp messages are read only in phase 1.
+ * Messages with the lead. WhatsApp (Connectors › WhatsApp): the chat and a composer. Email
+ * (Connectors › Email): every email sent from Vitevue and every reply or email received, oldest
+ * first, read only. Portal messages are read only in phase 1.
  */
 let { id }: { id: number } = $props()
 
 const conversation = createQuery(() => crmQueries.leadConversation(id))
 const emails = createQuery(() => crmQueries.emailThread(id))
 </script>
+
+<LeadWhatsApp {id} />
 
 <QueryView query={emails} rows={3}>
 	{#snippet children(items)}
@@ -50,9 +54,9 @@ const emails = createQuery(() => crmQueries.emailThread(id))
 			</div>
 		{/if}
 		{#if !messages.length && !emails.data?.length}
-			<div class="notice">No messages with this lead yet. Emails sent from Vitevue and their replies show here.</div>
+			<div class="notice">No emails with this lead yet. Emails sent from Vitevue and their replies show here.</div>
 		{:else}
-			<div class="notice">Read only — reply to emails from your own inbox, and to chats from your phone.</div>
+			<div class="notice">Emails are read only here — reply to them from your own inbox.</div>
 		{/if}
 	{/snippet}
 </QueryView>

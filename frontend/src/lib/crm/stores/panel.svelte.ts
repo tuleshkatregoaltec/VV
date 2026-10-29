@@ -44,6 +44,7 @@ export type PanelState =
 	| { kind: 'email-send'; id: number }
 	| { kind: 'email-inbound'; id: number }
 	| { kind: 'email-template'; id?: number }
+	| { kind: 'whatsapp-chat'; waId: string }
 	| { kind: 'owner-lead'; id: string }
 	| { kind: 'add-record'; ownerId: string }
 	| { kind: 'send'; target: 'listing' | 'market'; id: string }

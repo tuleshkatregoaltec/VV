@@ -1573,3 +1573,71 @@ export interface EmailSync {
 	applied: number
 	unmatched: number
 }
+
+/* ── Connectors › WhatsApp (Meta WhatsApp Cloud API) ── */
+
+export interface WhatsAppStatus {
+	/** True once an administrator has connected the business number on the server. */
+	configured: boolean
+	business_name: string | null
+	/** The business number in display form, e.g. "+971 4 123 4567". */
+	display_number: string | null
+}
+
+/** Meta's delivery status for an outgoing message. */
+export type WhatsAppMessageStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed'
+
+/** A message template as Meta reviewed it; only approved ones can start a chat. */
+export interface WhatsAppTemplate {
+	name: string
+	/** Meta language code, e.g. "en_US". */
+	language: string
+	category: 'marketing' | 'utility' | 'authentication'
+	review: 'approved' | 'pending' | 'rejected' | 'paused'
+	/** The body with its {{1}} placeholders; Vitevue fills them from the lead when sending. */
+	body: string
+}
+
+export interface WhatsAppMessage {
+	/** The WhatsApp message id (wamid). */
+	id: string
+	direction: 'in' | 'out'
+	body: string
+	at: string
+	/** Outgoing only. */
+	status: WhatsAppMessageStatus | null
+	/** The template name when the message was sent from one. */
+	template: string | null
+	/** Why Meta refused or failed the message. */
+	error: string | null
+}
+
+/** A lead's WhatsApp conversation (Lead › Conversation), oldest first. */
+export interface WhatsAppThread {
+	/** The lead's WhatsApp number; null when the lead has none. */
+	wa_number: string | null
+	opted_out: boolean
+	/** End of the 24-hour customer-service window (last client message + 24h); null if never opened. */
+	window_ends_at: string | null
+	messages: WhatsAppMessage[]
+}
+
+/** One row on Connectors › WhatsApp › Chats. */
+export interface WhatsAppChat {
+	wa_id: string
+	contact_name: string | null
+	/** The matched lead; null until someone links the number to a lead (Needs review). */
+	lead_id: number | null
+	lead_name: string | null
+	/** The lead's current stage and score (0–100, how likely it is to close); null off a lead. */
+	lead_stage: LeadStage | null
+	lead_score: number | null
+	/** Where the lead came from, as on Leads, e.g. inbound · "Property Finder"; null off a lead. */
+	lead_source: Source | null
+	lead_source_short: string | null
+	last_body: string
+	last_direction: 'in' | 'out'
+	last_at: string
+	window_ends_at: string | null
+	unread: number
+}

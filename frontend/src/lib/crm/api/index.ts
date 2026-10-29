@@ -51,6 +51,7 @@ import type {
 	LeadListResponse,
 	LeadMatches,
 	LeadPatch,
+	LeadRow,
 	LeadStageMove,
 	ListingCreate,
 	ListingCreateResult,
@@ -88,12 +89,61 @@ import type {
 	RenewalListParams,
 	RenewalListResponse,
 	SearchResults,
+	WhatsAppChat,
+	WhatsAppStatus,
+	WhatsAppTemplate,
+	WhatsAppThread,
 	Written
 } from './types'
+import {
+	demoChatFor,
+	demoStatus,
+	demoTemplates,
+	demoThreadFor,
+	demoUnmatchedChat,
+	demoUnmatchedThread,
+	demoWaId,
+	WHATSAPP_DEMO
+} from './whatsappDemo'
 
 type Ok = { ok: boolean }
 
 const notOnBackend = backend.notOnBackend
+
+const WHATSAPP_NOT_CONNECTED: WhatsAppStatus = {
+	configured: false,
+	business_name: null,
+	display_number: null
+}
+/** Sample data: these real leads get a chat written from their own details. */
+const DEMO_NAMED = ['Ashwin Vyas']
+const demoLeads = async () => {
+	const [first, named] = await Promise.all([
+		backend.listLeads({}).catch(() => null),
+		Promise.all(DEMO_NAMED.map((q) => backend.listLeads({ q }).catch(() => null)))
+	])
+	// Named leads first (top of Chats), then the first two leads on the list.
+	const picked: LeadRow[] = []
+	for (const r of named) {
+		const l = r?.items.find((x) => x.id && !picked.some((p) => p.id === x.id))
+		if (l) picked.push(l)
+	}
+	for (const l of (first?.items ?? [])
+		.filter((x) => x.id && !picked.some((p) => p.id === x.id))
+		.slice(0, 2))
+		picked.push(l)
+	return picked
+}
+
+const noThread = (waNumber: string | null): WhatsAppThread => ({
+	wa_number: waNumber,
+	opted_out: false,
+	window_ends_at: null,
+	messages: []
+})
+
+const whatsappStatus = async (): Promise<WhatsAppStatus> =>
+	WHATSAPP_DEMO ? demoStatus : WHATSAPP_NOT_CONNECTED
 
 /** Connectors shown on the page, in build order. Calendar is left off until its spec is done. */
 const CONNECTORS: Connector[] = [
@@ -109,9 +159,9 @@ const CONNECTORS: Connector[] = [
 		kind: 'whatsapp',
 		name: 'WhatsApp',
 		provider: 'WhatsApp Business',
-		line: 'New chats become leads, and the conversation shows on the lead.',
-		status: 'coming_soon',
-		href: null
+		line: 'Chat with your leads on WhatsApp, right from the lead.',
+		status: 'available',
+		href: '/crm/connectors/whatsapp'
 	}
 ]
 
@@ -237,13 +287,12 @@ export const crm = {
 		restore: (_id: string) => notOnBackend<Written<InboxItem>>('Restoring an enquiry')
 	},
 
-	/** Manager › Connectors: Email is ready once Brevo is configured on the server; WhatsApp is next. */
+	/** Manager › Connectors: each is ready once it is configured on the server. */
 	connectors: {
 		list: async (): Promise<Connector[]> => {
-			const email = await backend.emailStatus()
-			return CONNECTORS.map((c) =>
-				c.kind === 'email' ? { ...c, status: email.configured ? 'ready' : 'available' } : c
-			)
+			const [email, whatsapp] = await Promise.all([backend.emailStatus(), whatsappStatus()])
+			const configured = { email: email.configured, whatsapp: whatsapp.configured, calendar: false }
+			return CONNECTORS.map((c) => (configured[c.kind] ? { ...c, status: 'ready' } : c))
 		}
 	},
 
@@ -262,6 +311,37 @@ export const crm = {
 		createTemplate: (body: EmailTemplateInput) => backend.createEmailTemplate(body),
 		updateTemplate: (id: number, body: EmailTemplateInput) => backend.updateEmailTemplate(id, body),
 		removeTemplate: (id: number) => backend.deleteEmailTemplate(id)
+	},
+
+	/**
+	 * Connectors › WhatsApp (Meta WhatsApp Cloud API). No backend endpoint yet: it reads as not
+	 * connected and empty, and sending fails with a 501 (sample data with VITE_WHATSAPP_DEMO=1).
+	 */
+	whatsapp: {
+		status: whatsappStatus,
+		chats: async (): Promise<WhatsAppChat[]> =>
+			WHATSAPP_DEMO ? [...(await demoLeads()).map(demoChatFor), demoUnmatchedChat] : [],
+		templates: async (): Promise<WhatsAppTemplate[]> => (WHATSAPP_DEMO ? demoTemplates : []),
+		thread: async (enquiryId: number): Promise<WhatsAppThread> =>
+			WHATSAPP_DEMO
+				? backend
+						.getLead(enquiryId)
+						.then(demoThreadFor)
+						.catch(() => noThread(null))
+				: noThread(null),
+		sendTemplate: (_enquiryId: number, _template: { name: string; language: string }) =>
+			notOnBackend<Ok>('Sending WhatsApp messages'),
+		reply: (_enquiryId: number, _body: string) => notOnBackend<Ok>('Replying on WhatsApp'),
+		/** A chat by WhatsApp number (Connectors › WhatsApp), on a lead or not yet. */
+		chat: async (waId: string): Promise<WhatsAppThread> => {
+			if (!WHATSAPP_DEMO) return noThread(`+${waId}`)
+			if (waId === demoUnmatchedChat.wa_id) return demoUnmatchedThread
+			const lead = (await demoLeads()).find((l) => demoWaId(l) === waId)
+			return lead ? demoThreadFor(lead) : noThread(`+${waId}`)
+		},
+		chatSendTemplate: (_waId: string, _template: { name: string; language: string }) =>
+			notOnBackend<Ok>('Sending WhatsApp messages'),
+		chatReply: (_waId: string, _body: string) => notOnBackend<Ok>('Replying on WhatsApp')
 	},
 
 	settings: {

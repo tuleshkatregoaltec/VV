@@ -28,6 +28,7 @@ import OwnerReportPanel from './OwnerReportPanel.svelte'
 import RenewalPanel from './RenewalPanel.svelte'
 import SearchPanel from './SearchPanel.svelte'
 import SendPanel from './SendPanel.svelte'
+import WhatsAppChatPanel from './WhatsAppChatPanel.svelte'
 import WhichDocPanel from './WhichDocPanel.svelte'
 
 let { state: p }: { state: PanelState } = $props()
@@ -55,6 +56,8 @@ const key = $derived.by(() => {
 			return `email-inbound:${p.id}`
 		case 'email-template':
 			return `email-template:${p.id ?? 'new'}`
+		case 'whatsapp-chat':
+			return `whatsapp-chat:${p.waId}`
 		case 'which-doc':
 			return `which-doc:${p.dealId}:${p.index}`
 		case 'send':
@@ -116,6 +119,8 @@ const key = $derived.by(() => {
 		<EmailInboundPanel id={p.id} />
 	{:else if p.kind === 'email-template'}
 		<EmailTemplatePanel id={p.id} />
+	{:else if p.kind === 'whatsapp-chat'}
+		<WhatsAppChatPanel waId={p.waId} />
 	{:else if p.kind === 'add-record'}
 		<AddRecordPanel ownerId={p.ownerId} />
 	{:else if p.kind === 'owner-lead'}

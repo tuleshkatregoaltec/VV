@@ -40,6 +40,11 @@ export const crmKeys = {
 	emailTemplates: () => [...crmKeys.all, 'email', 'templates'] as const,
 	emailInbound: () => [...crmKeys.all, 'email', 'inbound'] as const,
 	emailThread: (id: number) => [...crmKeys.all, 'lead', id, 'email-thread'] as const,
+	whatsappStatus: () => [...crmKeys.all, 'whatsapp', 'status'] as const,
+	whatsappChats: () => [...crmKeys.all, 'whatsapp', 'chats'] as const,
+	whatsappTemplates: () => [...crmKeys.all, 'whatsapp', 'templates'] as const,
+	whatsappThread: (id: number) => [...crmKeys.all, 'lead', id, 'whatsapp-thread'] as const,
+	whatsappChat: (waId: string) => [...crmKeys.all, 'whatsapp', 'chat', waId] as const,
 	leadConversation: (id: number) => [...crmKeys.all, 'lead', id, 'conversation'] as const,
 	feedSummary: () => [...crmKeys.all, 'feed', 'summary'] as const,
 	feedAreas: () => [...crmKeys.all, 'feed', 'areas'] as const,
@@ -129,6 +134,20 @@ export const crmQueries = {
 		queryKey: crmKeys.emailSends(status),
 		queryFn: () => crm.email.sends(status),
 		placeholderData: keepPreviousData
+	}),
+	whatsappStatus: () => ({ queryKey: crmKeys.whatsappStatus(), queryFn: crm.whatsapp.status }),
+	whatsappChats: () => ({ queryKey: crmKeys.whatsappChats(), queryFn: crm.whatsapp.chats }),
+	whatsappTemplates: () => ({
+		queryKey: crmKeys.whatsappTemplates(),
+		queryFn: crm.whatsapp.templates
+	}),
+	whatsappThread: (id: number) => ({
+		queryKey: crmKeys.whatsappThread(id),
+		queryFn: () => crm.whatsapp.thread(id)
+	}),
+	whatsappChat: (waId: string) => ({
+		queryKey: crmKeys.whatsappChat(waId),
+		queryFn: () => crm.whatsapp.chat(waId)
 	}),
 	leadConversation: (id: number) => ({
 		queryKey: crmKeys.leadConversation(id),
