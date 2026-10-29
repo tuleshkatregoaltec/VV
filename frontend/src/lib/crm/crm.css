@@ -8,54 +8,51 @@
 
 .crm-root {
 	color-scheme: light;
-	--font-sans:
-		-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial,
-		sans-serif;
-	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-	/* v2 tokens */
-	--page: #f4f4f6;
-	--card: #ffffff;
-	--sunk: #efeff2;
-	--hover: #f0f0f4;
-	--sel: #e6effc;
-	--sep: #dcdce1;
-	--sep-strong: #c4c4cb;
-	--text: #1d1d1f;
-	--text2: #5c5c63;
-	--text3: #6b6b72;
-	--accent: #0062cc;
-	--accent-fill: #0071e3;
-	--on-accent: #ffffff;
-	--focus: #0071e3;
-	--red: #c2261b;
-	--red-bg: #fde8e6;
-	--amber: #935400;
-	--amber-bg: #fff0d9;
-	--green: #1d7a35;
-	--green-bg: #e2f4e6;
-	--blue: #0059b8;
-	--blue-bg: #e3edfb;
+	/* Font, --font-mono and --shadow-lg come from app.css so the CRM matches Market. */
+	/* v2 token names, mapped onto the Market palette (app.css) so CRM and Market look alike.
+	 * The Market tokens switch with the theme, so the dark block only holds the rest. */
+	--page: var(--color-bg-app);
+	--card: var(--color-bg-card);
+	--sunk: var(--color-bg-panel);
+	--hover: var(--color-bg-panel);
+	--sel: var(--color-info-bg);
+	--sep: var(--color-border);
+	--sep-strong: var(--color-border-strong);
+	--text: var(--color-fg-1);
+	--text2: var(--color-fg-3);
+	--text3: var(--color-fg-4);
+	--accent: var(--color-info);
+	--accent-fill: var(--color-action);
+	--on-accent: var(--color-fg-on-action);
+	--focus: var(--color-navy-600);
+	--red: var(--color-error);
+	--red-bg: var(--color-error-bg);
+	--amber: var(--color-warning);
+	--amber-bg: var(--color-warning-bg);
+	--green: var(--color-success);
+	--green-bg: var(--color-success-bg);
+	--blue: var(--color-info);
+	--blue-bg: var(--color-info-bg);
 	--pink: #b8195a;
 	--pink-bg: #fbe4ee;
-	--grey-bg: #ececf0;
-	--glass: rgba(246, 246, 248, 0.78);
+	--grey-bg: var(--color-bg-panel);
+	--glass: var(--color-bg-card);
 	/* source line colours (always paired with a word) */
 	--l-in: #e5372b;
-	--l-vv: #0a72e8;
+	--l-vv: #2c4a66;
 	--l-own: #8a8a90;
 	--l-a2a: #e0336e;
 	/* event kinds */
-	--e-view: #0a72e8;
+	--e-view: #3a8fad;
 	--e-call: #1d9a47;
 	--e-fu: #b26a00;
 	--e-deal: #7a4fd6;
 	--e-dead: #e5372b;
-	--shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.06);
-	--shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.18);
-	--scrim: rgba(0, 0, 0, 0.18);
+	--shadow: var(--shadow-sm);
+	--scrim: var(--color-overlay);
 	--ctl: 32px;
 	/* 1 Oct names, mapped onto v2 */
-	--card-2: #f9f9fb;
+	--card-2: var(--color-bg-app);
 	--ink: var(--text);
 	--ink-2: var(--text2);
 	--muted: var(--text2);
@@ -65,7 +62,7 @@
 	--teal: var(--accent);
 	--teal-soft: var(--sel);
 	--btn: var(--accent-fill);
-	--on-btn: #ffffff;
+	--on-btn: var(--on-accent);
 	--band: var(--text);
 	--band-2: var(--text2);
 	--on-band: var(--card);
@@ -75,47 +72,19 @@
 
 :root[data-theme="dark"] .crm-root {
 	color-scheme: dark;
-	--page: #161618;
-	--card: #242428;
-	--sunk: #2e2e33;
-	--hover: #2c2c31;
-	--sel: #1d3352;
-	--sep: #3a3a40;
-	--sep-strong: #4c4c53;
-	--text: #f3f3f5;
-	--text2: #b0b0b8;
-	--text3: #9a9aa2;
-	--accent: #4ba3ff;
-	--accent-fill: #2b8cff;
-	--on-accent: #08080a;
-	--focus: #4ba3ff;
-	--red: #ff8a80;
-	--red-bg: #3d1f1d;
-	--amber: #ffb74d;
-	--amber-bg: #3a2c14;
-	--green: #6fdc8c;
-	--green-bg: #1b3322;
-	--blue: #79b6ff;
-	--blue-bg: #182c45;
+	--hover: var(--color-bg-elevated);
+	--focus: var(--color-navy-100);
 	--pink: #ff8ab8;
 	--pink-bg: #3d1c2b;
-	--grey-bg: #34343a;
-	--glass: rgba(30, 30, 33, 0.78);
 	--l-in: #ff5a4f;
-	--l-vv: #3d97ff;
+	--l-vv: #9fb6cf;
 	--l-own: #9a9aa2;
 	--l-a2a: #ff5c93;
-	--e-view: #3d97ff;
+	--e-view: #6fb3cc;
 	--e-call: #43c96b;
 	--e-fu: #f0a73a;
 	--e-deal: #a98bff;
 	--e-dead: #ff5a4f;
-	--shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.35);
-	--shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.6);
-	--scrim: rgba(0, 0, 0, 0.45);
-	--card-2: #29292e;
-	--btn: #4ba3ff;
-	--on-btn: #08080a;
 }
 
 @media (pointer: coarse) {
@@ -213,14 +182,14 @@
 		&.app.nosb .sb {
 			visibility: hidden;
 		}
+		/* Not overflow: hidden, so the profile menu in the footer can open past the collapsed rail. */
 		.sb {
-			background: var(--glass);
-			backdrop-filter: saturate(180%) blur(20px);
-			-webkit-backdrop-filter: saturate(180%) blur(20px);
+			position: relative;
+			z-index: 2;
+			background: var(--card);
 			border-right: 1px solid var(--sep);
 			display: flex;
 			flex-direction: column;
-			overflow: hidden;
 			min-width: 0;
 		}
 		.sb-head {
@@ -303,17 +272,12 @@
 			font-size: 12.5px;
 			line-height: 1.35;
 		}
-		.avatar {
-			width: 26px;
-			height: 26px;
-			border-radius: 50%;
-			background: var(--accent-fill);
-			color: #fff;
-			display: grid;
-			place-items: center;
-			font-size: 11px;
-			font-weight: 700;
-			flex: none;
+		.sb-foot .who {
+			min-width: 0;
+			flex: 1;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 		}
 		.sb-scrim {
 			display: none;
@@ -1275,7 +1239,7 @@
 		}
 		.cal .c.today .dn {
 			background: var(--teal);
-			color: #fff;
+			color: var(--card);
 			border-radius: 99px;
 			width: 1.4rem;
 			height: 1.4rem;
