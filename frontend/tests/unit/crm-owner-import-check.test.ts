@@ -194,10 +194,10 @@ describe('owner unit check', () => {
 				market: 'Ready'
 			},
 			result: {
-				label: 'Transaction-matched current buyer',
+				label: 'Current owner',
 				confidence: 98,
 				reason: 'Acquisition date and price match the latest sale.',
-				chip: { tone: 'green', label: 'Transaction-matched current buyer' }
+				chip: { tone: 'green', label: 'Current owner' }
 			},
 			lease: { end: '2026-09-22', aed: 120_000 }
 		})

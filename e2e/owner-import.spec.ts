@@ -44,8 +44,11 @@ test('unresolved owner imports report property evidence separately and reuse dup
         const currentSummary = page.getByRole('region', { name: 'Current ownership summary', exact: true });
         await expect(historical).not.toHaveAttribute('open', '');
         // The unit-by-unit match result leads the report: an unknown building confirms nothing.
-        await expect(page.locator('.headline .big')).toHaveText('0');
-        await expect(page.locator('.headline .of')).toHaveText('of 1 distinct units confirmed with a sale');
+        const stat = (label: string) => page.locator('.stat').filter({ has: page.getByText(label, { exact: true }) });
+        await expect(stat('Units identified').locator('.big')).toHaveText('1');
+        await expect(stat('Units mapped').locator('.big')).toHaveText('0');
+        await expect(stat('Units mapped')).toContainText('0% coverage');
+        await expect(stat('Rows to review').locator('.big')).toHaveText('0');
         await page.getByRole('tab', { name: 'Not matched', exact: true }).click();
         await expect(page.locator('#source-rows .count')).toHaveText('Showing 1–2 of 2');
         await page.getByRole('tab', { name: 'All', exact: true }).click();
@@ -59,42 +62,42 @@ test('unresolved owner imports report property evidence separately and reuse dup
         // The same evidence remains available through a keyboard-operated disclosure.
         await historical.getByText('Processing details', { exact: true }).click();
         await expect(currentSummary.locator('details')).not.toHaveAttribute('open', '');
-        const evidenceDisclosure = currentSummary.getByText('Evidence and counting details', { exact: true });
+        const evidenceDisclosure = currentSummary.getByText('Details', { exact: true });
         await evidenceDisclosure.focus();
         await page.keyboard.press('Enter');
         await expect(currentSummary.getByText('Source events', { exact: true })).toBeVisible();
         await evidenceDisclosure.click();
-        const linked = page.locator('.kpi').filter({ has: page.getByText('Property-linked rows', { exact: true }) });
+        const linked = page.locator('.kpi').filter({ has: page.getByText('Rows linked to a property', { exact: true }) });
         await expect(linked.locator('.v')).toHaveText('0');
         await expect(linked).toContainText('0% of 2 kept rows · 0% of 2 source rows');
-        const verified = page.locator('.kpi').filter({ has: page.getByText('Import-time transaction-matched buyer records', { exact: true }) });
+        const verified = page.locator('.kpi').filter({ has: page.getByText('Current owners', { exact: true }) });
         await expect(verified.locator('.v')).toHaveText('0');
         await expect(currentSummary).toBeVisible();
-        await currentSummary.getByText('Evidence and counting details', { exact: true }).click();
+        await currentSummary.getByText('Details', { exact: true }).click();
         await expect(currentSummary.locator('div').filter({ has: page.getByText('Source events', { exact: true }) }).locator('dd')).toHaveText('2');
-        await expect(currentSummary.locator('div').filter({ has: page.getByText('Transaction-matched current buyers', { exact: true }) }).locator('dd')).toHaveText('0');
+        await expect(currentSummary.locator('div').filter({ has: page.getByText('Current owners', { exact: true }) }).locator('dd')).toHaveText('0');
         await page.getByRole('button', { name: 'Synthetic Buyer', exact: true }).click();
         await page.getByRole('button', { name: 'Show ownership history', exact: true }).click();
-        const sourceHistory = page.getByRole('region', { name: 'Ownership source history', exact: true });
+        const sourceHistory = page.getByRole('region', { name: 'Ownership history', exact: true });
         await expect(sourceHistory).toContainText('Buyer');
         await expect(sourceHistory).toContainText('Sell');
         await expect(sourceHistory).toContainText('Row 2');
         await sourceHistory.getByRole('button', { name: file.name, exact: true }).click();
-        await expect(page.getByRole('region', { name: 'Ownership source history', exact: true })).not.toBeVisible();
+        await expect(page.getByRole('region', { name: 'Ownership history', exact: true })).not.toBeVisible();
         await expect(page.getByRole('heading', { name: 'Source rows', exact: true })).toBeVisible();
         // No sale backs either row, so neither is presented as a former or current owner.
         expect(imported.summary.unverified_former_owners).toBe(0);
         expect(imported.summary.former_owners).toBe(0);
         expect(imported.summary.unmatched).toBe(1);
         await expect(page.locator('#source-rows tbody tr').filter({ hasText: 'Synthetic Seller' }).locator('[data-label="Result"]')).toHaveText('Not matched');
-        await page.getByRole('button', { name: 'Inspect current property records', exact: true }).click();
+        await page.getByRole('button', { name: 'Show properties', exact: true }).click();
         const propertiesResponse = await page.request.get(`${importUrl}/${imported.id}/properties`, { headers: authorization });
         expect(propertiesResponse.ok()).toBeTruthy();
         const properties = await propertiesResponse.json();
         expect(properties.rows.length).toBeGreaterThan(0);
         expect(properties.rows.every((row: { current_owner: string | null }) => row.current_owner === null)).toBe(true);
         await expect(page.locator('[data-label="Current owner"]').first()).toHaveText('—');
-        const reviewLink = page.getByRole('link', { name: 'Review people with unresolved evidence', exact: true });
+        const reviewLink = page.getByRole('link', { name: 'Review unresolved owners', exact: true });
         await expect(reviewLink).toHaveAttribute('href', /scope=needs_review&list_id=/);
         await reviewLink.click();
         await expect(page.getByRole('tab', { name: /Needs review/ })).toHaveAttribute('aria-selected', 'true');
@@ -113,11 +116,9 @@ test('unresolved owner imports report property evidence separately and reuse dup
         await page.setViewportSize({ width: 1440, height: 900 });
         await page.getByRole('button', { name: 'Synthetic Seller', exact: true }).click();
         await expect(page.getByText('Professional role has not been established.', { exact: true })).toBeVisible();
-        const publicSearch = page.getByRole('link', { name: 'Verify public professional profile ↗', exact: true });
-        await expect(publicSearch).toHaveAttribute('href', 'https://www.google.com/search?q=Synthetic%20Seller%20professional%20profile');
-        await page.getByLabel('Record review note', { exact: true }).fill('Synthetic review: source seller claim needs corroborating transaction evidence.');
+        await page.getByLabel('Add note', { exact: true }).fill('Synthetic review: source seller claim needs corroborating transaction evidence.');
         const savedNote = page.waitForResponse(result => new URL(result.url()).pathname === '/api/v1/crm/owner-workspaces/bulk' && result.request().method() === 'PATCH');
-        await page.getByRole('button', { name: 'Save review note', exact: true }).click();
+        await page.getByRole('button', { name: 'Save note', exact: true }).click();
         expect((await savedNote).ok()).toBeTruthy();
         await expect(page.getByText('Synthetic review: source seller claim needs corroborating transaction evidence.', { exact: true })).toBeVisible();
         await expect(page.getByText('Needs review', { exact: true }).first()).toBeVisible();
@@ -136,7 +137,7 @@ test('unresolved owner imports report property evidence separately and reuse dup
         expect(history.filter((item: { id: number }) => item.id === imported.id)).toHaveLength(1);
         console.log('Synthetic duplicate upload reused import:', imported.id);
     } finally {
-        const removed = await page.request.delete(`${importUrl}/${imported.id}`, { headers: authorization, timeout: 10_000 });
+        const removed = await page.request.delete(`${importUrl}/${imported.id}`, { headers: authorization, timeout: 60_000 });
         expect(removed.ok()).toBeTruthy();
     }
 });

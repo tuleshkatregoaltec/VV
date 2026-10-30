@@ -81,6 +81,49 @@ describe('ownerMatchView', () => {
 	})
 })
 
+describe('ownerMatchView results block', () => {
+	const FULL = {
+		...OWNER_MATCH,
+		rows: { ...OWNER_MATCH.rows, broker: 3 },
+		review_reasons: { date_differs: 4, unit_differs: 3, other: 1, share_differs: 2 },
+		sales_matched: { transactions: 11, registry: 41, total: 52 }
+	}
+
+	it('counts the rows to review from the summary and orders the reasons by size', () => {
+		const v = ownerMatchView(FULL)
+		expect(v?.review.rows).toBe(10)
+		expect(v?.review.reasons.map((r) => [r.label, r.count])).toEqual([
+			['Sale date differs', 4],
+			['Unit number differs', 3],
+			['Different share sold', 2],
+			['Other', 1]
+		])
+	})
+
+	it('splits the matched sales by meaning: unit-level records vs records without a unit number', () => {
+		expect(ownerMatchView(FULL)?.sales).toEqual({ total: 52, withUnit: 41, withoutUnit: 11 })
+	})
+
+	it('reports brokers next to lenders', () => {
+		const v = ownerMatchView(FULL)
+		expect([v?.brokerRows, v?.lenderRows, v?.rowsWithoutUnit]).toEqual([3, 5, 9])
+	})
+
+	it('tolerates an older summary without reasons, sales or broker rows', () => {
+		const v = ownerMatchView(OWNER_MATCH)
+		expect(v?.review.reasons).toEqual([])
+		expect(v?.review.rows).toBe(10)
+		expect(v?.sales).toBeNull()
+		expect(v?.brokerRows).toBe(0)
+		expect(ownerMatchView({ ...OWNER_MATCH, rows: undefined as never })?.review.rows).toBe(0)
+	})
+
+	it('words an unknown reason from its key instead of showing it raw', () => {
+		const v = ownerMatchView({ ...FULL, review_reasons: { new_thing: 2 } })
+		expect(v?.review.reasons[0].label).toBe('New thing')
+	})
+})
+
 describe('MATCH_FILTERS', () => {
 	it('filters by colour, and by outcome where a colour is shared (grey: not matched vs lender)', () => {
 		expect(MATCH_FILTERS.map((f) => [f.id, f.colours, f.outcomes])).toEqual([
@@ -89,7 +132,8 @@ describe('MATCH_FILTERS', () => {
 			['review', ['amber'], []],
 			['property_only', ['blue'], []],
 			['not_matched', [], ['rejected', 'no_evidence']],
-			['lender', [], ['lender']]
+			['lender', [], ['lender']],
+			['broker', [], ['broker']]
 		])
 	})
 })
@@ -107,6 +151,7 @@ describe('matchOutcomeInfo', () => {
 			tone: 'neutral'
 		})
 		expect(matchOutcomeInfo('lender', 'grey')?.label).toBe('Lender')
+		expect(matchOutcomeInfo('broker', 'grey')).toEqual({ label: 'Broker', tone: 'neutral' })
 	})
 
 	it('says how a green match was reached', () => {
@@ -136,7 +181,7 @@ describe('explainMatch', () => {
 		['size_basis_differs', "The sheet's size fits the sale on a different basis"],
 		['share_sale', 'The sale was for a share of the unit'],
 		[
-			'share_qualifier_differs: DXBI sold 2807 (Q 1)',
+			'share_qualifier_differs: Transactions sold 2807 (Q 1)',
 			'Another share of this unit sold at this price'
 		],
 		['buildingno_renumbered', 'The sheet numbers the villas differently'],
@@ -214,7 +259,7 @@ describe('matchedSaleLine', () => {
 				sqft: 1180,
 				source: 'dxbi'
 			})
-		).toBe('1203 · Burj Crown · AED 2,150,000 · 21 Mar 2024 · DXBI')
+		).toBe('1203 · Burj Crown · AED 2,150,000 · 21 Mar 2024')
 	})
 
 	it('skips what is missing and is empty without a sale', () => {
@@ -244,19 +289,43 @@ describe('columnsRead', () => {
 		checks: []
 	}
 
-	it('names the field each column feeds', () => {
-		expect(columnsRead(sheet).fields).toEqual([
-			{ field: 'Owner name', column: 'Owner Name' },
-			{ field: 'Unit number', column: 'Flat' },
-			{ field: 'Sale price (AED)', column: 'Price' }
+	it('lists our fields as found or not found, never the file’s own headers', () => {
+		const r = columnsRead(sheet)
+		const find = (f: string) => r.fields.find((x) => x.field === f)?.found
+		expect(find('Owner name')).toBe(true)
+		expect(find('Unit number')).toBe(true)
+		expect(find('Sale price')).toBe(true)
+		expect(find('Building')).toBe(false)
+		expect(find('Sale date')).toBe(false)
+		expect(JSON.stringify(r)).not.toMatch(/Owner Name|Flat|Remarks|Agent Code/)
+	})
+
+	it('leaves sale fields out of a contact list unless the file has them', () => {
+		const list = columnsRead({ ...sheet, family: 'contact_list', fields: [sheet.fields[0]] })
+		expect(list.fields.map((f) => f.field)).not.toContain('Sale date')
+		expect(columnsRead(sheet).fields.map((f) => f.field)).toContain('Sale date')
+	})
+
+	it('counts unused columns instead of naming them, and keeps other warnings', () => {
+		const r = columnsRead(sheet)
+		expect(r.unused).toBe(2)
+		expect(r.warnings).toEqual([
+			'Size has no stated unit; it cannot corroborate a transaction match.'
 		])
 	})
 
-	it('lists unmapped columns as a warning, apart from other warnings', () => {
-		const r = columnsRead(sheet)
-		expect(r.notImported).toEqual(['Remarks', 'Agent Code'])
+	it('drops warnings that quote a column and rewrites date notes without the header', () => {
+		const r = columnsRead({
+			...sheet,
+			warnings: [
+				'Model suggests unit_number = Flat',
+				'Dates in Regis were read month first (MM/DD/YYYY).',
+				'12 dates in Regis could not be read.'
+			]
+		})
 		expect(r.warnings).toEqual([
-			'Size has no stated unit; it cannot corroborate a transaction match.'
+			'Dates were read month first (MM/DD/YYYY).',
+			'Some dates could not be read.'
 		])
 	})
 
@@ -272,15 +341,15 @@ describe('columnsRead', () => {
 	})
 
 	it('explains where an auto-mapping came from', () => {
-		expect(columnsRead(sheet).sourceNote).toMatch(/model/i)
+		expect(columnsRead(sheet).sourceNote).toMatch(/automatically/i)
 		expect(columnsRead({ ...sheet, source: 'reused' }).sourceNote).toMatch(/earlier/i)
 		expect(columnsRead({ ...sheet, source: 'override' }).sourceNote).toMatch(
 			/set by hand|manual|chosen/i
 		)
 	})
 
-	it('reports no unmapped columns when the warning is absent', () => {
-		expect(columnsRead({ ...sheet, warnings: [] }).notImported).toEqual([])
+	it('reports no unused columns when the warning is absent', () => {
+		expect(columnsRead({ ...sheet, warnings: [] }).unused).toBe(0)
 	})
 
 	it('carries the sheet-level mapping checks', () => {
@@ -292,6 +361,25 @@ describe('columnsRead', () => {
 			}
 		]
 		expect(columnsRead({ ...sheet, checks }).checks).toEqual(checks)
+	})
+})
+
+describe('explainMatch date difference', () => {
+	it('says by how many days the sale date differs from the file', () => {
+		expect(explainMatch('date_differs: sheet 2024-01-01, sale 2024-06-30')).toBe(
+			'The sale date differs from the file by 181 days.'
+		)
+		expect(explainMatch('date_differs: sheet 2024-01-01, sale 2024-01-02')).toBe(
+			'The sale date differs from the file by 1 day.'
+		)
+	})
+	it('still reads when the dates cannot be parsed', () => {
+		expect(explainMatch('date_differs: sheet n/a, sale n/a')).toBe(
+			'The sale date differs from the file.'
+		)
+	})
+	it('never prints the data vendor’s name', () => {
+		expect(explainMatch('share_qualifier_differs: DXBI sold 2807 (Q 1)')).not.toMatch(/dxbi/i)
 	})
 })
 
@@ -317,6 +405,6 @@ describe('explainMatch wording for evidence lines', () => {
 		expect(explainMatch('dld_only Sell - Pre registration')).toBe(
 			'A land-registry sale with no unit number (Sell - Pre registration).'
 		)
-		expect(explainMatch('matched Delayed Sell')).toBe('A DXBI sale (Delayed Sell).')
+		expect(explainMatch('matched Delayed Sell')).toBe('A sale record (Delayed Sell).')
 	})
 })

@@ -23,6 +23,7 @@ import {
 	MATCH_FILTERS,
 	type MatchBucketKey,
 	type MatchFilterId,
+	type OwnerMatchView,
 	STATUS_HELP,
 	STATUS_INFO
 } from '$lib/crm/ownerImportReport'
@@ -30,9 +31,10 @@ import { crmQueries } from '$lib/crm/queries'
 import { write } from '$lib/crm/write'
 
 /**
- * One owner file's report. Top to bottom: the match result (distinct units by tier, from the
- * property-first matcher), the kept rows with the sale each was tied to and why, the columns read
- * from the file, and one collapsed "Processing details" holding everything recorded at import time.
+ * One owner file's report. Top to bottom: the results block (units identified and mapped, rows to
+ * review by reason, sales matched, rows left out; all from the matcher's summary), the kept rows
+ * with the sale each was tied to and why, the fields read from the file, and one collapsed
+ * "Processing details" holding everything recorded at import time.
  */
 const imports = createQuery(() => crmQueries.ownerImportDetails())
 const id = $derived(Number(page.params.id))
@@ -113,7 +115,7 @@ function pick(key: MatchBucketKey) {
 }
 const filterLabel = (id: MatchFilterId) => MATCH_FILTERS.find((f) => f.id === id)?.label
 
-/** The header's facts, like the mock's "Agency file · 214 rows uploaded 28 Sep · checked against DLD and Ejari". */
+/** The header's facts: file, rows, import date and number. */
 const facts = (i: OwnerImportDetail) =>
 	[
 		i.file,
@@ -121,9 +123,24 @@ const facts = (i: OwnerImportDetail) =>
 		`imported ${i.at}`,
 		`import #${i.id}`
 	].join(' · ')
+const count = (n: number, one: string, many: string) => `${fmt(n)} ${n === 1 ? one : many}`
+
+/** Rows the match leaves out: brokers and lenders are not owners; rows with no unit cannot be placed. */
+function leftOut(m: OwnerMatchView): string {
+	const parties = [
+		m.brokerRows ? count(m.brokerRows, 'broker', 'brokers') : '',
+		m.lenderRows ? count(m.lenderRows, 'lender', 'lenders') : ''
+	].filter(Boolean)
+	return [
+		parties.length ? `${parties.join(' and ')} (not owners)` : '',
+		m.rowsWithoutUnit ? `${count(m.rowsWithoutUnit, 'row', 'rows')} without a unit` : ''
+	]
+		.filter(Boolean)
+		.join(' · ')
+}
 const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : '—')
 </script>
-<svelte:head><title>{imp ? `${imp.name} · ` : ''}Owner imports · CRM Beta</title></svelte:head>
+<svelte:head><title>{imp ? `${imp.name} · ` : ''}Owner imports · CRM</title></svelte:head>
 
 <PageHeader title={imp?.name ?? 'Import report'} facts={imp ? facts(imp) : ''}>
 	{#snippet right()}
@@ -192,22 +209,44 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 			{#if imp.status === 'completed'}
 				<section class="card match" aria-labelledby="match-h">
 					<div class="ch">
-						<h2 id="match-h">Match result<span class="facts">Distinct units, checked against DXBI and DLD sales</span></h2>
+						<h2 id="match-h">Match results</h2>
 					</div>
 					{#if !m}
 						<div class="cb">
 							<p class="pending"><Chip tone="amber">Re-match pending</Chip></p>
-							<p class="small muted">
-								This file was imported before owners were matched to sales unit by unit, so there are no unit counts yet. They appear once the file is re-matched.
-							</p>
+							<p class="small muted">Unit counts appear once this file is re-matched.</p>
 						</div>
 					{:else}
 						<div class="cb">
-							<p class="headline">
-								<span class="big">{fmt(m.headline.units)}</span>
-								<span class="of">of {fmt(m.headline.total)} distinct units confirmed with a sale</span>
-								<span class="pc">{m.headline.percent}%</span>
-							</p>
+							<div class="stats">
+								<div class="stat">
+									<span class="sl">Units identified <InfoTip label="What a unit is"><span>A building or project plus a unit number.</span></InfoTip></span>
+									<span class="big">{fmt(m.total)}</span>
+								</div>
+								<div class="stat">
+									<span class="sl">Units mapped</span>
+									<span class="big ok">{fmt(m.headline.units)}</span>
+									<span class="ss">{m.headline.percent}% coverage</span>
+								</div>
+								<button type="button" class="stat act" aria-pressed={filter === 'review'} aria-controls="source-rows" onclick={() => pick('review')}>
+									<span class="sl">Rows to review</span>
+									<span class="big warn">{fmt(m.review.rows)}</span>
+								</button>
+								<div class="stat">
+									<span class="sl">Sales matched</span>
+									<span class="big">{m.sales ? fmt(m.sales.total) : '—'}</span>
+									{#if m.sales}<span class="ss">{fmt(m.sales.withUnit)} with unit details · {fmt(m.sales.withoutUnit)} without a unit number</span>{/if}
+								</div>
+							</div>
+							{#if m.review.reasons.length}
+								<h3 class="mini">Rows to review</h3>
+								<ul class="reasons" aria-label="Rows to review by reason">
+									{#each m.review.reasons as r (r.key)}
+										<li title={r.meaning}><span>{r.label}</span><b>{fmt(r.count)}</b></li>
+									{/each}
+								</ul>
+							{/if}
+							<h3 class="mini">Units by result</h3>
 							<div class="stack" role="img" aria-label={m.buckets.map((b) => `${fmt(b.units)} ${b.label}`).join(', ')}>
 								{#each m.buckets as b (b.key)}
 									<span class={['seg', b.tone]} style:width={pct(b.units, m.total)}></span>
@@ -235,9 +274,9 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 									</li>
 								{/each}
 							</ul>
-							<p class="small muted aside">
-								A unit is a building (or project) and unit number. {fmt(m.rowsWithoutUnit)} {m.rowsWithoutUnit === 1 ? 'row has' : 'rows have'} no unit identifier and {m.rowsWithoutUnit === 1 ? 'is' : 'are'} not counted above. {fmt(m.lenderRows)} lender {m.lenderRows === 1 ? 'row is' : 'rows are'} excluded: a bank on a mortgage row is not an owner.
-							</p>
+							{#if leftOut(m)}
+								<p class="small muted aside">Left out: {leftOut(m)}</p>
+							{/if}
 						</div>
 					{/if}
 				</section>
@@ -246,7 +285,6 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 			<!-- 3. Source rows -->
 			<section class="sec rows" id="source-rows">
 				<h3>Source rows{#if m && filter !== 'all'}<span class="hint">{filterLabel(filter)} only</span>{/if}</h3>
-				<p class="small muted">Each row shows the property the sheet names, the sale it was tied to and why. Open a person to record a review note.</p>
 				{#if imp.listId === null}
 					<p class="small muted">No rows were saved for this import.</p>
 				{:else}
@@ -259,7 +297,7 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 			<!-- 4. Columns read from the file -->
 			{#if imp.sheets.length}
 				<section class="sec cols" aria-labelledby="cols-h">
-					<h3 id="cols-h">Columns read from the file</h3>
+					<h3 id="cols-h">Columns read</h3>
 					<div class="sheets">
 						{#each imp.sheets as sheet (sheet.name)}
 							{@const r = columnsRead(sheet)}
@@ -269,26 +307,16 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 									{#if r.auto}<Chip tone="blue" title={r.sourceNote}>Auto-mapped</Chip>{/if}
 								</div>
 								<div class="cb">
-									{#if r.auto}<p class="small muted">{r.sourceNote}</p>{/if}
 									{#each r.checks as check (check.code)}
 										<p class={['small', 'check', check.level]}>{check.text}</p>
 									{/each}
-									{#if r.notImported.length}
-										<p class="small warnline">
-											<b>Not imported</b>
-											{#each r.notImported as col (col)}<span class="col">{col}</span>{/each}
-										</p>
-									{/if}
 									{#each r.warnings as w (w)}<p class="small warnline">{w}</p>{/each}
-									{#if r.fields.length}
-										<dl class="map">
-											{#each r.fields as f (f.field)}
-												<div><dt>{f.field}</dt><dd>{f.column}</dd></div>
-											{/each}
-										</dl>
-									{:else}
-										<p class="small muted">No columns were mapped.</p>
-									{/if}
+									<dl class="map">
+										{#each r.fields as f (f.field)}
+											<div><dt>{f.field}</dt><dd class={[!f.found && 'missing']}>{f.found ? 'Found' : 'Not found'}</dd></div>
+										{/each}
+									</dl>
+									{#if r.unused}<p class="small muted">{count(r.unused, 'column', 'columns')} not used</p>{/if}
 								</div>
 							</div>
 						{/each}
@@ -301,7 +329,7 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 				<summary>Processing details</summary>
 				{#if imp.status === 'completed'}
 					<p class="small muted row-accounting">{fmt(c.rows)} source rows · {fmt(c.kept)} kept · {fmt(c.merged)} merged · {fmt(c.dropped)} dropped.</p>
-					{#if c.rows !== c.kept + c.merged + c.dropped}<p class="notice" role="status">Row totals need review; the processing breakdown does not account for all source rows.</p>{/if}
+					{#if c.rows !== c.kept + c.merged + c.dropped}<p class="notice" role="status">The row totals do not add up to the source rows.</p>{/if}
 				{/if}
 
 				{#if imp.source_audit}
@@ -310,16 +338,15 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 
 				<OwnerImportSummary importId={imp.id} listId={imp.listId} processing={imp.status === 'processing'} />
 
-				<button type="button" class="btn ghost sm" aria-expanded={showProperties} aria-controls="property-rows" onclick={() => (showProperties = !showProperties)}>{showProperties ? 'Hide current property records' : 'Inspect current property records'}</button>
+				<button type="button" class="btn ghost sm" aria-expanded={showProperties} aria-controls="property-rows" onclick={() => (showProperties = !showProperties)}>{showProperties ? 'Hide properties' : 'Show properties'}</button>
 
 				{#if showProperties}
 				<section class="sec" id="property-rows">
-					<h3>Properties and unresolved source records</h3>
+					<h3>Properties</h3>
 					<PropertyRows importId={imp.id} />
 				</section>
 			{/if}
 
-				<p class="small muted">These counts were recorded when this file was processed. Current assessments and source rows above use evidence across all imports and may differ.</p>
 
 			<section class="sec">
 				<h3>What happened to the rows</h3>
@@ -348,65 +375,60 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 					
 					
 					<div class="kpi">
-						<span class="lbl">Property-linked rows</span><span class="v">{c.matched === null ? '—' : fmt(c.matched)}</span>
+						<span class="lbl">Rows linked to a property</span><span class="v">{c.matched === null ? '—' : fmt(c.matched)}</span>
 						<span class="n">{c.matchRate === null ? '—' : `${Math.round(c.matchRate * 100)}%`} of {fmt(c.kept)} kept rows · {c.sourceMatchRate === null ? '—' : `${Math.round(c.sourceMatchRate * 100)}%`} of {fmt(c.rows)} source rows</span>
-						{#if c.matched === null}<span class="n">Count unavailable for this older import</span>{/if}
 						{#if c.salesHistoryRows !== null}
 							<span class="n">{fmt(c.salesHistoryRows)} with sales history · {fmt(c.plotOnlyRows ?? 0)} plot only</span>
 						{/if}
 					</div>
 					<div class="kpi">
-						<span class="lbl">Import-time transaction-matched buyer records</span><span class="v">{fmt(c.byStatus.verified_current_owner)}</span>
-						<span class="n">{share(c.byStatus.verified_current_owner, c.kept)} of kept rows; sale-based ownership evidence</span>
+						<span class="lbl">Current owners</span><span class="v">{fmt(c.byStatus.verified_current_owner)}</span>
+						<span class="n">{share(c.byStatus.verified_current_owner, c.kept)} of kept rows</span>
 					</div>
 					<div class="kpi">
-						<span class="lbl">Records with phone or email</span><span class="v">{fmt(c.validContacts)}</span>
-						<span class="n">{share(c.validContacts, c.kept)} of kept rows; contact data alone does not establish ownership</span>
+						<span class="lbl">Rows with phone or email</span><span class="v">{fmt(c.validContacts)}</span>
+						<span class="n">{share(c.validContacts, c.kept)} of kept rows</span>
 					</div>
 					<div class="kpi">
 						<span class="lbl">Contactable candidates</span><span class="v">{fmt(c.readyToContact)}</span>
 						<span class="n">{share(c.readyToContact, c.kept)} of kept rows · {fmt(c.rentalLeads)} rental leads</span>
-						<span class="n">Transaction-matched or possible buyer, contact data and linked rental opportunity; review before outreach</span>
 					</div>
 				</div>
-				<p>Property links, ownership assessments and contactability measure different things. A source seller claim without corroborating transaction evidence still needs review.</p>
 				{#if c.sourceProperties}
 					{@const source = c.sourceProperties}
-					<h3>Identifiers in the original file</h3>
+					<h3>Identifiers in the file</h3>
 					<div class="grid-4 kpis">
 						<div class="kpi">
 							<span class="lbl">Source property references</span><span class="v">{fmt(source.source_property_references ?? 0)}</span>
-							<span class="n">Unit, then property number, then building code; units scoped by location</span>
+							
 						</div>
 						<div class="kpi">
-							<span class="lbl">Property-number fallback</span><span class="v">{fmt(source.distinct_property_numbers_without_unit ?? 0)}</span>
-							<span class="n">Distinct property_number values where unit is empty; included in source references</span>
+							<span class="lbl">Property numbers without a unit</span><span class="v">{fmt(source.distinct_property_numbers_without_unit ?? 0)}</span>
+							
 						</div>
 						<div class="kpi">
 							<span class="lbl">Distinct unit numbers</span><span class="v">{fmt(source.distinct_unit_numbers ?? 0)}</span>
 							<span class="n">{fmt(source.location_scoped_units ?? 0)} building/project + unit combinations</span>
 						</div>
 						<div class="kpi">
-							<span class="lbl">Building numbers when unit is empty</span><span class="v">{fmt(source.distinct_building_numbers_without_unit ?? 0)}</span>
-							<span class="n">Distinct source building-number values</span>
+							<span class="lbl">Building numbers without a unit</span><span class="v">{fmt(source.distinct_building_numbers_without_unit ?? 0)}</span>
+							
 						</div>
 						<div class="kpi">
 							<span class="lbl">Combined identifiers</span><span class="v">{fmt(source.distinct_identifiers ?? 0)}</span>
-							<span class="n">{fmt(source.identifiers_in_both_columns ?? 0)} values appear in both columns; counted once</span>
+							
 						</div>
 						<div class="kpi">
 							<span class="lbl">Rows missing both identifiers</span><span class="v">{fmt(source.rows_without_identifiers ?? 0)}</span>
-							<span class="n">May still contain land numbers or transaction evidence</span>
+							
 						</div>
 					</div>
-					<p>Counts cover all {fmt(source.total_rows ?? 0)} source rows, including rows without an owner name. Repeated apartment numbers across buildings and inconsistent address labels mean these are source references, not a verified physical-property total.</p>
 				{/if}
 			</section>
 
 			
 			<section class="sec">
-				<h3>Import-time ownership classifications</h3>
-				<p class="small muted">Each percentage below is a share of the {fmt(c.kept)} kept source records.</p>
+				<h3>Ownership by row</h3>
 				<div class="grid-4 kpis">
 					{#each statuses as s (s)}
 						<!-- Historical classifications are separate from the current row filter. -->
@@ -445,31 +467,80 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 	.match {
 		margin-bottom: 1.25rem;
 	}
-	.headline {
-		display: flex;
-		align-items: baseline;
-		flex-wrap: wrap;
-		gap: 0.25rem 0.6rem;
-		margin: 0 0 0.7rem;
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 0.5rem;
+		margin-bottom: 1rem;
 	}
-	.headline .big {
-		font-size: 34px;
+	.stat {
+		display: grid;
+		align-content: start;
+		gap: 0.2rem;
+		padding: 0.7rem 0.8rem;
+		border: 1px solid var(--sep);
+		border-radius: 10px;
+		background: var(--card);
+		color: var(--text);
+		text-align: left;
+		font: inherit;
+	}
+	.stat.act {
+		cursor: pointer;
+	}
+	.stat.act:hover {
+		background: var(--hover);
+	}
+	.stat.act[aria-pressed='true'] {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 1px var(--accent);
+	}
+	.stat .sl {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text2);
+	}
+	.stat .big {
+		font-size: 30px;
 		font-weight: 700;
 		letter-spacing: -0.02em;
-		line-height: 1;
+		line-height: 1.1;
 		font-variant-numeric: tabular-nums;
+	}
+	.stat .big.ok {
 		color: var(--green);
 	}
-	.headline .of {
-		color: var(--text);
-		font-weight: 600;
+	.stat .big.warn {
+		color: var(--amber);
 	}
-	.headline .pc {
-		margin-left: auto;
-		font-size: 20px;
-		font-weight: 600;
-		font-variant-numeric: tabular-nums;
+	.stat .ss {
+		font-size: 12.5px;
 		color: var(--text2);
+	}
+	.mini {
+		margin: 0 0 0.4rem;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text2);
+	}
+	.reasons {
+		list-style: none;
+		margin: 0 0 1rem;
+		padding: 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+	}
+	.reasons li {
+		display: inline-flex;
+		gap: 0.5rem;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		background: var(--amber-bg);
+		font-size: 12.5px;
+	}
+	.reasons b {
+		font-variant-numeric: tabular-nums;
 	}
 	.stack {
 		display: flex;
@@ -587,13 +658,6 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 	.warnline {
 		color: var(--amber);
 	}
-	.warnline .col {
-		display: inline-block;
-		margin: 0 0.25rem 0.2rem 0.4rem;
-		padding: 0 0.4rem;
-		border-radius: 5px;
-		background: var(--amber-bg);
-	}
 	.map {
 		margin: 0;
 		display: grid;
@@ -613,9 +677,13 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 		margin: 0;
 		font-weight: 600;
 		text-align: right;
-		overflow-wrap: anywhere;
+	}
+	.map dd.missing {
+		font-weight: 400;
+		color: var(--text2);
 	}
 	@media (max-width: 900px) {
+		.stats,
 		.buckets {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}

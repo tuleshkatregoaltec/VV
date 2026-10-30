@@ -3,7 +3,7 @@ import { goto } from '$app/navigation'
 import { crm } from '../../api'
 import type { ImportPreview, OwnerFilePreview, OwnerImportResult } from '../../api/types'
 import { fmt } from '../../format'
-import { fieldLabel } from '../../ownerImportReport'
+import { fieldChecklist, fieldLabel } from '../../ownerImportReport'
 import { panel } from '../../stores/panel.svelte'
 import { errorText, write } from '../../write'
 import Kv from '../ui/Kv.svelte'
@@ -12,14 +12,14 @@ import Seg from '../ui/Seg.svelte'
 
 /**
  * Import a file: Owners or Leads, CSV or XLSX → preview → import. A manager imports directly
- * (owners are checked against DLD; leads land in the Inbox); an agent is told to send the file
+ * (owners are matched to sales; leads land in the Inbox); an agent is told to send the file
  * to their manager (approval requests are open question 9). The backend reads the file and
  * picks the columns; this screen only shows what it found. From the Owners page it imports owners only.
  *
- * An owners file is read in the browser first (header row, row count, five rows); the backend
- * then matches it against DXBI and DLD sales before it answers, and the panel shows its counts.
- * Like the mock's "Request an import" dialog, the preview shows under each column the field it
- * feeds or "not used", as the backend will read it. Renaming and deleting a file are on its report.
+ * An owners file is read in the browser first (row count, five rows); the backend then matches it
+ * to sales before it answers, and the panel shows the headline counts. The preview speaks in our
+ * fields (found or not found) and never prints the file's own column headers. Renaming and
+ * deleting a file are on its report.
  */
 let { ownersOnly = false }: { ownersOnly?: boolean } = $props()
 let kind = $state<'Owners' | 'Leads'>('Owners')
@@ -43,11 +43,17 @@ async function openReport(id: number) {
 	await goto(`/crm/owners/imports/${id}`)
 }
 
-/** Under each header, as in the mock: "→ Building", "not used", or "read at import". */
-function role(i: number, p: OwnerFilePreview) {
-	const field = p.fields?.[i]
-	if (field) return { text: `→ ${fieldLabel(field)}`, used: true }
-	return { text: p.readAtImport ? 'read at import' : 'not used', used: false }
+/** Our field names for the columns the backend reads, with the sample values under them. */
+function readColumns(p: OwnerFilePreview) {
+	const index = (p.fields ?? []).flatMap((f, i) => (f ? [i] : []))
+	return {
+		headers: index.map((i) => fieldLabel(p.fields?.[i] ?? '')),
+		rows: p.sample.slice(0, 3).map((row) => index.map((i) => row[i] ?? '')),
+		checklist: fieldChecklist(
+			(p.fields ?? []).filter((f): f is string => Boolean(f)),
+			false
+		)
+	}
 }
 const rows = $derived(owners ? (ownerPreview?.rows ?? 0) : (preview?.rows ?? 0))
 const ready = $derived(owners ? ownerPreview && !ownerPreview.problem : preview && !preview.problem)
@@ -109,7 +115,7 @@ async function send() {
 			data.alreadyImported
 				? null
 				: data.status === 'completed'
-					? `Imported · ${fmt(data.summary.candidateRows)} source records`
+					? `Imported · ${fmt(data.summary.candidateRows)} rows`
 					: null,
 		event: 'import_requested'
 	})
@@ -121,9 +127,6 @@ async function send() {
 <Panel
 	kicker="New"
 	title={owners ? 'Import an owner file' : 'Import a file'}
-	sub={ownersOnly
-		? 'Vitevue does not provide or sell owner data · owners are checked against DXBI and DLD sales'
-		: 'Owners are checked against DXBI and DLD sales, leads go to the Inbox'}
 	footer={result ? done : undefined}
 >
 	<div class="form">
@@ -144,26 +147,32 @@ async function send() {
 				<section class="sec">
 					<h3>{result.name}</h3>
 					{#if result.match}
-						{@const h = result.match.headline}
-						<p class="done"><b>{fmt(h.units)}</b> of {fmt(h.total)} distinct units confirmed with a sale · {h.percent}%</p>
+						{@const m = result.match}
+						<div class="kv result">
+							<Kv k="Units identified" v={fmt(m.total)} />
+							<Kv k="Units mapped" v={fmt(m.headline.units)} o={`${m.headline.percent}% coverage`} />
+							<Kv k="Rows to review" v={fmt(m.review.rows)} />
+							{#if m.sales}<Kv k="Sales matched" v={fmt(m.sales.total)} />{/if}
+						</div>
+					{:else}
+						<p class="small muted">{fmt(s.candidateRows)} rows kept from {fmt(s.totalRows)}.</p>
 					{/if}
-					<p class="small muted">{fmt(s.candidateRows)} source records kept from {fmt(s.totalRows)} rows. Open the report to see each row's match.</p>
 					<details>
 						<summary>Processing details</summary>
-					<div class="kv">
-						<Kv k="Rows in the file" v={fmt(s.totalRows)} />
-						<Kv k="Source records kept" v={fmt(s.candidateRows)} o={s.duplicatesCollapsed ? `${fmt(s.duplicatesCollapsed)} duplicates merged` : ''} />
-						{#if s.distinctProperties !== null}<Kv k="Property groups" v={fmt(s.distinctProperties)} o="Includes inferred identities and plot links" />{/if}
-						<Kv k="With a phone or email" v={fmt(s.validContacts)} />
-						<Kv k="Contactable candidates" v={fmt(s.contactReady)} o="Verified or probable owner, contact data and linked rental opportunity; review before outreach" />
-						<Kv k="Transaction-matched buyers" v={fmt(s.verified)} o="Matches a DLD sale; named ownership is unverified" />
-						<Kv k="Probable owners" v={fmt(s.probable)} />
-						<Kv k="Unit found, owner not verified" v={fmt(s.unitLinked)} />
-						<Kv k="Former owners" v={fmt(s.former)} o="Source seller or a later observed sale" />
-						<Kv k="Conflicts with DLD" v={fmt(s.conflicting)} />
-						<Kv k="Not matched" v={fmt(s.notMatched)} />
-						<Kv k="Rental opportunities" v={fmt(s.rentalOpportunities)} />
-					</div>
+						<div class="kv">
+							<Kv k="Rows in the file" v={fmt(s.totalRows)} />
+							<Kv k="Rows kept" v={fmt(s.candidateRows)} o={s.duplicatesCollapsed ? `${fmt(s.duplicatesCollapsed)} duplicates merged` : ''} />
+							{#if s.distinctProperties !== null}<Kv k="Properties" v={fmt(s.distinctProperties)} />{/if}
+							<Kv k="With a phone or email" v={fmt(s.validContacts)} />
+							<Kv k="Contactable candidates" v={fmt(s.contactReady)} />
+							<Kv k="Current owners" v={fmt(s.verified)} />
+							<Kv k="Possible owners" v={fmt(s.probable)} />
+							<Kv k="Property found, owner unknown" v={fmt(s.unitLinked)} />
+							<Kv k="Former owners" v={fmt(s.former)} />
+							<Kv k="Conflicting records" v={fmt(s.conflicting)} />
+							<Kv k="Not matched" v={fmt(s.notMatched)} />
+							<Kv k="Rental opportunities" v={fmt(s.rentalOpportunities)} />
+						</div>
 					</details>
 				</section>
 			{/if}
@@ -217,7 +226,6 @@ async function send() {
 				}}
 			>
 				<b>{file ? file.name : 'Drop a CSV or XLSX file here'}</b>
-				<span>{owners ? 'name, mobile, community, building, unit number' : 'name, phone or mobile, area, budget'}</span>
 				<span class="btn ghost sm">{file ? 'Choose another file' : 'Choose a file'}</span>
 			</button>
 
@@ -227,7 +235,7 @@ async function send() {
 					<input
 						id="imp-list"
 						maxlength="200"
-						placeholder={file ? file.name.replace(/\.[^.]+$/, '') : 'e.g. Downtown owners · July'}
+						placeholder={file ? file.name.replace(/\.[^.]+$/, '') : 'Downtown owners, July'}
 						bind:value={listName}
 						disabled={sending}
 					/>
@@ -238,44 +246,46 @@ async function send() {
 
 			{#if owners && ownerPreview && !ownerPreview.problem}
 				{@const p = ownerPreview}
+				{@const cols = readColumns(p)}
 				{@const used = p.fields?.filter(Boolean).length ?? 0}
 				<section class="sec">
 					<h3>
 						{fmt(p.rows)} rows · {p.file} · {size(p.size)}{p.sheets > 1 ? ` · ${p.sheets} sheets` : ''}
 					</h3>
-					<p class="small muted">
-						{#if p.fields}
+					{#if p.fields}
+						<p class="small muted">
 							{used} of {p.headers.length} columns read{p.headers.length - used
-								? ` · ${p.headers.length - used} ${p.readAtImport ? 'read at import or not used' : 'not used'}`
-								: ''}{p.sheets > 1 ? ' · first sheet shown' : ''}.
-						{:else}
-							Columns found: {p.headers.join(', ')}. Vitevue maps them when you import.
-						{/if}
-					</p>
-					<div class="tblwrap boxed cols">
-						<table class="tbl">
-							<thead>
-								<tr>
-									{#each p.headers as h, i (i)}
-										{@const r = p.fields ? role(i, p) : null}
-										<th>
-											{h}
-											{#if r}<div class={['role', r.used && 'used']}>{r.text}</div>{/if}
-										</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody>
-								{#each p.sample.slice(0, 3) as row, i (i)}
-									<tr>
-										{#each row as cell, j (j)}
-											<td data-label={p.headers[j]}>{cell || '—'}</td>
+								? ` · ${p.headers.length - used} ${p.readAtImport ? 'assigned at import' : 'unused'}`
+								: ''}{p.sheets > 1 ? ' · first sheet shown' : ''}
+						</p>
+						<ul class="found" aria-label="Fields in the file">
+							{#each cols.checklist as f (f.field)}
+								<li class={['fd', f.found && 'on']}>{f.field}<span>{f.found ? 'found' : 'not found'}</span></li>
+							{/each}
+						</ul>
+						{#if cols.headers.length}
+							<div class="tblwrap boxed cols">
+								<table class="tbl">
+									<thead>
+										<tr>
+											{#each cols.headers as h, i (i)}<th>{h}</th>{/each}
+										</tr>
+									</thead>
+									<tbody>
+										{#each cols.rows as row, i (i)}
+											<tr>
+												{#each row as cell, j (j)}
+													<td data-label={cols.headers[j]}>{cell || '—'}</td>
+												{/each}
+											</tr>
 										{/each}
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+									</tbody>
+								</table>
+							</div>
+						{/if}
+					{:else}
+						<p class="small muted">{p.headers.length} columns found</p>
+					{/if}
 					{#if p.rows > 3}<div class="small muted">and {fmt(p.rows - 3)} more rows</div>{/if}
 				</section>
 			{:else if !owners && preview}
@@ -315,7 +325,7 @@ async function send() {
 					</button>
 				</div>
 				{#if sending && owners}
-					<div class="small muted">Checking each owner against DXBI and DLD sales. A large file can take a few minutes; keep this panel open.</div>
+					<div class="small muted">Matching owners to sales. A large file can take a few minutes; keep this panel open.</div>
 				{/if}
 			{/if}
 		{/if}
@@ -358,15 +368,27 @@ async function send() {
 	.cols th {
 		vertical-align: top;
 	}
-	.done b {
-		color: var(--green);
-		font-size: 20px;
+	.found {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		list-style: none;
+		margin: 0.5rem 0;
+		padding: 0;
 	}
-	.role {
-		font-weight: 400;
+	.fd {
+		display: inline-flex;
+		gap: 0.4rem;
+		padding: 0.15rem 0.5rem;
+		border: 1px solid var(--sep);
+		border-radius: 999px;
+		font-size: 12.5px;
 		color: var(--text2);
 	}
-	.role.used {
+	.fd.on {
 		color: var(--text);
+	}
+	.fd.on span {
+		color: var(--green);
 	}
 </style>
