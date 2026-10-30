@@ -351,8 +351,11 @@ async function send() {
 	.cols {
 		overflow-x: auto;
 	}
-	.cols th {
+	.cols th,
+	.cols td {
 		white-space: nowrap;
+	}
+	.cols th {
 		vertical-align: top;
 	}
 	.done b {
