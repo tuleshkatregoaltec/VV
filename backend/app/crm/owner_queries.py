@@ -373,6 +373,12 @@ async def fetch_assessment_building_aliases(parameters):
     )
 
 
+# The query answers in milliseconds; the bound covers this process being busy too. Decoding or
+# building an owner assessment blocks the event loop for seconds, and a fingerprint that times out
+# marks the warehouse unavailable, which forces another full rebuild.
+FINGERPRINT_TIMEOUT_SECONDS = 30
+
+
 async def fetch_assessment_source_fingerprint() -> str:
     """Identify the physical DXBI/alias inputs, not a canonical market release.
 
@@ -380,7 +386,7 @@ async def fetch_assessment_source_fingerprint() -> str:
     inputs do not provide an atomic, validated publication contract.
     """
     tables = ["analytics_building_keys", "dxbi_sales_unit_events"]
-    async with asyncio.timeout(3):
+    async with asyncio.timeout(FINGERPRINT_TIMEOUT_SECONDS):
         rows = await query(
             """SELECT t.name AS name, toString(t.uuid) AS uuid,
                       t.engine AS engine, p.parts AS parts,

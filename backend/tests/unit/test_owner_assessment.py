@@ -825,3 +825,31 @@ def test_a_lender_row_reports_the_final_outcome_not_the_matchers_raw_one():
 def test_a_row_with_no_verdict_lists_no_match_fields():
     (item,) = snapshot([contact()], []).rows
     assert item["match_outcome"] is None and item["match_colour"] is None
+
+
+async def test_a_busy_event_loop_does_not_make_the_warehouse_look_unavailable(monkeypatch):
+    # Decoding a large cached assessment blocks the loop for seconds. If that stall timed out the
+    # fingerprint, the warehouse would read as unavailable and every request would rebuild.
+    import asyncio
+    import time
+
+    from app.crm import owner_queries
+
+    metadata = [
+        {"name": name, "uuid": name, "engine": "MergeTree", "parts": [], "pending": 0}
+        for name in ["analytics_building_keys", "dxbi_sales_unit_events"]
+    ]
+
+    async def in_flight(*_args, **_kwargs):
+        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.01)
+        return metadata
+
+    async def stall():
+        await asyncio.sleep(0)
+        time.sleep(3.2)
+
+    monkeypatch.setattr(owner_queries, "query", in_flight)
+    blocker = asyncio.create_task(stall())
+    assert await fetch_assessment_source_fingerprint()
+    await blocker
