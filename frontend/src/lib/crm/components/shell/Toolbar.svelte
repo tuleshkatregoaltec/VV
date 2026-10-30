@@ -16,17 +16,18 @@ const dark = $derived(colorTheme.resolved === 'dark')
 const path = $derived(page.url.pathname.replace(/\/$/, ''))
 
 /**
- * ＋ New presets to the page: Owners → Owner, Assets → Listing, Deals → Deal, Calendar → Task, else
- * Lead. Home and the owner import pages have no ＋ New (an import's Upload button is the way in).
+ * ＋ New presets to the page: Leads → Lead, Owners → Owner, Assets → Listing, Deals → Deal,
+ * Calendar → Task. Every other page (Home, Inbox, Matches, Assistant, Manager view, Connectors,
+ * owner imports) has no ＋ New.
  */
 const preset = $derived.by((): { label: string; to: PanelState } | null => {
-	if (path === '/crm') return null
 	if (path.includes('/owners/imports')) return null
+	if (path.startsWith('/crm/leads')) return { label: 'lead', to: { kind: 'new-lead' } }
 	if (path.endsWith('/owners')) return { label: 'owner', to: { kind: 'new-owner' } }
 	if (path.endsWith('/assets')) return { label: 'listing', to: { kind: 'new-listing' } }
 	if (path.endsWith('/deals')) return { label: 'deal', to: { kind: 'new-deal' } }
 	if (path.endsWith('/calendar')) return { label: 'task', to: { kind: 'new-task' } }
-	return { label: 'lead', to: { kind: 'new-lead' } }
+	return null
 })
 
 /** Laptop hides the sidebar; tablet expands the icon rail; phone opens it over the page. */

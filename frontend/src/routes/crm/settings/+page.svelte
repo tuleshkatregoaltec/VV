@@ -1,119 +1,89 @@
 <script lang="ts">
-import { createQuery } from '@tanstack/svelte-query'
-import { crm } from '$lib/crm/api'
-import type { HandoutMode } from '$lib/crm/api/types'
-import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
+import ChartNoAxesColumn from 'lucide-svelte/icons/chart-no-axes-column'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
-import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
-import { crmQueries } from '$lib/crm/queries'
-import { errorText, write } from '$lib/crm/write'
 
 /**
- * Manager › Settings, only what the agent-side Inbox needs (scope, 7 Oct): the lead handout
- * setting with its changes log and Restore, and the lead stages per type (read only). The rest
- * of Manager view (agents table, waiting to assign, reports) is out of this build.
+ * Manager view placeholder. Its settings (lead handout, agents, reports) have no backend yet, so
+ * the page explains what is coming instead of loading data that always fails.
  */
-const handout = createQuery(() => crmQueries.handout())
-
-function setMode(mode: HandoutMode, label: string) {
-	if (mode === handout.data?.mode) return
-	write({
-		call: () => crm.settings.setHandout(mode),
-		success: `Lead handout: ${label.toLowerCase()}`
-	})
-}
-
-function onkeydown(e: KeyboardEvent, i: number) {
-	const opts = handout.data?.options
-	if (
-		!opts ||
-		(e.key !== 'ArrowDown' &&
-			e.key !== 'ArrowUp' &&
-			e.key !== 'ArrowRight' &&
-			e.key !== 'ArrowLeft')
-	)
-		return
-	e.preventDefault()
-	const n =
-		(i + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1) + opts.length) % opts.length
-	const group = (e.currentTarget as HTMLElement).parentElement
-	group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[n]?.focus()
-}
+const COMING = [
+	{ title: 'Lead handout', line: 'Choose how a waiting enquiry gets an agent.' },
+	{ title: 'Agents', line: 'See each agent’s leads, replies and follow-ups.' },
+	{ title: 'Reports', line: 'Pipeline and response times across the team.' }
+]
 </script>
 
 <svelte:head><title>Manager view · CRM Beta</title></svelte:head>
 
-<PageHeader
-	title="Manager view"
-	facts={handout.data
-		? `Lead handout: ${handout.data.options.find((o) => o.id === handout.data?.mode)?.label.toLowerCase()} · default not decided`
-		: ''}
-/>
+<PageHeader title="Manager view" />
 
-{#if handout.data}
-	{@const h = handout.data}
-	<div class="setgrid">
-		<section class="card" aria-labelledby="ho-h">
-			<div class="ch">
-				<h2 id="ho-h">Lead handout <span class="facts">how a waiting enquiry gets an agent</span></h2>
-			</div>
-			<div class="cb">
-				<div class="radios" role="radiogroup" aria-labelledby="ho-h">
-					{#each h.options as o, i (o.id)}
-						<button
-							type="button"
-							role="radio"
-							aria-checked={h.mode === o.id}
-							tabindex={h.mode === o.id ? 0 : -1}
-							onclick={() => setMode(o.id, o.label)}
-							onkeydown={(e) => onkeydown(e, i)}
-						>
-							<span class="rdot" aria-hidden="true"></span>
-							<span><b>{o.label}</b><span class="d">{o.line}</span></span>
-						</button>
-					{/each}
-				</div>
-			</div>
-			<div class="ch" style:border-top="1px solid var(--sep)">
-				<h2>Changes <span class="facts">{h.log.length}</span></h2>
-			</div>
-			<div class="list">
-				{#each h.log as e (e.id)}
-					<div class="li">
-						<span class="when mono small">{e.at}</span>
-						<span><div class="t">{e.from_label} → {e.to_label}</div><div class="d">{e.who}</div></span>
-						<button type="button" class="btn ghost sm" disabled={h.mode === e.from} onclick={() => setMode(e.from, e.from_label)}>
-							Restore {e.from_label.toLowerCase()}
-						</button>
-					</div>
-				{:else}
-					<div class="nomatch">No changes yet.</div>
-				{/each}
-			</div>
-		</section>
+<section class="card soon" aria-labelledby="soon-h">
+	<span class="mark" aria-hidden="true"><ChartNoAxesColumn size={22} /></span>
+	<h2 id="soon-h">Manager view is coming soon</h2>
+	<p>Team settings and reports will live here. Nothing to set up yet.</p>
+	<ul>
+		{#each COMING as c (c.title)}
+			<li><b>{c.title}</b><span>{c.line}</span></li>
+		{/each}
+	</ul>
+</section>
 
-		<section class="card" aria-labelledby="st-h">
-			<div class="ch">
-				<h2 id="st-h">Lead stages <span class="facts">per lead type · read only</span></h2>
-			</div>
-			<div class="list">
-				{#each h.stages as s (s.types)}
-					<div class="li">
-						<span></span>
-						<span><div class="t">{s.types}</div><div class="d">{s.stages.join(' → ')}</div></span>
-						{#if s.proposal}
-							<span class="chip outline" title="Seller and landlord stage names were not set on the 6 Oct call.">Proposal</span>
-						{:else}<span></span>{/if}
-					</div>
-				{/each}
-			</div>
-		</section>
-	</div>
-	{#if handout.isError}
-		<ErrorLine bar message={errorText(handout.error)} onretry={() => handout.refetch()} />
-	{/if}
-{:else if handout.isError}
-	<div class="card"><ErrorLine message={errorText(handout.error)} onretry={() => handout.refetch()} /></div>
-{:else}
-	<div class="card"><Skeleton rows={4} /></div>
-{/if}
+<style>
+	.soon {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		padding: 48px 24px;
+	}
+	.mark {
+		display: grid;
+		place-items: center;
+		width: 44px;
+		height: 44px;
+		border-radius: 12px;
+		background: var(--sunk);
+		color: var(--text2);
+		margin-bottom: 14px;
+	}
+	h2 {
+		margin: 0;
+		font-size: 17px;
+		font-weight: 600;
+		color: var(--text);
+	}
+	p {
+		margin: 6px 0 22px;
+		color: var(--text2);
+		font-size: 14px;
+	}
+	ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 12px;
+		width: 100%;
+		max-width: 760px;
+	}
+	li {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		text-align: left;
+		padding: 14px;
+		border: 1px solid var(--sep);
+		border-radius: 10px;
+		font-size: 13.5px;
+		color: var(--text);
+	}
+	li span {
+		color: var(--text2);
+	}
+	@media (max-width: 720px) {
+		ul {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

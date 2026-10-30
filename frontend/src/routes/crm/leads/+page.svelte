@@ -65,6 +65,8 @@ const params = $derived<LeadListParams>({
 	vitevue: true
 })
 const leads = createQuery(() => crmQueries.leads(params))
+/** Areas named on the lease strip; the rest open under My areas. */
+const AREA_PREVIEW = 4
 const counts = $derived(leads.data?.counts)
 const more = $derived((ui.beds ? 1 : 0) + (ui.ptype ? 1 : 0) + (ui.budget ? 1 : 0))
 const filtered = $derived(Boolean(ui.q || ui.source || ui.stage || ui.area || more))
@@ -150,31 +152,38 @@ const typeLine = (l: LeadRow) =>
 	{/snippet}
 </PageHeader>
 
-<div class="card feedstrip">
-	<span class="srcdot" style:--c="var(--l-vv)">
-		{feed.data
-			? `Lease ends · next ${feed.data.forward_days} days, last ${feed.data.lookback_days} days`
-			: 'Lease ends'}
-	</span>
+<section class="card lease" aria-label="Lease-end leads">
+	<div class="lease-head">
+		<span class="srcdot lease-title" style:--c="var(--l-vv)">Lease ends</span>
+		{#if feed.data}
+			<span class="lease-window">
+				Next {feed.data.forward_days} days · last {feed.data.lookback_days} days
+			</span>
+		{/if}
+	</div>
 	{#if feed.data && !feed.data.areas.length}
-		<span class="sep">·</span>
-		<span class="muted">Pick your areas to get renewal leads in the Inbox</span>
+		<p class="lease-areas">Pick your areas to get renewal leads in the Inbox.</p>
 	{:else if feed.data}
-		<span class="sep">·</span>
-		<b>{feed.data.areas.join(', ')}</b>
-		<span class="sep">·</span>
-		<span><b class="num">{fmt(feed.data.window_total)}</b> units</span>
-		<span class="sep">·</span>
-		<span><b class="num">{fmt(feed.data.on_file)}</b> with a known owner</span>
-		<span class="sep">·</span>
-		<span><b class="num">{fmt(feed.data.entered_today)}</b> entered the inbox today</span>
+		{@const areas = feed.data.areas}
+		<dl class="lease-stats">
+			<div><dt>Units</dt><dd>{fmt(feed.data.window_total)}</dd></div>
+			<div><dt>Known owner</dt><dd>{fmt(feed.data.on_file)}</dd></div>
+			<div><dt>Entered today</dt><dd>{fmt(feed.data.entered_today)}</dd></div>
+		</dl>
+		<p class="lease-areas" title={areas.join(', ')}>
+			<span class="lease-count">{areas.length} {areas.length === 1 ? 'area' : 'areas'}</span>
+			{areas.slice(0, AREA_PREVIEW).join(', ')}{#if areas.length > AREA_PREVIEW}
+				<button type="button" class="linkbtn" onclick={() => panel.open({ kind: 'areas' })}>
+					+{areas.length - AREA_PREVIEW} more
+				</button>{/if}
+		</p>
 	{:else if feed.isError}
-		<span class="muted">
+		<p class="lease-areas">
 			Could not load. <button type="button" class="linkbtn" onclick={() => feed.refetch()}>Retry</button>
-		</span>
+		</p>
 	{/if}
-	<button type="button" class="btn ghost sm" onclick={() => panel.open({ kind: 'areas' })}>My areas</button>
-</div>
+	<button type="button" class="btn ghost sm lease-btn" onclick={() => panel.open({ kind: 'areas' })}>My areas</button>
+</section>
 
 <Tabs label="Lead type" items={tabs} value={ui.leadTab} onselect={selectTab} />
 
@@ -387,3 +396,84 @@ const typeLine = (l: LeadRow) =>
 {:else}
 	<div class="card"><Skeleton rows={6} /></div>
 {/if}
+
+<style>
+	.lease {
+		display: grid;
+		grid-template-columns: auto auto minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 12px 24px;
+		padding: 12px 16px;
+	}
+	.lease-head {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.lease-title {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--text);
+	}
+	.lease-window {
+		font-size: 12px;
+		color: var(--text2);
+		padding-left: 13px;
+	}
+	.lease-stats {
+		display: flex;
+		gap: 24px;
+		margin: 0;
+		padding-left: 24px;
+		border-left: 1px solid var(--sep);
+	}
+	.lease-stats div {
+		display: flex;
+		flex-direction: column-reverse;
+		gap: 1px;
+	}
+	.lease-stats dt {
+		font-size: 12px;
+		color: var(--text2);
+	}
+	.lease-stats dd {
+		margin: 0;
+		font-size: 17px;
+		font-weight: 600;
+		color: var(--text);
+		font-variant-numeric: tabular-nums;
+	}
+	.lease-areas {
+		margin: 0;
+		min-width: 0;
+		font-size: 13px;
+		color: var(--text2);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.lease-count {
+		font-weight: 600;
+		color: var(--text);
+		margin-right: 6px;
+	}
+	@media (max-width: 900px) {
+		.lease {
+			grid-template-columns: minmax(0, 1fr) auto;
+		}
+		.lease-stats {
+			grid-column: 1 / -1;
+			grid-row: 2;
+			padding-left: 0;
+			border-left: 0;
+		}
+		.lease-areas {
+			grid-column: 1 / -1;
+			white-space: normal;
+		}
+		.lease-btn {
+			grid-row: 1;
+			grid-column: 2;
+		}
+	}
+</style>
