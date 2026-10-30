@@ -2543,6 +2543,18 @@ export type CrmOwnerProfile = {
      * Role Signals
      */
     role_signals?: Array<string>;
+    /**
+     * Developer Side Seller
+     */
+    developer_side_seller?: boolean;
+    /**
+     * Current Property Count
+     */
+    current_property_count?: number;
+    /**
+     * Total Property Count
+     */
+    total_property_count?: number | null;
 };
 
 /**

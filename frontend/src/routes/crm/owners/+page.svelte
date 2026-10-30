@@ -4,7 +4,13 @@ import ChartBar from 'lucide-svelte/icons/chart-no-axes-column'
 import Search from 'lucide-svelte/icons/search'
 import Upload from 'lucide-svelte/icons/upload'
 import { page } from '$app/state'
-import type { OwnerListParams, OwnerSource, OwnerTab, PropertyKind } from '$lib/crm/api/types'
+import type {
+	OwnerListParams,
+	OwnerRow,
+	OwnerSource,
+	OwnerTab,
+	PropertyKind
+} from '$lib/crm/api/types'
 import SourceAuditSummary from '$lib/crm/components/owners/SourceAuditSummary.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
@@ -107,6 +113,13 @@ const tabs = $derived(
 		hint: o && o.page.total > o.page.limit && o.pageOnlyTabs.includes(id) ? 'this page' : undefined
 	}))
 )
+
+/** "29 current · 40 in total": the list counts only the properties in its view. */
+function unitCount(x: OwnerRow) {
+	const view = [ui.ownerOwnership, ui.ownerTransactionMatch].filter(Boolean).join(', ')
+	const shown = `${x.units.length} ${view}`
+	return x.units_total > x.units.length ? `${shown} · ${x.units_total} in total` : shown
+}
 
 const facts = $derived(
 	o ? `${listId ? 'Selected import' : 'Agency file'} · ${fmt(o.on_file)} people` : ''
@@ -213,7 +226,7 @@ const facts = $derived(
 							<td>
 								<button type="button" class="rowlink" onclick={() => openOwner(x.id)}>{x.name}</button>
 								{#if x.tag}<Chip>{x.tag}</Chip>{/if}
-								{#if x.relationship_role === 'possible_intermediary'}<div class="sub">Possible intermediary · unverified</div>{:else if x.relationship_role === 'organization'}<div class="sub">Organization in source · role unverified</div>{/if}
+								{#if x.developer_side_seller}<div class="sub">Developer-side seller · not a former owner</div>{:else if x.relationship_role === 'possible_intermediary'}<div class="sub">Possible intermediary · unverified</div>{:else if x.relationship_role === 'organization'}<div class="sub">Organization in source · role unverified</div>{/if}
 								{#if x.lead}
 									<div class="sub">
 										Lead · {stageOf(x.lead.stage).label}{x.lead.id === null ? ` · ${x.lead.agent}` : ''}
@@ -222,7 +235,7 @@ const facts = $derived(
 							</td>
 							<td data-label="Associated properties">
 								<div>
-									<div>{x.units.length}</div>
+									<div>{unitCount(x)}</div>
 									<div class="sub">
 										{x.units.slice(0, 3).join(' · ')}{x.units.length > 3 ? ` · +${x.units.length - 3}` : ''}
 									</div>

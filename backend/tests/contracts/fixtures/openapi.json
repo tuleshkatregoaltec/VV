@@ -15042,6 +15042,27 @@
 						},
 						"type": "array",
 						"title": "Role Signals"
+					},
+					"developer_side_seller": {
+						"type": "boolean",
+						"title": "Developer Side Seller",
+						"default": false
+					},
+					"current_property_count": {
+						"type": "integer",
+						"title": "Current Property Count",
+						"default": 0
+					},
+					"total_property_count": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Total Property Count"
 					}
 				},
 				"type": "object",

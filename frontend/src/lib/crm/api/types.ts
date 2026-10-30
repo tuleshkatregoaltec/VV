@@ -825,6 +825,12 @@ export interface OwnerRow {
 	source_label: string
 	/** Unit numbers, not sentences: "Marina Gate 2 #2304". */
 	units: string[]
+	/** Every associated property; `units` may hold only those in the list's view. */
+	units_total: number
+	/** Properties held now (verified or probable current owner). */
+	units_current: number
+	/** Sells off-plan units for a developer; kept out of former owners. */
+	developer_side_seller: boolean
 	next_event: string
 	next_event_date: string
 	/** "in 41 days · 9 Nov" */

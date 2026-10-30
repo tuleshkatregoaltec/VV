@@ -831,3 +831,56 @@ async def test_an_owner_who_still_holds_a_property_is_not_headlined_as_former(mo
     # Someone who has sold everything is still a former owner.
     sold = await registry(scope="prior_owners")
     assert sold.owners[0].highest_ownership_status == "former_owner"
+
+
+async def test_tabs_report_the_whole_portfolio_beside_the_count_in_view(monkeypatch):
+    # The Current owners list counts current properties only; the panel counts everything.
+    # Both carry the other number so the screens can say "1 current · 2 in total".
+    install_snapshot(
+        monkeypatch,
+        [
+            event(1),
+            event(
+                2,
+                property_key="tower|102",
+                property_identity=("businessbay", "tower|102"),
+                unit_number="102",
+                assessed_status="former_owner",
+                lead_id=None,
+                unit_candidate_key=None,
+            ),
+        ],
+    )
+    listed = (await registry(scope="current_owners")).owners[0]
+    assert (listed.property_count, listed.total_property_count) == (1, 2)
+    clicked = await owners.get_owner_profile(None, organization_id="org", owner_key="alias-1")
+    assert (clicked.property_count, clicked.current_property_count) == (2, 1)
+    assert clicked.total_property_count is None
+
+
+async def test_a_developer_side_seller_is_left_out_of_former_owners(monkeypatch):
+    rows = [
+        event(
+            n,
+            owner_key=f"signatory-{n}",
+            canonical_owner_key="signatory",
+            contact_name="Example Signatory",
+            property_key=f"tower{n % 4}|{n}",
+            property_identity=("area", f"tower{n % 4}|{n}"),
+            building_name=f"Tower {n % 4}",
+            unit_number=str(n),
+            party_role="Seller",
+            procedure_type="Complete Delayed Sell",
+            assessed_status="former_owner",
+            lead_id=None,
+            unit_candidate_key=None,
+        )
+        for n in range(1, 61)
+    ]
+    install_snapshot(monkeypatch, rows)
+    prior = await registry(scope="prior_owners")
+    assert prior.total == 0 and prior.summary.prior_owner_profiles == 0
+    # Still findable, labelled for what it is.
+    everyone = await registry(scope="all", search="Example Signatory")
+    assert everyone.total == 1
+    assert everyone.owners[0].relationship_role == "possible_intermediary"

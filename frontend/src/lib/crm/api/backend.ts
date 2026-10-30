@@ -809,6 +809,9 @@ function ownerRow(p: CrmOwnerProfile, ws: CrmOwnerWorkspaceSummary | undefined):
 		sources: ['agency_import'],
 		source_label: 'Agency file',
 		units: (p.properties ?? []).map(unitLabel),
+		units_total: p.total_property_count ?? p.property_count,
+		units_current: p.current_property_count ?? 0,
+		developer_side_seller: p.developer_side_seller ?? false,
 		next_event: end ? 'Lease ends' : 'No event on record',
 		next_event_date: end ?? '',
 		next_event_label:

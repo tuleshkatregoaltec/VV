@@ -69,7 +69,7 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 {#if owner.data}
 	{@const o = owner.data}
 	{@const allOpen = o.unit_rows.length > 0 && o.unit_rows.every((u) => open[u.id])}
-	<Panel kicker="Owner" title={o.name} sub="{o.units.length} associated propert{o.units.length === 1 ? 'y' : 'ies'} · {o.source_label}">
+	<Panel kicker="Owner" title={o.name} sub="{o.units.length} associated propert{o.units.length === 1 ? 'y' : 'ies'} · {o.units_current} current · {o.source_label}">
 		{#snippet tags()}
 			{#if o.prior_deal}
 				<Chip tone="green">Prior deal on file</Chip>

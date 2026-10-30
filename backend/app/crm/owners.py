@@ -498,6 +498,9 @@ def _profile_with_properties(
         update={
             "properties": properties,
             "property_count": len(properties),
+            "current_property_count": sum(
+                item.ownership_status in _CURRENT_OWNER_STATUSES for item in properties
+            ),
             "rental_linked_count": len(rental_properties),
             "contact_ready_count": sum(
                 _property_contact_ready(item, profile) for item in properties
@@ -736,7 +739,8 @@ def _owner_registry_summary(
             for profile in profiles
         ),
         prior_owner_profiles=sum(
-            any(item.ownership_status == "former_owner" for item in profile.properties)
+            not profile.developer_side_seller
+            and any(item.ownership_status == "former_owner" for item in profile.properties)
             for profile in profiles
         ),
         needs_review_profiles=sum(
@@ -850,6 +854,8 @@ async def get_owner_registry(
     summary = _owner_registry_summary(profiles)
     filtered = []
     for profile in profiles:
+        if scope == "prior_owners" and profile.developer_side_seller:
+            continue
         properties = [
             item
             for item in profile.properties
@@ -893,10 +899,13 @@ async def get_owner_registry(
         )
         if not properties and not invalid_review:
             continue
+        full = full_by_key[profile.owner_key]
         scoped = (
-            _profile_with_properties(profile, properties)
+            _profile_with_properties(profile, properties).model_copy(
+                update={"total_property_count": full.property_count}
+            )
             if scope in {"current_owners", "prior_owners"} or transaction_match_status
-            else full_by_key[profile.owner_key]
+            else full
         )
         if portfolio_only and scoped.property_count < 2:
             continue

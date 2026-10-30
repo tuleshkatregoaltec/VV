@@ -136,6 +136,25 @@ describe('owner unit check', () => {
 		])
 	})
 
+	it('carries the whole portfolio, the current count and the developer-seller flag', async () => {
+		// The list counts properties in its view; the screens show it beside the whole portfolio.
+		vi.spyOn(client, 'get').mockImplementation(async (url: string) => {
+			if (url.startsWith('/api/v1/crm/owner-workspaces')) return [] as never
+			if (url.startsWith('/api/v1/crm/contact-imports')) return [] as never
+			return {
+				owner_key: 'abc123',
+				contact_name: 'X',
+				highest_ownership_status: 'former_owner',
+				property_count: 40,
+				current_property_count: 29,
+				developer_side_seller: true,
+				properties: []
+			} as never
+		})
+		const o = await getOwner('abc123')
+		expect([o.units_total, o.units_current, o.developer_side_seller]).toEqual([40, 29, true])
+	})
+
 	it('shows the file record, the DLD record, the result and the lease', async () => {
 		serve({
 			ownership_status: 'verified_current_owner',

@@ -39,7 +39,11 @@ def test_many_properties_do_not_establish_a_brokerage_role():
 
 def test_repeated_sources_do_not_inflate_shared_phone_evidence():
     signal = build_owner_signals([_row()] * 100)["a"]
-    assert signal == {"relationship_role": "unknown", "role_signals": []}
+    assert signal == {
+        "relationship_role": "unknown",
+        "role_signals": [],
+        "developer_side_seller": False,
+    }
 
 
 def test_shared_phone_is_a_review_signal_not_confirmed_profession():
@@ -53,6 +57,50 @@ def test_company_name_does_not_establish_developer_or_broker_role():
     signal = build_owner_signals([_row(name="Example Development LLC")])["a"]
     assert signal["relationship_role"] == "organization"
     assert "has not been verified" in signal["role_signals"][0]
+
+
+def _sale(key, name, unit, building, procedure="Complete Delayed Sell", role="Seller"):
+    return _row(key=key, name=name, unit=f"{building}-{unit}") | {
+        "party_role": role,
+        "procedure_type": procedure,
+        "building_name": building,
+    }
+
+
+def test_a_person_selling_off_plan_units_for_a_developer_is_not_a_former_owner():
+    # One signatory's rows carry a different phone per buyer, so the name splits into several
+    # identities; all of them are the developer side, however few units each holds.
+    name = "Example Signatory"
+    rows = [_sale(f"id-{unit % 5}", name, unit, f"Tower {unit % 4}") for unit in range(60)]
+    signals = build_owner_signals(rows)
+    for key in {f"id-{n}" for n in range(5)}:
+        assert signals[key]["developer_side_seller"] is True
+        assert signals[key]["relationship_role"] == "possible_intermediary"
+        assert any("developer-side seller" in s for s in signals[key]["role_signals"])
+
+
+@pytest.mark.parametrize(
+    ("units", "buildings", "procedure"),
+    [
+        (49, 4, "Complete Delayed Sell"),  # too few units
+        (60, 2, "Delayed Sell"),  # one project's own resales
+        (60, 4, "Sell"),  # ordinary resales: a real investor's history
+    ],
+)
+def test_an_investor_selling_their_own_units_stays_a_former_owner(units, buildings, procedure):
+    rows = [
+        _sale("a", "Example Investor", u, f"Tower {u % buildings}", procedure) for u in range(units)
+    ]
+    signal = build_owner_signals(rows)["a"]
+    assert signal["developer_side_seller"] is False
+    assert signal["relationship_role"] == "unknown"
+
+
+def test_a_developer_company_stays_an_organization():
+    rows = [_sale("a", "Example Developments LLC", u, f"Tower {u % 4}") for u in range(60)]
+    signal = build_owner_signals(rows)["a"]
+    assert signal["relationship_role"] == "organization"
+    assert signal["developer_side_seller"] is False
 
 
 def test_explicit_area_units_are_not_silently_treated_as_square_feet():
