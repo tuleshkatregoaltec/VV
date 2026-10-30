@@ -851,6 +851,7 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 	return {
 		source_reference: p.source_reference,
 		key: p.property_key,
+		id: p.property_key,
 		number: p.unit_number,
 		building: p.building_name || p.project_name,
 		area: p.area_name,
@@ -1107,7 +1108,7 @@ export async function getOwner(id: string): Promise<OwnerDetail> {
 				)
 			)
 		],
-		unit_rows: (o.properties ?? []).map(ownerUnit),
+		unit_rows: rowIds((o.properties ?? []).map(ownerUnit)),
 		imported_from: ownerImportSources(o.properties ?? [], imports),
 		matched: [],
 		// The workspace keeps the latest note only.
@@ -1117,6 +1118,17 @@ export async function getOwner(id: string): Promise<OwnerDetail> {
 		relationship: [],
 		create_lead: null
 	}
+}
+
+/** One owner can hold the same property on two source rows (a sale and a resale, two imports);
+ * each row gets its own id so lists and open states stay apart. */
+function rowIds(units: OwnerUnit[]): OwnerUnit[] {
+	const seen = new Map<string, number>()
+	return units.map((u) => {
+		const n = (seen.get(u.key) ?? 0) + 1
+		seen.set(u.key, n)
+		return { ...u, id: n === 1 ? u.key : `${u.key}#${n}` }
+	})
 }
 
 export async function addOwnerNote(id: string, note: string): Promise<Written<OwnerRow>> {

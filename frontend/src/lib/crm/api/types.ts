@@ -851,7 +851,10 @@ export interface OwnerNote {
 /** Properties associated with an imported person; status carries the ownership assessment. */
 export interface OwnerUnit {
 	source_reference?: CrmOwnerProperty['source_reference']
+	/** The property; the same one can appear on two source rows of one owner. */
 	key: string
+	/** Unique within the owner's rows: the key, then `key#2`, `key#3` for repeats. */
+	id: string
 	number: string
 	building: string
 	area: string

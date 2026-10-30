@@ -39,7 +39,7 @@ $effect(() => {
 	if (!units || !want || shownUnit === `${id}|${want}`) return
 	shownUnit = `${id}|${want}`
 	const hits = units.filter((u) => u.number.trim().toUpperCase() === want)
-	if (hits.length) open = { ...open, ...Object.fromEntries(hits.map((u) => [u.key, true])) }
+	if (hits.length) open = { ...open, ...Object.fromEntries(hits.map((u) => [u.id, true])) }
 })
 
 function saveReviewNote(e: SubmitEvent) {
@@ -68,7 +68,7 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 
 {#if owner.data}
 	{@const o = owner.data}
-	{@const allOpen = o.unit_rows.length > 0 && o.unit_rows.every((u) => open[u.key])}
+	{@const allOpen = o.unit_rows.length > 0 && o.unit_rows.every((u) => open[u.id])}
 	<Panel kicker="Owner" title={o.name} sub="{o.units.length} associated propert{o.units.length === 1 ? 'y' : 'ies'} · {o.source_label}">
 		{#snippet tags()}
 			{#if o.prior_deal}
@@ -221,7 +221,7 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 						class="btn ghost sm"
 						onclick={() => {
 							const next = !allOpen
-							open = Object.fromEntries(o.unit_rows.map((u) => [u.key, next]))
+							open = Object.fromEntries(o.unit_rows.map((u) => [u.id, next]))
 						}}
 					>
 						{allOpen ? 'Close all' : 'Open all'}
@@ -230,14 +230,14 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 			</h3>
 			{#if o.unit_rows.length}
 				<div class="docs">
-					{#each o.unit_rows as u (u.key)}
-						{@const isOpen = Boolean(open[u.key])}
+					{#each o.unit_rows as u (u.id)}
+						{@const isOpen = Boolean(open[u.id])}
 						<div class="urow">
 							<button
 								type="button"
 								aria-expanded={isOpen}
-								aria-controls="unit-{u.key}"
-								onclick={() => (open = { ...open, [u.key]: !isOpen })}
+								aria-controls="unit-{u.id}"
+								onclick={() => (open = { ...open, [u.id]: !isOpen })}
 							>
 								<span>
 									<span class="no">{#if u.number}#{u.number}{:else if u.source_reference?.land_number}Land {u.source_reference.land_number}{:else if u.source_reference?.building_number}Building {u.source_reference.building_number}{:else}{u.type || 'Property reference'}{/if}</span>{u.building ? ` · ${u.building}` : ''}{beds(u) ? ` · ${beds(u)}` : ''}
@@ -255,7 +255,7 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 								<span class="muted" aria-hidden="true">{isOpen ? '−' : '＋'}</span>
 							</button>
 							{#if isOpen}
-								<div class="ub" id="unit-{u.key}">
+								<div class="ub" id="unit-{u.id}">
 									<div class="kv">
 										<Kv k="Type" v="{u.type}{u.size_sqft ? ` · ${fmt(u.size_sqft)} sqft` : ''}" />
 										{#if u.source_reference}

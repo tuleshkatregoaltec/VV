@@ -101,6 +101,41 @@ describe('owner unit check', () => {
 		})
 	}
 
+	it('keeps two source rows of the same property apart', async () => {
+		// One owner can hold a villa on two rows (a sale and a resale). Keyed by the property alone,
+		// the panel's list throws a duplicate-key error and never leaves "Loading…".
+		vi.spyOn(client, 'get').mockImplementation(async (url: string) => {
+			if (url.startsWith('/api/v1/crm/owner-workspaces')) return [] as never
+			if (url.startsWith('/api/v1/crm/contact-imports')) return [] as never
+			const row = (n: number) => ({
+				property_key: 'maple3|demapleiii-v-349',
+				building_name: 'Maple 3',
+				project_name: 'Maple',
+				area_name: 'Dubai Hills Estate',
+				unit_number: 'DEMAPLEIII-V-349',
+				property_type: 'Villa',
+				ownership_status: 'probable_current_owner',
+				source_lists: ['Dubai Hills'],
+				source_rows: [`Reviewed source:${n}`]
+			})
+			return {
+				owner_key: 'abc123',
+				contact_name: 'X',
+				highest_ownership_status: 'probable_current_owner',
+				properties: [row(1), row(2)]
+			} as never
+		})
+		const o = await getOwner('abc123')
+		expect(o.unit_rows.map((u) => u.id)).toEqual([
+			'maple3|demapleiii-v-349',
+			'maple3|demapleiii-v-349#2'
+		])
+		expect(o.unit_rows.map((u) => u.key)).toEqual([
+			'maple3|demapleiii-v-349',
+			'maple3|demapleiii-v-349'
+		])
+	})
+
 	it('shows the file record, the DLD record, the result and the lease', async () => {
 		serve({
 			ownership_status: 'verified_current_owner',
