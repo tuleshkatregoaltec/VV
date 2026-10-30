@@ -650,6 +650,260 @@ export type BuildingUnitType = {
 };
 
 /**
+ * CalendarEventCreate
+ */
+export type CalendarEventCreate = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time?: string | null;
+    /**
+     * End Date
+     */
+    end_date?: string | null;
+    /**
+     * End Time
+     */
+    end_time?: string | null;
+    /**
+     * All Day
+     */
+    all_day?: boolean;
+    /**
+     * Repeat
+     */
+    repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+    /**
+     * Meet
+     */
+    meet?: boolean;
+    /**
+     * Location
+     */
+    location?: string;
+    /**
+     * Reminders
+     */
+    reminders?: Array<number>;
+    /**
+     * Reminders Use Default
+     */
+    reminders_use_default?: boolean;
+    /**
+     * Guests
+     */
+    guests?: Array<string>;
+    /**
+     * Guests Can Modify
+     */
+    guests_can_modify?: boolean;
+    /**
+     * Guests Can Invite Others
+     */
+    guests_can_invite_others?: boolean;
+    /**
+     * Guests Can See Other Guests
+     */
+    guests_can_see_other_guests?: boolean;
+    /**
+     * Show As
+     */
+    show_as?: 'busy' | 'free';
+    /**
+     * Visibility
+     */
+    visibility?: 'default' | 'public' | 'private' | 'confidential';
+    /**
+     * Kind
+     */
+    kind: 'viewing' | 'call' | 'follow_up' | 'deal_date' | 'deadline';
+    /**
+     * Detail
+     */
+    detail?: string;
+    /**
+     * Lead Id
+     */
+    lead_id?: number | null;
+    /**
+     * Listing Id
+     */
+    listing_id?: string | null;
+};
+
+/**
+ * CalendarEventMove
+ */
+export type CalendarEventMove = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time?: string | null;
+};
+
+/**
+ * CalendarEventResponse
+ */
+export type CalendarEventResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time: string | null;
+    /**
+     * End Date
+     */
+    end_date: string;
+    /**
+     * End Time
+     */
+    end_time: string | null;
+    /**
+     * All Day
+     */
+    all_day: boolean;
+    /**
+     * Repeat
+     */
+    repeat: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+    /**
+     * Meet
+     */
+    meet: boolean;
+    /**
+     * Meet Link
+     */
+    meet_link: string | null;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Reminders
+     */
+    reminders: Array<number>;
+    /**
+     * Reminders Use Default
+     */
+    reminders_use_default: boolean;
+    /**
+     * Guests
+     */
+    guests: Array<string>;
+    /**
+     * Guests Can Modify
+     */
+    guests_can_modify: boolean;
+    /**
+     * Guests Can Invite Others
+     */
+    guests_can_invite_others: boolean;
+    /**
+     * Guests Can See Other Guests
+     */
+    guests_can_see_other_guests: boolean;
+    /**
+     * Show As
+     */
+    show_as: 'busy' | 'free';
+    /**
+     * Visibility
+     */
+    visibility: 'default' | 'public' | 'private' | 'confidential';
+    /**
+     * Kind
+     */
+    kind: 'viewing' | 'call' | 'follow_up' | 'deal_date' | 'deadline';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Agent
+     */
+    agent: string;
+    /**
+     * Lead Id
+     */
+    lead_id: number | null;
+    /**
+     * Deal Id
+     */
+    deal_id: string | null;
+    /**
+     * Listing Id
+     */
+    listing_id: string | null;
+    /**
+     * Owner Id
+     */
+    owner_id: string | null;
+    /**
+     * Context
+     */
+    context: string | null;
+    /**
+     * Record
+     */
+    record: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Outcome
+     */
+    outcome: string | null;
+    /**
+     * Google Sync Status
+     */
+    google_sync_status: 'local' | 'pending' | 'synced' | 'error';
+};
+
+/**
+ * CalendarViewingCreate
+ */
+export type CalendarViewingCreate = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time: string;
+    /**
+     * Listing Id
+     */
+    listing_id?: string | null;
+    /**
+     * Note
+     */
+    note?: string;
+};
+
+/**
  * CheckoutSessionRequest
  *
  * Request to create a Stripe checkout session (org must exist)
@@ -3808,6 +4062,438 @@ export type DimensionBreakdown = {
 };
 
 /**
+ * EmailEvent
+ */
+export type EmailEvent = {
+    /**
+     * Event
+     */
+    event: string;
+    /**
+     * At
+     */
+    at: string;
+    /**
+     * Link
+     */
+    link?: string | null;
+};
+
+/**
+ * EmailInboundListResponse
+ */
+export type EmailInboundListResponse = {
+    /**
+     * Items
+     */
+    items: Array<EmailInboundResponse>;
+    /**
+     * Total
+     */
+    total: number;
+};
+
+/**
+ * EmailInboundResponse
+ */
+export type EmailInboundResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Enquiry Id
+     */
+    enquiry_id: number | null;
+    /**
+     * Lead Name
+     */
+    lead_name: string | null;
+    /**
+     * Send Id
+     */
+    send_id: number | null;
+    /**
+     * From Email
+     */
+    from_email: string;
+    /**
+     * From Name
+     */
+    from_name: string | null;
+    /**
+     * Subject
+     */
+    subject: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Attachments
+     */
+    attachments: Array<string>;
+    /**
+     * Created Lead
+     */
+    created_lead: boolean;
+    /**
+     * Received At
+     */
+    received_at: string;
+};
+
+/**
+ * EmailLeadListResponse
+ */
+export type EmailLeadListResponse = {
+    /**
+     * Items
+     */
+    items: Array<EmailLeadResponse>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Sources
+     */
+    sources: Array<string>;
+};
+
+/**
+ * EmailLeadResponse
+ *
+ * A lead whose contact has an email, with how emailing it has gone so far.
+ */
+export type EmailLeadResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Phone
+     */
+    phone: string | null;
+    /**
+     * Intent
+     */
+    intent: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Do Not Contact
+     */
+    do_not_contact: boolean;
+    /**
+     * Last Status
+     */
+    last_status: string | null;
+    /**
+     * Last Sent At
+     */
+    last_sent_at: string | null;
+    /**
+     * Sends
+     */
+    sends: number;
+};
+
+/**
+ * EmailSendBatchResponse
+ */
+export type EmailSendBatchResponse = {
+    /**
+     * Sent
+     */
+    sent: number;
+    /**
+     * Failed
+     */
+    failed: number;
+    /**
+     * Results
+     */
+    results: Array<EmailSendResult>;
+};
+
+/**
+ * EmailSendCreate
+ */
+export type EmailSendCreate = {
+    /**
+     * Enquiry Ids
+     */
+    enquiry_ids: Array<number>;
+    /**
+     * Subject
+     */
+    subject: string;
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
+ * EmailSendListResponse
+ */
+export type EmailSendListResponse = {
+    /**
+     * Items
+     */
+    items: Array<EmailSendResponse>;
+    /**
+     * Counts
+     */
+    counts: {
+        [key: string]: number;
+    };
+};
+
+/**
+ * EmailSendResponse
+ */
+export type EmailSendResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Enquiry Id
+     */
+    enquiry_id: number | null;
+    /**
+     * To Email
+     */
+    to_email: string;
+    /**
+     * To Name
+     */
+    to_name: string | null;
+    /**
+     * Subject
+     */
+    subject: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Status
+     */
+    status: 'queued' | 'sent' | 'deferred' | 'delivered' | 'opened' | 'clicked' | 'bounced' | 'spam' | 'unsubscribed' | 'failed' | 'replied';
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Sent At
+     */
+    sent_at: string | null;
+    /**
+     * Delivered At
+     */
+    delivered_at: string | null;
+    /**
+     * Opened At
+     */
+    opened_at: string | null;
+    /**
+     * Clicked At
+     */
+    clicked_at: string | null;
+    /**
+     * Bounced At
+     */
+    bounced_at: string | null;
+    /**
+     * Opens
+     */
+    opens: number;
+    /**
+     * Clicks
+     */
+    clicks: number;
+    /**
+     * Events
+     */
+    events: Array<EmailEvent>;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * EmailSendResult
+ */
+export type EmailSendResult = {
+    /**
+     * Enquiry Id
+     */
+    enquiry_id: number;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Error
+     */
+    error?: string | null;
+};
+
+/**
+ * EmailStatusResponse
+ */
+export type EmailStatusResponse = {
+    /**
+     * Configured
+     */
+    configured: boolean;
+    /**
+     * Sender Name
+     */
+    sender_name: string | null;
+    /**
+     * Sender Email
+     */
+    sender_email: string | null;
+    /**
+     * Webhook Configured
+     */
+    webhook_configured: boolean;
+};
+
+/**
+ * EmailSyncResponse
+ */
+export type EmailSyncResponse = {
+    /**
+     * Fetched
+     */
+    fetched: number;
+    /**
+     * Applied
+     */
+    applied: number;
+    /**
+     * Unmatched
+     */
+    unmatched: number;
+};
+
+/**
+ * EmailTemplateResponse
+ */
+export type EmailTemplateResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Subject
+     */
+    subject: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Lead Types
+     */
+    lead_types: Array<string>;
+    /**
+     * Updated By User Id
+     */
+    updated_by_user_id: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * EmailTemplateWrite
+ */
+export type EmailTemplateWrite = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Subject
+     */
+    subject: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Lead Types
+     */
+    lead_types?: Array<'unknown' | 'buy' | 'rent' | 'sell' | 'let'>;
+};
+
+/**
+ * EmailThreadItem
+ *
+ * One email on a lead, either way: `out` is a send from Vitevue, `in` a received email.
+ */
+export type EmailThreadItem = {
+    /**
+     * Direction
+     */
+    direction: 'out' | 'in';
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Subject
+     */
+    subject: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * At
+     */
+    at: string;
+    /**
+     * Status
+     */
+    status?: string | null;
+    /**
+     * Counterpart
+     */
+    counterpart: string;
+};
+
+/**
  * FeasibilityAssumptions
  */
 export type FeasibilityAssumptions = {
@@ -4772,6 +5458,34 @@ export type GeoPolygon = {
      * Coordinates
      */
     coordinates: Array<Array<number>>;
+};
+
+/**
+ * GoogleCalendarConnectResponse
+ */
+export type GoogleCalendarConnectResponse = {
+    /**
+     * Authorization Url
+     */
+    authorization_url: string;
+};
+
+/**
+ * GoogleCalendarStatus
+ */
+export type GoogleCalendarStatus = {
+    /**
+     * Configured
+     */
+    configured: boolean;
+    /**
+     * Connected
+     */
+    connected: boolean;
+    /**
+     * Email
+     */
+    email?: string | null;
 };
 
 /**
@@ -11454,6 +12168,265 @@ export type ChatSendMessageResponses = {
     200: unknown;
 };
 
+export type CrmCrmGoogleCalendarDisconnectData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/calendar/google';
+};
+
+export type CrmCrmGoogleCalendarDisconnectResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmGoogleCalendarDisconnectResponse = CrmCrmGoogleCalendarDisconnectResponses[keyof CrmCrmGoogleCalendarDisconnectResponses];
+
+export type CrmCrmGoogleCalendarStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/calendar/google';
+};
+
+export type CrmCrmGoogleCalendarStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoogleCalendarStatus;
+};
+
+export type CrmCrmGoogleCalendarStatusResponse = CrmCrmGoogleCalendarStatusResponses[keyof CrmCrmGoogleCalendarStatusResponses];
+
+export type CrmCrmGoogleCalendarConnectData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/calendar/google/connect';
+};
+
+export type CrmCrmGoogleCalendarConnectResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoogleCalendarConnectResponse;
+};
+
+export type CrmCrmGoogleCalendarConnectResponse = CrmCrmGoogleCalendarConnectResponses[keyof CrmCrmGoogleCalendarConnectResponses];
+
+export type CrmCrmCalendarEventsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Start
+         */
+        start: string;
+        /**
+         * End
+         */
+        end: string;
+    };
+    url: '/api/v1/crm/calendar/events';
+};
+
+export type CrmCrmCalendarEventsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCalendarEventsError = CrmCrmCalendarEventsErrors[keyof CrmCrmCalendarEventsErrors];
+
+export type CrmCrmCalendarEventsResponses = {
+    /**
+     * Response Crm-Crm Calendar Events
+     *
+     * Successful Response
+     */
+    200: Array<CalendarEventResponse>;
+};
+
+export type CrmCrmCalendarEventsResponse = CrmCrmCalendarEventsResponses[keyof CrmCrmCalendarEventsResponses];
+
+export type CrmCrmCreateCalendarEventData = {
+    body: CalendarEventCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/calendar/events';
+};
+
+export type CrmCrmCreateCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCreateCalendarEventError = CrmCrmCreateCalendarEventErrors[keyof CrmCrmCreateCalendarEventErrors];
+
+export type CrmCrmCreateCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    201: CalendarEventResponse;
+};
+
+export type CrmCrmCreateCalendarEventResponse = CrmCrmCreateCalendarEventResponses[keyof CrmCrmCreateCalendarEventResponses];
+
+export type CrmCrmDeleteCalendarEventData = {
+    body?: never;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/events/{event_id}';
+};
+
+export type CrmCrmDeleteCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDeleteCalendarEventError = CrmCrmDeleteCalendarEventErrors[keyof CrmCrmDeleteCalendarEventErrors];
+
+export type CrmCrmDeleteCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmDeleteCalendarEventResponse = CrmCrmDeleteCalendarEventResponses[keyof CrmCrmDeleteCalendarEventResponses];
+
+export type CrmCrmCalendarEventData = {
+    body?: never;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/events/{event_id}';
+};
+
+export type CrmCrmCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCalendarEventError = CrmCrmCalendarEventErrors[keyof CrmCrmCalendarEventErrors];
+
+export type CrmCrmCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    200: CalendarEventResponse;
+};
+
+export type CrmCrmCalendarEventResponse = CrmCrmCalendarEventResponses[keyof CrmCrmCalendarEventResponses];
+
+export type CrmCrmMoveCalendarEventData = {
+    body: CalendarEventMove;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/events/{event_id}';
+};
+
+export type CrmCrmMoveCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmMoveCalendarEventError = CrmCrmMoveCalendarEventErrors[keyof CrmCrmMoveCalendarEventErrors];
+
+export type CrmCrmMoveCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    200: CalendarEventResponse;
+};
+
+export type CrmCrmMoveCalendarEventResponse = CrmCrmMoveCalendarEventResponses[keyof CrmCrmMoveCalendarEventResponses];
+
+export type CrmCrmBookCalendarViewingData = {
+    body: CalendarViewingCreate;
+    path: {
+        /**
+         * Lead Id
+         */
+        lead_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/viewings/{lead_id}';
+};
+
+export type CrmCrmBookCalendarViewingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmBookCalendarViewingError = CrmCrmBookCalendarViewingErrors[keyof CrmCrmBookCalendarViewingErrors];
+
+export type CrmCrmBookCalendarViewingResponses = {
+    /**
+     * Successful Response
+     */
+    201: CalendarEventResponse;
+};
+
+export type CrmCrmBookCalendarViewingResponse = CrmCrmBookCalendarViewingResponses[keyof CrmCrmBookCalendarViewingResponses];
+
+export type CrmCrmCompleteCalendarEventData = {
+    body?: never;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/events/{event_id}/done';
+};
+
+export type CrmCrmCompleteCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCompleteCalendarEventError = CrmCrmCompleteCalendarEventErrors[keyof CrmCrmCompleteCalendarEventErrors];
+
+export type CrmCrmCompleteCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    200: CalendarEventResponse;
+};
+
+export type CrmCrmCompleteCalendarEventResponse = CrmCrmCompleteCalendarEventResponses[keyof CrmCrmCompleteCalendarEventResponses];
+
 export type CrmCrmInboundEnquiriesData = {
     body?: never;
     path?: never;
@@ -11482,6 +12455,14 @@ export type CrmCrmInboundEnquiriesData = {
          * Offset
          */
         offset?: number;
+        /**
+         * Within Days
+         */
+        within_days?: number | null;
+        /**
+         * Leads Only
+         */
+        leads_only?: boolean;
     };
     url: '/api/v1/crm/inbound/enquiries';
 };
@@ -11528,6 +12509,36 @@ export type CrmCrmCreateInboundEnquiryResponses = {
 };
 
 export type CrmCrmCreateInboundEnquiryResponse = CrmCrmCreateInboundEnquiryResponses[keyof CrmCrmCreateInboundEnquiryResponses];
+
+export type CrmCrmApproveRecentSellerData = {
+    body?: never;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/enquiries/{enquiry_id}/approve-buyer';
+};
+
+export type CrmCrmApproveRecentSellerErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmApproveRecentSellerError = CrmCrmApproveRecentSellerErrors[keyof CrmCrmApproveRecentSellerErrors];
+
+export type CrmCrmApproveRecentSellerResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryResponse;
+};
+
+export type CrmCrmApproveRecentSellerResponse = CrmCrmApproveRecentSellerResponses[keyof CrmCrmApproveRecentSellerResponses];
 
 export type CrmCrmInboundEnquiryData = {
     body?: never;
@@ -12950,6 +13961,406 @@ export type CrmCrmDeleteSavedLeadResponses = {
 };
 
 export type CrmCrmDeleteSavedLeadResponse = CrmCrmDeleteSavedLeadResponses[keyof CrmCrmDeleteSavedLeadResponses];
+
+export type CrmCrmEmailStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/email/status';
+};
+
+export type CrmCrmEmailStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmailStatusResponse;
+};
+
+export type CrmCrmEmailStatusResponse = CrmCrmEmailStatusResponses[keyof CrmCrmEmailStatusResponses];
+
+export type CrmCrmEmailLeadsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Intent
+         */
+        intent?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Ids
+         */
+        ids?: Array<number> | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/email/leads';
+};
+
+export type CrmCrmEmailLeadsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmEmailLeadsError = CrmCrmEmailLeadsErrors[keyof CrmCrmEmailLeadsErrors];
+
+export type CrmCrmEmailLeadsResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmailLeadListResponse;
+};
+
+export type CrmCrmEmailLeadsResponse = CrmCrmEmailLeadsResponses[keyof CrmCrmEmailLeadsResponses];
+
+export type CrmCrmEmailTemplatesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/email/templates';
+};
+
+export type CrmCrmEmailTemplatesResponses = {
+    /**
+     * Response Crm-Crm Email Templates
+     *
+     * Successful Response
+     */
+    200: Array<EmailTemplateResponse>;
+};
+
+export type CrmCrmEmailTemplatesResponse = CrmCrmEmailTemplatesResponses[keyof CrmCrmEmailTemplatesResponses];
+
+export type CrmCrmCreateEmailTemplateData = {
+    body: EmailTemplateWrite;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/email/templates';
+};
+
+export type CrmCrmCreateEmailTemplateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCreateEmailTemplateError = CrmCrmCreateEmailTemplateErrors[keyof CrmCrmCreateEmailTemplateErrors];
+
+export type CrmCrmCreateEmailTemplateResponses = {
+    /**
+     * Successful Response
+     */
+    201: EmailTemplateResponse;
+};
+
+export type CrmCrmCreateEmailTemplateResponse = CrmCrmCreateEmailTemplateResponses[keyof CrmCrmCreateEmailTemplateResponses];
+
+export type CrmCrmDeleteEmailTemplateData = {
+    body?: never;
+    path: {
+        /**
+         * Template Id
+         */
+        template_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/email/templates/{template_id}';
+};
+
+export type CrmCrmDeleteEmailTemplateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDeleteEmailTemplateError = CrmCrmDeleteEmailTemplateErrors[keyof CrmCrmDeleteEmailTemplateErrors];
+
+export type CrmCrmDeleteEmailTemplateResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmDeleteEmailTemplateResponse = CrmCrmDeleteEmailTemplateResponses[keyof CrmCrmDeleteEmailTemplateResponses];
+
+export type CrmCrmUpdateEmailTemplateData = {
+    body: EmailTemplateWrite;
+    path: {
+        /**
+         * Template Id
+         */
+        template_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/email/templates/{template_id}';
+};
+
+export type CrmCrmUpdateEmailTemplateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmUpdateEmailTemplateError = CrmCrmUpdateEmailTemplateErrors[keyof CrmCrmUpdateEmailTemplateErrors];
+
+export type CrmCrmUpdateEmailTemplateResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmailTemplateResponse;
+};
+
+export type CrmCrmUpdateEmailTemplateResponse = CrmCrmUpdateEmailTemplateResponses[keyof CrmCrmUpdateEmailTemplateResponses];
+
+export type CrmCrmSendEmailData = {
+    body: EmailSendCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/email/send';
+};
+
+export type CrmCrmSendEmailErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmSendEmailError = CrmCrmSendEmailErrors[keyof CrmCrmSendEmailErrors];
+
+export type CrmCrmSendEmailResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmailSendBatchResponse;
+};
+
+export type CrmCrmSendEmailResponse = CrmCrmSendEmailResponses[keyof CrmCrmSendEmailResponses];
+
+export type CrmCrmEmailSendsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Status
+         */
+        status?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/email/sends';
+};
+
+export type CrmCrmEmailSendsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmEmailSendsError = CrmCrmEmailSendsErrors[keyof CrmCrmEmailSendsErrors];
+
+export type CrmCrmEmailSendsResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmailSendListResponse;
+};
+
+export type CrmCrmEmailSendsResponse = CrmCrmEmailSendsResponses[keyof CrmCrmEmailSendsResponses];
+
+export type CrmCrmDeleteEmailSendData = {
+    body?: never;
+    path: {
+        /**
+         * Send Id
+         */
+        send_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/email/sends/{send_id}';
+};
+
+export type CrmCrmDeleteEmailSendErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDeleteEmailSendError = CrmCrmDeleteEmailSendErrors[keyof CrmCrmDeleteEmailSendErrors];
+
+export type CrmCrmDeleteEmailSendResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmDeleteEmailSendResponse = CrmCrmDeleteEmailSendResponses[keyof CrmCrmDeleteEmailSendResponses];
+
+export type CrmCrmSyncEmailEventsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/email/tracking/sync';
+};
+
+export type CrmCrmSyncEmailEventsResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmailSyncResponse;
+};
+
+export type CrmCrmSyncEmailEventsResponse = CrmCrmSyncEmailEventsResponses[keyof CrmCrmSyncEmailEventsResponses];
+
+export type CrmCrmBrevoWebhookData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Secret
+         */
+        secret?: string | null;
+    };
+    url: '/api/v1/crm/email/brevo-webhook';
+};
+
+export type CrmCrmBrevoWebhookErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmBrevoWebhookError = CrmCrmBrevoWebhookErrors[keyof CrmCrmBrevoWebhookErrors];
+
+export type CrmCrmBrevoWebhookResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type CrmCrmEmailInboundData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/email/inbound';
+};
+
+export type CrmCrmEmailInboundErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmEmailInboundError = CrmCrmEmailInboundErrors[keyof CrmCrmEmailInboundErrors];
+
+export type CrmCrmEmailInboundResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmailInboundListResponse;
+};
+
+export type CrmCrmEmailInboundResponse = CrmCrmEmailInboundResponses[keyof CrmCrmEmailInboundResponses];
+
+export type CrmCrmEmailLeadThreadData = {
+    body?: never;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/email/leads/{enquiry_id}/thread';
+};
+
+export type CrmCrmEmailLeadThreadErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmEmailLeadThreadError = CrmCrmEmailLeadThreadErrors[keyof CrmCrmEmailLeadThreadErrors];
+
+export type CrmCrmEmailLeadThreadResponses = {
+    /**
+     * Response Crm-Crm Email Lead Thread
+     *
+     * Successful Response
+     */
+    200: Array<EmailThreadItem>;
+};
+
+export type CrmCrmEmailLeadThreadResponse = CrmCrmEmailLeadThreadResponses[keyof CrmCrmEmailLeadThreadResponses];
+
+export type CrmCrmBrevoInboundData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Secret
+         */
+        secret?: string | null;
+    };
+    url: '/api/v1/crm/email/brevo-inbound';
+};
+
+export type CrmCrmBrevoInboundErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmBrevoInboundError = CrmCrmBrevoInboundErrors[keyof CrmCrmBrevoInboundErrors];
+
+export type CrmCrmBrevoInboundResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type FiltersGetSalesFilterOptionsData = {
     body?: never;

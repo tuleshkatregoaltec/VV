@@ -10,6 +10,7 @@
  * listings, portfolio, notifications, settings) read as empty, and their writes fail with a 501
  * so no screen reports a change that was not stored.
  */
+import { ApiError } from '$lib/api/client'
 import { addDays } from '../format'
 import * as backend from './backend'
 import type {
@@ -108,6 +109,7 @@ import {
 
 type Ok = { ok: boolean }
 
+const done = <T>(data: T): Written<T> => ({ data, undo_token: null })
 const notOnBackend = backend.notOnBackend
 
 const WHATSAPP_NOT_CONNECTED: WhatsAppStatus = {
@@ -246,10 +248,10 @@ export const crm = {
 			notOnBackend<{ data: LeadDetail; undone: string }>('Undo'),
 		addNote: (id: number, text: string) => backend.addLeadNote(id, text),
 		logCall: (id: number, outcome?: string) => backend.logLeadCall(id, outcome),
-		bookViewing: (
-			_id: number,
-			_body: { date: string; time: string; listing_id: string | null; note: string }
-		) => notOnBackend<Written<CalendarEvent>>('Booking a viewing'),
+		bookViewing: async (
+			id: number,
+			body: { date: string; time: string; listing_id: string | null; note: string }
+		) => done(await backend.bookCalendarViewing(id, body)),
 		/** The backend has no over-budget or after-move options; both are ignored. */
 		matches: (id: number, _o: MatchOptions = {}): Promise<LeadMatches> => backend.leadMatches(id),
 		/** Pursue a match (again to stop): "Match pursued" on both records + the next action. */
@@ -511,15 +513,32 @@ export const crm = {
 	},
 
 	events: {
-		list: async (_from: string, _to: string): Promise<CalendarEvent[]> => [],
-		get: (_id: number) => notOnBackend<CalendarEvent>('Calendar events'),
-		create: (_body: EventCreate) => notOnBackend<Written<CalendarEvent>>('Calendar events'),
-		done: (_id: number) => notOnBackend<Written<CalendarEvent>>('Calendar events'),
+		list: backend.listCalendarEvents,
+		get: backend.getCalendarEvent,
+		create: async (body: EventCreate) => done(await backend.createCalendarEvent(body)),
+		/** Full edit; pushed to Google Calendar when connected. */
+		update: async (id: number, body: EventCreate) =>
+			done(await backend.updateCalendarEvent(id, body)),
+		done: async (id: number) => done(await backend.completeCalendarEvent(id)),
 		/** Reschedule: a lead's event is logged on the lead and becomes its next action. */
-		reschedule: (_id: number, _date: string, _time: string | null) =>
-			notOnBackend<Written<CalendarEvent>>('Calendar events'),
-		remove: (_id: number) => notOnBackend<Written<{ deleted: string }>>('Calendar events'),
-		side: async (): Promise<CalendarSide> => ({ overdue: [], deadlines: [] })
+		reschedule: async (id: number, date: string, time: string | null) =>
+			done(await backend.moveCalendarEvent(id, date, time)),
+		/** Already gone (deleted in another tab or by another user) counts as deleted. */
+		remove: async (id: number) => {
+			try {
+				await backend.deleteCalendarEvent(id)
+			} catch (e) {
+				if (!(e instanceof ApiError && e.status === 404)) throw e
+			}
+			return done({ deleted: String(id) })
+		},
+		side: backend.calendarSide
+	},
+
+	googleCalendar: {
+		status: backend.googleCalendarStatus,
+		connect: backend.connectGoogleCalendar,
+		disconnect: backend.disconnectGoogleCalendar
 	},
 
 	search: (q: string): Promise<SearchResults> => backend.search(q),

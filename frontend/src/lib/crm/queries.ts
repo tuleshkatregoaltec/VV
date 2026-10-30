@@ -81,6 +81,7 @@ export const crmKeys = {
 	events: (from: string, to: string) => [...crmKeys.all, 'events', from, to] as const,
 	event: (id: number) => [...crmKeys.all, 'event', id] as const,
 	calendarSide: () => [...crmKeys.all, 'calendar-side'] as const,
+	googleCalendar: () => [...crmKeys.all, 'google-calendar'] as const,
 	search: (q: string) => [...crmKeys.all, 'search', q] as const,
 	notifications: () => [...crmKeys.all, 'notifications'] as const,
 	connections: () => [...crmKeys.all, 'connections'] as const
@@ -237,6 +238,10 @@ export const crmQueries = {
 	}),
 	event: (id: number) => ({ queryKey: crmKeys.event(id), queryFn: () => crm.events.get(id) }),
 	calendarSide: () => ({ queryKey: crmKeys.calendarSide(), queryFn: crm.events.side }),
+	googleCalendar: () => ({
+		queryKey: crmKeys.googleCalendar(),
+		queryFn: crm.googleCalendar.status
+	}),
 	search: (q: string) => ({
 		queryKey: crmKeys.search(q),
 		queryFn: () => crm.search(q),

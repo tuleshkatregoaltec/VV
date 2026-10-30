@@ -66,6 +66,8 @@ const key = $derived.by(() => {
 			return `client:${p.client}`
 		case 'day':
 			return `day:${p.date}`
+		case 'edit-event':
+			return `edit-event:${p.id}`
 		default:
 			return p.kind
 	}
@@ -105,6 +107,8 @@ const key = $derived.by(() => {
 		<NewDealPanel leadId={p.leadId} />
 	{:else if p.kind === 'new-task'}
 		<NewTaskPanel date={p.date} />
+	{:else if p.kind === 'edit-event'}
+		<NewTaskPanel id={p.id} />
 	{:else if p.kind === 'new-owner'}
 		<NewOwnerPanel />
 	{:else if p.kind === 'new-import'}

@@ -47,6 +47,8 @@ import {
 	STATUS_INFO
 } from '../ownerImportReport'
 import type {
+	CalendarEvent,
+	CalendarSide,
 	Chip,
 	CompanyListingAgentInventory,
 	CompanyListingCompany,
@@ -62,6 +64,7 @@ import type {
 	EmailTemplate,
 	EmailTemplateInput,
 	EmailThreadItem,
+	EventCreate,
 	FeedArea,
 	FeedPreferences,
 	FeedSummary,
@@ -132,6 +135,36 @@ const OFF_PLAN_TAG = 'off-plan'
 const VITEVUE_SOURCE = 'Vitevue lease lead'
 /** Owners on the agency file whose unit just resold (backend SOLD_OWNER_SOURCE). */
 const SOLD_OWNER_SOURCE = 'Owner file · recently sold'
+
+export interface GoogleCalendarStatus {
+	configured: boolean
+	connected: boolean
+	email: string | null
+}
+
+export const googleCalendarStatus = () => client.get<GoogleCalendarStatus>(`${CRM}/calendar/google`)
+export const connectGoogleCalendar = () =>
+	client.post<{ authorization_url: string }>(`${CRM}/calendar/google/connect`)
+export const disconnectGoogleCalendar = () => client.delete<void>(`${CRM}/calendar/google`)
+export const listCalendarEvents = (from: string, to: string) =>
+	client.get<CalendarEvent[]>(`${CRM}/calendar/events?start=${from}&end=${to}`)
+export const getCalendarEvent = (id: number) =>
+	client.get<CalendarEvent>(`${CRM}/calendar/events/${id}`)
+export const createCalendarEvent = (body: EventCreate) =>
+	client.post<CalendarEvent>(`${CRM}/calendar/events`, body)
+export const bookCalendarViewing = (
+	leadId: number,
+	body: { date: string; time: string; listing_id: string | null; note: string }
+) => client.post<CalendarEvent>(`${CRM}/calendar/viewings/${leadId}`, body)
+export const moveCalendarEvent = (id: number, date: string, time: string | null) =>
+	client.patch<CalendarEvent>(`${CRM}/calendar/events/${id}`, { date, time })
+export const updateCalendarEvent = (id: number, body: EventCreate) =>
+	client.put<CalendarEvent>(`${CRM}/calendar/events/${id}`, body)
+export const completeCalendarEvent = (id: number) =>
+	client.post<CalendarEvent>(`${CRM}/calendar/events/${id}/done`)
+export const deleteCalendarEvent = (id: number) =>
+	client.delete<void>(`${CRM}/calendar/events/${id}`)
+export const calendarSide = async (): Promise<CalendarSide> => ({ overdue: [], deadlines: [] })
 
 type Intent = InboundEnquiryResponse['intent']
 type Status = InboundEnquiryResponse['status']

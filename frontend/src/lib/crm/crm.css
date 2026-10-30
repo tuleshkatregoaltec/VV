@@ -1345,6 +1345,9 @@
 			display: grid;
 			grid-template-rows: auto auto minmax(0, 1fr) auto;
 		}
+		.drawer.wide {
+			width: min(960px, 100%);
+		}
 		.drawer:focus {
 			outline: none;
 		}

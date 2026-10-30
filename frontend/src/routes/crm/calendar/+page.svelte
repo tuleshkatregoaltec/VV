@@ -2,6 +2,8 @@
 import { createQuery } from '@tanstack/svelte-query'
 import ArrowLeft from 'lucide-svelte/icons/arrow-left'
 import ArrowRight from 'lucide-svelte/icons/arrow-right'
+import RefreshCw from 'lucide-svelte/icons/refresh-cw'
+import { crm } from '$lib/crm/api'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
@@ -24,20 +26,51 @@ import {
 import { crmQueries } from '$lib/crm/queries'
 import { phone } from '$lib/crm/stores/media.svelte'
 import { openLead, panel } from '$lib/crm/stores/panel.svelte'
+import { toast } from '$lib/crm/stores/toast.svelte'
 import { ui } from '$lib/crm/stores/ui.svelte'
-import { errorText } from '$lib/crm/write'
+import { errorText, write } from '$lib/crm/write'
 
 const me = createQuery(() => crmQueries.me())
 const today = $derived(me.data?.today ?? '')
 const month = $derived(ui.calMonth || (today ? monthOf(today) : ''))
 const grid = $derived(month ? monthGrid(month) : [])
+const googleCalendar = createQuery(() => crmQueries.googleCalendar())
+// Loading events pulls Google's changes, so coming back to the tab picks up edits made there.
 const events = createQuery(() => ({
 	...crmQueries.events(grid[0] ?? '', grid[41] ?? ''),
-	enabled: grid.length > 0
+	enabled: grid.length > 0,
+	refetchOnWindowFocus: Boolean(googleCalendar.data?.connected)
 }))
 const side = createQuery(() => crmQueries.calendarSide())
 
+async function syncGoogleCalendar() {
+	const r = await events.refetch()
+	if (r.isError) toast.show(errorText(r.error), { tone: 'error' })
+	else toast.show('Synced with Google Calendar')
+}
+
+async function connectGoogleCalendar() {
+	const response = await write({
+		call: crm.googleCalendar.connect,
+		success: null,
+		undoable: false
+	})
+	if (response) window.location.assign(response.authorization_url)
+}
+
+async function disconnectGoogleCalendar() {
+	await write({
+		call: () => crm.googleCalendar.disconnect(),
+		success: 'Google Calendar disconnected',
+		undoable: false
+	})
+}
+
 const inMonth = $derived((events.data ?? []).filter((e) => monthOf(e.date) === month))
+const syncIssue = $derived(
+	googleCalendar.data?.connected &&
+		(events.data ?? []).some((event) => event.google_sync_status === 'error')
+)
 const byDay = $derived.by(() => {
 	const m = new Map<string, typeof inMonth>()
 	for (const e of events.data ?? []) m.set(e.date, [...(m.get(e.date) ?? []), e])
@@ -58,6 +91,26 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 >
 	{#snippet right()}
 		<div class="flex gap-2">
+			{#if googleCalendar.data?.connected}
+				<span class="small muted" title={googleCalendar.data.email ?? ''}>Google connected</span>
+				<button
+					type="button"
+					class="btn ghost sm"
+					disabled={events.isFetching}
+					title="Pull the latest changes from Google Calendar"
+					onclick={syncGoogleCalendar}
+				>
+					<RefreshCw size={14} class={events.isFetching ? 'sync-spin' : ''} />
+					{events.isFetching ? 'Syncing…' : 'Sync'}
+				</button>
+				<button type="button" class="btn ghost sm" onclick={disconnectGoogleCalendar}>Disconnect</button>
+			{:else if googleCalendar.data?.configured}
+				<button type="button" class="btn ghost sm" onclick={connectGoogleCalendar}>
+					Connect Google Calendar
+				</button>
+			{:else}
+				<span class="small muted" title="Set Google OAuth credentials in backend environment">Google Calendar not configured</span>
+			{/if}
 			<button type="button" class="btn ghost sm" aria-label="Previous month" onclick={() => shift(-1)}>
 				<ArrowLeft size={14} />
 			</button>
@@ -68,6 +121,10 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 		</div>
 	{/snippet}
 </PageHeader>
+
+{#if syncIssue}
+	<ErrorLine message="Some calendar events haven't synced to Google yet." onretry={() => events.refetch()} bar />
+{/if}
 
 <div class="legend" aria-label="Legend">
 	{#each EVENT_KIND_ORDER as k (k)}
@@ -189,3 +246,14 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 		</section>
 	</div>
 </div>
+
+<style>
+	:global(.sync-spin) {
+		animation: calendar-spin 0.9s linear infinite;
+	}
+	@keyframes calendar-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+</style>

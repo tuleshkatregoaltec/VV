@@ -6,6 +6,9 @@ import PanelHost from '../panels/PanelHost.svelte'
  * The side panel: opens over the current screen (full screen under 700px). Escape, the close
  * button and a click outside close it. Content stays while it slides out.
  */
+/** Panels with long forms that get more of the screen. */
+const WIDE = new Set(['new-task', 'edit-event'])
+
 let shown = $state<PanelState | null>(null)
 let aside: HTMLElement | undefined = $state()
 let wasOpen = false
@@ -45,7 +48,7 @@ function onkeydown(e: KeyboardEvent) {
 <div class={['scrim', panel.current && 'on']} aria-hidden="true" onclick={() => panel.closeAll()}></div>
 <div
 	bind:this={aside}
-	class={['drawer', panel.current && 'open']}
+	class={['drawer', panel.current && 'open', WIDE.has(shown?.kind ?? '') && 'wide']}
 	role="dialog"
 	aria-modal="true"
 	aria-labelledby="crm-panel-title"
