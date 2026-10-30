@@ -62,6 +62,8 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(imports, "_recover_property_identity_from_near_transaction", AsyncMock())
     monkeypatch.setattr(imports, "_sales_evidence", AsyncMock(return_value={}))
     monkeypatch.setattr(imports, "_apply_registry_unit_fallbacks", AsyncMock())
+    # The property-first matcher reads ClickHouse; these tests cover reading the file only.
+    monkeypatch.setattr(imports, "run_owner_matching", AsyncMock())
     monkeypatch.setattr(imports, "save_drop_log", AsyncMock(return_value=True))
     monkeypatch.setattr(imports, "_rental_evidence", AsyncMock(return_value={}))
     monkeypatch.setattr(imports, "_enrich_workspaces", AsyncMock())

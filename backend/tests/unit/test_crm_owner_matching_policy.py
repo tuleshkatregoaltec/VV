@@ -571,6 +571,14 @@ async def test_actual_upload_parser_shared_matcher_and_persistence_learn_new_she
         owner_queries, "fetch_property_identity_candidates", AsyncMock(return_value=[])
     )
     monkeypatch.setattr(owner_queries, "fetch_unit_sales", AsyncMock(return_value=targets))
+    # The property-first matcher runs too, on an empty warehouse: no place, so no confirmed owner.
+    for name in (
+        "fetch_place_hierarchy",
+        "fetch_matcher_places",
+        "fetch_matcher_events",
+        "fetch_matcher_registry",
+    ):
+        monkeypatch.setattr(owner_queries, name, AsyncMock(return_value=[]))
     lines = [
         "NameEn,BuildingNameEn,Project,AreaNameEn,UnitNumber,PropertyTypeEn,TransactionDate,ProcedureValue,ProcedurePartyTypeNameEn,ProcedureNameEn,Size"
     ]
