@@ -53,9 +53,6 @@ function selectDubaiMarket() {
 					<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">
 						Project scope
 					</p>
-					<p class="mt-1 text-sm text-fg-3">
-						DXBI sales and rentals. Search a project, building or community. Upcoming supply uses DLD.
-					</p>
 				</div>
 				<button
 					type="button"
@@ -89,7 +86,7 @@ function selectDubaiMarket() {
 				{@const chosen = (projectA ?? projectB)!}
 				<div class="rounded-lg border border-dashed border-strong bg-card px-5 py-4 text-sm text-fg-3">
 					<span class="font-semibold text-fg-1">{chosen.name}</span> is Project {projectA ? 'A' : 'B'}.
-					Search for Project {projectA ? 'B' : 'A'} above to compare the two side by side.
+					Search for Project {projectA ? 'B' : 'A'} above.
 				</div>
 				<ProjectPanel selection={chosen} onSelect={(next) => (projectA ? (projectA = next) : (projectB = next))} />
 			{:else}
@@ -108,6 +105,6 @@ function selectDubaiMarket() {
 			<Building2 size={28} strokeWidth={1.5} />
 		</div>
 		<p class="text-base font-semibold text-fg-1">{label} is waiting for a project.</p>
-		<p class="mt-2 text-sm text-fg-4">Search above to load live transaction-backed analytics.</p>
+		<p class="mt-2 text-sm text-fg-4">Search above to load analytics.</p>
 	</div>
 {/snippet}

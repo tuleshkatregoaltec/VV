@@ -111,14 +111,11 @@ function hideBrokenImage(event: Event) {
 				<div class="flex flex-wrap items-start justify-between gap-4">
 					<div>
 						<p class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">
-							Developers / Ranking engine
+							Developers
 						</p>
 						<h1 class="mt-2 text-2xl font-semibold tracking-normal text-fg-1 sm:text-3xl">
 							Developer leaderboard
 						</h1>
-						<p class="mt-2 max-w-2xl text-sm leading-6 text-fg-3">
-							Rank branded developer groups and open their upcoming project pipeline.
-						</p>
 					</div>
 
 					<div class="grid w-full gap-2 sm:w-auto sm:grid-cols-3">
@@ -224,9 +221,6 @@ function hideBrokenImage(event: Event) {
 											{riskPillLabel(developer.risk_badge)}
 										</span>
 									</div>
-									<p class="mt-0.5 text-xs text-fg-4">
-										Composite score
-									</p>
 								</div>
 
 								<div>

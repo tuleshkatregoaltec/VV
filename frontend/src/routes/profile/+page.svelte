@@ -38,7 +38,7 @@ function handleNameEdit() {
 	editSuccess = ''
 
 	if (!firstName.trim() || !lastName.trim()) {
-		editError = 'Both first and last names are required'
+		editError = 'First and last name are required'
 		return
 	}
 
@@ -48,7 +48,7 @@ function handleNameEdit() {
 	update_user_profile(trimmedFirstName, trimmedLastName)
 		.then(async () => {
 			await refreshUser()
-			editSuccess = 'Profile updated successfully'
+			editSuccess = 'Profile updated'
 			editingName = false
 
 			setTimeout(() => {
@@ -56,7 +56,7 @@ function handleNameEdit() {
 			}, 3000)
 		})
 		.catch(() => {
-			editError = 'Failed to sync profile changes'
+			editError = 'Could not save profile'
 		})
 }
 
@@ -80,9 +80,6 @@ function handleAvatarError() {
 				<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
 					Profile
 				</h1>
-				<p class="mt-2 max-w-2xl text-sm leading-6 text-on-navy-muted">
-					Manage your personal details, display preferences, and account access.
-				</p>
 			</div>
 		</section>
 
@@ -187,40 +184,12 @@ function handleAvatarError() {
 				{/if}
 			</div>
 
-			<!-- Notifications Section -->
-			<div class="ui-surface p-6">
-				<h2 class="text-lg font-semibold text-fg-1 mb-4">Notifications</h2>
-				<div class="space-y-4">
-					<label class="flex items-center justify-between">
-						<span class="text-fg-2">Email notifications</span>
-						<input
-							type="checkbox"
-							checked
-							class="w-5 h-5 accent-info rounded"
-							disabled
-						/>
-					</label>
-					<label class="flex items-center justify-between">
-						<span class="text-fg-2">Weekly digest</span>
-						<input
-							type="checkbox"
-							class="w-5 h-5 accent-info rounded"
-							disabled
-						/>
-					</label>
-				</div>
-				<p class="text-sm text-fg-4 mt-4">Notification settings coming soon.</p>
-			</div>
-
 			<!-- Preferences Section -->
 			<div class="ui-surface p-6">
 				<h2 class="text-lg font-semibold text-fg-1 mb-4">Preferences</h2>
 				<div class="space-y-4">
 					<div class="flex items-center justify-between gap-4">
-						<div>
-							<span class="text-fg-2">Theme</span>
-							<p class="text-xs text-fg-4">Use your device setting or choose a fixed mode</p>
-						</div>
+						<span class="text-fg-2">Theme</span>
 						<ThemePreferenceControl />
 					</div>
 				</div>
@@ -233,7 +202,7 @@ function handleAvatarError() {
 					onclick={() => logout()}
 					class="rounded-md border border-[rgba(163,36,36,0.2)] px-4 py-2 text-sm font-medium text-error transition hover:bg-error-bg"
 				>
-					Sign out of your account
+					Sign out
 				</button>
 			</div>
 		</div>

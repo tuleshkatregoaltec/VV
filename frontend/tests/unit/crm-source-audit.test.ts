@@ -70,7 +70,7 @@ describe('workbook reference counts stay separate from candidate people', () => 
 			''
 		)
 		for (const [label, count] of [
-			['Workbook references', 17],
+			['File references', 17],
 			['Owner-candidate references', 11],
 			['Possible mortgage / bank acquisition', 2],
 			['Non-ownership references (excluded)', 1],
@@ -79,20 +79,20 @@ describe('workbook reference counts stay separate from candidate people', () => 
 		]) {
 			expect(html).toContain(`<dt>${label}</dt><dd>${count}</dd>`)
 		}
-		expect(html).toMatch(/<details[^>]*>\s*<summary[^>]*>Workbook source audit<\/summary>/)
+		expect(html).toMatch(/<details[^>]*>\s*<summary[^>]*>Import summary<\/summary>/)
 		expect(html).not.toMatch(/<details[^>]*\sopen(?:[\s=>])/)
 		expect(html).toContain('83 source rows across 1 import')
-		expect(html).toContain('Workbook only — transaction matching not run')
-		expect(html).toContain('DXBI sales evidence was not checked')
-		expect(html).toContain('not people or verified physical properties')
-		expect(html).toContain('Latest recorded buyer candidate')
+		expect(html).not.toContain('transaction matching not run')
+		expect(html).not.toContain('DXBI')
+		expect(html).not.toContain('not people or verified physical properties')
+		expect(html).toContain('Latest recorded buyer')
 		expect(html).toContain('Property extent needs review')
 		expect(html).not.toContain('latest_recorded_buyer_candidate')
 		expect(html).not.toContain('possible_mortgage_or_bank_acquisition')
 		const changed = render(SourceAuditSummaryCard, {
 			props: { summary: { ...audit, reference_count: 18, review_reference_count: 3 } }
 		}).body.replaceAll(/ class="[^"]*"/g, '')
-		expect(changed).toContain('<dt>Workbook references</dt><dd>18</dd>')
+		expect(changed).toContain('<dt>File references</dt><dd>18</dd>')
 		expect(changed).toContain('<dt>References needing review</dt><dd>3</dd>')
 	})
 })
@@ -194,12 +194,12 @@ describe('source-only assessments are intentional rather than an outage', () => 
 
 	it('does not imply a warehouse outage or a sales check for a source-only summary', () => {
 		const html = render(OwnerHistorySummaryCard, {
-			props: { summary, scope: 'This import' }
+			props: { summary }
 		}).body
-		expect(html).toContain('Workbook only — transaction matching not run')
-		expect(html).toContain('DXBI sales evidence was not checked')
-		expect(html).toContain('Identified source property groups')
-		expect(html).toMatch(/<details[^>]*>\s*<summary[^>]*>Evidence and counting details<\/summary>/)
+		expect(html).not.toContain('transaction matching not run')
+		expect(html).not.toContain('DXBI')
+		expect(html).toContain('Properties identified')
+		expect(html).toMatch(/<details[^>]*>\s*<summary[^>]*>Details<\/summary>/)
 		expect(html).not.toMatch(/<details[^>]*\sopen(?:[\s=>])/)
 		expect(html).not.toContain('temporarily unavailable')
 		expect(html).not.toContain('Checked against available sales')
@@ -213,18 +213,16 @@ describe('source-only assessments are intentional rather than an outage', () => 
 					unresolved_count: 54_479,
 					invalid_identity_source_count: 7,
 					unverified_former_count: 12
-				},
-				scope: 'This import'
+				}
 			}
 		}).body
-		expect(html).toContain('Source associations')
-		expect(html).toContain('Other historical/source associations')
+		expect(html).toContain('Owner–property associations')
+		expect(html).toContain('Other associations')
 		expect(html).toContain('54,479')
-		expect(html).toContain('not additional reference-review cases')
-		expect(html).toContain('The Workbook source audit gives the audited reference classifications')
-		expect(html).toContain('Buyer transaction matches (not checked)')
-		expect(html).toContain('Former-owner associations (not rechecked)')
-		expect(html).toContain('12 historical seller-claim associations')
+		expect(html).not.toContain('not additional reference-review cases')
+		expect(html).toContain('Buyer transaction matches')
+		expect(html).toContain('Former owners')
+		expect(html).not.toContain('historical seller-claim associations')
 		expect(html).not.toContain('Links needing review')
 		expect(html).not.toContain('Review people with unresolved evidence')
 		expect(html).not.toContain('also appear in the review queue')
@@ -235,14 +233,13 @@ describe('source-only assessments are intentional rather than an outage', () => 
 	it('retains the existing unavailable-evidence notice for normal imports', () => {
 		const html = render(OwnerHistorySummaryCard, {
 			props: {
-				summary: { ...summary, warehouse_status: 'unavailable', unresolved_count: 3 },
-				scope: 'All imports'
+				summary: { ...summary, warehouse_status: 'unavailable', unresolved_count: 3 }
 			}
 		}).body
-		expect(html).toContain('Sales evidence is temporarily unavailable')
+		expect(html).toContain('Transaction data is unavailable')
 		expect(html).not.toContain('Workbook only')
 		expect(html).toContain('Links needing review')
-		expect(html).toContain('Review people with unresolved evidence')
+		expect(html).toContain('Review unresolved owners')
 	})
 })
 
@@ -266,12 +263,9 @@ describe('transaction matching audit', () => {
 		expect(html).toContain('<dt>Source references matched to transactions</dt><dd>9</dd>')
 		expect(html).toContain('<dt>Distinct transaction properties matched</dt><dd>8</dd>')
 		expect(html).toContain('<dt>Former owner–property associations</dt><dd>5</dd>')
-		expect(html).toContain(
-			'9 matched + 4 unmatched + 2 ambiguous + 2 excluded = 17 workbook references'
-		)
-		expect(html).toContain('Workbook classifications before transaction matching')
-		expect(html).toContain('Unmatched candidates remain visible')
-		expect(html).toContain('do not verify the current named title holder')
+		expect(html).not.toContain('9 matched + 4 unmatched')
+		expect(html).toContain('Reference classifications')
+		expect(html).not.toContain('title holder')
 		expect(html).not.toContain('matching not run')
 	})
 })
@@ -297,9 +291,9 @@ describe('unverified owner associations remain visible with their recorded role'
 		}
 	})
 	it.each([
-		['probable_current_owner', 'unmatched', 'workbook_only', 'Unverified current candidate'],
-		['former_owner', 'ambiguous', 'workbook_only', 'Unverified former owner'],
-		['former_owner', 'matched', 'workbook_only', 'Unverified former owner'],
+		['probable_current_owner', 'unmatched', 'workbook_only', 'Unmatched current owner'],
+		['former_owner', 'ambiguous', 'workbook_only', 'Unmatched former owner'],
+		['former_owner', 'matched', 'workbook_only', 'Unmatched former owner'],
 		['former_owner', 'matched', 'transaction_supported', 'Former owner']
 	])('labels %s / %s / %s accurately', async (status, match, basis, label) => {
 		vi.spyOn(client, 'get').mockImplementation(async (url: string) => {
@@ -330,10 +324,10 @@ describe('unverified owner associations remain visible with their recorded role'
 			} as never
 		})
 		const result = await getOwner('source-owner')
-		expect(result.tag).toBe('Includes unverified properties')
+		expect(result.tag).toBe('Includes unmatched properties')
 		expect(result.unit_rows.map((p) => p.status_chip.label)).toEqual([
 			'Possible current owner',
-			'Unverified former owner'
+			'Unmatched former owner'
 		])
 	})
 })

@@ -59,12 +59,9 @@ describe('Owners labels unverified people separately from audited reference revi
 			}
 		}
 		const html = render(OwnersPage).body
-		expect(html).toContain('Unverified candidates')
-		expect(html).toContain('separately identifies 2 references needing review')
-		expect(html).toContain('does not represent additional manual review cases')
-		expect(html).toContain('Transaction matching was not run')
+		expect(html).toContain('Candidates')
+		expect(html).not.toContain('Transaction matching was not run')
 		expect(html).not.toContain('Needs review')
-		expect(html).not.toContain('Review people with unresolved claims')
 		expect(data.requestedTab).toBe('review')
 	})
 
@@ -80,7 +77,7 @@ describe('Owners labels unverified people separately from audited reference revi
 		expect(html).toContain('value="former"')
 		expect(html).toContain('Former owners')
 		expect(html).not.toContain('most recent')
-		expect(html).not.toContain('Unverified candidates')
+		expect(html).not.toContain('Candidates')
 		expect(data.requestedOwnership).toBe('current')
 	})
 
@@ -89,8 +86,8 @@ describe('Owners labels unverified people separately from audited reference revi
 		data.owners = owners
 		const html = render(OwnersPage).body
 		expect(html).toContain('Needs review')
-		expect(html).toContain('Review people with unresolved claims')
-		expect(html).not.toContain('Unverified candidates')
+		expect(html).not.toContain('Review people with unresolved claims')
+		expect(html).not.toContain('Candidates')
 		expect(data.requestedTab).toBe('review')
 	})
 })

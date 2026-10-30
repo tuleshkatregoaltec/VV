@@ -23,21 +23,13 @@ const groups = [
 			},
 			{ label: 'Contact', href: 'mailto:contact@vitevue.com' }
 		]
-	},
-	{
-		title: 'Legal',
-		links: [
-			{ label: 'Privacy requests', href: 'mailto:contact@vitevue.com?subject=Privacy%20request' },
-			{ label: 'Terms requests', href: 'mailto:contact@vitevue.com?subject=Terms%20request' },
-			{ label: 'Data sources', href: 'mailto:contact@vitevue.com?subject=Data%20sources' }
-		]
 	}
 ]
 </script>
 
 <footer id="contact" class="border-t border-bone-border bg-bone">
 	<div class="mx-auto max-w-[1440px] px-5 py-16 sm:px-8">
-		<div class="grid gap-12 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-16">
+		<div class="grid gap-12 lg:grid-cols-[1.4fr_1fr_1fr] lg:gap-16">
 			<div>
 				<img
 					src="/logos/vitevue-navbar-400.png"
@@ -46,7 +38,7 @@ const groups = [
 					class="h-[22px] w-auto"
 				/>
 				<p class="mt-5 max-w-sm text-sm leading-relaxed text-fg-3">
-					AI-native real estate intelligence for Dubai. Tactical comps, institutional outputs.
+					Real estate intelligence for Dubai.
 				</p>
 			</div>
 
@@ -74,7 +66,6 @@ const groups = [
 			class="mt-14 flex flex-col gap-3 border-t border-bone-border pt-6 text-xs text-fg-4 sm:flex-row sm:items-center sm:justify-between"
 		>
 			<span>&copy; {year} Vitevue L.L.C-FZ. All rights reserved.</span>
-			<span>Dubai real estate intelligence</span>
 		</div>
 	</div>
 </footer>

@@ -78,9 +78,6 @@ async function done(title: string) {
 						<input id="ev-time" type="time" bind:value={time} />
 					</div>
 				</div>
-				{#if e.record?.kind === 'lead'}
-					<div class="small muted">Also moves the lead's next action to this date.</div>
-				{/if}
 				<div class="form-actions">
 					<button type="submit" class="btn">Move</button>
 					<button type="button" class="btn ghost" onclick={() => (moving = false)}>Cancel</button>

@@ -38,7 +38,7 @@ async function screen() {
 async function goaml() {
 	try {
 		await crm.deals.goaml(deal.id)
-		toast.show(`goAML report prepared for ${deal.id} — ready to file`)
+		toast.show(`goAML report prepared for ${deal.id}`)
 	} catch (e) {
 		toast.show(errorText(e), { tone: 'error' })
 	}
@@ -50,7 +50,6 @@ async function goaml() {
 	<div class="doc">
 		<div>
 			<div class="nm">{deal.client}</div>
-			<div class="fn">ID, address, source of funds · kept five years</div>
 		</div>
 		<div class="acts">
 			{#if deal.compliance.due_diligence === 'complete'}
@@ -68,7 +67,6 @@ async function goaml() {
 	<div class="doc">
 		<div>
 			<div class="nm">{deal.client}</div>
-			<div class="fn">UAE Local Terrorist List · UN list · international lists</div>
 		</div>
 		<div class="acts" aria-live="polite">
 			{#if deal.compliance.screening === 'clear'}
@@ -90,7 +88,7 @@ async function goaml() {
 		<div class="doc">
 			<div>
 				<div class="nm">Real Estate Activity Report</div>
-				<div class="fn">AED {fmt(deal.compliance.cash_aed)} paid in cash · file before transfer</div>
+				<div class="fn">AED {fmt(deal.compliance.cash_aed)} paid in cash</div>
 			</div>
 			<div class="acts">
 				<Chip tone="amber">Draft</Chip>
@@ -98,6 +96,4 @@ async function goaml() {
 			</div>
 		</div>
 	</section>
-{:else}
-	<div class="notice">No cash payment of AED 55,000 or more on this deal — no goAML report needed.</div>
 {/if}

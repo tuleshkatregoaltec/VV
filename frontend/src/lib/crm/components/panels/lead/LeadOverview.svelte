@@ -98,7 +98,7 @@ const chain = $derived.by((): ChainPart[] => {
 
 {#if lead.gated}
 	<div class="note gate">
-		<span>{GATE_LINE}. No deal, listing or past transaction with {lead.name} is on file.</span>
+		<span>{GATE_LINE}.</span>
 		{#if lead.owner_id}
 			<button
 				type="button"
@@ -114,9 +114,6 @@ const chain = $derived.by((): ChainPart[] => {
 <section class="sec">
 	<h3>
 		Stage
-		<span class="hint">
-			{lead.gated ? 'only Lost until a prior deal is on record' : 'click to change'}
-		</span>
 	</h3>
 	<div class="stages" role="group" aria-label="Stage">
 		{#each stages as s, i (s.id)}
@@ -189,7 +186,7 @@ const chain = $derived.by((): ChainPart[] => {
 			<Kv k={f.label} v={value(f)} />
 		{/each}
 		<Kv k="Next action" v={lead.next_action || '—'} />
-		<Kv k="Phone" o="normalised · rule"><span class="mono">{lead.phone}</span></Kv>
+		<Kv k="Phone"><span class="mono">{lead.phone}</span></Kv>
 		<Kv k="Language" v={lead.language} />
 	</div>
 </section>
@@ -198,11 +195,10 @@ const chain = $derived.by((): ChainPart[] => {
 	<section class="sec">
 		<h3>
 			Off-plan
-			<span class="hint"><span class="chip outline" title="Off-plan matching is planned.">Planned</span></span>
 		</h3>
 		<label class="check">
 			<input type="checkbox" checked={lead.off_plan} onchange={(e) => setOffPlan(e.currentTarget.checked)} />
-			Off-plan buyer · matched to Launch desk projects
+			Off-plan buyer
 		</label>
 		{#if lead.off_plan}
 			<div class="kv">
@@ -302,6 +298,4 @@ const chain = $derived.by((): ChainPart[] => {
 		Suggested agent: <b>{lead.suggested_agent.name}</b> — {lead.suggested_agent.reason}
 	</div>
 {/if}
-{#if lead.source === 'agent_to_agent'}
-	<div class="notice">Get Form I on file before sharing unit details.</div>
-{/if}
+

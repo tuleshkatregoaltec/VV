@@ -229,7 +229,6 @@ function formatDate(dateString: string): string {
 						</span>
 					{/if}
 				</div>
-				<p class="mt-0.5 truncate text-sm font-semibold text-fg-1">Conversations</p>
 			</div>
 			<button
 				type="button"
@@ -270,7 +269,7 @@ function formatDate(dateString: string): string {
 					strokeWidth={1.8}
 					class="mx-auto mb-3 animate-spin text-fg-4"
 				/>
-				<p class="text-sm font-medium text-fg-3">Loading...</p>
+				<p class="text-sm font-medium text-fg-3">Loading…</p>
 			</div>
 			{:else if displayError}
 				<div class="p-6 text-center">
@@ -296,12 +295,10 @@ function formatDate(dateString: string): string {
 					<MessageSquare size={22} strokeWidth={1.8} class="text-fg-3" />
 				</div>
 				<p class="mb-1 text-sm font-semibold text-fg-1">No conversations yet</p>
-				<p class="text-xs text-fg-4">Start a new chat to begin.</p>
 			</div>
 		{:else if filteredConversations.length === 0}
 			<div class="px-4 py-8 text-center">
 				<p class="text-sm font-semibold text-fg-1">No matching conversations</p>
-				<p class="mt-1 text-xs text-fg-4">Try a different search.</p>
 			</div>
 		{:else}
 			{#each filteredConversations as conv (conv.id)}

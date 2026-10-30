@@ -139,7 +139,7 @@ const OPEN_LABEL: Partial<Record<MatchRow['kind'], string>> = {
 				type="button"
 				class="btn ghost sm"
 				aria-pressed={Boolean(r.pursued)}
-				title={r.pursued ? `Next: ${r.pursued.next}. Click to stop.` : 'Sets the next action'}
+				title={r.pursued ? `Next: ${r.pursued.next}` : undefined}
 				onclick={() => pursue(r)}
 			>
 				{#if r.pursued}<Check size={14} />Pursued{:else}Pursue{/if}
@@ -169,7 +169,7 @@ const OPEN_LABEL: Partial<Record<MatchRow['kind'], string>> = {
 					{/if}
 				</span>
 			</h2>
-			{#if t.chip}<Chip chip={t.chip} title="Raised on the 6 Oct call, not built yet." />{/if}
+			{#if t.chip}<Chip chip={t.chip} />{/if}
 		</div>
 		{#if t.gate}
 			{@const ownerId = t.gate.owner_id}

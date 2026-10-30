@@ -100,11 +100,8 @@ async function renameStudy(study: (typeof studies)[number]) {
 						<div>
 							<p class="text-xs font-semibold uppercase tracking-[0.18em] text-on-navy-muted">Feasibility</p>
 							<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
-								Saved studies workspace
+								Studies
 							</h1>
-							<p class="mt-2 max-w-3xl text-sm leading-6 text-on-navy-muted">
-								Reopen persisted assumptions, create a fresh plot-backed study, or continue model edits from the workbook.
-							</p>
 						</div>
 						<button type="button" class="inline-flex h-10 items-center gap-2 rounded-md bg-bone px-4 text-sm font-semibold text-navy transition hover:bg-bone-muted" onclick={() => (mode = 'new')}>
 							<Plus size={16} />
@@ -148,7 +145,7 @@ async function renameStudy(study: (typeof studies)[number]) {
 
 				<section class="ui-surface">
 					{#if studiesQuery.isPending}
-						<p class="p-6 text-sm text-fg-4">Loading saved studies...</p>
+						<p class="p-6 text-sm text-fg-4">Loading…</p>
 					{:else if studiesQuery.isError}
 						<p class="p-6 text-sm text-rose-600">Failed to load saved studies.</p>
 					{:else if studies.length === 0}

@@ -40,9 +40,9 @@ const orgQuery = createQuery(() => adminQueries.organizations.detail(organizatio
 
 const org = $derived(orgQuery.data ?? null)
 const loadError = $derived.by(() => {
-	if (!organizationId) return 'Organization ID is missing'
+	if (!organizationId) return 'Organization not found'
 	if (!orgQuery.isError) return ''
-	return orgQuery.error instanceof ApiError ? orgQuery.error.message : 'Failed to load organization'
+	return orgQuery.error instanceof ApiError ? orgQuery.error.message : 'Could not load organization'
 })
 
 $effect(() => {
@@ -75,7 +75,7 @@ async function saveSettings() {
 		})
 		await refreshOrganization()
 	} catch (e) {
-		error = e instanceof ApiError ? e.message : 'Failed to save'
+		error = e instanceof ApiError ? e.message : 'Could not save'
 	} finally {
 		saving = false
 	}
@@ -89,7 +89,7 @@ async function saveSubscription() {
 		await admin.organizations.setSubscription(org.id, editSubscription)
 		await refreshOrganization()
 	} catch (e) {
-		error = e instanceof ApiError ? e.message : 'Failed to update subscription'
+		error = e instanceof ApiError ? e.message : 'Could not update subscription'
 	} finally {
 		savingSubscription = false
 	}
@@ -104,7 +104,7 @@ async function deleteOrg() {
 		await queryClient.invalidateQueries({ queryKey: adminKeys.organizations() })
 		goto('/admin/organizations')
 	} catch (e) {
-		error = e instanceof ApiError ? e.message : 'Failed to delete'
+		error = e instanceof ApiError ? e.message : 'Could not delete'
 		deletingOrg = false
 		confirmDeleteOrg = false
 	}
@@ -126,7 +126,7 @@ async function saveTokenLimit() {
 		showTokenModal = false
 		await refreshOrganization()
 	} catch (e) {
-		limitError = e instanceof ApiError ? e.message : 'Failed to update limit'
+		limitError = e instanceof ApiError ? e.message : 'Could not update limit'
 	} finally {
 		savingLimit = false
 	}
@@ -141,7 +141,7 @@ async function deleteUser() {
 		confirmDeleteUser = null
 		await refreshOrganization()
 	} catch (e) {
-		alert(e instanceof ApiError ? e.message : 'Failed to delete user')
+		alert(e instanceof ApiError ? e.message : 'Could not delete user')
 	} finally {
 		deletingUser = false
 	}
@@ -165,6 +165,10 @@ function usageColor(pct: number) {
 	if (pct >= 90) return 'bg-error'
 	if (pct >= 70) return 'bg-warning'
 	return 'bg-success'
+}
+
+function statusLabel(status: string) {
+	return status.replace(/_/g, ' ')
 }
 
 function statusBadge(status: string) {
@@ -194,7 +198,7 @@ function statusBadge(status: string) {
 			onclick={() => goto('/admin/organizations')}
 			class="text-sm text-primary-light hover:underline"
 		>
-			← Back to Organizations
+			Back to Organizations
 		</button>
 	{:else if org}
 		<!-- Header -->
@@ -205,9 +209,9 @@ function statusBadge(status: string) {
 						onclick={() => goto('/admin/organizations')}
 						class="mb-2 flex items-center gap-1 text-sm text-slate-300 transition hover:text-bone"
 					>
-						← Organizations
+						Organizations
 					</button>
-					<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Admin organization</p>
+					<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Admin</p>
 					<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
 						{org.name}
 					</h1>
@@ -269,7 +273,7 @@ function statusBadge(status: string) {
 								org.subscription_status
 							)}"
 						>
-							{org.subscription_status}
+							{statusLabel(org.subscription_status)}
 						</span>
 					</div>
 					<div>
@@ -281,12 +285,12 @@ function statusBadge(status: string) {
 							bind:value={editSubscription}
 							class="w-full rounded-md border border-border px-3 py-2 text-sm text-fg-1 focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
 						>
-							<option value="active">active</option>
-							<option value="trialing">trialing</option>
-							<option value="pending">pending</option>
-							<option value="past_due">past_due</option>
-							<option value="canceled">canceled</option>
-							<option value="none">none</option>
+							<option value="active">Active</option>
+							<option value="trialing">Trialing</option>
+							<option value="pending">Pending</option>
+							<option value="past_due">Past due</option>
+							<option value="canceled">Canceled</option>
+							<option value="none">None</option>
 						</select>
 					</div>
 					<button
@@ -414,7 +418,7 @@ function statusBadge(status: string) {
 					class="w-full rounded-md border border-border px-3 py-2 text-sm text-fg-1 focus:outline-none focus:ring-2 focus:ring-focus"
 				/>
 				<p class="mt-1 text-xs text-fg-4">
-					Current usage today: {selectedUser.tokens_used_today.toLocaleString()} tokens
+					Used today: {selectedUser.tokens_used_today.toLocaleString()}
 				</p>
 			</div>
 			{#if limitError}
@@ -442,7 +446,7 @@ function statusBadge(status: string) {
 <ConfirmModal
 	open={confirmDeleteUser !== null}
 	title="Delete user"
-	message={`Delete ${confirmDeleteUser?.email}? This removes them from Supabase and this organization.`}
+	message={`Delete ${confirmDeleteUser?.email}? They lose access to this organization.`}
 	confirmText={deletingUser ? 'Deleting...' : 'Delete user'}
 	confirmVariant="danger"
 	onConfirm={deleteUser}
@@ -452,7 +456,7 @@ function statusBadge(status: string) {
 <ConfirmModal
 	open={confirmDeleteOrg}
 	title="Delete organization"
-	message={`Delete '${org?.name}'? This removes the organization. Users will lose access immediately.`}
+	message={`Delete '${org?.name}'? Users lose access immediately.`}
 	confirmText={deletingOrg ? 'Deleting...' : 'Delete organization'}
 	confirmVariant="danger"
 	onConfirm={deleteOrg}

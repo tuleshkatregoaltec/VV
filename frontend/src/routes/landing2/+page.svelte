@@ -95,7 +95,7 @@ const marketRows = [
 		</a>
 		<nav>
 			<a href="/auth" class="nav-link">Sign in</a>
-			<a href="/auth" class="cta-btn">Contact Sales</a>
+			<a href="/auth" class="cta-btn">Contact us</a>
 		</nav>
 	</header>
 
@@ -111,7 +111,7 @@ const marketRows = [
 			<div class="hero-content" data-reveal>
 				<div class="badge">
 					<span class="badge-dot" aria-hidden="true"></span>
-					Dubai · Real Estate Intelligence
+					Dubai real estate intelligence
 				</div>
 
 				<h1>
@@ -125,7 +125,7 @@ const marketRows = [
 				</p>
 
 				<div class="hero-actions">
-					<a href="/auth" class="cta-btn large">Contact Sales</a>
+					<a href="/auth" class="cta-btn large">Contact us</a>
 					<a href="#preview" class="ghost-link">See the platform <span aria-hidden="true">↓</span></a>
 				</div>
 
@@ -269,7 +269,7 @@ const marketRows = [
 		<!-- ── WHO IT'S FOR ── -->
 		<section class="for-section">
 			<div class="for-head" data-reveal>
-				<p class="eyebrow">Who It's For</p>
+				<p class="eyebrow">Who it's for</p>
 				<h2>Built for the teams<br />making the calls.</h2>
 			</div>
 
@@ -289,7 +289,7 @@ const marketRows = [
 				<div class="for-card" data-reveal style="transition-delay:100ms">
 					<div class="for-n mono">02</div>
 					<h3>Investment Committees</h3>
-					<p>Receive investment-grade reports backed by real market data — not consultant estimates. Every assumption is traceable, every number source-linked.</p>
+					<p>Receive investment-grade reports backed by real market data — not consultant estimates. Every assumption is traceable.</p>
 					<ul>
 						<li>Full audit trail from raw data to output</li>
 						<li>Comparable benchmarking across all submarkets</li>
@@ -329,7 +329,7 @@ const marketRows = [
 				<div class="step" data-reveal style="transition-delay:160ms">
 					<div class="step-n mono">03</div>
 					<h3>Act on intelligence</h3>
-					<p>Export reports, pro-formas, and comparable analyses — structured and source-linked, ready for IC submission or client presentation.</p>
+					<p>Export reports, pro-formas, and comparable analyses — ready for IC submission or client presentation.</p>
 				</div>
 			</div>
 		</section>
@@ -337,7 +337,7 @@ const marketRows = [
 		<!-- ── CTA ── -->
 		<section class="cta-section" data-reveal>
 			<div class="cta-glow" aria-hidden="true"></div>
-			<p class="eyebrow">Contact Sales</p>
+			<p class="eyebrow">Contact us</p>
 			<h2>Better data.<br />Sharper decisions.</h2>
 			<p class="cta-sub">Join the teams using Vitevue to move faster, win more sites, and back every decision with real market intelligence.</p>
 			<a href="/auth" class="cta-btn large">Get in touch</a>

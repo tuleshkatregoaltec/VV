@@ -112,14 +112,14 @@ const options = (list: string[] | undefined) => (list ?? []).map((x) => ({ id: x
 function startRenewal(id: string, unit: string) {
 	write({
 		call: () => crm.renewals.start(id),
-		success: `Renewal started — ${unit} · rent deal opened`
+		success: `Renewal started for ${unit}`
 	})
 }
 
 const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 </script>
 
-<svelte:head><title>Assets · CRM Beta</title></svelte:head>
+<svelte:head><title>Assets · CRM</title></svelte:head>
 
 <PageHeader title="Assets" {facts} />
 
@@ -216,7 +216,7 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 									</tr>
 								{/each}
 							{:else}
-								<tr><td colspan="7"><Empty text="No closed deals yet. They land here once transferred." /></td></tr>
+								<tr><td colspan="7"><Empty text="No closed deals yet." /></td></tr>
 							{/each}
 						</tbody>
 					</table>
@@ -314,7 +314,7 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 					</div>
 				{:else if res.items.length < res.total}
 					<div class="cb small muted">
-						Showing the first {fmt(res.items.length)} of {fmt(res.total)}. Pick an area or a lease end to see the rest.
+						Showing {fmt(res.items.length)} of {fmt(res.total)}. Narrow the filters to see the rest.
 					</div>
 				{/if}
 			{/snippet}

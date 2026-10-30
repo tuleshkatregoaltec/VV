@@ -34,10 +34,9 @@ const statusInfo = (status: string) => STATUS_INFO[status as keyof typeof STATUS
 
 <QueryView query={history} rows={3}>
 	{#snippet children(data)}
-		<OwnerHistorySummary summary={data.summary} scope="This person's imported associations. Current assessments use all owner imports." />
-		<section class="sec" aria-label="Ownership source history">
-			<h3>Ownership source history</h3>
-			<p class="small muted">Source rows retain their recorded role and procedure. Unknown events, mortgages and owner snapshots alone do not establish a sale acquisition. The current assessment can differ from the assessment recorded at import.</p>
+		<OwnerHistorySummary summary={data.summary} />
+		<section class="sec" aria-label="Ownership history">
+			<h3>Ownership history</h3>
 			{#if data.events.length}
 				<ol class="events">
 					{#each data.events as event (event.id)}
@@ -47,23 +46,20 @@ const statusInfo = (status: string) => STATUS_INFO[status as keyof typeof STATUS
 								<Chip tone={statusInfo(event.current_ownership_status)?.tone ?? 'neutral'}>{statusInfo(event.current_ownership_status)?.label ?? event.current_ownership_status}</Chip>
 							</div>
 							<div>{[event.building_name || event.project_name, event.unit_number && `Unit ${event.unit_number}`, event.area_name].filter(Boolean).join(' · ') || 'Property not identified'}</div>
-							{#if !event.property_key}<div class="small muted">Invalid or unresolved property identity; excluded from association totals.</div>{/if}
+							{#if !event.property_key}<div class="small muted">Property not resolved</div>{/if}
 							<div class="small">Role: {event.party_role || 'Not supplied'} · Procedure: {event.procedure_type || 'Not supplied'}</div>
 							{#if event.transaction_price_aed != null}<div class="small">Recorded amount: {aed(event.transaction_price_aed)}</div>{/if}
-							<div class="small muted">Observed/source status: {statusInfo(event.observed_ownership_status)?.label ?? event.observed_ownership_status} · Current assessment: {statusInfo(event.current_ownership_status)?.label ?? event.current_ownership_status}</div>
-							{#if event.evidence_reason}<div class="small">Source assessment: {event.evidence_reason}</div>{/if}
-							{#if event.current_evidence_reason}<div class="small">Current assessment: {event.current_evidence_reason}</div>{/if}
+							{#if event.current_evidence_reason || event.evidence_reason}<div class="small">{event.current_evidence_reason || event.evidence_reason}</div>{/if}
 							<button type="button" class="source" onclick={() => openSource(event.import_id)}>{event.source_filename || `Import #${event.import_id}`}</button>
 							<div class="small muted">{event.source_sheet || 'Sheet unknown'} · {event.source_row_number === null ? 'Row unknown' : `Row ${event.source_row_number}`}</div>
-							<details class="small muted"><summary>Technical evidence details</summary>Event: {event.event_family || 'Unknown'} · Resolver: {event.resolver_version || 'Legacy resolver'}</details>
 						</li>
 					{/each}
 				</ol>
 			{:else}
-				<Empty text="No imported source history is available for this person." />
+				<Empty text="No ownership history." />
 			{/if}
 			<div class="paging">
-				<span class="small muted" aria-live="polite">{data.total ? `${fmt(data.offset + 1)}–${fmt(data.offset + data.events.length)} of ${fmt(data.total)} source events` : '0 source events'}</span>
+				<span class="small muted" aria-live="polite">{data.total ? `${fmt(data.offset + 1)}–${fmt(data.offset + data.events.length)} of ${fmt(data.total)} events` : '0 events'}</span>
 				<button type="button" class="btn ghost sm" disabled={data.offset === 0 || history.isFetching} onclick={() => (offset = Math.max(0, data.offset - limit))}>Previous events</button>
 				<button type="button" class="btn ghost sm" disabled={data.offset + data.events.length >= data.total || history.isFetching} onclick={() => (offset = data.offset + limit)}>Next events</button>
 			</div>

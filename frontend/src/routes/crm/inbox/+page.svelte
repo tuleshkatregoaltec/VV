@@ -36,9 +36,7 @@ const FILTERS: [InboxFilter, string][] = [
 ]
 
 const facts = $derived(
-	inbox.data
-		? `${inbox.data.today} today · ${inbox.data.waiting} waiting to assign · Handout: ${inbox.data.handout_label.toLowerCase()} · colour = source`
-		: ''
+	inbox.data ? `${inbox.data.today} today · ${inbox.data.waiting} waiting to assign` : ''
 )
 
 function act(
@@ -49,7 +47,7 @@ function act(
 }
 </script>
 
-<svelte:head><title>Inbox · CRM Beta</title></svelte:head>
+<svelte:head><title>Inbox · CRM</title></svelte:head>
 
 <PageHeader title="Inbox" {facts} />
 
@@ -88,8 +86,8 @@ function act(
 				{:else}
 					<Empty
 						text={ui.inboxFilter === 'waiting'
-							? 'Nothing waiting. Every enquiry has an agent.'
-							: 'Nothing here. New enquiries appear as they arrive.'}
+							? 'Nothing waiting.'
+							: 'No enquiries.'}
 					/>
 				{/each}
 			</div>
@@ -183,7 +181,7 @@ function act(
 					</div>
 				</section>
 			{:else}
-				<div class="card"><Empty text="Pick an enquiry. Its checks show here." /></div>
+				<div class="card"><Empty text="Select an enquiry." /></div>
 			{/if}
 
 			<section class="card" aria-labelledby="sources-h">

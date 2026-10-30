@@ -51,10 +51,7 @@ async function send() {
 }
 </script>
 
-<Panel kicker="Send" title={label} sub="Drafts go to each lead's thread">
-	{#if target === 'market'}
-		<div class="notice">Form I first — another agency's listing.</div>
-	{/if}
+<Panel kicker="Send" title={label}>
 	{#if !record}
 		<Skeleton rows={3} />
 	{:else if leads.length}

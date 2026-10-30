@@ -125,7 +125,7 @@ const typeLine = (l: LeadRow) =>
 		.join(' · ')
 </script>
 
-<svelte:head><title>Leads · CRM Beta</title></svelte:head>
+<svelte:head><title>Leads · CRM</title></svelte:head>
 
 <PageHeader
 	title="Leads"
@@ -154,7 +154,7 @@ const typeLine = (l: LeadRow) =>
 	</span>
 	{#if feed.data && !feed.data.areas.length}
 		<span class="sep">·</span>
-		<span class="muted">Pick your areas to get renewal leads in the Inbox</span>
+		<span class="muted">No areas selected</span>
 	{:else if feed.data}
 		<span class="sep">·</span>
 		<b>{feed.data.areas.join(', ')}</b>
@@ -251,22 +251,11 @@ const typeLine = (l: LeadRow) =>
 			value={group}
 			onselect={pickGroup}
 		/>
-		<span class="muted small">
-			{boardStages.map((s) => s.label).join(' → ')}
-			{#if LEAD_GROUPS[group].proposal}
-				<span
-					class="chip outline"
-					title="Seller and landlord stages were not named on the 6 Oct call. This is a proposal."
-				>
-					Proposal
-				</span>
-			{/if}
-		</span>
 	</div>
 {/if}
 
 {#if leads.data?.vitevue_unavailable}
-	<ErrorLine bar message="Vitevue lease leads could not load. Your agency's own leads are listed." onretry={() => leads.refetch()} />
+	<ErrorLine bar message="Lease leads could not load." onretry={() => leads.refetch()} />
 {/if}
 {#if leads.isError && leads.data}
 	<ErrorLine bar message={errorText(leads.error)} onretry={() => leads.refetch()} />
@@ -364,7 +353,7 @@ const typeLine = (l: LeadRow) =>
 											>
 										</Empty>
 									{:else}
-										<Empty text="No leads yet. Enquiries land in the Inbox first.">
+										<Empty text="No leads yet.">
 											<button type="button" class="btn sm" onclick={() => panel.open({ kind: 'new-lead' })}>
 												New lead
 											</button>

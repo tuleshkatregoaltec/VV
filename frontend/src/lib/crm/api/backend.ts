@@ -791,8 +791,8 @@ const ownerPropertyChip = (p: CrmOwnerProperty): Chip =>
 		? {
 				label:
 					p.ownership_status === 'former_owner'
-						? 'Unverified former owner'
-						: 'Unverified current candidate',
+						? 'Unmatched former owner'
+						: 'Unmatched current owner',
 				tone: 'amber'
 			}
 		: OWNERSHIP[p.ownership_status]
@@ -822,7 +822,7 @@ function ownerRow(p: CrmOwnerProfile, ws: CrmOwnerWorkspaceSummary | undefined):
 		tag: properties.some(unverifiedOwnerAssociation)
 			? properties.every(unverifiedOwnerAssociation)
 				? ownerPropertyChip(properties[0]).label
-				: 'Includes unverified properties'
+				: 'Includes unmatched properties'
 			: OWNERSHIP[p.highest_ownership_status].label,
 		market_update_due: false,
 		mine: Boolean(ws),
@@ -840,7 +840,7 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 	const transactions = [
 		p.imported_transaction_date && {
 			when: p.imported_transaction_date,
-			what: 'On the agency file',
+			what: 'Agency file',
 			aed: p.imported_transaction_price_aed ?? null
 		},
 		p.registry_sale_date && {

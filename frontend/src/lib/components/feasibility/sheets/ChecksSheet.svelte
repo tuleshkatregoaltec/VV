@@ -250,7 +250,7 @@ const modelChecks = $derived(isBtr ? btrChecks : btsChecks)
 
 {#if !outputs || !validation}
 <div class="h-full flex items-center justify-center px-6 text-sm text-slate-400">
-Generate an HBU study to build the draft checks view.
+Generate an HBU study to view checks.
 </div>
 {:else}
 <div class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none">
@@ -317,7 +317,7 @@ Generate an HBU study to build the draft checks view.
 			{/each}
 		{:else}
 			<tr class="border-b border-[#D9D9D9]">
-				<td class="px-2 py-[3px] text-left text-[10px] text-slate-500" colspan="4">No validation issues on current draft.</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-500" colspan="4">No issues.</td>
 			</tr>
 		{/if}
 

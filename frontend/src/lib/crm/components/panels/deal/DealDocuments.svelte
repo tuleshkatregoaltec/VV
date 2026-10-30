@@ -115,7 +115,7 @@ function dropAll(e: DragEvent) {
 <input bind:this={input} type="file" hidden onchange={onPicked} aria-hidden="true" tabindex="-1" />
 
 <section class="sec">
-	<h3>{deal.docs_received} of {deal.docs_required} · {deal.deal_type} set</h3>
+	<h3>{deal.docs_received} of {deal.docs_required} received</h3>
 	<div class="docs">
 		{#each deal.documents.required as docType (docType)}
 			{@const doc = received.get(docType)}
@@ -135,7 +135,7 @@ function dropAll(e: DragEvent) {
 					{#if doc}
 						<div class="fn">{doc.file} · {fileSize(doc.size_bytes)} · {doc.uploaded}</div>
 					{:else}
-						<div class="fn missing">Missing — drop a file here</div>
+						<div class="fn missing">Missing</div>
 					{/if}
 				</div>
 				<div class="acts">
@@ -167,6 +167,5 @@ function dropAll(e: DragEvent) {
 	ondrop={dropAll}
 >
 	<b>Drop several files at once</b>
-	<span>Named files are matched automatically — passport, emirates-id, form-f, title-deed, noc, cheque, tenancy</span>
 	<span class="btn ghost sm">Choose files</span>
 </button>

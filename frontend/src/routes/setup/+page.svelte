@@ -102,7 +102,7 @@ async function handleProfileSubmit() {
 		await refreshUser()
 		manualStep = 'organization'
 	} catch (err: unknown) {
-		error = err instanceof Error ? err.message : 'Failed to save your profile.'
+		error = err instanceof Error ? err.message : 'Could not save your profile.'
 	} finally {
 		loading = false
 		loadingStep = null
@@ -118,7 +118,7 @@ async function handleOrganizationSubmit() {
 	}
 
 	if (seats < 1) {
-		error = 'Please select at least one seat.'
+		error = 'Select at least one seat.'
 		return
 	}
 
@@ -131,7 +131,7 @@ async function handleOrganizationSubmit() {
 		const checkout = await createCheckoutSession(organization.organization_id, seats, selectedTier)
 
 		if (!checkout.checkout_url) {
-			throw new Error('No checkout URL returned from the server.')
+			throw new Error('No checkout URL returned.')
 		}
 
 		window.location.href = checkout.checkout_url
@@ -139,8 +139,8 @@ async function handleOrganizationSubmit() {
 		const message = err instanceof Error ? err.message : 'Please try again.'
 		error =
 			loadingStep === 'checkout'
-				? `Failed to prepare checkout: ${message}`
-				: `Failed to create organization: ${message}`
+				? `Could not prepare checkout: ${message}`
+				: `Could not create organization: ${message}`
 		loading = false
 		loadingStep = null
 	}
@@ -153,20 +153,14 @@ async function handleOrganizationSubmit() {
 
 <AuthFlowShell
 	title={visibleStep === 'profile' ? 'Tell us who you are' : 'Create your organization'}
-	description={visibleStep === 'profile'
-		? 'Add your name before you create a workspace and start subscription setup.'
-		: 'Choose your plan, set your team size, and continue to Stripe to activate your workspace.'}
 	eyebrow="Workspace setup"
 	step={String(currentStep)}
 	totalSteps={3}
 	stepLabel={visibleStep === 'profile' ? 'Profile' : 'Organization'}
-	sideAccent={visibleStep === 'profile' ? 'Welcome aboard' : 'Owner setup'}
+	sideAccent={visibleStep === 'profile' ? 'Welcome' : 'Owner setup'}
 	sideTitle={visibleStep === 'profile'
-		? 'Vitevue keeps market signals, feasibility work, and commercial context in one place.'
+		? 'Market signals, feasibility work, and commercial context in one place.'
 		: 'Shared market view, structured analysis, cleaner collaboration.'}
-	sideCopy={visibleStep === 'profile'
-		? 'Track transactions, compare opportunities, structure analysis, and keep the team aligned without scattering the work across disconnected tools.'
-		: 'Choose the plan and seat count that fit how you work today. You can adjust both later once the workspace is live.'}
 	sectionWidthClass="lg:max-w-[46rem] xl:max-w-[48rem]"
 	contentWidthClass="max-w-[46rem]"
 	cardClass="lg:p-6 xl:p-6"
@@ -186,21 +180,12 @@ async function handleOrganizationSubmit() {
 				<div class="grid gap-3">
 					<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3">
 						<p class="text-sm font-semibold text-white">Market clarity</p>
-						<p class="mt-1 text-sm leading-6 text-on-navy-muted">
-							See transactions, pricing signals, and commercial context in one workspace.
-						</p>
 					</div>
 					<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3">
 						<p class="text-sm font-semibold text-white">Feasibility workflow</p>
-						<p class="mt-1 text-sm leading-6 text-on-navy-muted">
-							Move from raw site inputs to structured analysis with less spreadsheet overhead.
-						</p>
 					</div>
 					<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3">
 						<p class="text-sm font-semibold text-white">Team coordination</p>
-						<p class="mt-1 text-sm leading-6 text-on-navy-muted">
-							Keep ownership, access, and commercial decisions aligned from the start.
-						</p>
 					</div>
 				</div>
 			{:else}
@@ -211,14 +196,6 @@ async function handleOrganizationSubmit() {
 					<p class="mt-3 text-[1.4rem] font-semibold leading-tight text-white">
 						{ownerName} will own billing, access, and the team from one place.
 					</p>
-					<p class="mt-3 text-sm leading-6 text-on-navy-muted">
-						Choose a plan, set your initial team size, and continue to Stripe. Everything can be
-						adjusted later.
-					</p>
-					<div class="mt-4 space-y-2 text-sm text-on-navy">
-						<p>Market context, transactions, and analysis in one workspace.</p>
-						<p>Structured access and billing from day one.</p>
-					</div>
 				</div>
 			{/if}
 		</div>
@@ -264,12 +241,6 @@ async function handleOrganizationSubmit() {
 			>
 				{loading ? 'Saving profile...' : 'Continue'}
 			</button>
-
-			<div
-				class="rounded-lg border border-border bg-panel px-4 py-3 text-sm text-fg-3"
-			>
-				Next up: choose your plan, set your seat count, and continue to Stripe.
-			</div>
 		</form>
 	{:else}
 		<form
@@ -343,8 +314,7 @@ async function handleOrganizationSubmit() {
 						</div>
 
 						<div>
-							<p class="text-sm text-fg-4">How many people need access right now.</p>
-							<input
+								<input
 								id="seatCount"
 								type="number"
 								min="1"
@@ -356,7 +326,6 @@ async function handleOrganizationSubmit() {
 								class="mt-2 w-full rounded-md border border-strong bg-card px-4 py-3 text-lg font-semibold text-fg-1 shadow-sm focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus"
 								aria-label="Seat count"
 							/>
-							<p class="mt-2 text-xs leading-5 text-fg-4">You can change seats later.</p>
 						</div>
 					</div>
 
@@ -375,10 +344,6 @@ async function handleOrganizationSubmit() {
 									{activePlan.name} · {activePlan.price} AED per seat · {seats} seats
 								</p>
 							</div>
-							<p class="mt-1 text-xs leading-5 text-fg-4">
-								Billed monthly in Stripe. You will return to Vitevue to invite teammates after
-								checkout.
-							</p>
 						</div>
 
 						<button

@@ -7,4 +7,4 @@ onMount(() => {
 })
 </script>
 
-<p class="text-sm text-fg-4">Redirecting to admin panel...</p>
+<p class="text-sm text-fg-4">Loading...</p>

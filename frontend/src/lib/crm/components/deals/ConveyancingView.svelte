@@ -106,7 +106,6 @@ const typeItems = $derived(
 
 <div class="cvfilter">
 	<Seg label="Deal type" items={typeItems} value={ui.cvType} onselect={(t) => (ui.cvType = t)} />
-	<span class="small muted">Sorted by due date</span>
 </div>
 
 {#if list.isError && !list.data}
@@ -115,9 +114,7 @@ const typeItems = $derived(
 	<div class="card"><Skeleton rows={5} /></div>
 {:else if !items.length}
 	<div class="card">
-		<Empty
-			text="No open {ui.cvType ? `${ui.cvType} ` : ''}deals. A deal starts when a buyer or tenant lead is moved to deal."
-		>
+		<Empty text="No open {ui.cvType ? `${ui.cvType} ` : ''}deals.">
 			<button type="button" class="btn sm" onclick={() => panel.open({ kind: 'new-deal' })}>＋ Deal</button>
 		</Empty>
 	</div>

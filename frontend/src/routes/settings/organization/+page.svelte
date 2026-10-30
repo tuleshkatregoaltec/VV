@@ -58,7 +58,7 @@ async function handleManageSubscription() {
 		const result = await getCustomerPortalUrl()
 		window.location.href = result.url
 	} catch (err: any) {
-		alert(err.message || 'Failed to open subscription management')
+		alert(err.message || 'Could not open subscription management')
 	}
 }
 
@@ -71,7 +71,7 @@ async function handleRemoveMember(userId: string, userName: string) {
 			organizationKeys.subscription()
 		])
 	} catch (err: any) {
-		alert(err.message || 'Failed to remove member')
+		alert(err.message || 'Could not remove member')
 	}
 }
 
@@ -85,7 +85,7 @@ async function handleResendInvitation(email: string) {
 		])
 		alert(`Invitation resent to ${email}`)
 	} catch (err: any) {
-		alert(err.message || 'Failed to resend invitation')
+		alert(err.message || 'Could not resend invitation')
 	} finally {
 		resendingEmail = ''
 	}
@@ -101,7 +101,7 @@ async function handleCancelInvitation(invitationId: string, email: string) {
 			organizationKeys.subscription()
 		])
 	} catch (err: any) {
-		alert(err.message || 'Failed to cancel invitation')
+		alert(err.message || 'Could not cancel invitation')
 	} finally {
 		cancelingInvitationId = ''
 	}
@@ -119,7 +119,7 @@ async function handleInviteUser() {
 	}
 
 	if (subscription && availableSeats <= 0) {
-		inviteError = 'No available seats. Please upgrade your subscription first.'
+		inviteError = 'No available seats. Upgrade your subscription first.'
 		return
 	}
 
@@ -138,7 +138,7 @@ async function handleInviteUser() {
 			inviteSuccess = false
 		}, 2000)
 	} catch (err: any) {
-		inviteError = err.message || 'Failed to send invitation'
+		inviteError = err.message || 'Could not send invitation'
 	} finally {
 		inviteLoading = false
 	}
@@ -168,9 +168,6 @@ function roleLabel(role: string): string {
 				<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
 					Organization settings
 				</h1>
-				<p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-					Manage workspace seats, billing access, members, and pending invitations.
-				</p>
 			</div>
 		</section>
 
@@ -190,7 +187,7 @@ function roleLabel(role: string): string {
 					></path>
 				</svg>
 				<h2 class="mb-2 text-xl font-semibold text-slate-900">Access restricted</h2>
-				<p class="text-slate-600">Only the organization owner can access these settings.</p>
+				<p class="text-slate-600">Only the organization owner can open these settings.</p>
 			</div>
 		{:else}
 			<!-- Subscription Info -->
@@ -208,12 +205,12 @@ function roleLabel(role: string): string {
 						<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
 							<div>
 								<p class="text-sm text-fg-3 mb-1">Status</p>
-								<p class="text-lg font-semibold text-fg-1 capitalize">{subscription.status}</p>
+								<p class="text-lg font-semibold text-fg-1 capitalize">{subscription.status.replace(/_/g, ' ')}</p>
 							</div>
 							<div>
 								<p class="text-sm text-fg-3 mb-1">Seats used</p>
 								<p class="text-lg font-semibold text-fg-1">
-									{subscription.current_members} / {subscription.seats} used
+									{subscription.current_members} / {subscription.seats}
 								</p>
 							</div>
 							<div>
@@ -244,15 +241,11 @@ function roleLabel(role: string): string {
 										<p class="mb-1 font-medium text-warning">
 											Action required after billing period
 										</p>
-										<p class="mb-2 text-sm text-warning">
-											You have {subscription?.excess_users} too many users for your subscription ({subscription?.current_members}
-											users, {subscription?.seats} seats).
-										</p>
 										<p class="text-sm text-warning">
-											All users will remain active until {new Date(
+											{subscription?.current_members} members, {subscription?.seats} seats. Remove {subscription?.excess_users}
+											{subscription?.excess_users === 1 ? 'member' : 'members'} or add seats before {new Date(
 												subscription?.current_period_end || ''
-											).toLocaleDateString()}. After this date, you must either remove {subscription?.excess_users}
-											{subscription?.excess_users === 1 ? 'member' : 'members'} or upgrade your subscription.
+											).toLocaleDateString()}.
 										</p>
 									</div>
 								</div>
@@ -275,14 +268,9 @@ function roleLabel(role: string): string {
 									</svg>
 									<div>
 										<p class="mb-1 font-medium text-error">Immediate action required</p>
-										<p class="mb-2 text-sm text-error">
-											You have {subscription?.excess_users} too many users ({subscription?.current_members}
-											users, {subscription?.seats} seats). Your billing period has ended.
-										</p>
 										<p class="text-sm text-error">
-											Please remove {subscription?.excess_users}
-											{subscription?.excess_users === 1 ? 'member' : 'members'} immediately or upgrade
-											your subscription to prevent service disruption.
+											{subscription?.current_members} members, {subscription?.seats} seats. Remove {subscription?.excess_users}
+											{subscription?.excess_users === 1 ? 'member' : 'members'} or add seats.
 										</p>
 									</div>
 								</div>
@@ -304,8 +292,7 @@ function roleLabel(role: string): string {
 										></path>
 									</svg>
 									<p class="text-sm text-success">
-										You have {availableSeats} available {availableSeats === 1 ? 'seat' : 'seats'}.
-										Invite new members!
+										{availableSeats} available {availableSeats === 1 ? 'seat' : 'seats'}.
 									</p>
 								</div>
 							</div>
@@ -318,7 +305,7 @@ function roleLabel(role: string): string {
 							Manage subscription
 						</button>
 					{:else}
-						<p class="text-fg-3">No subscription information available</p>
+						<p class="text-fg-3">No subscription found</p>
 					{/if}
 				</div>
 			</div>
@@ -391,7 +378,7 @@ function roleLabel(role: string): string {
 							{/each}
 						</div>
 					{:else}
-						<p class="text-fg-3 text-center py-8">No team members found</p>
+						<p class="text-fg-3 text-center py-8">No team members</p>
 					{/if}
 				</div>
 			</div>
@@ -489,7 +476,7 @@ function roleLabel(role: string): string {
 
 			{#if inviteSuccess}
 				<div class="mb-4 rounded-lg border border-[rgba(17,122,72,0.2)] bg-success-bg p-4">
-					<p class="text-sm text-success">Invitation sent successfully!</p>
+					<p class="text-sm text-success">Invitation sent</p>
 				</div>
 			{/if}
 

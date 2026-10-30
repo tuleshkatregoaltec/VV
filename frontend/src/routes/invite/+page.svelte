@@ -63,7 +63,7 @@ function getTitle() {
 		case 'accept':
 			return `Join ${inviteDetails?.organization_name}`
 		case 'mismatch':
-			return 'This invite is for a different account'
+			return 'Invite is for a different account'
 		case 'error':
 			return 'Invitation unavailable'
 	}
@@ -72,13 +72,11 @@ function getTitle() {
 function getDescription() {
 	switch (step) {
 		case 'loading':
-			return 'We are validating the invitation and checking your current session.'
 		case 'profile':
-			return `Add your name, then we’ll finish joining ${inviteDetails?.organization_name}.`
 		case 'accept':
-			return `You’re signed in as the invited email and ready to join ${inviteDetails?.organization_name}.`
+			return ''
 		case 'mismatch':
-			return `This invite is for ${inviteDetails?.email}, but your current session belongs to ${currentEmail}.`
+			return `This invite is for ${inviteDetails?.email}. You are signed in as ${currentEmail}.`
 		case 'error':
 			return error || 'The invitation link is invalid or expired.'
 	}
@@ -88,7 +86,7 @@ async function syncInviteState() {
 	resetMessages()
 
 	if (!inviteToken) {
-		error = 'Invitation token is missing.'
+		error = 'Invitation link is incomplete.'
 		step = 'error'
 		return
 	}
@@ -98,10 +96,7 @@ async function syncInviteState() {
 	try {
 		inviteDetails = await validateInviteToken(inviteToken)
 	} catch (err: unknown) {
-		error =
-			err instanceof Error
-				? err.message
-				: 'Invalid invitation link. Please contact your administrator.'
+		error = err instanceof Error ? err.message : 'Invalid invitation link.'
 		step = 'error'
 		return
 	}
@@ -168,7 +163,7 @@ async function joinOrganization() {
 			)
 			return
 		}
-		error = err instanceof Error ? err.message : 'Failed to join organization. Please try again.'
+		error = err instanceof Error ? err.message : 'Could not join the organization.'
 	} finally {
 		loading = false
 	}
@@ -183,10 +178,10 @@ async function switchAccount() {
 
 function getConflictMessage(conflict: InviteConflictResponse): string {
 	if (conflict.current_role === 'owner') {
-		return `You already own ${conflict.current_org_name}. Transfer ownership or cancel that organization before joining another one.`
+		return `You already own ${conflict.current_org_name}. Transfer ownership or cancel it before joining another organization.`
 	}
 
-	return `You are already a member of ${conflict.current_org_name}. Leave that organization before joining another one.`
+	return `You are already a member of ${conflict.current_org_name}. Leave it before joining another organization.`
 }
 </script>
 
@@ -198,9 +193,8 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 	title={getTitle()}
 	description={getDescription()}
 	eyebrow="Organization invite"
-	sideAccent="Guided join flow"
-	sideTitle="Join the right workspace with the right account."
-	sideCopy="Vitevue keeps the invite flow narrow: authenticate first, confirm the invited email, add your name if needed, then join the organization."
+	sideAccent="Invitation"
+	sideTitle="Join your team's workspace."
 >
 	<svelte:fragment slot="account">
 		{#if currentEmail}
@@ -214,20 +208,9 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 				<div class="rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-4">
 					<p class="text-xs font-semibold uppercase tracking-[0.22em] text-on-navy-muted">Invitation</p>
 					<p class="mt-3 text-2xl font-semibold text-white">{inviteDetails.organization_name}</p>
-					<p class="mt-2 text-sm leading-6 text-on-navy-muted">Invited email: {inviteDetails.email}</p>
+					<p class="mt-2 text-sm leading-6 text-on-navy-muted">{inviteDetails.email}</p>
 				</div>
 			{/if}
-			<div class="grid gap-3">
-				<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3 text-sm text-on-navy">
-					Authenticate with the invited account first
-				</div>
-				<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3 text-sm text-on-navy">
-					Add your name only if it is still missing
-				</div>
-				<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3 text-sm text-on-navy">
-					Join the workspace and let the normal guard flow take over
-				</div>
-			</div>
 		</div>
 	</svelte:fragment>
 
@@ -249,7 +232,6 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 				class="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-border border-t-action"
 			></div>
 			<p class="mt-6 text-lg font-semibold text-fg-1">Loading invitation</p>
-			<p class="mt-2 text-sm text-fg-3">This should only take a moment.</p>
 		</div>
 	{:else if step === 'error'}
 		<div class="space-y-5">
@@ -269,8 +251,8 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 			<div class="rounded-lg border border-[rgba(165,90,19,0.2)] bg-warning-bg p-6">
 				<p class="text-sm font-semibold text-warning">Wrong account</p>
 				<p class="mt-2 text-sm leading-6 text-warning">
-					You are signed in as <span class="font-semibold">{currentEmail}</span>, but this invite is
-					for <span class="font-semibold">{inviteDetails?.email}</span>.
+					Signed in as <span class="font-semibold">{currentEmail}</span>. This invite is for
+					<span class="font-semibold">{inviteDetails?.email}</span>.
 				</p>
 			</div>
 			<div class="flex flex-col gap-3 sm:flex-row">
@@ -325,9 +307,6 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 		<div class="space-y-5">
 			<div class="rounded-lg border border-border bg-panel p-6">
 				<p class="text-sm font-semibold text-fg-1">Ready to join</p>
-				<p class="mt-2 text-sm leading-6 text-fg-3">
-					You are signed in as the invited user and your profile is complete.
-				</p>
 			</div>
 			<button
 				type="button"

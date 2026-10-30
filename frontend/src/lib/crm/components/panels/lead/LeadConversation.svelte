@@ -19,6 +19,5 @@ const conversation = createQuery(() => crmQueries.leadConversation(id))
 				</div>
 			{/each}
 		</div>
-		<div class="notice">Read only — replies go from your own phone or WhatsApp.</div>
 	{/snippet}
 </QueryView>

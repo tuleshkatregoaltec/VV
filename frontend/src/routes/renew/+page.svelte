@@ -11,27 +11,27 @@ let error = $state('')
 let processingRenewal = $state(false)
 
 function getStatusMessage() {
-	if (!user) return 'Loading your organization state.'
+	if (!user) return ''
 
 	switch (user.subscription_status) {
 		case 'past_due':
-			return 'Your organization subscription payment is past due.'
+			return 'Subscription payment is past due.'
 		case 'canceled':
-			return 'Your organization subscription has been canceled.'
+			return 'Subscription canceled.'
 		case 'incomplete':
-			return 'Your organization subscription setup is incomplete.'
+			return 'Subscription setup is incomplete.'
 		case null:
 		case 'none':
-			return 'Your organization does not have an active subscription yet.'
+			return 'No active subscription.'
 		default:
-			return 'Your organization subscription is currently inactive.'
+			return 'Subscription inactive.'
 	}
 }
 
 function getOwnerActionMessage() {
 	return user?.subscription_status === 'past_due'
-		? 'Update the payment method to restore access for the entire team.'
-		: 'Complete or renew billing to restore access for the entire team.'
+		? 'Update the payment method to restore team access.'
+		: 'Renew billing to restore team access.'
 }
 
 async function handleManageSubscription() {
@@ -41,7 +41,7 @@ async function handleManageSubscription() {
 		const result = await getCustomerPortalUrl()
 		window.location.href = result.url
 	} catch (err: unknown) {
-		error = err instanceof Error ? err.message : 'Failed to open subscription management'
+		error = err instanceof Error ? err.message : 'Could not open subscription management'
 		processingRenewal = false
 	}
 }
@@ -55,9 +55,8 @@ async function handleManageSubscription() {
 	title={user?.is_owner ? 'Restore your workspace access' : 'Workspace subscription inactive'}
 	description={getStatusMessage()}
 	eyebrow="Billing recovery"
-	sideAccent="Recovery flow"
-	sideTitle="Restore access without losing the workspace context."
-	sideCopy="Owners can recover billing here. Members can see why access changed and switch accounts if they landed in the wrong session."
+	sideAccent="Billing"
+	sideTitle="Restore access to your workspace."
 >
 	<svelte:fragment slot="account">
 		<AccountContextBar email={user?.email} redirectTo="/auth" />
@@ -71,7 +70,7 @@ async function handleManageSubscription() {
 					{user?.organization_name || 'Workspace'}
 				</p>
 				<p class="mt-2 text-sm leading-6 text-on-navy-muted">
-					Role: {user?.is_owner ? 'Owner' : 'Member'}
+					{user?.is_owner ? 'Owner' : 'Member'}
 				</p>
 			</div>
 			<div
@@ -80,8 +79,7 @@ async function handleManageSubscription() {
 				{#if user?.is_owner}
 					{getOwnerActionMessage()}
 				{:else}
-					Only the owner can restore billing. If you expected a different account, sign out and
-					switch first.
+					Only the owner can restore billing.
 				{/if}
 			</div>
 		</div>
@@ -94,11 +92,6 @@ async function handleManageSubscription() {
 	{/if}
 
 	<div class="space-y-5">
-		<div class="rounded-lg border border-border bg-panel p-6">
-			<p class="text-sm font-semibold text-fg-1">Current status</p>
-			<p class="mt-2 text-sm leading-6 text-fg-3">{getStatusMessage()}</p>
-		</div>
-
 		{#if user?.is_owner}
 			<div class="flex flex-col gap-3 sm:flex-row">
 				{#if user.subscription_status === 'past_due' || user.subscription_status === 'canceled'}
@@ -130,8 +123,7 @@ async function handleManageSubscription() {
 			<div class="rounded-lg border border-info-border bg-info-bg p-6">
 				<p class="text-sm font-semibold text-fg-1">Contact your organization owner</p>
 				<p class="mt-2 text-sm leading-6 text-info">
-					Only the organization owner can restore billing. Once the subscription is active again,
-					your normal access will return automatically.
+					Only the organization owner can restore billing.
 				</p>
 			</div>
 		{/if}

@@ -17,8 +17,6 @@ const summary = createQuery(() => ({
 
 <QueryView query={summary} rows={3}>
 	{#snippet children(data)}
-		<OwnerHistorySummary summary={data} reviewHref={listId ? `/crm/owners?scope=needs_review&list_id=${listId}` : "/crm/owners?scope=needs_review"} scope={importId === undefined
-			? 'Across all owner imports in your organization.'
-			: 'People and properties recorded in this import, assessed using evidence across all owner imports.'} />
+		<OwnerHistorySummary summary={data} reviewHref={listId ? `/crm/owners?scope=needs_review&list_id=${listId}` : "/crm/owners?scope=needs_review"} />
 	{/snippet}
 </QueryView>

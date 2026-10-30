@@ -237,12 +237,9 @@ function hideBrokenImage(event: Event) {
 				<div class="rounded-lg border border-border bg-card p-5 shadow-sm">
 					<div class="flex flex-wrap items-start justify-between gap-4">
 						<div>
-							<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
-								Internal / Project risk
-							</p>
 							<h2 class="mt-2 flex items-center gap-2 text-lg font-semibold text-fg-1">
 								<ShieldCheck size={18} strokeWidth={2} />
-								Risk cockpit
+								Project risk
 							</h2>
 						</div>
 						<div class="rounded-md border px-3 py-2 text-right {riskPillClass(project.project_risk_badge)}">
@@ -259,7 +256,7 @@ function hideBrokenImage(event: Event) {
 								<div class="flex items-start justify-between gap-3">
 									<div class="min-w-0">
 										<p class="text-sm font-semibold text-fg-1">{indicator.label}</p>
-										<p class="mt-1 truncate text-xs text-fg-4">{indicator.note ?? 'Internal signal'}</p>
+										<p class="mt-1 truncate text-xs text-fg-4">{indicator.note ?? ''}</p>
 									</div>
 									<span class="rounded-full border px-2 py-0.5 text-xs font-semibold {riskPillClass(indicator.status)}">
 										{riskPillLabel(indicator.status)}
@@ -321,10 +318,6 @@ function hideBrokenImage(event: Event) {
 							<span class="text-fg-4">Estimated project IRR</span>
 							<span class="font-semibold text-fg-1">{project.estimated_project_irr ?? '~'}</span>
 						</div>
-						<p class="mt-3 text-xs leading-5 text-fg-4">
-							{project.sales_inventory_source ?? 'Live inventory pending.'}
-						</p>
-						<p class="mt-1 text-xs leading-5 text-fg-4">Estimated IRR source: Feasibility model.</p>
 					</div>
 				</aside>
 			</section>

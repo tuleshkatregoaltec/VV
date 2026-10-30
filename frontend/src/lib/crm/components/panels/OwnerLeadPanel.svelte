@@ -57,7 +57,7 @@ async function submit(e: SubmitEvent) {
 
 {#if owner.data}
 	{@const o = owner.data}
-	<Panel kicker="Owner → lead" title={o.name} sub="{o.next_event} · {o.next_event_label}">
+	<Panel kicker="New lead" title={o.name} sub="{o.next_event} · {o.next_event_label}">
 		{#if o.create_lead}
 			<form class="form" onsubmit={submit}>
 				<div class="fld">

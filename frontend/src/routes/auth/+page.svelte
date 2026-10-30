@@ -29,7 +29,6 @@ let email = $state('')
 let password = $state('')
 let confirmPassword = $state('')
 let otpCode = $state('')
-let termsAccepted = $state(false)
 let selectedTierName = $state('')
 let nextPath = $state<string | null>(null)
 
@@ -41,8 +40,7 @@ let otpSubmissionKey = $state<string | null>(null)
 let fieldErrors = $state({
 	email: '',
 	password: '',
-	confirmPassword: '',
-	terms: ''
+	confirmPassword: ''
 })
 
 function requireEmail(): boolean {
@@ -82,7 +80,6 @@ function clearMessages() {
 	fieldErrors.email = ''
 	fieldErrors.password = ''
 	fieldErrors.confirmPassword = ''
-	fieldErrors.terms = ''
 }
 
 function setView(nextView: View) {
@@ -128,7 +125,7 @@ function navigateAfterAuth(path: string = '/dashboard') {
 function requireOtpCode(): boolean {
 	if (loading) return false
 	if (otpCode.length === 6) return true
-	error = 'Please enter the complete 6-digit code'
+	error = 'Enter the 6-digit code'
 	return false
 }
 
@@ -154,21 +151,19 @@ function getTitle() {
 function getDescription() {
 	switch (currentView) {
 		case 'signup':
-			return selectedTierName
-				? `Create your account to continue with the ${selectedTierName} plan.`
-				: 'Create your account, then we’ll guide you through profile, organization, and payment.'
+			return selectedTierName ? `Continue with the ${selectedTierName} plan.` : ''
 		case 'verify-otp':
-			return `Enter the six-digit code we sent to ${email}.`
+			return `Enter the code sent to ${email}.`
 		case 'email-auth':
-			return 'We’ll send a one-time code and magic link to your email so you can continue without a password.'
+			return ''
 		case 'email-auth-otp':
-			return `We sent a sign-in code to ${email}. You can also use the magic link in the email.`
+			return `Enter the code sent to ${email}.`
 		case 'forgot-password':
-			return 'Enter your email and we’ll send a secure recovery link and code.'
+			return ''
 		case 'forgot-password-otp':
-			return `We sent a password reset code to ${email}. You can also click the link in the email.`
+			return `Enter the code sent to ${email}.`
 		default:
-			return 'Access your workspace with your password or a secure email code.'
+			return ''
 	}
 }
 
@@ -237,7 +232,6 @@ async function handleLogin() {
 async function handleSignup() {
 	fieldErrors.password = ''
 	fieldErrors.confirmPassword = ''
-	fieldErrors.terms = ''
 
 	if (!password) {
 		fieldErrors.password = 'Password is required'
@@ -253,10 +247,6 @@ async function handleSignup() {
 	}
 	if (password !== confirmPassword) {
 		fieldErrors.confirmPassword = 'Passwords do not match'
-		return
-	}
-	if (!termsAccepted) {
-		fieldErrors.terms = 'Please accept the Terms of Service and Privacy Policy.'
 		return
 	}
 
@@ -276,7 +266,7 @@ async function handleSignup() {
 			error = result.error || 'Sign up failed'
 		}
 	} catch {
-		error = 'An unexpected error occurred during sign up. Please try again.'
+		error = 'Sign up failed. Try again.'
 	} finally {
 		loading = false
 	}
@@ -358,10 +348,9 @@ async function handleResendForgotPasswordOTP() {
 <AuthFlowShell
 	title={getTitle()}
 	description={getDescription()}
-	eyebrow="Access Vitevue"
-	sideAccent="Workspace access"
+	eyebrow="Vitevue"
+	sideAccent="Workspace"
 	sideTitle="One place for transactions, feasibility work, and commercial decisions."
-	sideCopy="Vitevue keeps market signals, project analysis, and commercial context in one workspace so teams can move with more confidence and less friction."
 	cardViewportFill={false}
 	panelClass="lg:min-h-[min(calc(100vh-2rem),49rem)]"
 	sectionWidthClass="lg:max-w-xl xl:max-w-2xl lg:h-auto"
@@ -380,36 +369,27 @@ async function handleResendForgotPasswordOTP() {
 					<p class="mt-3 font-display text-4xl font-normal text-on-navy">
 						{selectedTierName}
 					</p>
-					<p class="mt-2 text-sm leading-6 text-on-navy-muted">
-						We will keep this choice through signup and send you straight into workspace setup.
-					</p>
 				</div>
 			{/if}
 
 			<div class="rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-4">
 				<p class="font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-on-navy-muted">
-					Market context
+					Market data
 				</p>
 				<p class="mt-2 font-display text-[2.15rem] font-normal leading-none text-on-navy">
 					10M+ transactions
-				</p>
-				<p class="mt-2 text-sm leading-5 text-on-navy-muted">
-					Browse sales, rentals, pricing signals, and location context before moving into feasibility work.
 				</p>
 			</div>
 
 			<div class="divide-y divide-[rgba(246,241,231,0.12)] rounded-lg border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4">
 				<div class="py-2.5">
-					<p class="text-sm font-semibold text-on-navy">Market data</p>
-					<p class="mt-1 text-sm leading-5 text-on-navy-muted">Compare sales, rentals, and pricing context.</p>
+					<p class="text-sm font-semibold text-on-navy">Sales and rentals</p>
 				</div>
 				<div class="py-2.5">
 					<p class="text-sm font-semibold text-on-navy">Feasibility workflow</p>
-					<p class="mt-1 text-sm leading-5 text-on-navy-muted">Keep assumptions and workbook inputs structured.</p>
 				</div>
 				<div class="py-2.5">
 					<p class="text-sm font-semibold text-on-navy">Team access</p>
-					<p class="mt-1 text-sm leading-5 text-on-navy-muted">Manage ownership, seats, and billing.</p>
 				</div>
 			</div>
 		</div>
@@ -525,10 +505,6 @@ async function handleResendForgotPasswordOTP() {
 				}}
 				class="space-y-4"
 			>
-				<div class="rounded-lg border border-border bg-info-bg px-4 py-3 text-sm leading-6 text-info">
-					We’ll send a code and magic link to your email.
-				</div>
-
 				<TextInput
 					label="Email"
 					type="email"
@@ -600,41 +576,6 @@ async function handleResendForgotPasswordOTP() {
 					required
 					autocomplete="new-password"
 				/>
-
-				<label
-					class="flex items-start gap-3 rounded-md border px-3 py-2.5 text-xs leading-5 text-fg-3 transition-colors {fieldErrors.terms
-						? 'border-error-border bg-error-bg'
-						: 'border-border bg-card'}"
-				>
-					<input
-						type="checkbox"
-						id="terms"
-						bind:checked={termsAccepted}
-						onchange={() => (fieldErrors.terms = '')}
-						class="mt-0.5 h-4 w-4 rounded-sm border-strong accent-[var(--color-action)] focus:ring-2 focus:ring-focus"
-					/>
-					<span>
-						I agree to the
-						<a
-							href="/terms"
-							target="_blank"
-							class="font-medium text-fg-1 underline-offset-2 hover:underline"
-						>
-							Terms of Service
-						</a>
-						and
-						<a
-							href="/privacy"
-							target="_blank"
-							class="font-medium text-fg-1 underline-offset-2 hover:underline"
-						>
-							Privacy Policy
-						</a>
-					</span>
-				</label>
-				{#if fieldErrors.terms}
-					<p class="-mt-2 text-sm text-error">{fieldErrors.terms}</p>
-				{/if}
 
 				<button
 					type="submit"

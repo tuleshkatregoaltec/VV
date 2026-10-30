@@ -96,7 +96,6 @@ function start(r: RenewalDetail) {
 		{#if r.owner_evidence.length}
 			<section class="sec">
 				<h3>Imported ownership evidence</h3>
-				<p class="small muted">Assessments from owner files. Only a reliable current-owner match fills the owner fields above.</p>
 				{#each r.owner_evidence as evidence (evidence.id)}
 					<div class="kv">
 						<Kv k="Contact in file" v={evidence.name} o={evidence.source} />
@@ -129,7 +128,6 @@ function start(r: RenewalDetail) {
 						</div>
 					{/each}
 				</div>
-				<p class="small muted">{r.match_explanation}</p>
 			{:else}
 				<p class="small muted">No other registered leases or sales for this unit.</p>
 			{/if}

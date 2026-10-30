@@ -24,7 +24,7 @@ let fieldErrors = $state({
 onMount(async () => {
 	const session = await get_session()
 	if (!session) {
-		error = 'Invalid or expired reset link. Please request a new password reset.'
+		error = 'Invalid or expired reset link.'
 		return
 	}
 
@@ -74,7 +74,7 @@ async function handleResetPassword() {
 				goto(resolve('/dashboard'))
 			}, 2000)
 		} else {
-			error = result.error || 'Failed to update password'
+			error = result.error || 'Could not update password'
 		}
 	} finally {
 		loading = false
@@ -93,14 +93,13 @@ async function handleResetPassword() {
 			? 'Create a new password'
 			: 'Reset link unavailable'}
 	description={success
-		? 'Your password has been updated. We’ll send you back to your workspace.'
+		? ''
 		: hasValidSession
-			? 'Choose a new password for this account.'
+			? ''
 			: error}
 	eyebrow="Password recovery"
 	sideAccent="Account recovery"
-	sideTitle="Secure account recovery for the same workspace flow."
-	sideCopy="Choose a new password once the recovery session is valid, then return to the guarded workspace."
+	sideTitle="Reset your password."
 >
 	<svelte:fragment slot="account">
 		{#if email}
@@ -115,10 +114,6 @@ async function handleResetPassword() {
 					Recovery flow
 				</p>
 				<p class="mt-3 text-2xl font-semibold text-white">Secure reset</p>
-				<p class="mt-2 text-sm leading-6 text-on-navy-muted">
-					Once the password changes, you return to the same guarded application flow as any other
-					authenticated session.
-				</p>
 			</div>
 		</div>
 	</svelte:fragment>
@@ -126,12 +121,11 @@ async function handleResetPassword() {
 	{#if success}
 		<div class="rounded-lg border border-[rgba(17,122,72,0.2)] bg-success-bg p-6 text-center">
 			<p class="text-lg font-semibold text-success">Password updated successfully</p>
-			<p class="mt-2 text-sm text-success">Redirecting you to the dashboard now.</p>
 		</div>
 	{:else if !hasValidSession && error}
 		<div class="space-y-5">
 			<div class="rounded-lg border border-error-border bg-error-bg p-6">
-				<p class="text-sm font-semibold text-error">Reset link is no longer valid</p>
+				<p class="text-sm font-semibold text-error">Reset link expired</p>
 				<p class="mt-2 text-sm leading-6 text-error">{error}</p>
 			</div>
 			<a
@@ -158,7 +152,7 @@ async function handleResetPassword() {
 			<PasswordInput
 				label="New password"
 				bind:value={newPassword}
-				placeholder="Create a new password"
+				placeholder="New password"
 				error={fieldErrors.newPassword}
 				required
 				autocomplete="new-password"
@@ -168,7 +162,7 @@ async function handleResetPassword() {
 			<PasswordInput
 				label="Confirm password"
 				bind:value={confirmPassword}
-				placeholder="Confirm your new password"
+				placeholder="Confirm password"
 				error={fieldErrors.confirmPassword}
 				required
 				autocomplete="new-password"

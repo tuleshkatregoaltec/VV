@@ -280,5 +280,12 @@ export const ORIGIN_TONE: Record<Origin, Tone> = {
 /** Score chip: ≥70 dark · 45–69 grey · <45 outline. */
 export const scoreClass = (score: number) => (score >= 70 ? '' : score >= 45 ? 'mid' : 'low')
 
+export const ORIGIN_LABEL: Record<Origin, string> = {
+	human: 'Agent',
+	rule: 'System',
+	model: 'Assistant',
+	voice: 'Voice'
+}
+
 export const ownerSourceTone = (label: string): Tone =>
 	label === 'DLD/Ejari event' ? 'blue' : 'neutral'
