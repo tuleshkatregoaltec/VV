@@ -19,9 +19,12 @@ from app.crm.owner_matcher import MatchResult, SalesIndex, later_sale_date
 
 
 def candidate_source(candidate: ParsedContact) -> dict[str, str]:
-    """The matcher's input for a row: stored at parse time, or rebuilt for an older claim."""
+    """The matcher's input for a row: stored at parse time, or rebuilt for an older claim.
+
+    A rebuilt source is stored for the summary but rebuilt again on every rematch, so a fix to the
+    rebuild reaches claims that were already rematched."""
     stored = candidate.evidence.get("matcher_source")
-    if isinstance(stored, dict):
+    if isinstance(stored, dict) and not candidate.evidence.get("matcher_source_rebuilt"):
         return stored
     return matcher_source_from_evidence(
         candidate.evidence,
@@ -60,6 +63,10 @@ async def run_owner_matching(candidates: list[ParsedContact]) -> None:
         verdicts = await asyncio.to_thread(_match_import, index, sources)
         del index
         for candidate, source, (result, later) in zip(group, sources, verdicts, strict=True):
+            if "matcher_source" not in candidate.evidence or candidate.evidence.get(
+                "matcher_source_rebuilt"
+            ):
+                candidate.evidence["matcher_source_rebuilt"] = True
             candidate.evidence["matcher_source"] = source
             candidate.evidence["owner_match"] = owner_match_evidence(result, later_sale_date=later)
 

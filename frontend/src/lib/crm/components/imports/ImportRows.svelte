@@ -134,7 +134,7 @@ const usable = (value: string | undefined) =>
 										{[usable(r.project) !== usable(r.building) ? usable(r.project) : '', usable(r.area)].filter(Boolean).join(' · ') || 'No project identified'}
 									</div>
 									<div class="sub">
-										{r.price ? aed(r.price) : 'No price'}{r.date ? ` · ${fullDate(r.date)}` : ''} · {r.sheet} row {r.rowNumber}
+										{r.price ? aed(r.price) : 'No price'}{r.date ? ` · ${fullDate(r.date)}` : ''} · Sheet {r.sheet}, row {r.rowNumber}
 									</div>
 								</div></td>
 								<td data-label="Result"><div class="cell">

@@ -678,7 +678,11 @@ const EXPLAINERS: Explainer[] = [
 	],
 	[/^ambiguous_registry_sale/, () => 'More than one sale fits this place and size.'],
 	[/^repeat_price/, () => 'This unit sold more than once at this price.'],
-	[/^type_label_differs \((.+)\)$/, (_t, m) => `The property type differs (${m[1]}).`],
+	[
+		/^type_label_differs \((.+) vs (.+)\)$/,
+		(_t, m) =>
+			sameTypeFamily(m[1], m[2]) ? '' : `The sheet says ${m[1]}, Transactions says ${m[2]}.`
+	],
 	[
 		/^unit (\S+) exists in DXBI but has no sale within (\d+) AED/,
 		(_t, m) =>
@@ -688,9 +692,36 @@ const EXPLAINERS: Explainer[] = [
 	[
 		/^Transactions: (\d+) sale\(s\) fit place and size, (\d+) belong to other units/,
 		(_t, m) =>
-			`${m[1]} ${m[1] === '1' ? 'sale fits' : 'sales fit'} the place and size; ${m[2]} belong to other units.`
-	]
+			`Transactions has ${m[1]} ${m[1] === '1' ? 'sale' : 'sales'} at this price for this place and size` +
+			(m[2] === '0'
+				? ''
+				: `; ${m[2]} other ${m[2] === '1' ? 'sale belongs' : 'sales belong'} to other units`) +
+			'.'
+	],
+	[/^dld_only (.+)$/, (_t, m) => `A land-registry sale with no unit number (${m[1]}).`],
+	[/^matched (.+)$/, (_t, m) => `A DXBI sale (${m[1]}).`]
 ]
+
+// Labels for one kind of property: a difference between two of them says nothing.
+const TYPE_FAMILIES = [
+	[
+		'flat',
+		'unit',
+		'apartment',
+		'apartments',
+		'hotel apartment',
+		'hotel apartments',
+		'hotel rooms',
+		'hotel room'
+	],
+	['villa', 'villas', 'residential', 'building', 'townhouse']
+]
+
+function sameTypeFamily(a: string, b: string): boolean {
+	const x = a.trim().toLowerCase()
+	const y = b.trim().toLowerCase()
+	return TYPE_FAMILIES.some((family) => family.includes(x) && family.includes(y))
+}
 
 /** A matcher reason or warning in plain words; text it does not know is returned as it came. */
 export function explainMatch(code: string): string {
@@ -698,7 +729,10 @@ export function explainMatch(code: string): string {
 	if (!text) return ''
 	for (const [pattern, say] of EXPLAINERS) {
 		const m = pattern.exec(text)
-		if (m) return sentence(say(text, m))
+		if (m) {
+			const said = say(text, m)
+			return said ? sentence(said) : ''
+		}
 	}
 	return text
 }

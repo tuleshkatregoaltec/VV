@@ -129,10 +129,26 @@ def test_a_claim_without_a_stored_source_is_rebuilt_from_its_evidence() -> None:
     }
 
 
-async def test_a_rebuilt_source_is_kept_so_the_next_rematch_reads_the_same_input(loaded) -> None:
+async def test_a_rebuilt_source_is_stored_but_rebuilt_again_on_the_next_rematch(loaded) -> None:
+    # The summary reads the stored source, but a rebuilt one must not freeze: a later fix to the
+    # rebuild (or to the claim's columns) has to reach the next rematch.
     candidate = contact(2, source=None)
     await stage.run_owner_matching([candidate])
     assert candidate.evidence["matcher_source"]["unit_number"] == "1410"
+    assert candidate.evidence["matcher_source_rebuilt"] is True
+    candidate.evidence["matcher_source"] = {"unit_number": "stale"}
+    assert stage.candidate_source(candidate)["unit_number"] == "1410"
+
+
+async def test_a_parse_time_source_is_used_as_stored(loaded) -> None:
+    candidate = contact(2)
+    await stage.run_owner_matching([candidate])
+    assert "matcher_source_rebuilt" not in candidate.evidence
+    candidate.evidence["matcher_source"] = {
+        **candidate.evidence["matcher_source"],
+        "unit_number": "9",
+    }
+    assert stage.candidate_source(candidate)["unit_number"] == "9"
 
 
 async def test_aliases_are_learned_over_the_whole_import(monkeypatch: pytest.MonkeyPatch) -> None:

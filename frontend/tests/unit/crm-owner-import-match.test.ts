@@ -163,7 +163,9 @@ describe('explainMatch', () => {
 		)
 		expect(
 			explainMatch('Transactions: 1 sale(s) fit place and size, 2 belong to other units')
-		).toBe('1 sale fits the place and size; 2 belong to other units.')
+		).toBe(
+			'Transactions has 1 sale at this price for this place and size; 2 other sales belong to other units.'
+		)
 	})
 
 	// The strings below are the matcher's own (backend/app/crm/owner_matcher.py, owner_match_status.py).
@@ -290,5 +292,31 @@ describe('columnsRead', () => {
 			}
 		]
 		expect(columnsRead({ ...sheet, checks }).checks).toEqual(checks)
+	})
+})
+
+describe('explainMatch wording for evidence lines', () => {
+	it('hides type labels that name the same kind of property', () => {
+		expect(explainMatch('type_label_differs (Flat vs Unit)')).toBe('')
+		expect(explainMatch('type_label_differs (Building vs Villa)')).toBe('')
+	})
+	it('keeps a real type difference', () => {
+		expect(explainMatch('type_label_differs (Land vs Villa)')).toBe(
+			'The sheet says Land, Transactions says Villa.'
+		)
+	})
+	it('explains Transactions and registry lines', () => {
+		expect(
+			explainMatch('Transactions: 1 sale(s) fit place and size, 0 belong to other units')
+		).toBe('Transactions has 1 sale at this price for this place and size.')
+		expect(
+			explainMatch('Transactions: 1 sale(s) fit place and size, 2 belong to other units')
+		).toBe(
+			'Transactions has 1 sale at this price for this place and size; 2 other sales belong to other units.'
+		)
+		expect(explainMatch('dld_only Sell - Pre registration')).toBe(
+			'A land-registry sale with no unit number (Sell - Pre registration).'
+		)
+		expect(explainMatch('matched Delayed Sell')).toBe('A DXBI sale (Delayed Sell).')
 	})
 })
