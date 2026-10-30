@@ -802,3 +802,32 @@ async def test_colour_and_outcome_filters_combine(monkeypatch):
         monkeypatch, rows, match_colour=["grey"], match_outcome=["matched_sale"]
     )
     assert result.total == 0
+
+
+async def test_an_owner_who_still_holds_a_property_is_not_headlined_as_former(monkeypatch):
+    # The same person owns 101 today and sold 102. Their headline (list chip and panel chip)
+    # must say what they hold now; "former" applies to 102 only. Seen live: an owner with 29
+    # transaction-matched current properties and 3 sold ones was shown as "Former owner".
+    install_snapshot(
+        monkeypatch,
+        [
+            event(1),
+            event(
+                2,
+                property_key="tower|102",
+                property_identity=("businessbay", "tower|102"),
+                unit_number="102",
+                assessed_status="former_owner",
+                assessed_confidence_score=99,
+                lead_id=None,
+                unit_candidate_key=None,
+            ),
+        ],
+    )
+    clicked = await owners.get_owner_profile(None, organization_id="org", owner_key="alias-1")
+    assert clicked.highest_ownership_status == "verified_current_owner"
+    listed = await registry(scope="current_owners")
+    assert listed.owners[0].highest_ownership_status == clicked.highest_ownership_status
+    # Someone who has sold everything is still a former owner.
+    sold = await registry(scope="prior_owners")
+    assert sold.owners[0].highest_ownership_status == "former_owner"

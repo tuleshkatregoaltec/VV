@@ -472,6 +472,18 @@ def _property_contact_ready(item: CrmOwnerProperty, profile: CrmOwnerProfile) ->
     )
 
 
+# An owner's headline is what they hold now: a current property outranks a sold one. (Per
+# property, ``_OWNERSHIP_PRIORITY`` lets a later sale win, which is right for one unit.)
+_HEADLINE_PRIORITY = {
+    "verified_current_owner": 6,
+    "probable_current_owner": 5,
+    "former_owner": 4,
+    "unit_linked_unverified": 3,
+    "unverified_former_owner": 2,
+    "conflicting_claim": 2,
+}
+
+
 def _profile_with_properties(
     profile: CrmOwnerProfile, properties: list[CrmOwnerProperty]
 ) -> CrmOwnerProfile:
@@ -479,7 +491,7 @@ def _profile_with_properties(
     lease_dates = [item.lease_end for item in rental_properties if item.lease_end]
     best = max(
         properties,
-        key=lambda item: (_OWNERSHIP_PRIORITY.get(item.ownership_status, 0), item.confidence_score),
+        key=lambda item: (_HEADLINE_PRIORITY.get(item.ownership_status, 1), item.confidence_score),
         default=None,
     )
     return profile.model_copy(
