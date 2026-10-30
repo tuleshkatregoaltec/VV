@@ -1,6 +1,5 @@
 <script lang="ts">
 import { createQuery, useQueryClient } from '@tanstack/svelte-query'
-import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 import {
 	type AssistantConversationResponse,
 	assistant,
@@ -8,6 +7,7 @@ import {
 } from '$lib/crm/assistant/api'
 import AssistantThread from '$lib/crm/assistant/components/AssistantThread.svelte'
 import ConversationList from '$lib/crm/assistant/components/ConversationList.svelte'
+import DeleteConversationDialog from '$lib/crm/assistant/components/DeleteConversationDialog.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 
 const queryClient = useQueryClient()
@@ -63,14 +63,10 @@ async function remove() {
 	<AssistantThread conversationId={activeId} {ensureConversation} />
 </section>
 
-<ConfirmModal
+<DeleteConversationDialog
 	open={deleting !== null}
-	title="Delete conversation?"
-	message="This removes the conversation. Changes you already confirmed stay on the leads."
-	confirmText="Delete"
-	confirmVariant="danger"
-	onConfirm={remove}
-	onCancel={() => (deleting = null)}
+	ondelete={remove}
+	oncancel={() => (deleting = null)}
 />
 
 <style>
