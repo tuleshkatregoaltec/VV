@@ -426,6 +426,110 @@ export type AreaProjectSnapshot = {
 };
 
 /**
+ * AssistantActionResult
+ */
+export type AssistantActionResult = {
+    /**
+     * Action Id
+     */
+    action_id: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Href
+     */
+    href?: string | null;
+    /**
+     * Text
+     */
+    text?: string | null;
+};
+
+/**
+ * AssistantConversationListResponse
+ */
+export type AssistantConversationListResponse = {
+    /**
+     * Conversations
+     */
+    conversations: Array<AssistantConversationResponse>;
+    /**
+     * Total
+     */
+    total: number;
+};
+
+/**
+ * AssistantConversationResponse
+ */
+export type AssistantConversationResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Title
+     */
+    title: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * AssistantMessageRequest
+ */
+export type AssistantMessageRequest = {
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
+ * AssistantMessageResponse
+ */
+export type AssistantMessageResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Conversation Id
+     */
+    conversation_id: number;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Meta Data
+     */
+    meta_data?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
  * AuthMeResponse
  */
 export type AuthMeResponse = {
@@ -1125,6 +1229,16 @@ export type ConversationResponse = {
      * Updated At
      */
     updated_at: string;
+};
+
+/**
+ * CreateAssistantConversationRequest
+ */
+export type CreateAssistantConversationRequest = {
+    /**
+     * Title
+     */
+    title?: string | null;
 };
 
 /**
@@ -11007,6 +11121,16 @@ export type UpcomingProjectsResponse = {
 };
 
 /**
+ * UpdateAssistantConversationRequest
+ */
+export type UpdateAssistantConversationRequest = {
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
  * UpdateConversationRequest
  *
  * Request model for updating a conversation
@@ -12366,6 +12490,36 @@ export type CrmCrmMoveCalendarEventResponses = {
 };
 
 export type CrmCrmMoveCalendarEventResponse = CrmCrmMoveCalendarEventResponses[keyof CrmCrmMoveCalendarEventResponses];
+
+export type CrmCrmEditCalendarEventData = {
+    body: CalendarEventCreate;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/events/{event_id}';
+};
+
+export type CrmCrmEditCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmEditCalendarEventError = CrmCrmEditCalendarEventErrors[keyof CrmCrmEditCalendarEventErrors];
+
+export type CrmCrmEditCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    200: CalendarEventResponse;
+};
+
+export type CrmCrmEditCalendarEventResponse = CrmCrmEditCalendarEventResponses[keyof CrmCrmEditCalendarEventResponses];
 
 export type CrmCrmBookCalendarViewingData = {
     body: CalendarViewingCreate;
@@ -14361,6 +14515,250 @@ export type CrmCrmBrevoInboundResponses = {
      */
     200: unknown;
 };
+
+export type CrmAssistantListAssistantConversationsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/assistant/conversations';
+};
+
+export type CrmAssistantListAssistantConversationsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmAssistantListAssistantConversationsError = CrmAssistantListAssistantConversationsErrors[keyof CrmAssistantListAssistantConversationsErrors];
+
+export type CrmAssistantListAssistantConversationsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssistantConversationListResponse;
+};
+
+export type CrmAssistantListAssistantConversationsResponse = CrmAssistantListAssistantConversationsResponses[keyof CrmAssistantListAssistantConversationsResponses];
+
+export type CrmAssistantCreateAssistantConversationData = {
+    body: CreateAssistantConversationRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/assistant/conversations';
+};
+
+export type CrmAssistantCreateAssistantConversationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmAssistantCreateAssistantConversationError = CrmAssistantCreateAssistantConversationErrors[keyof CrmAssistantCreateAssistantConversationErrors];
+
+export type CrmAssistantCreateAssistantConversationResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssistantConversationResponse;
+};
+
+export type CrmAssistantCreateAssistantConversationResponse = CrmAssistantCreateAssistantConversationResponses[keyof CrmAssistantCreateAssistantConversationResponses];
+
+export type CrmAssistantDeleteAssistantConversationData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/assistant/conversations/{conversation_id}';
+};
+
+export type CrmAssistantDeleteAssistantConversationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmAssistantDeleteAssistantConversationError = CrmAssistantDeleteAssistantConversationErrors[keyof CrmAssistantDeleteAssistantConversationErrors];
+
+export type CrmAssistantDeleteAssistantConversationResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmAssistantDeleteAssistantConversationResponse = CrmAssistantDeleteAssistantConversationResponses[keyof CrmAssistantDeleteAssistantConversationResponses];
+
+export type CrmAssistantRenameAssistantConversationData = {
+    body: UpdateAssistantConversationRequest;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/assistant/conversations/{conversation_id}';
+};
+
+export type CrmAssistantRenameAssistantConversationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmAssistantRenameAssistantConversationError = CrmAssistantRenameAssistantConversationErrors[keyof CrmAssistantRenameAssistantConversationErrors];
+
+export type CrmAssistantRenameAssistantConversationResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssistantConversationResponse;
+};
+
+export type CrmAssistantRenameAssistantConversationResponse = CrmAssistantRenameAssistantConversationResponses[keyof CrmAssistantRenameAssistantConversationResponses];
+
+export type CrmAssistantListAssistantMessagesData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: number;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/crm/assistant/conversations/{conversation_id}/messages';
+};
+
+export type CrmAssistantListAssistantMessagesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmAssistantListAssistantMessagesError = CrmAssistantListAssistantMessagesErrors[keyof CrmAssistantListAssistantMessagesErrors];
+
+export type CrmAssistantListAssistantMessagesResponses = {
+    /**
+     * Response Crm-Assistant-List Assistant Messages
+     *
+     * Successful Response
+     */
+    200: Array<AssistantMessageResponse>;
+};
+
+export type CrmAssistantListAssistantMessagesResponse = CrmAssistantListAssistantMessagesResponses[keyof CrmAssistantListAssistantMessagesResponses];
+
+export type CrmAssistantSendAssistantMessageData = {
+    body: AssistantMessageRequest;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/assistant/conversations/{conversation_id}/messages/stream';
+};
+
+export type CrmAssistantSendAssistantMessageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmAssistantSendAssistantMessageError = CrmAssistantSendAssistantMessageErrors[keyof CrmAssistantSendAssistantMessageErrors];
+
+export type CrmAssistantSendAssistantMessageResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type CrmAssistantConfirmAssistantActionData = {
+    body?: never;
+    path: {
+        /**
+         * Action Id
+         */
+        action_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/assistant/actions/{action_id}/confirm';
+};
+
+export type CrmAssistantConfirmAssistantActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmAssistantConfirmAssistantActionError = CrmAssistantConfirmAssistantActionErrors[keyof CrmAssistantConfirmAssistantActionErrors];
+
+export type CrmAssistantConfirmAssistantActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssistantActionResult;
+};
+
+export type CrmAssistantConfirmAssistantActionResponse = CrmAssistantConfirmAssistantActionResponses[keyof CrmAssistantConfirmAssistantActionResponses];
+
+export type CrmAssistantCancelAssistantActionData = {
+    body?: never;
+    path: {
+        /**
+         * Action Id
+         */
+        action_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/assistant/actions/{action_id}/cancel';
+};
+
+export type CrmAssistantCancelAssistantActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmAssistantCancelAssistantActionError = CrmAssistantCancelAssistantActionErrors[keyof CrmAssistantCancelAssistantActionErrors];
+
+export type CrmAssistantCancelAssistantActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssistantActionResult;
+};
+
+export type CrmAssistantCancelAssistantActionResponse = CrmAssistantCancelAssistantActionResponses[keyof CrmAssistantCancelAssistantActionResponses];
 
 export type FiltersGetSalesFilterOptionsData = {
     body?: never;

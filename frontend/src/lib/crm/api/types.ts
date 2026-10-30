@@ -1239,6 +1239,8 @@ export interface CalendarEvent {
 	record: { kind: RefKind; id: string; label: string } | null
 	/** Viewing outcome; "No outcome logged" for a past viewing without one. */
 	outcome: string | null
+	/** Earlier slots this event was rescheduled from, oldest first; shown struck through. */
+	rescheduled_from: { date: string; time: string | null }[]
 	google_sync_status: 'local' | 'pending' | 'synced' | 'error'
 }
 

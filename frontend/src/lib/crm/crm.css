@@ -1262,6 +1262,22 @@
 		.ev:hover {
 			background: var(--line);
 		}
+		/* A slot the event was rescheduled away from: grey and struck through, never happened. */
+		.ev.moved,
+		.evrow.moved .t,
+		.evrow.moved .time {
+			text-decoration: line-through;
+			color: var(--text2);
+		}
+		.ev.moved {
+			--e: var(--text2) !important;
+			background: transparent;
+			border: 1px dashed var(--line);
+			border-left: 3px dashed var(--text2);
+		}
+		.evrow.moved .bar {
+			background: var(--text2) !important;
+		}
 		.dayh {
 			padding: 6px 14px;
 			background: var(--sunk);

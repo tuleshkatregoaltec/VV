@@ -1768,6 +1768,54 @@
 					}
 				}
 			},
+			"put": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Edit Calendar Event",
+				"operationId": "crm-crm_edit_calendar_event",
+				"parameters": [
+					{
+						"name": "event_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Event Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CalendarEventCreate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CalendarEventResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
 			"delete": {
 				"tags": ["crm", "crm"],
 				"summary": "Crm Delete Calendar Event",
@@ -5291,6 +5339,359 @@
 						"content": {
 							"application/json": {
 								"schema": {}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assistant/conversations": {
+			"post": {
+				"tags": ["crm-assistant", "crm-assistant"],
+				"summary": "Create Assistant Conversation",
+				"operationId": "crm-assistant-create_assistant_conversation",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateAssistantConversationRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AssistantConversationResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"tags": ["crm-assistant", "crm-assistant"],
+				"summary": "List Assistant Conversations",
+				"operationId": "crm-assistant-list_assistant_conversations",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"default": 50,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AssistantConversationListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assistant/conversations/{conversation_id}": {
+			"patch": {
+				"tags": ["crm-assistant", "crm-assistant"],
+				"summary": "Rename Assistant Conversation",
+				"operationId": "crm-assistant-rename_assistant_conversation",
+				"parameters": [
+					{
+						"name": "conversation_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Conversation Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateAssistantConversationRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AssistantConversationResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["crm-assistant", "crm-assistant"],
+				"summary": "Delete Assistant Conversation",
+				"operationId": "crm-assistant-delete_assistant_conversation",
+				"parameters": [
+					{
+						"name": "conversation_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Conversation Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assistant/conversations/{conversation_id}/messages": {
+			"get": {
+				"tags": ["crm-assistant", "crm-assistant"],
+				"summary": "List Assistant Messages",
+				"operationId": "crm-assistant-list_assistant_messages",
+				"parameters": [
+					{
+						"name": "conversation_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Conversation Id"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/AssistantMessageResponse"
+									},
+									"title": "Response Crm-Assistant-List Assistant Messages"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assistant/conversations/{conversation_id}/messages/stream": {
+			"post": {
+				"tags": ["crm-assistant", "crm-assistant"],
+				"summary": "Send Assistant Message",
+				"description": "Send a message and stream the assistant's reply via SSE.",
+				"operationId": "crm-assistant-send_assistant_message",
+				"parameters": [
+					{
+						"name": "conversation_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Conversation Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AssistantMessageRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assistant/actions/{action_id}/confirm": {
+			"post": {
+				"tags": ["crm-assistant", "crm-assistant"],
+				"summary": "Confirm Assistant Action",
+				"description": "Run a change the assistant proposed, after re-checking it belongs to the signed-in user.",
+				"operationId": "crm-assistant-confirm_assistant_action",
+				"parameters": [
+					{
+						"name": "action_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Action Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AssistantActionResult"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assistant/actions/{action_id}/cancel": {
+			"post": {
+				"tags": ["crm-assistant", "crm-assistant"],
+				"summary": "Cancel Assistant Action",
+				"operationId": "crm-assistant-cancel_assistant_action",
+				"parameters": [
+					{
+						"name": "action_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Action Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AssistantActionResult"
+								}
 							}
 						}
 					},
@@ -11112,6 +11513,143 @@
 				],
 				"title": "AreaProjectSnapshot"
 			},
+			"AssistantActionResult": {
+				"properties": {
+					"action_id": {
+						"type": "string",
+						"title": "Action Id"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"lead_id": {
+						"type": "integer",
+						"title": "Lead Id"
+					},
+					"href": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Href"
+					},
+					"text": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Text"
+					}
+				},
+				"type": "object",
+				"required": ["action_id", "status", "lead_id"],
+				"title": "AssistantActionResult"
+			},
+			"AssistantConversationListResponse": {
+				"properties": {
+					"conversations": {
+						"items": {
+							"$ref": "#/components/schemas/AssistantConversationResponse"
+						},
+						"type": "array",
+						"title": "Conversations"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					}
+				},
+				"type": "object",
+				"required": ["conversations", "total"],
+				"title": "AssistantConversationListResponse"
+			},
+			"AssistantConversationResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"title": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Title"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "title", "created_at", "updated_at"],
+				"title": "AssistantConversationResponse"
+			},
+			"AssistantMessageRequest": {
+				"properties": {
+					"message": {
+						"type": "string",
+						"maxLength": 4000,
+						"minLength": 1,
+						"title": "Message"
+					}
+				},
+				"type": "object",
+				"required": ["message"],
+				"title": "AssistantMessageRequest"
+			},
+			"AssistantMessageResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"conversation_id": {
+						"type": "integer",
+						"title": "Conversation Id"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"content": {
+						"type": "string",
+						"title": "Content"
+					},
+					"meta_data": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Meta Data"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "conversation_id", "role", "content", "created_at"],
+				"title": "AssistantMessageResponse"
+			},
 			"AuthMeResponse": {
 				"properties": {
 					"id": {
@@ -12284,6 +12822,24 @@
 				"required": ["id", "user_id", "title", "created_at", "updated_at"],
 				"title": "ConversationResponse",
 				"description": "Response model for conversation data"
+			},
+			"CreateAssistantConversationRequest": {
+				"properties": {
+					"title": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Title"
+					}
+				},
+				"type": "object",
+				"title": "CreateAssistantConversationRequest"
 			},
 			"CreateConversationRequest": {
 				"properties": {
@@ -29171,6 +29727,19 @@
 				"type": "object",
 				"required": ["projects", "total"],
 				"title": "UpcomingProjectsResponse"
+			},
+			"UpdateAssistantConversationRequest": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					}
+				},
+				"type": "object",
+				"required": ["title"],
+				"title": "UpdateAssistantConversationRequest"
 			},
 			"UpdateConversationRequest": {
 				"properties": {

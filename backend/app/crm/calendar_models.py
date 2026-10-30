@@ -32,9 +32,7 @@ class CrmCalendarEvent(SQLModel, table=True):
     __tablename__ = "crm_calendar_events"
     __table_args__ = (
         Index("ix_crm_calendar_events_owner_date", "organization_id", "user_id", "event_date"),
-        Index(
-            "ix_crm_calendar_events_google_id", "organization_id", "user_id", "google_event_id"
-        ),
+        Index("ix_crm_calendar_events_google_id", "organization_id", "user_id", "google_event_id"),
     )
 
     id: int | None = SQLField(default=None, primary_key=True)
@@ -72,6 +70,10 @@ class CrmCalendarEvent(SQLModel, table=True):
     )
     listing_id: str | None = None
     done: bool = False
+    # Earlier slots this event was rescheduled from, oldest first: [{"date", "time"}].
+    rescheduled_from: list[dict] = SQLField(
+        default_factory=list, sa_column=Column(JSON, nullable=False)
+    )
     google_event_id: str | None = None
     etag: str | None = None
     google_sync_status: str = SQLField(default="local", index=True)
@@ -114,6 +116,11 @@ class CalendarEventMove(BaseModel):
     time: str | None = Field(default=None, pattern=TIME_PATTERN)
 
 
+class CalendarSlot(BaseModel):
+    date: str
+    time: str | None
+
+
 class CalendarEventResponse(BaseModel):
     id: int
     date: str
@@ -144,4 +151,5 @@ class CalendarEventResponse(BaseModel):
     context: str | None
     record: dict[str, Any] | None
     outcome: str | None
+    rescheduled_from: list[CalendarSlot]
     google_sync_status: GoogleSyncStatus

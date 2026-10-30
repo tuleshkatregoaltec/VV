@@ -5,6 +5,11 @@ This module explicitly registers domain SQLModel classes for Alembic migrations.
 
 from app.billing.models import Subscription
 from app.chat.models import Conversation, Message
+from app.crm.assistant.models import (
+    CrmAssistantAction,
+    CrmAssistantConversation,
+    CrmAssistantMessage,
+)
 from app.crm.calendar_models import CrmCalendarConnection, CrmCalendarEvent
 from app.crm.import_models import (
     CrmContactImport,
@@ -65,6 +70,9 @@ __all__ = [
     "CrmInboundNote",
     "CrmInboundActivity",
     "CrmInboundMatch",
+    "CrmAssistantConversation",
+    "CrmAssistantMessage",
+    "CrmAssistantAction",
     # Feasibility
     "FeasibilitySavedStudy",
 ]

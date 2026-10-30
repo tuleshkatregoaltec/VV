@@ -9,7 +9,7 @@ import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from dateutil.rrule import DAILY, MONTHLY, WEEKLY, YEARLY, rrule
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from sqlalchemy import or_
+from sqlalchemy import Text, and_, cast, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -527,6 +527,7 @@ def serialize_event(event: CrmCalendarEvent) -> dict:
             else None
         ),
         "outcome": "Done" if event.done else None,
+        "rescheduled_from": event.rescheduled_from,
         "google_sync_status": event.google_sync_status,
     }
 
@@ -545,8 +546,14 @@ async def list_events(
         .where(
             CrmCalendarEvent.organization_id == organization_id,
             CrmCalendarEvent.user_id == user_id,
-            CrmCalendarEvent.event_date <= end,
-            or_(CrmCalendarEvent.event_date >= start, CrmCalendarEvent.repeat != "none"),
+            or_(
+                and_(
+                    CrmCalendarEvent.event_date <= end,
+                    or_(CrmCalendarEvent.event_date >= start, CrmCalendarEvent.repeat != "none"),
+                ),
+                # Moved out of the range, but its old slot is still drawn there (struck through).
+                cast(CrmCalendarEvent.rescheduled_from, Text) != "[]",
+            ),
             CrmCalendarEvent.done.is_(False),
         )
         .order_by(CrmCalendarEvent.event_date, CrmCalendarEvent.event_time)
@@ -555,7 +562,11 @@ async def list_events(
     frequencies = {"daily": DAILY, "weekly": WEEKLY, "monthly": MONTHLY, "yearly": YEARLY}
     for row in rows.all():
         if row.repeat == "none":
-            if row.event_date >= start:
+            in_range = start <= row.event_date <= end
+            if in_range or any(
+                start.isoformat() <= slot["date"] <= end.isoformat()
+                for slot in row.rescheduled_from
+            ):
                 output.append(serialize_event(row))
             continue
         frequency = frequencies.get(row.repeat)

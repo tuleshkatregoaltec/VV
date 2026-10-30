@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     # OpenRouter
     OPENROUTER_API_KEY: str  # Bitwarden Secrets
     DEFAULT_CHAT_MODEL: str  # configMap
+    # CRM Assistant only: with an OpenAI key it calls OpenAI directly; otherwise it uses OpenRouter.
+    ASSISTANT_OPENAI_API_KEY: str | None = None
+    ASSISTANT_MODEL: str | None = None
 
     # Auth
     AUTH_URL: AnyUrl  # configMap

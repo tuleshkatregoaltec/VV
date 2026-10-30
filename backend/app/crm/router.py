@@ -355,6 +355,12 @@ async def crm_move_calendar_event(
         raise HTTPException(status_code=404, detail="Calendar event not found")
     original_date = event.event_date
     duration_days = (event.event_end_date or original_date) - original_date
+    if (payload.date, payload.time) != (original_date, event.event_time):
+        # A new list, so SQLAlchemy sees the JSON change.
+        event.rescheduled_from = [
+            *event.rescheduled_from,
+            {"date": original_date.isoformat(), "time": event.event_time},
+        ]
     event.event_date = payload.date
     event.event_time = payload.time
     if payload.time is None:
