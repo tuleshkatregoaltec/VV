@@ -10,7 +10,7 @@ from app.crm.identity import _identity_text, _normalize_phone
 
 _ORGANIZATION_NAME = re.compile(
     r"\b(?:llc|l\.?l\.?c\.?|ltd|limited|pjsc|fze|fzco|company|corporation|"
-    r"developments?|developers?|real\s+estate)\b",
+    r"developments?|developers?|real\s+estate|propert(?:y|ies))\b",
     re.IGNORECASE,
 )
 
@@ -21,34 +21,51 @@ _OFF_PLAN = re.compile(r"delayed|pre[\s-]*reg", re.IGNORECASE)
 # developer: Danube's founders, or a signatory whose rows carry buyers' phone numbers.
 DEVELOPER_SELLER_MIN_UNITS = 50
 DEVELOPER_SELLER_MIN_BUILDINGS = 3
+# A company is the developer on the same counts when its name says so or it sold this many units:
+# Dubai Hills Estate registers plain sales. Banks and investors selling their own stay former owners.
+DEVELOPER_COMPANY_MIN_UNITS = 500
+_DEVELOPER_NAME = re.compile(r"\bdevelop", re.IGNORECASE)
 
 
 def _developer_side_sellers(rows: list[dict[str, Any]]) -> dict[str, tuple[int, int]]:
-    """Names that sell off-plan units for a developer, with their unit and building counts.
+    """Names that sell units for a developer, with their unit and building counts.
 
-    Counted by name across identities: such a name splits into one identity per phone number."""
+    Counted by name across identities: such a name splits into one identity per phone number, or
+    per property when the rows carry none."""
     units: dict[str, set] = defaultdict(set)
     buildings: dict[str, set[str]] = defaultdict(set)
     sales: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    labels: dict[str, str] = {}
     for row in rows:
         if str(row.get("party_role") or "").casefold() != "seller":
             continue
         name = _identity_text(str(row.get("contact_name") or ""))
-        if not name or _ORGANIZATION_NAME.search(str(row.get("contact_name") or "")):
+        if not name:
             continue
+        labels.setdefault(name, str(row.get("contact_name") or ""))
         if identity := row.get("property_identity"):
             units[name].add(tuple(identity))
         if building := _identity_text(str(row.get("building_name") or "")):
             buildings[name].add(building)
         sales[name][0] += 1
         sales[name][1] += bool(_OFF_PLAN.search(str(row.get("procedure_type") or "")))
-    return {
-        name: (len(units[name]), len(buildings[name]))
-        for name, (total, off_plan) in sales.items()
-        if len(units[name]) >= DEVELOPER_SELLER_MIN_UNITS
-        and len(buildings[name]) >= DEVELOPER_SELLER_MIN_BUILDINGS
-        and off_plan * 2 >= total
-    }
+    result = {}
+    for name, (total, off_plan) in sales.items():
+        sold, spread = len(units[name]), len(buildings[name])
+        if sold < DEVELOPER_SELLER_MIN_UNITS or spread < DEVELOPER_SELLER_MIN_BUILDINGS:
+            continue
+        mostly_off_plan = off_plan * 2 >= total
+        if _ORGANIZATION_NAME.search(labels[name]):
+            developer = (
+                mostly_off_plan
+                or bool(_DEVELOPER_NAME.search(labels[name]))
+                or sold >= DEVELOPER_COMPANY_MIN_UNITS
+            )
+        else:
+            developer = mostly_off_plan
+        if developer:
+            result[name] = (sold, spread)
+    return result
 
 
 def build_owner_signals(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -101,7 +118,12 @@ def build_owner_signals(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
         developer = next(
             (developer_sellers[n] for n in sorted(owner["names"]) if n in developer_sellers), None
         )
-        if developer and not owner["company"]:
+        if developer and owner["company"]:
+            signals.append(
+                f"Sold {developer[0]} units across {developer[1]} buildings: "
+                "the developer, not a former owner."
+            )
+        elif developer:
             role = "possible_intermediary"
             signals.append(
                 f"Sold {developer[0]} units across {developer[1]} buildings, mostly off-plan "
@@ -121,6 +143,6 @@ def build_owner_signals(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
         result[key] = {
             "relationship_role": role,
             "role_signals": signals,
-            "developer_side_seller": bool(developer) and not owner["company"],
+            "developer_side_seller": bool(developer),
         }
     return result

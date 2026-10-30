@@ -96,11 +96,33 @@ def test_an_investor_selling_their_own_units_stays_a_former_owner(units, buildin
     assert signal["relationship_role"] == "unknown"
 
 
-def test_a_developer_company_stays_an_organization():
+def test_a_developer_company_stays_an_organization_and_is_not_a_former_owner():
     rows = [_sale("a", "Example Developments LLC", u, f"Tower {u % 4}") for u in range(60)]
     signal = build_owner_signals(rows)["a"]
     assert signal["relationship_role"] == "organization"
-    assert signal["developer_side_seller"] is False
+    assert signal["developer_side_seller"] is True
+    assert any("the developer, not a former owner" in s for s in signal["role_signals"])
+
+
+def test_a_name_ending_in_properties_is_an_organization():
+    # "DAMAC CRESCENT PROPERTIES" sold 9,831 units with no phone: one identity per unit.
+    signal = build_owner_signals([_row(name="Example Crescent Properties")])["a"]
+    assert signal["relationship_role"] == "organization"
+
+
+@pytest.mark.parametrize(
+    ("name", "units", "developer"),
+    [
+        ("Example Hills Estate LLC", 520, True),  # plain sales at a developer's volume
+        ("Example Bank PJSC", 80, False),  # repossessed units: a real former owner
+        ("Example Holdings Limited", 66, False),  # an investor company selling its own units
+    ],
+)
+def test_a_company_selling_plain_sales_is_a_developer_only_at_a_developers_volume(
+    name, units, developer
+):
+    rows = [_sale("a", name, u, f"Tower {u % 5}", procedure="Sell") for u in range(units)]
+    assert build_owner_signals(rows)["a"]["developer_side_seller"] is developer
 
 
 def test_explicit_area_units_are_not_silently_treated_as_square_feet():

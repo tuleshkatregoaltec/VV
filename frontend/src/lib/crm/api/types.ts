@@ -829,7 +829,7 @@ export interface OwnerRow {
 	units_total: number
 	/** Properties held now (verified or probable current owner). */
 	units_current: number
-	/** Sells off-plan units for a developer; kept out of former owners. */
+	/** A developer, or a person selling for one; kept out of former owners. */
 	developer_side_seller: boolean
 	next_event: string
 	next_event_date: string

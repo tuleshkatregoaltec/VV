@@ -226,7 +226,7 @@ const facts = $derived(
 							<td>
 								<button type="button" class="rowlink" onclick={() => openOwner(x.id)}>{x.name}</button>
 								{#if x.tag}<Chip>{x.tag}</Chip>{/if}
-								{#if x.developer_side_seller}<div class="sub">Developer-side seller · not a former owner</div>{:else if x.relationship_role === 'possible_intermediary'}<div class="sub">Possible intermediary · unverified</div>{:else if x.relationship_role === 'organization'}<div class="sub">Organization in source · role unverified</div>{/if}
+								{#if x.developer_side_seller}<div class="sub">{x.relationship_role === 'organization' ? 'Developer' : 'Developer-side seller'} · not a former owner</div>{:else if x.relationship_role === 'possible_intermediary'}<div class="sub">Possible intermediary · unverified</div>{:else if x.relationship_role === 'organization'}<div class="sub">Organization in source · role unverified</div>{/if}
 								{#if x.lead}
 									<div class="sub">
 										Lead · {stageOf(x.lead.stage).label}{x.lead.id === null ? ` · ${x.lead.agent}` : ''}

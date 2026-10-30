@@ -595,7 +595,7 @@ class CrmOwnerProfile(BaseModel):
     history_summary: CrmOwnerHistorySummary | None = None
     relationship_role: Literal["unknown", "possible_intermediary", "organization"] = "unknown"
     role_signals: list[str] = Field(default_factory=list)
-    # Sells off-plan units for a developer; never listed among former owners.
+    # A developer, or a person selling for one; never listed among former owners.
     developer_side_seller: bool = False
     # Properties held now (verified or probable current owner).
     current_property_count: int = 0
