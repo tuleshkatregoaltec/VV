@@ -43,11 +43,21 @@ async function openReport(id: number) {
 	await goto(`/crm/owners/imports/${id}`)
 }
 
+/** "Project", "Project 2": two columns can feed one field (the second is read when the first is blank). */
+function numbered(labels: string[]) {
+	const seen = new Map<string, number>()
+	return labels.map((label) => {
+		const n = (seen.get(label) ?? 0) + 1
+		seen.set(label, n)
+		return n === 1 ? label : `${label} ${n}`
+	})
+}
+
 /** Our field names for the columns the backend reads, with the sample values under them. */
 function readColumns(p: OwnerFilePreview) {
 	const index = (p.fields ?? []).flatMap((f, i) => (f ? [i] : []))
 	return {
-		headers: index.map((i) => fieldLabel(p.fields?.[i] ?? '')),
+		headers: numbered(index.map((i) => fieldLabel(p.fields?.[i] ?? ''))),
 		rows: p.sample.slice(0, 3).map((row) => index.map((i) => row[i] ?? '')),
 		checklist: fieldChecklist(
 			(p.fields ?? []).filter((f): f is string => Boolean(f)),
@@ -295,8 +305,8 @@ async function send() {
 						<table class="tbl">
 							<thead>
 								<tr>
-									<th>Name{preview.columns.name ? ` (${preview.columns.name})` : ''}</th>
-									<th>Phone{preview.columns.phone ? ` (${preview.columns.phone})` : ''}</th>
+									<th>Name</th>
+									<th>Phone</th>
 									<th>Budget</th>
 									<th>Area</th>
 								</tr>
