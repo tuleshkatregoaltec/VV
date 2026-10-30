@@ -20,7 +20,6 @@ async def test_replay_is_atomic_idempotent_and_preserves_agent_work(pg_session, 
         "_recover_property_identity_from_transaction",
         "_recover_property_identity_from_near_transaction",
         "_apply_registry_unit_fallbacks",
-        "resolve_cadastral_plots",
         "_enrich_workspaces",
     ):
         monkeypatch.setattr(imports, method, AsyncMock())

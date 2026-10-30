@@ -27,7 +27,6 @@ import type {
 	CrmRenewalLeadsResponse,
 	CrmRenewalOwner,
 	CrmRenewalsResponse,
-	CrmWorkspaceResponse,
 	InboundEnquiryListResponse,
 	InboundEnquiryResponse,
 	InboundEnquiryUpdate,
@@ -80,6 +79,9 @@ import type {
 	OwnerDroppedRows,
 	OwnerDroppedRowsParams,
 	OwnerFilePreview,
+	OwnerHistory,
+	OwnerHistoryParams,
+	OwnerHistorySummary,
 	OwnerImport,
 	OwnerImportDetail,
 	OwnerImportResult,
@@ -745,19 +747,25 @@ export async function shortlistMatch(
 
 /* ── owners ── */
 
-const OWNERSHIP: Record<CrmOwnerProperty['ownership_status'], Chip> = {
-	verified_current_owner: { tone: 'green', label: 'Verified owner' },
-	probable_current_owner: { tone: 'green', label: 'Probable owner' },
-	unit_linked_unverified: { tone: 'amber', label: 'Not verified' },
-	former_owner: { tone: 'neutral', label: 'Sold' },
-	conflicting_claim: { tone: 'red', label: 'Conflicting claim' },
-	insufficient_property_data: { tone: 'neutral', label: 'Not enough data' },
-	registry_not_observed: { tone: 'neutral', label: 'Not in registry' },
-	unmatched: { tone: 'neutral', label: 'Unmatched' }
-}
+const OWNERSHIP: Record<CrmOwnerProperty['ownership_status'], Chip> = STATUS_INFO
 
-const unitLabel = (p: CrmOwnerProperty) =>
-	[p.building_name || p.project_name, p.unit_number].filter(Boolean).join(' #')
+const unitLabel = (p: CrmOwnerProperty) => {
+	const location = p.building_name || p.project_name
+	if (p.unit_number) return [location, p.unit_number].filter(Boolean).join(' #')
+	const ref = p.source_reference
+	return (
+		[
+			location,
+			ref?.land_number && `Land ${ref.land_number}`,
+			ref?.building_number && `Building ${ref.building_number}`,
+			ref?.dm_sub_number && `DM sub ${ref.dm_sub_number}`
+		]
+			.filter(Boolean)
+			.join(' · ') ||
+		p.property_type ||
+		'Property reference'
+	)
+}
 const bedsOf = (p: CrmOwnerProperty) => {
 	const b = p.registry_bedrooms?.trim().toLowerCase()
 	if (!b) return null
@@ -768,11 +776,33 @@ const bedsOf = (p: CrmOwnerProperty) => {
 const soldLater = (p: CrmOwnerProfile) =>
 	(p.properties ?? []).some((x) => x.later_sale_date || x.ownership_status === 'former_owner')
 
+const unverifiedOwnerAssociation = (p: CrmOwnerProperty) => {
+	const ref = p.source_reference
+	return Boolean(
+		ref &&
+			(['unmatched', 'ambiguous'].includes(ref.transaction_match_status ?? '') ||
+				(p.ownership_status === 'former_owner' && ref.ownership_evidence_basis === 'workbook_only'))
+	)
+}
+const ownerPropertyChip = (p: CrmOwnerProperty): Chip =>
+	unverifiedOwnerAssociation(p)
+		? {
+				label:
+					p.ownership_status === 'former_owner'
+						? 'Unverified former owner'
+						: 'Unverified current candidate',
+				tone: 'amber'
+			}
+		: OWNERSHIP[p.ownership_status]
+
 function ownerRow(p: CrmOwnerProfile, ws: CrmOwnerWorkspaceSummary | undefined): OwnerRow {
+	const properties = p.properties ?? []
 	const end = p.next_lease_end ?? null
 	const days = end ? daysFromToday(end) : null
 	return {
 		id: p.owner_key,
+		relationship_role: p.relationship_role ?? 'unknown',
+		role_signals: p.role_signals ?? [],
 		name: p.contact_name,
 		sources: ['agency_import'],
 		source_label: 'Agency file',
@@ -784,7 +814,11 @@ function ownerRow(p: CrmOwnerProfile, ws: CrmOwnerWorkspaceSummary | undefined):
 				? ''
 				: `${days >= 0 ? `in ${days} days` : `${-days} days ago`} · ${dayMonth(end as string)}`,
 		last_contact: ws?.last_note ? dayMonth(ws.updated_at) : 'Never',
-		tag: OWNERSHIP[p.highest_ownership_status].label,
+		tag: properties.some(unverifiedOwnerAssociation)
+			? properties.every(unverifiedOwnerAssociation)
+				? ownerPropertyChip(properties[0]).label
+				: 'Includes unverified properties'
+			: OWNERSHIP[p.highest_ownership_status].label,
 		market_update_due: false,
 		mine: Boolean(ws),
 		on_file: true,
@@ -811,8 +845,9 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 		},
 		p.later_sale_date && { when: p.later_sale_date, what: 'Sold on', aed: null }
 	].filter(Boolean) as { when: string; what: string; aed: number | null }[]
-	const chip = OWNERSHIP[p.ownership_status]
+	const chip = ownerPropertyChip(p)
 	return {
+		source_reference: p.source_reference,
 		key: p.property_key,
 		number: p.unit_number,
 		building: p.building_name || p.project_name,
@@ -860,12 +895,12 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 			},
 			// Same wording as the import report, so the panel and the report agree.
 			result: {
-				label: STATUS_INFO[p.ownership_status].label,
+				label: chip.label,
 				confidence: p.confidence_score,
 				reason: p.match_reason,
 				chip: {
-					tone: STATUS_INFO[p.ownership_status].tone,
-					label: STATUS_INFO[p.ownership_status].label
+					tone: chip.tone,
+					label: chip.label
 				}
 			},
 			lease: p.lease_end ? { end: p.lease_end, aed: p.annual_rent_aed ?? null } : null
@@ -918,7 +953,8 @@ const SERVER_TABS = {
 	all: { scope: 'all' },
 	sold: { scope: 'prior_owners' },
 	multi: { scope: 'all', min_properties: 3 },
-	event: { scope: 'all', next_event_days: 90 }
+	event: { scope: 'all', next_event_days: 90 },
+	review: { scope: 'needs_review' }
 } as const
 type ServerTab = keyof typeof SERVER_TABS
 const isServerTab = (t: OwnerTab): t is ServerTab => t in SERVER_TABS
@@ -934,6 +970,11 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 		client.get<CrmOwnerRegistryResponse>(
 			client.withQuery(`${CRM}/owner-registry`, {
 				...SERVER_TABS[tab],
+				...(p.ownership && ['all', 'multi', 'event'].includes(tab)
+					? { scope: p.ownership === 'former' ? 'prior_owners' : 'current_owners' }
+					: {}),
+				list_id: p.list_id,
+				transaction_match_status: p.transaction_match_status || undefined,
 				search: p.q || undefined,
 				limit,
 				offset
@@ -990,6 +1031,13 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 		multi: ({ o }) => (o.properties ?? []).length >= 3,
 		event: ({ o }) => inEvent(o),
 		sold: ({ o }) => soldLater(o),
+		review: ({ o }) =>
+			(o.properties ?? []).some(
+				(x) =>
+					!['verified_current_owner', 'probable_current_owner', 'former_owner'].includes(
+						x.ownership_status
+					)
+			),
 		update: ({ row }) => row.market_update_due
 	}
 	const counts = Object.fromEntries(
@@ -1005,6 +1053,7 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 	const items = (isServerTab(p.tab) ? matching : matching.filter(TABS[p.tab])).map(({ row }) => row)
 
 	return {
+		source_audit: res.source_audit,
 		items,
 		counts,
 		total: items.length,
@@ -1021,6 +1070,25 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 	}
 }
 
+/** Current association assessments across all imported evidence, or one source import. */
+export function getOwnerHistorySummary(importId?: number): Promise<OwnerHistorySummary> {
+	return client.get<OwnerHistorySummary>(
+		importId === undefined
+			? `${CRM}/owner-history/summary`
+			: `${CRM}/contact-imports/${importId}/owner-summary`
+	)
+}
+
+/** Source events retain their import provenance; repeated source rows are not transactions. */
+export function getOwnerHistory(id: string, p: OwnerHistoryParams = {}): Promise<OwnerHistory> {
+	const params = new URLSearchParams({
+		limit: String(p.limit ?? 50),
+		offset: String(p.offset ?? 0)
+	})
+	if (p.import_id !== undefined) params.set('import_id', String(p.import_id))
+	return client.get<OwnerHistory>(`${CRM}/owners/${encodeURIComponent(id)}/history?${params}`)
+}
+
 export async function getOwner(id: string): Promise<OwnerDetail> {
 	const [o, ws, imports] = await Promise.all([
 		client.get<CrmOwnerProfile>(`${CRM}/owners/${encodeURIComponent(id)}`),
@@ -1030,6 +1098,13 @@ export async function getOwner(id: string): Promise<OwnerDetail> {
 	const w = ws.find((x) => x.owner_key === id)
 	return {
 		...ownerRow(o, w),
+		phone_numbers: [
+			...new Set(
+				[...(o.phone_numbers ?? []), o.phone_primary, o.phone_alternate].filter(
+					(phone): phone is string => Boolean(phone)
+				)
+			)
+		],
 		unit_rows: (o.properties ?? []).map(ownerUnit),
 		imported_from: ownerImportSources(o.properties ?? [], imports),
 		matched: [],
@@ -1306,6 +1381,7 @@ export async function listOwnerImportDetails(): Promise<OwnerImportDetail[]> {
 				at: stamp(r.created_at),
 				createdAt: r.created_at,
 				listId: r.list_id ?? null,
+				source_audit: r.summary.source_audit,
 				counts: importCounts(r.summary),
 				sheets: mappings.map((m) => ({
 					name: m.sheet_name,
@@ -1332,6 +1408,8 @@ export async function listOwnerImportRows(
 	const res = await client.get<CrmContactListDetail>(
 		client.withQuery(`${CRM}/contact-lists/${listId}`, {
 			status: p.status ?? undefined,
+			match_colour: p.matchColour?.length ? p.matchColour : undefined,
+			match_outcome: p.matchOutcome?.length ? p.matchOutcome : undefined,
 			search: p.search.trim() || undefined,
 			limit: OWNER_ROWS_LIMIT,
 			offset: p.offset
@@ -1358,7 +1436,12 @@ export async function listOwnerImportRows(
 				confidence: c.confidence_score,
 				reason: c.match_reason,
 				sheet: c.source_sheet,
-				rowNumber: c.source_row_number
+				rowNumber: c.source_row_number,
+				matchOutcome: c.match_outcome ?? null,
+				matchColour: c.match_colour ?? null,
+				matchReasons: c.match_reasons ?? [],
+				matchWarnings: c.match_warnings ?? [],
+				matchedSale: c.matched_sale ?? null
 			})
 		),
 		total: res.total,
@@ -1433,6 +1516,7 @@ export async function listOwnerImportProperties(
 			currentOwner: r.current_owner ?? null,
 			latestDate: r.latest_date ?? null,
 			latestPrice: r.latest_price_aed ?? null,
+			recordsTruncated: r.records_truncated ?? false,
 			records: r.records.map((x) => ({
 				name: x.name,
 				procedure: x.procedure ?? '',
@@ -1522,9 +1606,6 @@ export async function getMarket(id: string): Promise<MarketListingDetail> {
 
 /* ── lease renewals (Assets › Renewals and the Leads inbox) ── */
 
-/** Owner-import claims that tie a contact to the unit as its owner today. */
-const CURRENT_OWNER = new Set(['verified_current_owner', 'probable_current_owner'])
-
 function renewalUnit(l: CrmLead): string {
 	const place = l.building_name || l.project_name || l.area_name || 'Unit'
 	return l.unit_number ? `${place} · unit ${l.unit_number}` : place
@@ -1600,36 +1681,25 @@ export async function listRenewals(
 }
 
 /**
- * One lease with its property history (/leads/{id}) and owner. The owner is the one saved on
- * the agent's lead workspace, else a current-owner match from an owner import, else nobody.
+ * One lease with its history and the same server-resolved owner used by the renewal feed.
+ * Imported claims remain separate evidence; they never override the resolved owner here.
  */
 export async function getRenewal(id: string): Promise<RenewalDetail> {
 	const key = encodeURIComponent(id)
-	const [detail, workspace, contacts] = await Promise.all([
+	const [detail, contacts] = await Promise.all([
 		client.get<CrmLeadDetailResponse>(`${CRM}/leads/${key}`),
-		client.get<CrmWorkspaceResponse>(`${CRM}/workspaces/${key}`),
 		client.get<CrmLeadImportedContact[]>(`${CRM}/leads/${key}/contacts`)
 	])
-	const typed = workspace.owner_name || workspace.owner_phone || workspace.owner_email
-	const matched = contacts.find((c) => CURRENT_OWNER.has(c.ownership_status))
-	const owner: RenewalOwner | null = typed
-		? {
-				name: workspace.owner_name ?? null,
-				phone: workspace.owner_phone ?? null,
-				email: workspace.owner_email ?? null,
-				source: 'Saved on this lead'
-			}
-		: matched
-			? {
-					name: matched.contact_name || null,
-					phone: matched.phone_primary || matched.phone_alternate || null,
-					email: matched.email_primary ?? null,
-					source: `Owner import · ${matched.list_name}`
-				}
-			: null
 	const l = detail.lead
 	return {
-		...renewal(l, owner),
+		...renewal(l, renewalOwner(detail.owner)),
+		owner_evidence: contacts.map((c) => ({
+			id: c.claim_id,
+			name: c.contact_name,
+			status: c.ownership_status,
+			reason: c.match_reason,
+			source: c.list_name
+		})),
 		reason: l.lead_reason,
 		action: l.recommended_action,
 		last_purchase: l.last_purchase_date

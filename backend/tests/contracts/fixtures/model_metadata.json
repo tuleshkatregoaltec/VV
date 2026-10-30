@@ -104,7 +104,7 @@
     ]
   },
   "crm_lead_workspaces": {
-    "ddl": "\nCREATE TABLE crm_lead_workspaces (\n\tid SERIAL NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tlead_id VARCHAR NOT NULL, \n\tunit_candidate_key VARCHAR NOT NULL, \n\tpipeline_status VARCHAR NOT NULL, \n\thighlight_color VARCHAR NOT NULL, \n\towner_name VARCHAR, \n\towner_email VARCHAR, \n\towner_phone VARCHAR, \n\tnext_follow_up DATE, \n\ttags JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_workspace_owner_candidate UNIQUE (user_id, organization_id, unit_candidate_key)\n)\n\n",
+    "ddl": "\nCREATE TABLE crm_lead_workspaces (\n\tid SERIAL NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tlead_id VARCHAR NOT NULL, \n\tunit_candidate_key VARCHAR NOT NULL, \n\tpipeline_status VARCHAR NOT NULL, \n\thighlight_color VARCHAR NOT NULL, \n\towner_name VARCHAR, \n\towner_email VARCHAR, \n\towner_phone VARCHAR, \n\towner_source VARCHAR, \n\tnext_follow_up DATE, \n\ttags JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_workspace_owner_candidate UNIQUE (user_id, organization_id, unit_candidate_key)\n)\n\n",
     "indexes": [
       "CREATE INDEX ix_crm_lead_workspaces_lead_id ON crm_lead_workspaces (lead_id)",
       "CREATE INDEX ix_crm_lead_workspaces_organization_id ON crm_lead_workspaces (organization_id)",
@@ -136,6 +136,7 @@
       "CREATE INDEX ix_crm_claim_list_owner_property_preference ON crm_property_contact_claims (organization_id, list_id, owner_key, property_key, (CASE ownership_status WHEN 'former_owner' THEN 6 WHEN 'verified_current_owner' THEN 5 WHEN 'probable_current_owner' THEN 4 WHEN 'unit_linked_unverified' THEN 3 WHEN 'conflicting_claim' THEN 2 ELSE 1 END) DESC, confidence_score DESC, transaction_date DESC NULLS LAST)",
       "CREATE INDEX ix_crm_claim_org_owner ON crm_property_contact_claims (organization_id, owner_key)",
       "CREATE INDEX ix_crm_claim_org_owner_property ON crm_property_contact_claims (organization_id, owner_key, property_key)",
+      "CREATE INDEX ix_crm_claim_org_property ON crm_property_contact_claims (organization_id, property_key)",
       "CREATE INDEX ix_crm_claim_owner_property_preference ON crm_property_contact_claims (organization_id, owner_key, property_key, (CASE ownership_status WHEN 'former_owner' THEN 6 WHEN 'verified_current_owner' THEN 5 WHEN 'probable_current_owner' THEN 4 WHEN 'unit_linked_unverified' THEN 3 WHEN 'conflicting_claim' THEN 2 ELSE 1 END) DESC, confidence_score DESC, transaction_date DESC NULLS LAST)",
       "CREATE INDEX ix_crm_property_contact_claims_import_id ON crm_property_contact_claims (import_id)",
       "CREATE INDEX ix_crm_property_contact_claims_lead_id ON crm_property_contact_claims (lead_id)",

@@ -1,8 +1,7 @@
 /**
  * The "Matching" lines of an owner's unit: each thing the owner file says, next to DLD's latest
- * sale of the unit, and whether they agree. The rules are the import's own
- * (backend/app/crm/ownership.py): same sale = dates within 2 days, price within 2%, and a DLD sale
- * after the file's date means the owner has sold since. Property type is shown but not used.
+ * sale of the unit. These are field comparisons, not a second ownership resolver:
+ * the backend assessment considers the complete history, competing parties and missing evidence.
  */
 import type { OwnerUnitCheck } from './api/types'
 import { ownerPropertyKind } from './config'
@@ -19,7 +18,7 @@ export interface MatchLine {
 }
 
 const DAY = 86_400_000
-const SAME_SALE_DAYS = 2
+const DATE_WINDOW_DAYS = 7
 const PRICE_TOLERANCE = 0.02
 
 const unitKey = (v: string) => v.toUpperCase().replace(/\s+/g, '')
@@ -45,11 +44,11 @@ export function matchLines(c: OwnerUnitCheck): MatchLine[] {
 				: { result: 'differs' as const, note: 'Different unit' })
 	})
 
-	// Sale date: decides whether DLD's latest sale is the file's sale, a later one, or older.
+	// A nearby date is supporting evidence; it cannot establish the same sale on its own.
 	const fileDay = day(c.imported.date)
 	const dldDay = day(c.dld.date)
 	const days = Math.round((dldDay - fileDay) / DAY)
-	const sameSale = Number.isFinite(days) && Math.abs(days) <= SAME_SALE_DAYS
+	const nearbyDate = Number.isFinite(days) && Math.abs(days) <= DATE_WINDOW_DAYS
 	lines.push({
 		label: 'Sale date',
 		file: c.imported.date ? fullDate(c.imported.date) : '—',
@@ -59,12 +58,18 @@ export function matchLines(c: OwnerUnitCheck): MatchLine[] {
 					result: 'none' as const,
 					note: c.imported.date ? 'No DLD sale to compare' : 'No date in the file'
 				}
-			: sameSale
-				? { result: 'match' as const, note: `Same sale (within ${SAME_SALE_DAYS} days)` }
+			: nearbyDate
+				? {
+						result: 'match' as const,
+						note:
+							days === 0
+								? 'Same date'
+								: `Dates within ${DATE_WINDOW_DAYS} days; see ownership assessment`
+					}
 				: days > 0
 					? {
 							result: 'differs' as const,
-							note: `DLD has a later sale, ${days.toLocaleString('en-US')} days after the file's date: sold since`
+							note: `Latest recorded sale is ${days.toLocaleString('en-US')} days after the file's date; see ownership assessment`
 						}
 					: {
 							result: 'info' as const,
@@ -72,7 +77,7 @@ export function matchLines(c: OwnerUnitCheck): MatchLine[] {
 						})
 	})
 
-	// Price: only compared when both dates are the same sale.
+	// Equal amounts can support a provisional match despite a source-date discrepancy.
 	const fileAed = c.imported.aed
 	const dldAed = c.dld.aed
 	const gap = fileAed && dldAed ? Math.abs(fileAed - dldAed) / dldAed : null
@@ -85,29 +90,33 @@ export function matchLines(c: OwnerUnitCheck): MatchLine[] {
 					result: 'none' as const,
 					note: fileAed ? 'No DLD price to compare' : 'No price in the file'
 				}
-			: !sameSale
-				? { result: 'none' as const, note: 'Not compared: not the same sale' }
-				: gap <= PRICE_TOLERANCE
-					? { result: 'match' as const, note: `Within ${PRICE_TOLERANCE * 100}%` }
-					: { result: 'differs' as const, note: `Differs by ${(gap * 100).toFixed(1)}%` })
+			: gap <= PRICE_TOLERANCE
+				? { result: 'match' as const, note: `Within ${PRICE_TOLERANCE * 100}%` }
+				: { result: 'differs' as const, note: `Differs by ${(gap * 100).toFixed(1)}%` })
 	})
 
-	// Property type: shown for reference; the import does not match on it.
+	// A generic Unit is compatible with Apartment; explicit physical kinds still matter.
 	const fileType = c.imported.type
 	const dldType = c.dld.type
 	const fileKind = ownerPropertyKind(fileType)
+	const registryKind = ownerPropertyKind(dldType)
+	const genericApartment =
+		(/^units?$/i.test(fileType.trim()) && registryKind === 'apartment') ||
+		(/^units?$/i.test(dldType.trim()) && fileKind === 'apartment')
 	lines.push({
 		label: 'Property type',
 		file: fileType || '—',
 		dld: dldType || '—',
 		...(!fileType || !dldType
-			? { result: 'none' as const, note: 'Not used for matching' }
-			: fileKind !== 'unspecified' && fileKind === ownerPropertyKind(dldType)
-				? { result: 'match' as const, note: 'Same kind · not used for matching' }
-				: { result: 'info' as const, note: 'Different · not used for matching' })
+			? { result: 'none' as const, note: 'Property type unavailable' }
+			: genericApartment
+				? { result: 'match' as const, note: 'Compatible: Unit / Apartment' }
+				: fileKind !== 'unspecified' && fileKind === registryKind
+					? { result: 'match' as const, note: 'Same property kind' }
+					: { result: 'info' as const, note: 'Different descriptions; see ownership assessment' })
 	})
 
-	// Role: a Seller in the file is a former owner whatever DLD shows.
+	// Keep the source role visible without independently deciding current/former ownership.
 	const role = c.imported.role
 	lines.push({
 		label: 'Role',
@@ -116,8 +125,8 @@ export function matchLines(c: OwnerUnitCheck): MatchLine[] {
 		...(!role
 			? { result: 'none' as const, note: 'No role in the file' }
 			: /seller/i.test(role)
-				? { result: 'info' as const, note: 'Seller in the file: a former owner' }
-				: { result: 'info' as const, note: 'Buyer in the file: checked against DLD sales' })
+				? { result: 'info' as const, note: 'Source says Seller; role retained for review' }
+				: { result: 'info' as const, note: 'Source says Buyer; see ownership assessment' })
 	})
 
 	return lines

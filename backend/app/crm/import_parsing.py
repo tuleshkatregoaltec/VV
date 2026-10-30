@@ -23,12 +23,13 @@ from app.crm.identity import (
     _text,
     _usable_project_name,
 )
-from app.crm.import_events import IMPORT_RESOLVER_VERSION, event_family
+from app.crm.import_events import IMPORT_RESOLVER_VERSION, event_family, source_size_unit
 from app.crm.import_inventory import SourcePropertyInventory
 from app.crm.import_models import (
     CrmContactImportSummary,
     CrmSheetMapping,
 )
+from app.crm.import_normalization import location_evidence, positive_decimal
 
 _MAX_ROWS = 500_000
 
@@ -49,6 +50,8 @@ _CANONICAL_FIELDS = {
     "property_type",
     "completion_status",
     "size_sqft",
+    "size_sqm",
+    "size_unknown",
     "transaction_date",
     "transaction_price_aed",
     "party_role",
@@ -74,6 +77,8 @@ _ALIASES = {
     "unit_number": {
         "unitnumber",
         "unit",
+        "flatnumber",
+        "flatno",
         "villanumber",
         "unitnumberproxy",
         "plotpreregisterationno",
@@ -88,7 +93,9 @@ _ALIASES = {
         "regtypeen",
         "propertycompletionstatus",
     },
-    "size_sqft": {"size", "areasqft", "propertysize"},
+    "size_sqft": {"areasqft", "sizesqft", "propertysizesqft"},
+    "size_sqm": {"sizesqm", "areasqm", "propertysizesqm", "areasquaremeters"},
+    "size_unknown": {"size", "propertysize"},
     "transaction_date": {"regis", "date", "registrationdate", "transactiondate"},
     "transaction_price_aed": {
         "procedurevalue",
@@ -108,9 +115,54 @@ _ALIASES = {
     "land_sub_number": {"landsubnumber", "landsubno"},
     "property_number": {"propertynumber"},
     "plot_number": {"plotpreregno", "plotpreregistrationno", "plotnumber"},
-    "municipality_number": {"dmno", "municipalityno"},
-    "municipality_sub_number": {"dmsubno", "municipalitysubno"},
+    # JVT exports spell it "Muncipality": Area = municipality no, Land = sub no (see their
+    # sibling "Municipality No" / "Municipality Sub No" sheets).
+    "municipality_number": {
+        "dmno",
+        "municipalityno",
+        "areamuncipalitynumber",
+        "areamunicipalitynumber",
+    },
+    "municipality_sub_number": {
+        "dmsubno",
+        "municipalitysubno",
+        "landmuncipalitynumber",
+        "landmunicipalitynumber",
+    },
 }
+
+# Land-registry variants ("Project Lnd"). They are the field when the explicit column is absent,
+# otherwise an ordered fallback that fills the explicit column's blank cells.
+_FALLBACK_ALIASES = {
+    "master_project": {"masterprojectlnd", "masterprojectland"},
+    "project_name": {"projectlnd", "projectland"},
+}
+_LOCATION_FIELDS = ("area_name", "master_project", "project_name", "building_name")
+
+_CHANNEL_TOKENS = {
+    "mobile",
+    "mobile1",
+    "mobile2",
+    "phone",
+    "phone1",
+    "phone2",
+    "secondarymobile",
+    "alternatemobile",
+    "phonenumber",
+    "mobilenumber",
+}
+# Unmapped headers holding owner identity or contact data are intentionally never imported, so
+# they are not reported as dropped; anything naming a property location is always reported.
+_IDENTITY_HEADER = re.compile(
+    r"name|phone|mobile|mail|nation|passport|birth|dob|emirates|contact|gender|visa|owner"
+    r"|idnumber|unified|identity|card|whatsapp"
+)
+_LOCATION_HEADER = re.compile(r"build|project|area|unit|villa|tower|community")
+_SPREADSHEET_ERROR = re.compile(r"#(?:REF!|N/A|VALUE!|DIV/0!|NAME\?|NULL!|NUM!)", re.IGNORECASE)
+_BLANK_TEXT = {"", "0", "null", "none", "n/a", "-"}
+_AUTOFILL_LABEL = re.compile(r"(?P<base>.*\S)\s+(?P<number>\d+)")
+# Rows read at inspection to find which unmapped columns hold data and to sample them.
+_SCAN_ROWS = 2000
 
 
 @dataclass
@@ -134,6 +186,63 @@ class SheetProfile:
     date_order: str = "dmy"
     last_data_row: int | None = None
     property_inventory: SourcePropertyInventory = field(default_factory=SourcePropertyInventory)
+    # Ordered extra headers per canonical field: used when the mapped cell is blank.
+    fallback_map: dict[str, list[str]] = field(default_factory=dict)
+    # Non-personal headers that hold data but have no role (header keys, in sheet order).
+    unmapped_headers: list[str] = field(default_factory=list)
+    # First rows below the header, kept for data detection and non-personal column samples.
+    sample_rows: list[tuple[Any, ...]] = field(default_factory=list, repr=False)
+    # Header index -> {row number: label} for Excel autofill runs found while parsing.
+    autofill_repairs: dict[int, dict[int, str]] = field(default_factory=dict, repr=False)
+
+
+def is_blank(value: Any) -> bool:
+    """True for empty cells and the placeholders exports use for "no value"."""
+    if value is None:
+        return True
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return value == 0
+    text = str(value).strip().lower()
+    return text in _BLANK_TEXT or bool(_SPREADSHEET_ERROR.fullmatch(text))
+
+
+def repair_autofill_runs(values: list[tuple[int, Any]], *, min_run: int = 50) -> dict[int, str]:
+    """Undo Excel autofill in one location column.
+
+    Dragging the seed ``DAMAC HILLS 2`` down a column writes ``DAMAC HILLS 3``, ``DAMAC HILLS 4``
+    ... one per row, so the number minus the row number stays constant. A run of at least
+    ``min_run`` such rows after the seed is an artefact: each of its rows maps to the seed label
+    (the row just before the run, which itself follows the same pattern). Shorter runs, and
+    numbering that does not track the row number, are real data and are left alone.
+    """
+    repaired: dict[int, str] = {}
+    run: list[tuple[int, str]] = []
+    base = ""
+    offset = 0
+
+    def close() -> None:
+        if len(run) - 1 >= min_run:
+            repaired.update({row: run[0][1] for row, _ in run[1:]})
+
+    for row, cell in sorted(values, key=lambda item: item[0]):
+        label = _text(cell)
+        match = _AUTOFILL_LABEL.fullmatch(label)
+        if (
+            match
+            and run
+            and row == run[-1][0] + 1
+            and match["base"].casefold() == base
+            and int(match["number"]) - row == offset
+        ):
+            run.append((row, label))
+            continue
+        close()
+        run = [(row, label)] if match else []
+        if match:
+            base = match["base"].casefold()
+            offset = int(match["number"]) - row
+    close()
+    return repaired
 
 
 def _header_token(value: str) -> str:
@@ -157,7 +266,7 @@ def _unique_headers(values: tuple[Any, ...] | list[Any]) -> list[HeaderCell]:
 
 def _recognized_headers(values: tuple[Any, ...] | list[Any]) -> int:
     tokens = {_header_token(_text(value)) for value in values if _text(value)}
-    aliases = set().union(*_ALIASES.values())
+    aliases = set().union(*_ALIASES.values(), *_FALLBACK_ALIASES.values())
     return len(tokens & aliases)
 
 
@@ -196,9 +305,9 @@ def _heuristic_mapping(
     mapping: dict[str, str] = {}
     warnings: list[str] = []
     lowered_filename = filename.lower()
-    for field_name, aliases in _ALIASES.items():
+    for field_name, aliases in (*_ALIASES.items(), *_FALLBACK_ALIASES.items()):
         header = _header_for(headers, aliases)
-        if header:
+        if header and field_name not in mapping:
             mapping[field_name] = header
 
     if "elan" in lowered_filename:
@@ -216,6 +325,8 @@ def _heuristic_mapping(
         mapping.pop("procedure_type", None)
 
     family = "transaction_party" if mapping.get("party_role") else "contact_list"
+    if "size_unknown" in mapping:
+        warnings.append("Size has no stated unit; it cannot corroborate a transaction match.")
     if mapping.get("transaction_date") and not mapping.get("party_role"):
         warnings.append("Dated owner records have no party role; ownership requires review.")
     if "contact_name" not in mapping:
@@ -237,6 +348,64 @@ def _inferred_project(filename: str, sheet_name: str) -> str:
         if name.lower() in source:
             return name
     return ""
+
+
+def _fallback_map(headers: list[HeaderCell], mapping: dict[str, str]) -> dict[str, list[str]]:
+    fallbacks: dict[str, list[str]] = {}
+    for field_name, aliases in _FALLBACK_ALIASES.items():
+        keys = [
+            header.key
+            for header in headers
+            if _header_token(header.key) in aliases and header.key != mapping.get(field_name)
+        ]
+        if keys:
+            fallbacks[field_name] = keys
+    return fallbacks
+
+
+def _mapped_headers(profile: SheetProfile) -> set[str]:
+    return set(profile.field_map.values()).union(*profile.fallback_map.values())
+
+
+def _unmapped_with_data(profile: SheetProfile) -> list[str]:
+    """Headers with no role that hold data. Owner identity and contact columns are never listed."""
+    mapped = _mapped_headers(profile)
+    unmapped = []
+    for header in profile.headers:
+        token = _header_token(header.key)
+        if (
+            header.key in mapped
+            or token in _CHANNEL_TOKENS | {"propertynumber"}
+            or (_IDENTITY_HEADER.search(token) and not _LOCATION_HEADER.search(token))
+        ):
+            continue
+        if any(
+            header.index < len(row) and not is_blank(row[header.index])
+            for row in profile.sample_rows
+        ):
+            unmapped.append(header.key)
+    return unmapped
+
+
+def _set_unmapped_warning(profile: SheetProfile) -> None:
+    profile.warnings[:] = [w for w in profile.warnings if not w.startswith("Columns not imported")]
+    if profile.unmapped_headers:
+        profile.warnings.insert(0, f"Columns not imported: {', '.join(profile.unmapped_headers)}.")
+
+
+def refresh_unmapped_headers(profile: SheetProfile) -> None:
+    """Drop headers that gained a role (model, saved mapping, override) and redo the warning."""
+    mapped = _mapped_headers(profile)
+    profile.unmapped_headers = [h for h in profile.unmapped_headers if h not in mapped]
+    _set_unmapped_warning(profile)
+
+
+def _finalize_profile(profile: SheetProfile, rows: list[tuple[Any, ...]]) -> SheetProfile:
+    profile.fallback_map = _fallback_map(profile.headers, profile.field_map)
+    profile.sample_rows = rows
+    profile.unmapped_headers = _unmapped_with_data(profile)
+    _set_unmapped_warning(profile)
+    return profile
 
 
 def _populated_xlsx_rows(workbook, sheet) -> list[int]:
@@ -270,8 +439,8 @@ def _inspect_xlsx(data: bytes, filename: str) -> list[SheetProfile]:
             initial_rows = list(
                 sheet.iter_rows(
                     min_row=1,
-                    max_row=min(15, max(1, sheet.max_row)),
-                    max_col=min(100, max(1, sheet.max_column)),
+                    max_row=min(15, max(1, sheet.max_row or 15)),
+                    max_col=min(100, max(1, sheet.max_column or 100)),
                     values_only=True,
                 )
             )
@@ -282,16 +451,27 @@ def _inspect_xlsx(data: bytes, filename: str) -> list[SheetProfile]:
                 sheet_name=sheet.title,
             )
             populated_rows = _populated_xlsx_rows(workbook, sheet)
+            scan_rows = list(
+                sheet.iter_rows(
+                    min_row=header_row + 1,
+                    max_row=header_row + _SCAN_ROWS,
+                    max_col=max((header.index for header in headers), default=0) + 1,
+                    values_only=True,
+                )
+            )
             profiles.append(
-                SheetProfile(
-                    name=sheet.title.strip() or "Sheet",
-                    header_row=header_row,
-                    headers=headers,
-                    meaningful_rows=sum(number > header_row for number in populated_rows),
-                    field_map=mapping,
-                    sheet_family=family,
-                    warnings=warnings,
-                    last_data_row=max(populated_rows, default=header_row),
+                _finalize_profile(
+                    SheetProfile(
+                        name=sheet.title.strip() or "Sheet",
+                        header_row=header_row,
+                        headers=headers,
+                        meaningful_rows=sum(number > header_row for number in populated_rows),
+                        field_map=mapping,
+                        sheet_family=family,
+                        warnings=warnings,
+                        last_data_row=max(populated_rows, default=header_row),
+                    ),
+                    scan_rows,
                 )
             )
     finally:
@@ -314,14 +494,17 @@ def _inspect_csv(data: bytes, filename: str) -> list[SheetProfile]:
         sheet_name=Path(filename).stem,
     )
     return [
-        SheetProfile(
-            name=Path(filename).stem,
-            header_row=header_row,
-            headers=headers,
-            meaningful_rows=max(0, len(rows) - header_row),
-            field_map=mapping,
-            sheet_family=family,
-            warnings=warnings,
+        _finalize_profile(
+            SheetProfile(
+                name=Path(filename).stem,
+                header_row=header_row,
+                headers=headers,
+                meaningful_rows=max(0, len(rows) - header_row),
+                field_map=mapping,
+                sheet_family=family,
+                warnings=warnings,
+            ),
+            [tuple(row) for row in rows[header_row : header_row + _SCAN_ROWS]],
         )
     ]
 
@@ -444,15 +627,11 @@ def _read_dates_by_column_order(profile: SheetProfile, values: Iterable[Any]) ->
 
 
 def _parse_amount(value: Any) -> int | None:
-    if isinstance(value, int | float) and value > 0:
-        return int(round(value))
-    raw = re.sub(r"[^\d.]", "", _text(value))
-    if not raw:
+    parsed = positive_decimal(value)
+    if parsed is None:
         return None
-    try:
-        amount = int(round(float(raw)))
-    except ValueError:
-        return None
+    # Keep the historical whole-AED, ties-to-even contract.
+    amount = int(round(parsed))
     return amount if amount > 0 else None
 
 
@@ -479,6 +658,61 @@ def _field_value(
     return row[header.index]
 
 
+def _location_value(
+    row: tuple[Any, ...] | list[Any],
+    profile: SheetProfile,
+    canonical: str,
+    row_number: int,
+) -> tuple[str, str]:
+    """The first non-blank cell of the field's header, then its fallbacks, with autofill undone.
+
+    Returns ``(value, original)``; ``original`` is the file's own text when an autofill run was
+    restored and empty otherwise.
+    """
+    keys = [profile.field_map.get(canonical), *profile.fallback_map.get(canonical, [])]
+    for key in keys:
+        header = next((item for item in profile.headers if item.key == key), None)
+        if header is None or header.index >= len(row):
+            continue
+        original = _text(row[header.index])
+        restored = profile.autofill_repairs.get(header.index, {}).get(row_number)
+        if restored and not is_blank(original):
+            return restored, original
+        if not is_blank(original):
+            return original, ""
+    return "", ""
+
+
+def _repair_autofill_labels(
+    profile: SheetProfile, columns: dict[int, list[tuple[int, Any]]]
+) -> None:
+    """Find autofill runs in the location columns (header index -> (row, cell) pairs)."""
+    profile.autofill_repairs = {}
+    for index, values in columns.items():
+        repaired = repair_autofill_runs(values)
+        if not repaired:
+            continue
+        profile.autofill_repairs[index] = repaired
+        label = next(h.label for h in profile.headers if h.index == index)
+        seeds = sorted(set(repaired.values()))
+        warning = (
+            f"Autofill labels in {label} were restored to {', '.join(seeds)} "
+            f"({len(repaired)} rows); the file's own text is kept in the row evidence."
+        )
+        if warning not in profile.warnings:
+            profile.warnings.append(warning)
+
+
+def _location_header_indexes(profile: SheetProfile) -> list[int]:
+    keys = {
+        key
+        for canonical in _LOCATION_FIELDS
+        for key in (profile.field_map.get(canonical), *profile.fallback_map.get(canonical, []))
+        if key
+    }
+    return sorted(header.index for header in profile.headers if header.key in keys)
+
+
 def _dropped_row(
     row: tuple[Any, ...] | list[Any],
     *,
@@ -501,13 +735,121 @@ def _dropped_row(
         "row": row_number,
         "reason": reason,
         "name": value("contact_name"),
-        "building": value("building_name") or value("project_name"),
+        "building": value("building_name")
+        or _location_value(row, profile, "project_name", row_number)[0][:200],
         "unit": value("unit_number"),
         "date": value("transaction_date"),
         "price": value("transaction_price_aed"),
         "role": value("party_role"),
         "procedure": value("procedure_type"),
     }
+
+
+# What the property-first matcher reads from a row: the sheet's own property fields, never an
+# owner or contact. The importer stores this at parse time and the offline shadow run reads it
+# through ``matcher_source`` too, so both give the matcher the same input.
+_MATCHER_FIELDS = (
+    "unit_number",
+    "building_number",
+    "property_number",
+    "plot_number",
+    "property_type",
+    "size_sqft",
+    "size_sqm",
+    "size_unknown",
+    "procedure_type",  # the matcher never links a financing row (mortgage...) to a sale
+)
+_MATCHER_IDENTIFIERS = ("unit_number", "building_number", "property_number", "plot_number")
+
+
+def _decimal_text(value: Any) -> str:
+    number = positive_decimal(value)
+    return format(number, "f") if number is not None else ""
+
+
+def matcher_source(
+    row: tuple[Any, ...] | list[Any], profile: SheetProfile, row_number: int
+) -> dict[str, str]:
+    """The matcher's input for one sheet row (canonical field names, text values)."""
+    source: dict[str, str] = {}
+    for name in _LOCATION_FIELDS:
+        value = _location_value(row, profile, name, row_number)[0]
+        if value and not is_blank(value):
+            source[name] = value
+    for name in _MATCHER_FIELDS:
+        value = _text(_field_value(row, profile, name))
+        if value and not is_blank(value):
+            source[name] = value
+    price = _decimal_text(_field_value(row, profile, "transaction_price_aed"))
+    if price:
+        source["transaction_price_aed"] = price
+    day = _parse_date(_field_value(row, profile, "transaction_date"), profile.date_order)
+    if day:
+        source["transaction_date"] = day.isoformat()
+    return source
+
+
+def matcher_source_from_evidence(
+    evidence: dict[str, Any],
+    *,
+    transaction_date: date | None = None,
+    transaction_price_aed: int | None = None,
+    procedure_type: str = "",
+    area_name: str = "",
+    project_name: str = "",
+    building_name: str = "",
+    unit_number: str = "",
+    property_type: str = "",
+) -> dict[str, str]:
+    """Rebuild the matcher's input for a stored claim that has no ``matcher_source``.
+
+    Claims made before the property-first matcher kept the file's own cells in
+    ``source_fields`` (what the sheet said, by canonical name), ``original_identifiers`` and
+    ``source_identifiers``. A location the importer restored from an autofill run is read from
+    ``original_property_fields``. A claim with no ``source_fields`` at all falls back to its
+    property columns, which are the importer's normalised reading of the same cells.
+    """
+    fields = evidence.get("source_fields") or {}
+    restored = evidence.get("original_fields") or {}
+    resolved = evidence.get("original_property_fields") or {}
+    columns = {
+        "area_name": area_name,
+        "project_name": project_name,
+        "building_name": building_name,
+        "unit_number": unit_number,
+        "property_type": property_type,
+        "procedure_type": procedure_type,
+    }
+    # Source-audited claims keep only size and type in ``source_fields``: with no location there,
+    # the location and unit come from the claim's own columns.
+    no_location = not any(name in fields for name in _LOCATION_FIELDS)
+    source: dict[str, str] = {}
+    for name in (*_LOCATION_FIELDS, *_MATCHER_FIELDS):
+        value = ""
+        if name in restored and resolved.get(name):
+            value = str(resolved[name])  # the autofill run's restored value
+        elif name in fields:
+            value = _text(fields[name])
+        elif name in _MATCHER_IDENTIFIERS:
+            value = _text((evidence.get("original_identifiers") or {}).get(name)) or _text(
+                (evidence.get("source_identifiers") or {}).get(name)
+            )
+        if not value and (
+            not fields or (no_location and name in (*_LOCATION_FIELDS, "unit_number"))
+        ):
+            value = _text(columns.get(name))
+        if name == "procedure_type" and not value:
+            value = _text(procedure_type)
+        if value and not is_blank(value):
+            source[name] = value
+    price = _decimal_text(fields.get("transaction_price_aed")) or _decimal_text(
+        transaction_price_aed
+    )
+    if price:
+        source["transaction_price_aed"] = price
+    if transaction_date:
+        source["transaction_date"] = transaction_date.isoformat()
+    return source
 
 
 def _missing_owner_name(name: str) -> bool:
@@ -522,9 +864,26 @@ def _candidate_from_row(
     row_number: int,
     dropped: list[dict[str, Any]] | None = None,
 ) -> ParsedContact | None:
-    profile.property_inventory.add(
-        {key: _text(_field_value(row, profile, key)) for key in profile.field_map}
+    located = {
+        canonical: _location_value(row, profile, canonical, row_number)
+        for canonical in _LOCATION_FIELDS
+    }
+    area, master_project, explicit_project, building_source = (
+        located[canonical][0] for canonical in _LOCATION_FIELDS
     )
+    original_fields = {
+        canonical: original for canonical, (_, original) in located.items() if original
+    }
+    inventory_fields = {key: _text(_field_value(row, profile, key)) for key in profile.field_map}
+    for key, value in (
+        ("area_name", area),
+        ("master_project", master_project),
+        ("project_name", explicit_project),
+        ("building_name", building_source),
+    ):
+        if key in inventory_fields or key in {"master_project", "project_name"} and value:
+            inventory_fields[key] = value
+    profile.property_inventory.add(inventory_fields)
     name = _text(_field_value(row, profile, "contact_name"))
     unit = _normalize_unit(_field_value(row, profile, "unit_number"))
     if unit == "0":
@@ -556,11 +915,9 @@ def _candidate_from_row(
     role = _normalized_role(_field_value(row, profile, "party_role"))
     procedure = _text(_field_value(row, profile, "procedure_type"))
     inferred_project = _inferred_project(filename, profile.name)
-    area = _text(_field_value(row, profile, "area_name"))
-    master_project = _text(_field_value(row, profile, "master_project"))
     area_source_field = ""
-    project = _text(_field_value(row, profile, "project_name")) or inferred_project
-    building = _text(_field_value(row, profile, "building_name")) or project
+    project = explicit_project or inferred_project
+    building = building_source or project
     if not area:
         area = _usable_project_name(master_project)
         if area:
@@ -579,20 +936,7 @@ def _candidate_from_row(
                 *(
                     _normalize_phone(row[h.index])
                     for h in profile.headers
-                    if h.index < len(row)
-                    and _header_token(h.key)
-                    in {
-                        "mobile",
-                        "mobile1",
-                        "mobile2",
-                        "phone",
-                        "phone1",
-                        "phone2",
-                        "secondarymobile",
-                        "alternatemobile",
-                        "phonenumber",
-                        "mobilenumber",
-                    }
+                    if h.index < len(row) and _header_token(h.key) in _CHANNEL_TOKENS
                 ),
             )
             if value
@@ -638,11 +982,34 @@ def _candidate_from_row(
             "resolver_version": IMPORT_RESOLVER_VERSION,
             "source_filename": filename,
             "event_family": event_family(procedure),
+            "source_size_unit": source_size_unit(profile.field_map),
+            "original_identifiers": {
+                key: _text(_field_value(row, profile, key))
+                for key in (
+                    "unit_number",
+                    "building_number",
+                    "property_number",
+                    "plot_number",
+                    "plot_pre_reg_number",
+                )
+            },
+            "original_property_fields": {
+                key: getattr(candidate, key)
+                for key in (
+                    "area_name",
+                    "project_name",
+                    "building_name",
+                    "unit_number",
+                    "property_type",
+                )
+            },
             "source_fields": {
                 canonical: _text(_field_value(row, profile, canonical))
                 for canonical in profile.field_map
             },
             "contact_channels": channels,
+            "matcher_source": matcher_source(row, profile, row_number),
+            "price_quality": "positive" if transaction_price is not None else "missing_or_invalid",
             "source_identifiers": {
                 key: _text(_field_value(row, profile, key))
                 for key in (
@@ -659,6 +1026,8 @@ def _candidate_from_row(
     )
     if area_source_field:
         candidate.evidence["source_area_field"] = area_source_field
+    if original_fields:
+        candidate.evidence["original_fields"] = original_fields
     source_unit = re.sub(r"\s+", "", _text(_field_value(row, profile, "unit_number"))).upper()
     if source_unit and source_unit.lower() != unit.lower():
         candidate.evidence["source_unit_number"] = source_unit[:100]
@@ -705,6 +1074,9 @@ def _candidate_from_row(
             "source_field": "buildingno",
             "source_value": building_no[:100],
         }
+    candidate.evidence["location_normalization"] = location_evidence(
+        candidate.area_name, candidate.project_name, candidate.building_name
+    )
     return candidate
 
 
@@ -725,6 +1097,23 @@ def _parse_xlsx(
                 continue
             profile.property_inventory = SourcePropertyInventory()
             max_index = max((header.index for header in profile.headers), default=0)
+            location_indexes = _location_header_indexes(profile)
+            if location_indexes:
+                first = location_indexes[0]
+                columns: dict[int, list[tuple[int, Any]]] = {i: [] for i in location_indexes}
+                for row_number, row in enumerate(
+                    sheet.iter_rows(
+                        min_row=profile.header_row + 1,
+                        max_row=profile.last_data_row,
+                        min_col=first + 1,
+                        max_col=location_indexes[-1] + 1,
+                        values_only=True,
+                    ),
+                    start=profile.header_row + 1,
+                ):
+                    for index in location_indexes:
+                        columns[index].append((row_number, row[index - first]))
+                _repair_autofill_labels(profile, columns)
             date_index = _date_column_index(profile)
             if date_index is not None:
                 _read_dates_by_column_order(
@@ -777,6 +1166,16 @@ def _parse_csv(
     rows = _csv_rows(data)
     profile = profiles[0]
     profile.property_inventory = SourcePropertyInventory()
+    _repair_autofill_labels(
+        profile,
+        {
+            index: [
+                (number, row[index] if index < len(row) else None)
+                for number, row in enumerate(rows[profile.header_row :], profile.header_row + 1)
+            ]
+            for index in _location_header_indexes(profile)
+        },
+    )
     date_index = _date_column_index(profile)
     if date_index is not None:
         _read_dates_by_column_order(
@@ -816,6 +1215,10 @@ def _summary(
         total_rows=total_rows,
         candidate_rows=len(candidates),
         rows_with_sales_history=sum(c.latest_sale_date is not None for c in candidates),
+        properties_linked_rows=sum(
+            bool(c.latest_sale_date or c.unit_candidate_key or c.evidence.get("cadastral_identity"))
+            for c in candidates
+        ),
         plot_only_rows=sum(
             bool(c.evidence.get("cadastral_identity")) and not c.unit_number for c in candidates
         ),
@@ -835,6 +1238,9 @@ def _summary(
             candidate.ownership_status == "unit_linked_unverified" for candidate in candidates
         ),
         former_owners=sum(candidate.ownership_status == "former_owner" for candidate in candidates),
+        unverified_former_owners=sum(
+            candidate.ownership_status == "unverified_former_owner" for candidate in candidates
+        ),
         conflicting_claims=sum(
             candidate.ownership_status == "conflicting_claim" for candidate in candidates
         ),
@@ -850,6 +1256,7 @@ def _summary(
             bool(candidate.lead_id)
             and candidate.has_valid_contact
             and candidate.ownership_status in {"verified_current_owner", "probable_current_owner"}
+            and candidate.party_role != "Seller"
             for candidate in candidates
         ),
     )

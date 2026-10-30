@@ -117,6 +117,8 @@ async def close_clickhouse() -> None:
 async def query(
     sql: str,
     parameters: Optional[Dict[str, Any]] = None,
+    *,
+    external_data: Any = None,
 ) -> List[Dict[str, Any]]:
     """
     Execute ClickHouse query and return list of dicts.
@@ -125,7 +127,10 @@ async def query(
     Always include FINAL when querying ReplacingMergeTree tables.
     """
     client = await get_client()
-    result = await client.query(sql, parameters=parameters or {}, settings=_scoped_settings())
+    options = {"external_data": external_data} if external_data is not None else {}
+    result = await client.query(
+        sql, parameters=parameters or {}, settings=_scoped_settings(), **options
+    )
     column_names = result.column_names
     return [dict(zip(column_names, row)) for row in result.result_rows]
 

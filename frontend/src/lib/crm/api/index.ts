@@ -64,6 +64,9 @@ import type {
 	OwnerDroppedRows,
 	OwnerDroppedRowsParams,
 	OwnerFilePreview,
+	OwnerHistory,
+	OwnerHistoryParams,
+	OwnerHistorySummary,
 	OwnerImport,
 	OwnerImportDetail,
 	OwnerImportResult,
@@ -319,6 +322,10 @@ export const crm = {
 	owners: {
 		list: (p: OwnerListParams): Promise<OwnerListResponse> => backend.listOwners(p),
 		get: (id: string): Promise<OwnerDetail> => backend.getOwner(id),
+		history: (id: string, p: OwnerHistoryParams = {}): Promise<OwnerHistory> =>
+			backend.getOwnerHistory(id, p),
+		historySummary: (importId?: number): Promise<OwnerHistorySummary> =>
+			backend.getOwnerHistorySummary(importId),
 		createLead: (_id: string, _body: OwnerLeadCreate) =>
 			notOnBackend<Written<LeadDetail>>('A lead from an owner'),
 		create: (_body: { name: string; units: string[] }) =>

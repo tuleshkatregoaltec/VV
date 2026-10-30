@@ -158,8 +158,18 @@ class CrmTimelineEvent(BaseModel):
     capital_gain_pct: float | None = None
 
 
+class CrmRenewalOwner(BaseModel):
+    """A manual owner or one unambiguous, verified imported owner."""
+
+    name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    source: Literal["workspace", "owner_import"]
+
+
 class CrmLeadDetailResponse(BaseModel):
     lead: CrmLead
+    owner: CrmRenewalOwner | None = None
     timeline: list[CrmTimelineEvent]
     next_best_actions: list[str]
     agent_signals: list[str] = Field(default_factory=list)
@@ -216,6 +226,7 @@ class CrmLeadWorkspace(SQLModel, table=True):
     owner_name: str | None = None
     owner_email: str | None = None
     owner_phone: str | None = None
+    owner_source: str | None = None
     next_follow_up: date | None = None
     tags: list[str] = SQLField(
         default_factory=list,
@@ -421,17 +432,6 @@ class CrmAreaPreferencesResponse(CrmAreaPreferencesUpdate):
 class CrmRenewalArea(BaseModel):
     area: str
     upcoming_90_days: int
-
-
-class CrmRenewalOwner(BaseModel):
-    """Owner contact for a renewal lead, only when entered by the agent or import-matched."""
-
-    name: str | None = None
-    phone: str | None = None
-    email: str | None = None
-    # workspace: saved on the agent's lead workspace (typed in, or copied there by an owner import).
-    # owner_import: a verified or probable current-owner claim on this unit from an owner import.
-    source: Literal["workspace", "owner_import"]
 
 
 class CrmRenewalLead(BaseModel):

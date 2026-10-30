@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import date
-from time import monotonic
+from datetime import date, timedelta
 from typing import Any
 
 from fastapi import HTTPException
@@ -14,9 +14,10 @@ from app.crm.identity import (
     _claim_owner_key,
     _claim_preference,
     _claim_property_key,
-    _dedupe_claims,
     _location_key,
     _location_similarity,
+    _normalize_email,
+    _normalize_phone,
     _normalize_unit,
     _usable_project_name,
 )
@@ -31,23 +32,19 @@ from app.crm.import_models import (
     CrmOwnerProperty,
     CrmOwnerRegistryResponse,
     CrmOwnerRegistrySummary,
+    CrmOwnerSourceReference,
     CrmPropertyContactClaim,
 )
-from app.crm.owner_repository import (
-    _owner_page_keys_sql,
-    _owner_properties_sql,
+from app.crm.owner_assessment import (
+    OwnerAssessmentSnapshot,
+    get_owner_assessment,
+    summarize_assessment_rows,
+)
+from app.crm.owner_cache import (
+    _invalidate_owner_summary_cache as _invalidate_owner_summary_cache,
 )
 
 logger = logging.getLogger(__name__)
-
-_OWNER_SUMMARY_CACHE_TTL_SECONDS = 300
-
-_owner_summary_cache: dict[tuple[str, int | None], tuple[float, CrmOwnerRegistrySummary]] = {}
-
-
-def _invalidate_owner_summary_cache(organization_id: str) -> None:
-    for key in [key for key in _owner_summary_cache if key[0] == organization_id]:
-        _owner_summary_cache.pop(key, None)
 
 
 def _claim_source_rows(group: list[CrmPropertyContactClaim]) -> list[str]:
@@ -104,39 +101,107 @@ def _claim_response(
         owner_key=_claim_owner_key(claim),
         duplicate_count=_claim_duplicate_count(grouped),
         source_rows=_claim_source_rows(grouped),
+        **_match_fields(claim.evidence or {}),
     )
 
 
-def _list_summary(
-    contact_list: CrmContactList,
-    claims: list[CrmPropertyContactClaim],
+def _match_fields(evidence: dict[str, Any]) -> dict[str, Any]:
+    """The stored property-first verdict as the row fields the API shows (empty before it)."""
+    match = evidence.get("owner_match")
+    if not isinstance(match, dict):
+        return {}
+    return {
+        "match_outcome": match.get("outcome"),
+        "match_colour": match.get("colour"),
+        "match_reasons": list(match.get("reasons") or []),
+        "match_warnings": list(match.get("warnings") or []),
+        "matched_sale": match.get("sale"),
+    }
+
+
+def _projected_claims(
+    claims: list[CrmPropertyContactClaim], rows: list[dict[str, Any]]
+) -> list[CrmPropertyContactClaim]:
+    assessed = {row["id"]: row for row in rows}
+    read_keys = _owner_read_keys(rows)
+    projected = []
+    for claim in claims:
+        row = assessed.get(claim.id)
+        if row is None:
+            continue
+        projected.append(
+            claim.model_copy(
+                update={
+                    "owner_key": read_keys[row["canonical_owner_key"]],
+                    "property_key": row["property_key"],
+                    "ownership_status": row["assessed_status"],
+                    "confidence_score": row.get(
+                        "assessed_confidence_score", row["confidence_score"]
+                    ),
+                    "match_reason": row["assessed_reason"],
+                    "phone_primary": _normalize_phone(row.get("phone_primary")),
+                    "phone_alternate": _normalize_phone(row.get("phone_alternate")),
+                    "email_primary": _normalize_email(row.get("email_primary")),
+                    **{
+                        key: row.get(key)
+                        for key in (
+                            "area_name",
+                            "project_name",
+                            "building_name",
+                            "unit_number",
+                            "lead_id",
+                            "unit_candidate_key",
+                            "latest_sale_date",
+                            "latest_sale_price_aed",
+                            "later_sale_date",
+                            "lease_end",
+                            "annual_rent_aed",
+                        )
+                    },
+                }
+            )
+        )
+    return projected
+
+
+def _assessed_contact_groups(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    grouped = {}
+    for row in rows:
+        identity = (
+            tuple(row["property_identity"]) if row["property_identity"] else ("source", row["id"])
+        )
+        grouped.setdefault((row["canonical_owner_key"], identity), []).append(row)
+    return list(grouped.values())
+
+
+def _assessed_list_summary(
+    contact_list: CrmContactList, rows: list[dict[str, Any]]
 ) -> CrmContactListSummary:
-    if contact_list.id is None:
-        raise HTTPException(status_code=500, detail="CRM contact list is missing an id")
-    unique_claims = [max(group, key=_claim_preference) for group in _dedupe_claims(claims)]
+    groups = _assessed_contact_groups(rows)
+    best = [max(group, key=_assessed_row_preference) for group in groups]
     return CrmContactListSummary(
         id=contact_list.id,
         source_import_id=contact_list.source_import_id,
         name=contact_list.name,
         description=contact_list.description,
-        total_contacts=len(unique_claims),
+        total_contacts=len(groups),
         contact_ready=sum(
-            bool(claim.lead_id)
-            and bool(claim.phone_primary or claim.phone_alternate or claim.email_primary)
-            and claim.ownership_status in {"verified_current_owner", "probable_current_owner"}
-            for claim in unique_claims
+            row["property_identity"] is not None
+            and bool(row.get("lead_id"))
+            and bool(row.get("unit_candidate_key"))
+            and _source_contact_ready(row["assessed_status"], row.get("party_role"))
+            and _source_contact_ready(
+                row.get("event_assessed_status", row["assessed_status"]), row.get("party_role")
+            )
+            and bool(
+                _normalize_phone(row.get("phone_primary"))
+                or _normalize_phone(row.get("phone_alternate"))
+                or _normalize_email(row.get("email_primary"))
+            )
+            for row in best
         ),
-        needs_review=sum(
-            claim.ownership_status
-            in {
-                "unit_linked_unverified",
-                "conflicting_claim",
-                "insufficient_property_data",
-                "registry_not_observed",
-            }
-            for claim in unique_claims
-        ),
-        former_owners=sum(claim.ownership_status == "former_owner" for claim in unique_claims),
+        needs_review=sum(row["assessed_status"] in _REVIEW_OWNER_STATUSES for row in best),
+        former_owners=sum(row["assessed_status"] == "former_owner" for row in best),
         created_at=contact_list.created_at,
         updated_at=contact_list.updated_at,
     )
@@ -151,12 +216,11 @@ async def list_contact_lists(
     contact_lists = list(list_result)
     if not contact_lists:
         return []
-    ids = [item.id for item in contact_lists if item.id is not None]
-    claim_result = await owner_repository.list_claims_for_lists(db, ids, organization_id)
-    grouped: dict[int, list[CrmPropertyContactClaim]] = {}
-    for claim in claim_result:
-        grouped.setdefault(claim.list_id, []).append(claim)
-    return [_list_summary(item, grouped.get(item.id or 0, [])) for item in contact_lists]
+    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for row in snapshot.rows:
+        grouped.setdefault(row["list_id"], []).append(row)
+    return [_assessed_list_summary(item, grouped.get(item.id or 0, [])) for item in contact_lists]
 
 
 async def get_contact_list(
@@ -168,28 +232,68 @@ async def get_contact_list(
     search: str | None,
     limit: int,
     offset: int,
+    match_colour: list[str] | None = None,
+    match_outcome: list[str] | None = None,
 ) -> CrmContactListDetail:
     list_result = await owner_repository.get_contact_list(db, list_id, organization_id)
     contact_list = list_result
     if not contact_list:
         raise HTTPException(status_code=404, detail="CRM contact list not found")
-    all_result = await owner_repository.find_contact_list_claims(
-        db, list_id, organization_id, search
-    )
-    matching_groups = _dedupe_claims(list(all_result))
-    if status:
-        matching_groups = [
-            group
-            for group in matching_groups
-            if max(group, key=_claim_preference).ownership_status == status
+    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    all_rows = [row for row in snapshot.rows if row["list_id"] == list_id]
+    matching_rows = all_rows
+    if search:
+        term = search.strip().casefold()
+        matching_rows = [
+            row
+            for row in matching_rows
+            if term
+            in " ".join(
+                str(row.get(field) or "")
+                for field in (
+                    "contact_name",
+                    "phone_primary",
+                    "phone_alternate",
+                    "email_primary",
+                    "area_name",
+                    "building_name",
+                    "project_name",
+                    "unit_number",
+                )
+            ).casefold()
         ]
-    visible = matching_groups[offset : offset + limit]
-    all_list_result = await owner_repository.list_claims_for_list(db, list_id, organization_id)
-    all_list_claims = list(all_list_result)
+    groups = _assessed_contact_groups(matching_rows)
+    if status:
+        groups = [group for group in groups if group[0]["assessed_status"] == status]
+    # The row a group shows decides its match filters, as it decides the fields shown.
+    for field_name, wanted in (("match_colour", match_colour), ("match_outcome", match_outcome)):
+        if wanted:
+            groups = [
+                group
+                for group in groups
+                if max(group, key=_assessed_row_preference).get(field_name) in wanted
+            ]
+    visible = groups[offset : offset + limit]
+    selected = [max(group, key=_assessed_row_preference) for group in visible]
+    claims = await owner_repository.list_claims_by_ids(
+        db, organization_id, [row["id"] for row in selected]
+    )
+    projected = {claim.id: claim for claim in _projected_claims(list(claims), snapshot.rows)}
+    contacts = []
+    for row, group in zip(selected, visible, strict=True):
+        claim = projected.get(row["id"])
+        if claim is None:
+            continue
+        response = _claim_response(claim)
+        response.duplicate_count = len(group)
+        response.source_rows = sorted(
+            {f"{event['source_sheet']}:{event['source_row_number']}" for event in group}
+        )
+        contacts.append(response)
     return CrmContactListDetail(
-        list=_list_summary(contact_list, all_list_claims),
-        contacts=[_claim_response(max(group, key=_claim_preference), group) for group in visible],
-        total=len(matching_groups),
+        list=_assessed_list_summary(contact_list, all_rows),
+        contacts=contacts,
+        total=len(groups),
         limit=limit,
         offset=offset,
     )
@@ -203,26 +307,31 @@ async def list_lead_imported_contacts(
 ) -> list[CrmLeadImportedContact]:
     result = await owner_repository.list_lead_claims_with_lists(db, lead_id, organization_id)
     rows = list(result)
+    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    by_id = {claim.id: contact_list for claim, contact_list in rows}
+    linked_ids = {
+        row["id"]
+        for row in snapshot.rows
+        if row.get("lead_id") == lead_id
+        and row.get("unit_candidate_key")
+        and row["property_identity"] is not None
+    }
+    projected = _projected_claims(
+        [claim for claim, _ in rows if claim.id in linked_ids], snapshot.rows
+    )
     grouped: dict[tuple[str, str], list[tuple[CrmPropertyContactClaim, CrmContactList]]] = {}
-    for claim, contact_list in rows:
-        grouped.setdefault(
-            (_claim_owner_key(claim), _claim_property_key(claim)),
-            [],
-        ).append((claim, contact_list))
-
-    # A lead drawer only needs portfolio counts for the owners attached to that
-    # lead. Loading and de-duplicating every imported claim made this endpoint
-    # progressively slower as an organization's owner registry grew.
-    owner_keys = {_claim_owner_key(claim) for claim, _ in rows}
-    property_counts: dict[str, int] = {}
-    if owner_keys:
-        property_count_result = await owner_repository.count_owner_properties(
-            db, organization_id, owner_keys
+    for claim in projected:
+        grouped.setdefault((claim.owner_key, claim.property_key), []).append(
+            (claim, by_id[claim.id])
         )
-        property_counts = {
-            str(owner_key): int(property_count)
-            for owner_key, property_count in property_count_result
-        }
+    read_keys = _owner_read_keys(snapshot.rows)
+    property_sets: dict[str, set[tuple[str, str]]] = {}
+    for row in snapshot.rows:
+        if row["property_identity"] is not None:
+            property_sets.setdefault(read_keys[row["canonical_owner_key"]], set()).add(
+                tuple(row["property_identity"])
+            )
+    property_counts = {key: len(identities) for key, identities in property_sets.items()}
 
     contacts: list[CrmLeadImportedContact] = []
     for group_rows in grouped.values():
@@ -250,37 +359,12 @@ async def list_lead_imported_contacts(
                 imported_at=claim.created_at,
                 owner_key=owner_key,
                 duplicate_count=_claim_duplicate_count(claim_group),
-                property_count=property_counts.get(owner_key, 1),
+                property_count=property_counts.get(owner_key, 0),
                 source_lists=sorted({item.name for _, item in group_rows}),
             )
         )
     contacts.sort(key=lambda item: (item.confidence_score, item.property_count), reverse=True)
     return contacts
-
-
-def _group_claim_rows(
-    rows: list[tuple[CrmPropertyContactClaim, CrmContactList]],
-) -> dict[str, list[list[tuple[CrmPropertyContactClaim, CrmContactList]]]]:
-    properties: dict[
-        tuple[str, str],
-        list[tuple[CrmPropertyContactClaim, CrmContactList]],
-    ] = {}
-    for claim, contact_list in rows:
-        properties.setdefault(
-            (_claim_owner_key(claim), _claim_property_key(claim)),
-            [],
-        ).append((claim, contact_list))
-    owners: dict[str, list[list[tuple[CrmPropertyContactClaim, CrmContactList]]]] = {}
-    for (owner_key, _), property_rows in properties.items():
-        owners.setdefault(owner_key, []).append(property_rows)
-    return owners
-
-
-def _is_rental_ready_claim(claim: CrmPropertyContactClaim) -> bool:
-    return bool(claim.lead_id) and claim.ownership_status in {
-        "verified_current_owner",
-        "probable_current_owner",
-    }
 
 
 def _property_from_rows(
@@ -317,141 +401,323 @@ def _property_from_rows(
     )
 
 
-def _owner_profile(
-    owner_key: str,
-    property_groups: list[list[tuple[CrmPropertyContactClaim, CrmContactList]]],
-) -> CrmOwnerProfile:
-    claims = [claim for group in property_groups for claim, _ in group]
-    best = max(claims, key=_claim_preference)
-    properties = [_property_from_rows(group) for group in property_groups]
-    properties.sort(
-        key=lambda item: (
-            1 if item.lead_id else 0,
-            item.confidence_score,
-            -(item.lease_end.toordinal() if item.lease_end else 0),
+_CURRENT_OWNER_STATUSES = {"verified_current_owner", "probable_current_owner"}
+_REVIEW_OWNER_STATUSES = {
+    "probable_current_owner",
+    "unit_linked_unverified",
+    "conflicting_claim",
+    "insufficient_property_data",
+    "registry_not_observed",
+    "unmatched",
+    "unverified_former_owner",
+}
+
+
+def _owner_read_keys(rows: list[dict[str, Any]]) -> dict[str, str]:
+    """Keep an existing workspace key when it uniquely identifies this person."""
+    by_alias: dict[str, set[str]] = {}
+    by_owner: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        canonical = row["canonical_owner_key"]
+        by_alias.setdefault(row["owner_key"], set()).add(canonical)
+        by_owner.setdefault(canonical, []).append(row)
+    return {
+        canonical: next(
+            (
+                row["owner_key"]
+                for row in sorted(events, key=lambda event: event["id"])
+                if len(by_alias[row["owner_key"]]) == 1
+            ),
+            canonical,
+        )
+        for canonical, events in by_owner.items()
+    }
+
+
+def _profile_has_channel(profile: CrmOwnerProfile) -> bool:
+    return bool(profile.phone_primary or profile.phone_alternate or profile.email_primary)
+
+
+def _source_contact_ready(status: str, party_role: str | None) -> bool:
+    return status in _CURRENT_OWNER_STATUSES and not (
+        status == "probable_current_owner" and party_role == "Seller"
+    )
+
+
+def _assessed_row_preference(row: dict[str, Any]) -> tuple:
+    current_support = (
+        row["assessed_status"] in _CURRENT_OWNER_STATUSES
+        and row.get("event_assessed_status", row["assessed_status"]) in _CURRENT_OWNER_STATUSES
+    )
+    return (
+        current_support,
+        current_support and row.get("party_role") == "Buyer",
+        row.get("transaction_date") or date.min,
+        int(
+            row.get(
+                "event_assessed_confidence_score",
+                row.get("assessed_confidence_score", row["confidence_score"]),
+            )
         ),
-        reverse=True,
+        row["id"],
     )
-    phones = list(
-        dict.fromkeys(
-            value
-            for claim in claims
-            for value in (claim.phone_primary, claim.phone_alternate)
-            if value
-        )
+
+
+def _property_contact_ready(item: CrmOwnerProperty, profile: CrmOwnerProfile) -> bool:
+    return bool(
+        _profile_has_channel(profile)
+        and item.lead_id
+        and item.unit_candidate_key
+        and _source_contact_ready(item.ownership_status, item.imported_party_role)
     )
-    emails = list(dict.fromkeys(claim.email_primary for claim in claims if claim.email_primary))
-    rental_properties = [item for item in properties if item.lead_id]
-    contact_ready = [
-        item
-        for item in properties
-        if item.lead_id
-        and item.ownership_status in {"verified_current_owner", "probable_current_owner"}
-    ]
+
+
+def _profile_with_properties(
+    profile: CrmOwnerProfile, properties: list[CrmOwnerProperty]
+) -> CrmOwnerProfile:
+    rental_properties = [item for item in properties if item.lead_id and item.unit_candidate_key]
     lease_dates = [item.lease_end for item in rental_properties if item.lease_end]
-    return CrmOwnerProfile(
-        owner_key=owner_key,
-        contact_name=best.contact_name,
-        phone_primary=phones[0] if phones else None,
-        phone_alternate=phones[1] if len(phones) > 1 else None,
-        email_primary=emails[0] if emails else None,
-        highest_ownership_status=best.ownership_status,  # type: ignore[arg-type]
-        highest_confidence_score=best.confidence_score,
-        property_count=len(properties),
-        rental_linked_count=len(rental_properties),
-        contact_ready_count=len(contact_ready),
-        annual_rent_aed=sum(item.annual_rent_aed or 0 for item in rental_properties),
-        next_lease_end=min(lease_dates) if lease_dates else None,
-        properties=properties,
-    )
-
-
-def _profile_matches_scope(profile: CrmOwnerProfile, scope: str) -> bool:
-    ready_properties = [
-        item
-        for item in profile.properties
-        if item.lead_id
-        and item.ownership_status in {"verified_current_owner", "probable_current_owner"}
-    ]
-    if scope == "rental_ready":
-        return bool(ready_properties)
-    if scope == "registry":
-        return len(ready_properties) < len(profile.properties)
-    return True
-
-
-def _profile_for_scope(profile: CrmOwnerProfile, scope: str) -> CrmOwnerProfile:
-    if scope == "all":
-        return profile
-    properties = [
-        item
-        for item in profile.properties
-        if (
-            item.lead_id
-            and item.ownership_status in {"verified_current_owner", "probable_current_owner"}
-        )
-        == (scope == "rental_ready")
-    ]
-    if not properties:
-        return profile
     best = max(
         properties,
-        key=lambda item: (
-            _OWNERSHIP_PRIORITY.get(item.ownership_status, 0),
-            item.confidence_score,
-        ),
+        key=lambda item: (_OWNERSHIP_PRIORITY.get(item.ownership_status, 0), item.confidence_score),
+        default=None,
     )
-    rental_properties = [item for item in properties if item.lead_id]
-    lease_dates = [item.lease_end for item in rental_properties if item.lease_end]
     return profile.model_copy(
         update={
-            "highest_ownership_status": best.ownership_status,
-            "highest_confidence_score": best.confidence_score,
+            "properties": properties,
             "property_count": len(properties),
             "rental_linked_count": len(rental_properties),
             "contact_ready_count": sum(
-                bool(item.lead_id)
-                and item.ownership_status in {"verified_current_owner", "probable_current_owner"}
-                for item in properties
+                _property_contact_ready(item, profile) for item in properties
             ),
             "annual_rent_aed": sum(item.annual_rent_aed or 0 for item in rental_properties),
             "next_lease_end": min(lease_dates) if lease_dates else None,
-            "properties": properties,
+            "highest_ownership_status": best.ownership_status
+            if best
+            else "insufficient_property_data",
+            "highest_confidence_score": best.confidence_score if best else 0,
         }
     )
 
 
-async def _all_owner_profiles(
-    db: AsyncSession,
+def _assessed_profiles(
+    rows: list[dict[str, Any]],
     *,
-    organization_id: str,
+    identity_rows: list[dict[str, Any]] | None = None,
+    snapshot: OwnerAssessmentSnapshot | None = None,
 ) -> list[CrmOwnerProfile]:
-    result = await owner_repository.list_claims_with_lists(db, organization_id)
-    owners = _group_claim_rows(list(result))
-    return [
-        _owner_profile(owner_key, property_groups) for owner_key, property_groups in owners.items()
+    from app.crm.owner_signals import build_owner_signals
+    from app.crm.source_audit import source_audit_for_row
+
+    if identity_rows is None:
+        identity_rows = rows
+    rows = [
+        row
+        for row in rows
+        if not (audit := source_audit_for_row(row))
+        or (
+            (audit["transaction_match"].get("owner_category") in {"current", "former"})
+            if audit.get("transaction_match")
+            else audit["owner_candidate"]
+        )
     ]
+    read_keys = _owner_read_keys(identity_rows if identity_rows is not None else rows)
+    signals = build_owner_signals(identity_rows if identity_rows is not None else rows)
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(row["canonical_owner_key"], []).append(row)
+    profiles = []
+    for canonical, events in grouped.items():
+        by_property: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for row in events:
+            if row["property_identity"] is not None:
+                by_property.setdefault(tuple(row["property_identity"]), []).append(row)
+        properties = []
+        for property_events in by_property.values():
+            best = max(property_events, key=_assessed_row_preference)
+            row = dict(best)
+            if (
+                row["assessed_status"] in _CURRENT_OWNER_STATUSES
+                and row.get("event_assessed_status", row["assessed_status"])
+                not in _CURRENT_OWNER_STATUSES
+            ):
+                # A file-scoped historical event cannot supply an actionable
+                # lease contact solely by inheriting another event's current label.
+                row["lead_id"] = None
+            row.update(
+                property_key_sql=row["property_key"],
+                ownership_status=row["assessed_status"],
+                confidence_score=row.get("assessed_confidence_score", row["confidence_score"]),
+                match_reason=row["assessed_reason"],
+                duplicate_count=len(property_events),
+                source_lists=sorted(
+                    {str(event.get("source_list_name") or "") for event in property_events} - {""}
+                ),
+                source_rows=sorted(
+                    {
+                        f"{event.get('source_sheet', '')}:{event.get('source_row_number', '')}"
+                        for event in property_events
+                    }
+                ),
+            )
+            properties.append(_sql_owner_property(row))
+        properties.sort(
+            key=lambda item: (
+                -_OWNERSHIP_PRIORITY.get(item.ownership_status, 0),
+                -item.confidence_score,
+                item.property_key,
+                item.area_name,
+            )
+        )
+        best = max(events, key=lambda row: (row["confidence_score"], row["id"]))
+        phones = list(
+            dict.fromkeys(
+                phone
+                for row in events
+                for field in ("phone_primary", "phone_alternate")
+                if (phone := _normalize_phone(row.get(field)))
+            )
+        )
+        emails = list(
+            dict.fromkeys(
+                email for row in events if (email := _normalize_email(row.get("email_primary")))
+            )
+        )
+        profile = CrmOwnerProfile(
+            owner_key=read_keys[canonical],
+            contact_name=best["contact_name"],
+            phone_primary=phones[0] if phones else None,
+            phone_alternate=phones[1] if len(phones) > 1 else None,
+            phone_numbers=phones,
+            email_primary=emails[0] if emails else None,
+            highest_ownership_status="insufficient_property_data",
+            highest_confidence_score=0,
+            property_count=0,
+            rental_linked_count=0,
+            contact_ready_count=0,
+            annual_rent_aed=0,
+            history_summary=summarize_assessment_rows(snapshot, events) if snapshot else None,
+            **signals.get(canonical, {}),
+        )
+        profiles.append(_profile_with_properties(profile, properties))
+    return profiles
+
+
+_owner_profiles_cache: tuple[OwnerAssessmentSnapshot, dict[str, CrmOwnerProfile]] | None = None
+_owner_profiles_lock = asyncio.Lock()
+
+
+def _build_snapshot_profiles(snapshot: OwnerAssessmentSnapshot) -> dict[str, CrmOwnerProfile]:
+    profiles = _assessed_profiles(snapshot.rows, snapshot=snapshot)
+    by_read_key = {profile.owner_key: profile for profile in profiles}
+    return {
+        canonical: by_read_key[read_key]
+        for canonical, read_key in _owner_read_keys(snapshot.rows).items()
+        if read_key in by_read_key
+    }
+
+
+async def _profiles_for_snapshot(snapshot: OwnerAssessmentSnapshot) -> dict[str, CrmOwnerProfile]:
+    # Keep one derived tenant snapshot, bounded by the shared assessment lifetime.
+    # Consumers copy returned profiles before enrichment or response-local changes.
+    global _owner_profiles_cache
+    if _owner_profiles_cache and _owner_profiles_cache[0] is snapshot:
+        return _owner_profiles_cache[1]
+    async with _owner_profiles_lock:
+        if _owner_profiles_cache and _owner_profiles_cache[0] is snapshot:
+            return _owner_profiles_cache[1]
+        profiles = await asyncio.to_thread(_build_snapshot_profiles, snapshot)
+        _owner_profiles_cache = (snapshot, profiles)
+        return profiles
+
+
+def _profile_search_matches(profile: CrmOwnerProfile, search: str) -> bool:
+    return (
+        search.strip().casefold()
+        in " ".join(
+            str(value or "")
+            for value in (
+                profile.contact_name,
+                profile.phone_primary,
+                profile.phone_alternate,
+                profile.email_primary,
+            )
+        ).casefold()
+    )
+
+
+def _assessed_property_matches(
+    item: CrmOwnerProperty,
+    *,
+    profile: CrmOwnerProfile,
+    scope: str,
+    status: str | None,
+    search: str | None,
+    lease_window: str | None,
+    min_rent_aed: int | None,
+    max_rent_aed: int | None,
+    min_value_aed: int | None,
+    max_value_aed: int | None,
+    transaction_match_status: str | None = None,
+) -> bool:
+    if transaction_match_status and (
+        item.source_reference is None
+        or item.source_reference.transaction_match_status != transaction_match_status
+    ):
+        return False
+    ready = _property_contact_ready(item, profile)
+    if scope == "rental_ready" and not ready:
+        return False
+    if scope == "registry" and (ready or item.ownership_status == "former_owner"):
+        return False
+    if scope == "current_owners" and item.ownership_status not in _CURRENT_OWNER_STATUSES:
+        return False
+    if scope == "prior_owners" and item.ownership_status != "former_owner":
+        return False
+    if scope == "needs_review" and item.ownership_status not in _REVIEW_OWNER_STATUSES:
+        return False
+    if status and item.ownership_status != status:
+        return False
+    if (
+        search
+        and not _profile_search_matches(profile, search)
+        and search.strip().casefold()
+        not in " ".join(
+            (item.area_name, item.project_name, item.building_name, item.unit_number)
+        ).casefold()
+    ):
+        return False
+    if lease_window:
+        if item.lease_end is None:
+            return False
+        days = (item.lease_end - date.today()).days
+        if lease_window == "expired" and days >= 0:
+            return False
+        windows = {"expiring_30": (0, 30), "expiring_60": (30, 60), "expiring_90": (60, 90)}
+        if lease_window in windows:
+            lower, upper = windows[lease_window]
+            if not lower < days <= upper:
+                return False
+    for value, minimum, maximum in (
+        (item.annual_rent_aed, min_rent_aed, max_rent_aed),
+        (item.latest_sale_price_aed, min_value_aed, max_value_aed),
+    ):
+        if minimum is not None and (value is None or value < minimum):
+            return False
+        if maximum is not None and (value is None or value > maximum):
+            return False
+    return True
 
 
 def _owner_registry_summary(
     profiles: list[CrmOwnerProfile],
 ) -> CrmOwnerRegistrySummary:
     return CrmOwnerRegistrySummary(
-        rental_owner_profiles=sum(
-            any(
-                item.lead_id
-                and item.ownership_status in {"verified_current_owner", "probable_current_owner"}
-                for item in profile.properties
-            )
-            for profile in profiles
-        ),
+        rental_owner_profiles=sum(profile.contact_ready_count > 0 for profile in profiles),
         registry_owner_profiles=sum(
-            any(
-                not (
-                    item.lead_id
-                    and item.ownership_status
-                    in {"verified_current_owner", "probable_current_owner"}
-                )
+            not profile.properties
+            or any(
+                not _property_contact_ready(item, profile)
                 and item.ownership_status != "former_owner"
                 for item in profile.properties
             )
@@ -462,47 +728,49 @@ def _owner_registry_summary(
             for profile in profiles
         ),
         needs_review_profiles=sum(
-            any(
-                item.ownership_status
-                in {
-                    "unit_linked_unverified",
-                    "conflicting_claim",
-                    "insufficient_property_data",
-                    "registry_not_observed",
-                    "unmatched",
-                }
-                for item in profile.properties
-            )
+            bool(profile.history_summary and profile.history_summary.invalid_identity_source_count)
+            or any(item.ownership_status in _REVIEW_OWNER_STATUSES for item in profile.properties)
             for profile in profiles
         ),
         multi_property_owners=sum(profile.property_count > 1 for profile in profiles),
     )
 
 
-async def _owner_registry_summary_sql(
-    db: AsyncSession,
-    *,
-    organization_id: str,
-    list_id: int | None,
-) -> CrmOwnerRegistrySummary:
-    cache_key = (organization_id, list_id)
-    cached = _owner_summary_cache.get(cache_key)
-    if cached and monotonic() - cached[0] < _OWNER_SUMMARY_CACHE_TTL_SECONDS:
-        return cached[1]
-    row = await owner_repository.fetch_owner_registry_totals(db, list_id, organization_id)
-    summary = CrmOwnerRegistrySummary(
-        rental_owner_profiles=int(row["rental_owner_profiles"] or 0),
-        registry_owner_profiles=int(row["registry_owner_profiles"] or 0),
-        prior_owner_profiles=int(row["prior_owner_profiles"] or 0),
-        needs_review_profiles=int(row["needs_review_profiles"] or 0),
-        multi_property_owners=int(row["multi_property_owners"] or 0),
-    )
-    _owner_summary_cache[cache_key] = (monotonic(), summary)
-    return summary
-
-
 def _sql_owner_property(row: dict[str, Any]) -> CrmOwnerProperty:
+    from app.crm.source_audit import source_audit_for_row
+
+    audit = source_audit_for_row(row)
+    source_reference = None
+    if audit:
+        values = audit.get("source_values") or []
+
+        def identifier(field, position):
+            return str(
+                audit.get(field) or (values[position] if len(values) > position else "") or ""
+            )
+
+        source_key = list(audit["source_key"])
+        match = audit.get("transaction_match") or {}
+        source_reference = CrmOwnerSourceReference(
+            transaction_match_status=match.get("status"),
+            ownership_evidence_basis=(
+                "transaction_supported"
+                if match.get("status") == "matched"
+                and match.get("acquisition_sale_keys")
+                and (row["ownership_status"] != "former_owner" or match.get("later_sale_date"))
+                else "workbook_only"
+            ),
+            reference_id=audit["reference_id"],
+            kind=source_key[0],
+            source_key=source_key,
+            building_number=identifier("building_number", 5),
+            land_number=identifier("land_number", 11),
+            dm_sub_number=identifier("dm_sub_number", 9),
+            size_sqm=audit.get("size_sqm"),
+            disposition=audit["disposition"],
+        )
     return CrmOwnerProperty(
+        source_reference=source_reference,
         property_key=str(row["property_key_sql"]),
         area_name=str(row["area_name"] or ""),
         project_name=str(row["project_name"] or ""),
@@ -537,52 +805,6 @@ def _sql_owner_property(row: dict[str, Any]) -> CrmOwnerProperty:
     )
 
 
-def _sql_owner_profile(
-    owner_key: str,
-    rows: list[dict[str, Any]],
-) -> CrmOwnerProfile:
-    best = max(
-        rows,
-        key=lambda row: (
-            int(row["status_rank"] or 0),
-            int(row["confidence_score"] or 0),
-        ),
-    )
-    properties = [_sql_owner_property(row) for row in rows]
-    phones = list(
-        dict.fromkeys(
-            str(value)
-            for row in rows
-            for value in (row["phone_primary"], row["phone_alternate"])
-            if value
-        )
-    )
-    emails = list(dict.fromkeys(str(row["email_primary"]) for row in rows if row["email_primary"]))
-    rental_properties = [item for item in properties if item.lead_id]
-    contact_ready = [
-        item
-        for item in properties
-        if item.lead_id
-        and item.ownership_status in {"verified_current_owner", "probable_current_owner"}
-    ]
-    lease_dates = [item.lease_end for item in rental_properties if item.lease_end]
-    return CrmOwnerProfile(
-        owner_key=owner_key,
-        contact_name=str(best["contact_name"]),
-        phone_primary=phones[0] if phones else None,
-        phone_alternate=phones[1] if len(phones) > 1 else None,
-        email_primary=emails[0] if emails else None,
-        highest_ownership_status=str(best["ownership_status"]),  # type: ignore[arg-type]
-        highest_confidence_score=int(best["confidence_score"] or 0),
-        property_count=len(properties),
-        rental_linked_count=len(rental_properties),
-        contact_ready_count=len(contact_ready),
-        annual_rent_aed=sum(item.annual_rent_aed or 0 for item in rental_properties),
-        next_lease_end=min(lease_dates) if lease_dates else None,
-        properties=properties,
-    )
-
-
 async def get_owner_registry(
     db: AsyncSession,
     *,
@@ -601,53 +823,98 @@ async def get_owner_registry(
     offset: int,
     min_properties: int | None = None,
     next_event_days: int | None = None,
+    transaction_match_status: str | None = None,
 ) -> CrmOwnerRegistryResponse:
-    summary = await _owner_registry_summary_sql(
-        db,
-        organization_id=organization_id,
-        list_id=list_id,
+    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    full_profiles = await _profiles_for_snapshot(snapshot)
+    if list_id is None:
+        profiles = list(full_profiles.values())
+    else:
+        rows = [row for row in snapshot.rows if row["list_id"] == list_id]
+        profiles = await asyncio.to_thread(
+            _assessed_profiles, rows, identity_rows=snapshot.rows, snapshot=snapshot
+        )
+    full_by_key = {profile.owner_key: profile for profile in full_profiles.values()}
+    summary = _owner_registry_summary(profiles)
+    filtered = []
+    for profile in profiles:
+        properties = [
+            item
+            for item in profile.properties
+            if _assessed_property_matches(
+                item,
+                profile=profile,
+                scope=scope,
+                status=status,
+                search=search,
+                lease_window=lease_window,
+                min_rent_aed=min_rent_aed,
+                max_rent_aed=max_rent_aed,
+                min_value_aed=min_value_aed,
+                max_value_aed=max_value_aed,
+                transaction_match_status=transaction_match_status,
+            )
+        ]
+        invalid_review = (
+            (
+                not profile.properties
+                or (
+                    scope == "needs_review"
+                    and profile.history_summary
+                    and profile.history_summary.invalid_identity_source_count
+                )
+            )
+            and scope in {"all", "registry", "needs_review"}
+            and not transaction_match_status
+            and status in {None, "insufficient_property_data"}
+            and (not search or _profile_search_matches(profile, search))
+            and not any(
+                value is not None
+                for value in (
+                    lease_window,
+                    min_rent_aed,
+                    max_rent_aed,
+                    min_value_aed,
+                    max_value_aed,
+                )
+            )
+        )
+        if not properties and not invalid_review:
+            continue
+        scoped = (
+            _profile_with_properties(profile, properties)
+            if scope in {"current_owners", "prior_owners"} or transaction_match_status
+            else full_by_key[profile.owner_key]
+        )
+        if portfolio_only and scoped.property_count < 2:
+            continue
+        if min_properties is not None and scoped.property_count < min_properties:
+            continue
+        if next_event_days is not None and (
+            scoped.next_lease_end is None
+            or not date.today()
+            <= scoped.next_lease_end
+            <= date.today() + timedelta(days=next_event_days)
+        ):
+            continue
+        filtered.append(scoped)
+    filtered.sort(
+        key=lambda profile: (
+            -profile.contact_ready_count,
+            -profile.property_count,
+            -profile.highest_confidence_score,
+            profile.next_lease_end or date.max,
+            profile.owner_key,
+        )
     )
-    owner_keys, total = await _owner_page_keys_sql(
-        db,
-        organization_id=organization_id,
-        list_id=list_id,
-        scope=scope,
-        status=status,
-        search=search,
-        lease_window=lease_window,
-        portfolio_only=portfolio_only,
-        min_rent_aed=min_rent_aed,
-        max_rent_aed=max_rent_aed,
-        min_value_aed=min_value_aed,
-        max_value_aed=max_value_aed,
-        limit=limit,
-        offset=offset,
-        min_properties=min_properties,
-        next_event_days=next_event_days,
-    )
-    property_rows = await _owner_properties_sql(
-        db,
-        organization_id=organization_id,
-        list_id=list_id,
-        owner_keys=owner_keys,
-        scope=scope,
-        status=status,
-        search=search,
-        lease_window=lease_window,
-        min_rent_aed=min_rent_aed,
-        max_rent_aed=max_rent_aed,
-        min_value_aed=min_value_aed,
-        max_value_aed=max_value_aed,
-    )
-    profiles = [
-        _sql_owner_profile(owner_key, property_rows[owner_key])
-        for owner_key in owner_keys
-        if owner_key in property_rows
-    ]
+    from app.crm.source_audit import aggregate_source_audit
+
+    source_audit = aggregate_source_audit(snapshot.rows, list_id)
     return CrmOwnerRegistryResponse(
+        source_audit=source_audit,
         scope=scope,  # type: ignore[arg-type]
-        owners=profiles,
-        total=total,
+        owners=[profile.model_copy(deep=True) for profile in filtered[offset : offset + limit]],
+        total=len(filtered),
         limit=limit,
         offset=offset,
         summary=summary,
@@ -791,17 +1058,32 @@ async def get_owner_profile(
     organization_id: str,
     owner_key: str,
 ) -> CrmOwnerProfile:
-    property_rows = await _owner_properties_sql(
-        db,
-        organization_id=organization_id,
-        list_id=None,
-        owner_keys=[owner_key],
-        scope="all",
-    )
-    rows = property_rows.get(owner_key)
-    if not rows:
+    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    canonical = {
+        row["canonical_owner_key"]
+        for row in snapshot.rows
+        if row["owner_key"] == owner_key or row["canonical_owner_key"] == owner_key
+    }
+    if not canonical:
         raise HTTPException(status_code=404, detail="Owner profile not found")
-    profile = _sql_owner_profile(owner_key, rows)
+    if len(canonical) != 1:
+        raise HTTPException(
+            status_code=409,
+            detail="This legacy owner key contains multiple contact identities; select an owner from the registry to review its evidence.",
+        )
+    profiles = await _profiles_for_snapshot(snapshot)
+    selected_key = next(iter(canonical))
+    if selected_key not in profiles:
+        raise HTTPException(status_code=404, detail="No reviewed owner candidate for this party")
+    profile = profiles[selected_key].model_copy(deep=True)
+    from app.crm.source_audit import source_audit_for_row
+
+    if any(
+        source_audit_for_row(row)
+        for row in snapshot.rows
+        if row["canonical_owner_key"] == selected_key
+    ):
+        return profile
     try:
         return await _enrich_owner_profile_registry(profile)
     except Exception:

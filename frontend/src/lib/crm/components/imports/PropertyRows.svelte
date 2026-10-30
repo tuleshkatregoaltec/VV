@@ -150,8 +150,8 @@ $effect(() => {
 												{/each}
 											</tbody>
 										</table>
-										{#if p.rows > p.records.length}
-											<p class="sub more">Showing the newest {fmt(p.records.length)} of {fmt(p.rows)} rows.</p>
+										{#if p.recordsTruncated}
+											<p class="sub more">Showing the newest {fmt(p.records.length)} source records. Older records are omitted from this preview; this is not the complete history.</p>
 										{/if}
 									</td>
 								</tr>

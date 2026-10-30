@@ -22,6 +22,7 @@ from app.crm import (
     renewal_repository,
     workspace_repository,
 )
+from app.crm.identity import _normalize_email, _normalize_phone
 from app.crm.inbound_models import InboundEnquiryResponse
 from app.crm.models import (
     CrmAgentAreaPreference,
@@ -34,6 +35,7 @@ from app.crm.models import (
     CrmRenewalsResponse,
 )
 from app.crm.opportunities import _lead_from_row, get_lead_detail
+from app.crm.owner_assessment import get_owner_assessment
 
 logger = logging.getLogger(__name__)
 
@@ -171,31 +173,123 @@ async def _owners_by_candidate(
     user_id: str,
     organization_id: str,
 ) -> dict[str, CrmRenewalOwner]:
-    """Known owners only: the agent's workspace first, then a current-owner import claim."""
+    """Manual owner fields override a single supported current imported identity."""
     if not candidate_keys:
         return {}
     owners: dict[str, CrmRenewalOwner] = {}
-    claims = await renewal_repository.list_current_owner_claims(db, organization_id, candidate_keys)
-    for claim in claims:  # Highest confidence first.
-        if claim.unit_candidate_key and claim.unit_candidate_key not in owners:
-            owners[claim.unit_candidate_key] = CrmRenewalOwner(
-                name=claim.contact_name or None,
-                phone=claim.phone_primary or claim.phone_alternate,
-                email=claim.email_primary,
-                source="owner_import",
+    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    requested = set(candidate_keys)
+    by_unit: dict[str, dict[str, list[dict]]] = {}
+    for row in snapshot.rows:
+        key = row.get("unit_candidate_key")
+        if (
+            key in requested
+            and row["property_identity"] is not None
+            and row["assessed_status"]
+            in {"verified_current_owner", "probable_current_owner", "conflicting_claim"}
+            and row.get("event_assessed_status", row["assessed_status"])
+            in {"verified_current_owner", "probable_current_owner", "conflicting_claim"}
+        ):
+            by_unit.setdefault(key, {}).setdefault(row["canonical_owner_key"], []).append(row)
+    for key, candidates in by_unit.items():
+        verified = {
+            person: [
+                row
+                for row in events
+                if row["assessed_status"] == "verified_current_owner"
+                and row.get("event_assessed_status", row["assessed_status"])
+                == "verified_current_owner"
+                and row.get("party_role") == "Buyer"
+            ]
+            for person, events in candidates.items()
+        }
+        verified = {person: events for person, events in verified.items() if events}
+        if len(verified) != 1 or len(candidates) > 2:
+            continue
+        if any(
+            row["assessed_status"] == "conflicting_claim"
+            or row.get("event_assessed_status") == "conflicting_claim"
+            for events in candidates.values()
+            for row in events
+        ):
+            continue
+        person, buyer_events = next(iter(verified.items()))
+        other_events = [
+            row for key, events in candidates.items() if key != person for row in events
+        ]
+        # A tentative Seller on the uniquely paired sale does not compete with
+        # its verified Buyer. Other people or sale anchors still prevent autofill.
+        if any(
+            row.get("party_role") != "Seller"
+            or row["assessed_status"] != "probable_current_owner"
+            or row.get("event_assessed_status", row["assessed_status"]) != "probable_current_owner"
+            or not any(
+                buyer.get("sale_anchor_key")
+                and buyer.get("sale_anchor_date")
+                and row.get("sale_anchor_key") == buyer["sale_anchor_key"]
+                and row.get("sale_anchor_date") == buyer["sale_anchor_date"]
+                and row["property_identity"] == buyer["property_identity"]
+                and buyer.get("transaction_date")
+                and row.get("transaction_date") == buyer.get("transaction_date")
+                and int(row.get("transaction_price_aed") or 0) > 0
+                and int(buyer.get("transaction_price_aed") or 0) > 0
+                for buyer in buyer_events
             )
+            for row in other_events
+        ):
+            continue
+        claim = max(
+            buyer_events, key=lambda row: (row.get("transaction_date") or date.min, row["id"])
+        )
+        phone = _normalize_phone(claim.get("phone_primary")) or _normalize_phone(
+            claim.get("phone_alternate")
+        )
+        email = _normalize_email(claim.get("email_primary"))
+        if not (phone or email) or not claim.get("lead_id"):
+            continue
+        owners[key] = CrmRenewalOwner(
+            name=claim["contact_name"] or None,
+            phone=phone,
+            email=email,
+            source="owner_import",
+        )
     workspaces = await workspace_repository.list_lead_workspaces_for_candidates(
         db, candidate_keys, organization_id, user_id
     )
     for workspace in workspaces:
-        if workspace.owner_name or workspace.owner_phone or workspace.owner_email:
+        is_manual = workspace.owner_source == "manual" or (
+            workspace.owner_source is None and "Imported owner" not in (workspace.tags or [])
+        )
+        if is_manual and (workspace.owner_name or workspace.owner_phone or workspace.owner_email):
             owners[workspace.unit_candidate_key] = CrmRenewalOwner(
                 name=workspace.owner_name,
                 phone=workspace.owner_phone,
                 email=workspace.owner_email,
                 source="workspace",
             )
+        elif workspace.owner_source == "manual":
+            # An explicit manual clear is an override too. An untouched empty
+            # legacy workspace (source=None) must still allow a later import.
+            owners.pop(workspace.unit_candidate_key, None)
     return owners
+
+
+async def get_renewal_detail(
+    db: AsyncSession,
+    *,
+    lead_id: str,
+    user_id: str,
+    organization_id: str,
+    as_of: date | None = None,
+):
+    detail = await get_lead_detail(lead_id, as_of=as_of)
+    owners = await _owners_by_candidate(
+        db,
+        candidate_keys=[detail.lead.unit_candidate_key],
+        user_id=user_id,
+        organization_id=organization_id,
+    )
+    return detail.model_copy(update={"owner": owners.get(detail.lead.unit_candidate_key)})
 
 
 async def list_renewal_leads(
@@ -272,17 +366,20 @@ async def open_renewal_lead(
     """Turn a Vitevue lease into the agency's shared lead for its unit, or return the one there.
 
     The lead starts undecided (seller or landlord) and carries the unit, its last tenancy and
-    last purchase. The owner comes only from an owner import that tied a current owner to the
-    unit; otherwise it stays blank for the agent to fill in.
+    last purchase. The owner comes from manual workspace fields or a reliable current-owner
+    import match; otherwise it stays blank for the agent to fill in.
     """
     detail = await get_lead_detail(lease_id)
     lead = detail.lead
     if not lead.unit_number:
         raise HTTPException(status_code=422, detail="This lease has no unit number")
-    claims = await renewal_repository.list_current_owner_claims(
-        db, organization_id, [lead.unit_candidate_key]
+    owners = await _owners_by_candidate(
+        db,
+        candidate_keys=[lead.unit_candidate_key],
+        user_id=user_id,
+        organization_id=organization_id,
     )
-    owner = claims[0] if claims else None  # Highest confidence first.
+    owner = owners.get(lead.unit_candidate_key)
     criteria = {
         "building": lead.building_name or lead.project_name,
         "unit_number": lead.unit_number,
@@ -307,9 +404,10 @@ async def open_renewal_lead(
         organization_id=organization_id,
         user_id=user_id,
         unit_key=lead.unit_candidate_key,
-        owner_name=(owner.contact_name or "") if owner else "",
-        owner_phone=(owner.phone_primary or owner.phone_alternate) if owner else None,
-        owner_email=owner.email_primary if owner else None,
+        owner_name=(owner.name or "") if owner else "",
+        owner_phone=owner.phone if owner else None,
+        owner_email=owner.email if owner else None,
+        owner_source=owner.source if owner else None,
         criteria={key: value for key, value in criteria.items() if value},
         lease=lease,
     )

@@ -1,13 +1,46 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { client } from '$lib/api/client'
-import { getOwner, listOwnerImportRows } from '$lib/crm/api/backend'
+import { getOwner, listOwnerImportProperties, listOwnerImportRows } from '$lib/crm/api/backend'
 
 /* A row on an import report opens its owner, and each of the owner's units shows what the file
    said next to what DLD has, with the match result, as the old CRM's owner profile did. */
 afterEach(() => vi.restoreAllMocks())
 
 describe('import report rows', () => {
+	it('retains the explicit preview cap so omitted property history can be disclosed', async () => {
+		vi.spyOn(client, 'get').mockResolvedValue({
+			rows: [
+				{
+					property_key: 'synthetic|216',
+					area: '',
+					project: '',
+					building: 'Synthetic',
+					unit: '216',
+					property_type: 'Apartment',
+					rows: 51,
+					buyers: 1,
+					sellers: 0,
+					records_truncated: true,
+					records: Array.from({ length: 50 }, (_, index) => ({
+						name: 'Synthetic Owner',
+						role: 'Buyer',
+						status: 'unmatched',
+						sheet: 'Owners',
+						row: index + 2
+					}))
+				}
+			],
+			total: 1,
+			limit: 100,
+			offset: 0
+		} as never)
+		const page = await listOwnerImportProperties(7, { search: '', offset: 0 })
+		expect(page.rows[0].rows).toBe(51)
+		expect(page.rows[0].records).toHaveLength(50)
+		expect(page.rows[0].recordsTruncated).toBe(true)
+	})
+
 	it('carry the owner key the Owner panel opens with', async () => {
 		vi.spyOn(client, 'get').mockResolvedValue({
 			list: { id: 5 },
@@ -107,10 +140,10 @@ describe('owner unit check', () => {
 				market: 'Ready'
 			},
 			result: {
-				label: 'Verified owner',
+				label: 'Transaction-matched current buyer',
 				confidence: 98,
 				reason: 'Acquisition date and price match the latest sale.',
-				chip: { tone: 'green', label: 'Verified owner' }
+				chip: { tone: 'green', label: 'Transaction-matched current buyer' }
 			},
 			lease: { end: '2026-09-22', aed: 120_000 }
 		})

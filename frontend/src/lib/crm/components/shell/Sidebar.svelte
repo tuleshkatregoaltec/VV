@@ -102,7 +102,7 @@ const path = $derived(page.url.pathname.replace(/\/$/, ''))
 					aria-current={path === it.href ? 'page' : undefined}
 					onclick={() => (chrome.sbOpen = false)}
 				>
-					<it.icon size={17} aria-hidden="true" />
+					<it.icon size={16} aria-hidden="true" />
 					<span class="lbltxt">{it.label}</span>
 					{#if it.count}<span class="ct" aria-label="{it.count} {it.countLabel}">{it.count}</span>{/if}
 				</a>

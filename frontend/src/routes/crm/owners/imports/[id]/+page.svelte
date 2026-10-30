@@ -8,6 +8,8 @@ import type { OwnerImportDetail } from '$lib/crm/api/types'
 import DroppedRows from '$lib/crm/components/imports/DroppedRows.svelte'
 import ImportRows from '$lib/crm/components/imports/ImportRows.svelte'
 import PropertyRows from '$lib/crm/components/imports/PropertyRows.svelte'
+import OwnerImportSummary from '$lib/crm/components/owners/OwnerImportSummary.svelte'
+import SourceAuditSummary from '$lib/crm/components/owners/SourceAuditSummary.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import InfoTip from '$lib/crm/components/ui/InfoTip.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
@@ -15,8 +17,12 @@ import QueryView from '$lib/crm/components/ui/QueryView.svelte'
 import { fmt } from '$lib/crm/format'
 import {
 	type ClaimStatus,
+	columnsRead,
 	DROP_REASON_INFO,
 	type DropReason,
+	MATCH_FILTERS,
+	type MatchBucketKey,
+	type MatchFilterId,
 	STATUS_HELP,
 	STATUS_INFO
 } from '$lib/crm/ownerImportReport'
@@ -24,8 +30,9 @@ import { crmQueries } from '$lib/crm/queries'
 import { write } from '$lib/crm/write'
 
 /**
- * One owner file's report: the row funnel (rows → dropped → merged → kept → matched), a tile per
- * DLD status, and the kept rows themselves, opening on all statuses.
+ * One owner file's report. Top to bottom: the match result (distinct units by tier, from the
+ * property-first matcher), the kept rows with the sale each was tied to and why, the columns read
+ * from the file, and one collapsed "Processing details" holding everything recorded at import time.
  */
 const imports = createQuery(() => crmQueries.ownerImportDetails())
 const id = $derived(Number(page.params.id))
@@ -43,12 +50,9 @@ let draft = $state('')
 let busy = $state(false)
 let confirming = $state(false)
 
-// The rows open on the first failed status that has rows; after that the tiles and the select drive
-// it. A processing import has no counts yet, so the choice waits until it has finished. Moving to
-// another import also closes any open rename or delete prompt.
-// The owner rows open on "All statuses"; the tiles and the select narrow them. Moving to another
-// import resets the filter and closes any open rename or delete prompt.
-let status = $state<ClaimStatus | null>(null)
+// The owner rows open on "All"; the result buckets and the colour chips narrow them. Moving to
+// another import resets the filter and closes any open rename or delete prompt.
+let filter = $state<MatchFilterId>('all')
 // The Dropped card opens the rows the import did not keep, with the reason for each.
 let showDropped = $state(false)
 // The Properties card opens the import's distinct units, each with its buyer/seller rows.
@@ -57,7 +61,7 @@ let shownFor = $state<number | null>(null)
 $effect.pre(() => {
 	if (!imp || shownFor === imp.id) return
 	shownFor = imp.id
-	status = null
+	filter = 'all'
 	showDropped = false
 	showProperties = false
 	editing = false
@@ -101,9 +105,15 @@ const droppedBreakdown = (byReason: Partial<Record<DropReason, number>>) =>
 		.join(' · ')
 
 const pct = (n: number, of: number) => (of ? `${(n / of) * 100}%` : '0%')
+
+/** A result bucket narrows the rows to its colour; pressing it again shows all rows. */
+function pick(key: MatchBucketKey) {
+	filter = filter === key ? 'all' : key
+	document.getElementById('source-rows')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+}
+const filterLabel = (id: MatchFilterId) => MATCH_FILTERS.find((f) => f.id === id)?.label
 const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : '—')
 </script>
-
 <svelte:head><title>{imp ? `${imp.name} · ` : ''}Owner imports · CRM Beta</title></svelte:head>
 
 <PageHeader title={imp?.name ?? 'Import report'} facts={imp ? `${imp.file} · ${imp.at}` : ''}>
@@ -120,6 +130,7 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 			</div>
 		{:else}
 			{@const c = imp.counts}
+			{@const m = c.ownerMatch}
 			<!-- 1. Header -->
 			<section class="card head">
 				{#if editing}
@@ -136,7 +147,7 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 					</form>
 				{:else}
 					<div class="title">
-						<h2>{imp.name}</h2>
+						<span class="small muted">Import #{imp.id}</span>
 						<Chip tone={STATUS[imp.status].tone}>{STATUS[imp.status].label}</Chip>
 					</div>
 					<div class="acts">
@@ -167,16 +178,146 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 				<div class="notice" role="status">This file is still being imported. Counts appear when it finishes.</div>
 			{/if}
 
-			<!-- 2. Row funnel -->
+			<!-- 2. Match result -->
+			{#if imp.status === 'completed'}
+				<section class="card match" aria-labelledby="match-h">
+					<div class="ch"><h2 id="match-h">Match result</h2></div>
+					{#if !m}
+						<div class="cb">
+							<p class="pending"><Chip tone="amber">Re-match pending</Chip></p>
+							<p class="small muted">
+								This file was imported before owners were matched to sales unit by unit, so there are no unit counts yet. They appear once the file is re-matched.
+							</p>
+						</div>
+					{:else}
+						<div class="cb">
+							<p class="headline">
+								<span class="big">{fmt(m.headline.units)}</span>
+								<span class="of">of {fmt(m.headline.total)} distinct units confirmed with a sale</span>
+								<span class="pc">{m.headline.percent}%</span>
+							</p>
+							<div class="stack" role="img" aria-label={m.buckets.map((b) => `${fmt(b.units)} ${b.label}`).join(', ')}>
+								{#each m.buckets as b (b.key)}
+									<span class={['seg', b.tone]} style:width={pct(b.units, m.total)}></span>
+								{/each}
+							</div>
+							<ul class="buckets">
+								{#each m.buckets as b (b.key)}
+									<li class={['bk', b.tone]}>
+										<button
+											type="button"
+											class="bkb"
+											aria-pressed={filter === b.key}
+											aria-controls="source-rows"
+											onclick={() => pick(b.key)}
+										>
+											<span class="bl"><i class={['dot', b.tone]}></i>{b.label}</span>
+											<span class="bn">{fmt(b.units)} <small>{b.percent}%</small></span>
+										</button>
+										<span class="bk-tip">
+											<InfoTip label="What “{b.label}” means">
+												<b>{b.label}</b>
+												<span>{b.meaning}</span>
+											</InfoTip>
+										</span>
+									</li>
+								{/each}
+							</ul>
+							<p class="small muted aside">
+								A unit is a building (or project) and unit number. {fmt(m.rowsWithoutUnit)} {m.rowsWithoutUnit === 1 ? 'row has' : 'rows have'} no unit identifier and {m.rowsWithoutUnit === 1 ? 'is' : 'are'} not counted above. {fmt(m.lenderRows)} lender {m.lenderRows === 1 ? 'row is' : 'rows are'} excluded: a bank on a mortgage row is not an owner.
+							</p>
+						</div>
+					{/if}
+				</section>
+			{/if}
+
+			<!-- 3. Source rows -->
+			<section class="sec rows" id="source-rows">
+				<h3>Source rows{#if m && filter !== 'all'}<span class="hint">{filterLabel(filter)} only</span>{/if}</h3>
+				<p class="small muted">Each row shows the property the sheet names, the sale it was tied to and why. Open a person to record a review note.</p>
+				{#if imp.listId === null}
+					<p class="small muted">No rows were saved for this import.</p>
+				{:else}
+					{#key imp.listId}
+						<ImportRows listId={imp.listId} bind:filter matched={m !== null} />
+					{/key}
+				{/if}
+			</section>
+
+			<!-- 4. Columns read from the file -->
+			{#if imp.sheets.length}
+				<section class="sec cols" aria-labelledby="cols-h">
+					<h3 id="cols-h">Columns read from the file</h3>
+					<div class="sheets">
+						{#each imp.sheets as sheet (sheet.name)}
+							{@const r = columnsRead(sheet)}
+							<div class="card sheet">
+								<div class="ch">
+									<h2>{r.name}<span class="ct">{fmt(sheet.rows)} rows</span></h2>
+									{#if r.auto}<Chip tone="blue" title={r.sourceNote}>Auto-mapped</Chip>{/if}
+								</div>
+								<div class="cb">
+									{#if r.auto}<p class="small muted">{r.sourceNote}</p>{/if}
+									{#each r.checks as check (check.code)}
+										<p class={['small', 'check', check.level]}>{check.text}</p>
+									{/each}
+									{#if r.notImported.length}
+										<p class="small warnline">
+											<b>Not imported</b>
+											{#each r.notImported as col (col)}<span class="col">{col}</span>{/each}
+										</p>
+									{/if}
+									{#each r.warnings as w (w)}<p class="small warnline">{w}</p>{/each}
+									{#if r.fields.length}
+										<dl class="map">
+											{#each r.fields as f (f.field)}
+												<div><dt>{f.field}</dt><dd>{f.column}</dd></div>
+											{/each}
+										</dl>
+									{:else}
+										<p class="small muted">No columns were mapped.</p>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				</section>
+			{/if}
+
+			<!-- 5. Processing details -->
+			<details class="snapshot">
+				<summary>Processing details</summary>
+				{#if imp.status === 'completed'}
+					<p class="small muted row-accounting">{fmt(c.rows)} source rows · {fmt(c.kept)} kept · {fmt(c.merged)} merged · {fmt(c.dropped)} dropped.</p>
+					{#if c.rows !== c.kept + c.merged + c.dropped}<p class="notice" role="status">Row totals need review; the processing breakdown does not account for all source rows.</p>{/if}
+				{/if}
+
+				{#if imp.source_audit}
+				<SourceAuditSummary summary={imp.source_audit} />
+			{/if}
+
+				<OwnerImportSummary importId={imp.id} listId={imp.listId} processing={imp.status === 'processing'} />
+
+				<button type="button" class="btn ghost sm" aria-expanded={showProperties} aria-controls="property-rows" onclick={() => (showProperties = !showProperties)}>{showProperties ? 'Hide current property records' : 'Inspect current property records'}</button>
+
+				{#if showProperties}
+				<section class="sec" id="property-rows">
+					<h3>Properties and unresolved source records</h3>
+					<PropertyRows importId={imp.id} />
+				</section>
+			{/if}
+
+				<p class="small muted">These counts were recorded when this file was processed. Current assessments and source rows above use evidence across all imports and may differ.</p>
+
 			<section class="sec">
 				<h3>What happened to the rows</h3>
 				<div class="bar" aria-hidden="true">
-					<span class="seg matched" style:width={pct(c.matched, c.rows)}></span>
+					<span class="seg matched" style:width={pct(c.kept, c.rows)}></span>
 					<span class="seg merged" style:width={pct(c.merged, c.rows)}></span>
 					<span class="seg dropped" style:width={pct(c.dropped, c.rows)}></span>
 				</div>
 				<div class="grid-4 kpis">
-					<div class="kpi"><span class="lbl">Rows in file</span><span class="v">{fmt(c.rows)}</span></div>
+					
 					<button
 						type="button"
 						class={['kpi', showDropped && 'on']}
@@ -192,30 +333,31 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 					<div class="kpi">
 						<span class="lbl"><i class="dot merged"></i>Duplicates merged</span><span class="v">{fmt(c.merged)}</span>
 					</div>
+					
+					
 					<div class="kpi">
-						<span class="lbl">Source records kept</span><span class="v">{fmt(c.kept)}</span>
-						<span class="n">{fmt(c.readyToContact)} ready to contact · {fmt(c.rentalLeads)} rental leads</span>
-					</div>
-					<button
-						type="button"
-						class={['kpi', showProperties && 'on']}
-						aria-pressed={showProperties}
-						aria-controls="property-rows"
-						disabled={!c.kept}
-						onclick={() => (showProperties = !showProperties)}
-					>
-						<span class="lbl">Property groups after matching</span><span class="v">{c.properties === null ? '—' : fmt(c.properties)}</span>
-						<span class="n">{c.properties === null ? 'Counted from the next rematch' : 'Includes inferred identities and plot links'}</span>
-						{#if c.kept}<span class="n link">{showProperties ? 'Hide properties' : 'Show properties'}</span>{/if}
-					</button>
-					<div class="kpi green">
-						<span class="lbl"><i class="dot matched"></i>Property evidence found</span><span class="v">{fmt(c.matched)}</span>
-						<span class="n">{c.matchRate === null ? '—' : `${Math.round(c.matchRate * 100)}%`} of kept</span>
+						<span class="lbl">Property-linked rows</span><span class="v">{c.matched === null ? '—' : fmt(c.matched)}</span>
+						<span class="n">{c.matchRate === null ? '—' : `${Math.round(c.matchRate * 100)}%`} of {fmt(c.kept)} kept rows · {c.sourceMatchRate === null ? '—' : `${Math.round(c.sourceMatchRate * 100)}%`} of {fmt(c.rows)} source rows</span>
+						{#if c.matched === null}<span class="n">Count unavailable for this older import</span>{/if}
 						{#if c.salesHistoryRows !== null}
 							<span class="n">{fmt(c.salesHistoryRows)} with sales history · {fmt(c.plotOnlyRows ?? 0)} plot only</span>
 						{/if}
 					</div>
+					<div class="kpi">
+						<span class="lbl">Import-time transaction-matched buyer records</span><span class="v">{fmt(c.byStatus.verified_current_owner)}</span>
+						<span class="n">{share(c.byStatus.verified_current_owner, c.kept)} of kept rows; sale-based ownership evidence</span>
+					</div>
+					<div class="kpi">
+						<span class="lbl">Records with phone or email</span><span class="v">{fmt(c.validContacts)}</span>
+						<span class="n">{share(c.validContacts, c.kept)} of kept rows; contact data alone does not establish ownership</span>
+					</div>
+					<div class="kpi">
+						<span class="lbl">Contactable candidates</span><span class="v">{fmt(c.readyToContact)}</span>
+						<span class="n">{share(c.readyToContact, c.kept)} of kept rows · {fmt(c.rentalLeads)} rental leads</span>
+						<span class="n">Transaction-matched or possible buyer, contact data and linked rental opportunity; review before outreach</span>
+					</div>
 				</div>
+				<p>Property links, ownership assessments and contactability measure different things. A source seller claim without corroborating transaction evidence still needs review.</p>
 				{#if c.sourceProperties}
 					{@const source = c.sourceProperties}
 					<h3>Identifiers in the original file</h3>
@@ -249,38 +391,19 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 				{/if}
 			</section>
 
-			{#if showDropped}
-				<section class="sec" id="dropped-rows">
-					<h3>Dropped rows</h3>
-					<DroppedRows importId={imp.id} />
-				</section>
-			{/if}
-
-			{#if showProperties}
-				<section class="sec" id="property-rows">
-					<h3>Properties and unresolved source records</h3>
-					<PropertyRows importId={imp.id} />
-				</section>
-			{/if}
-
-			<!-- 3. Status breakdown -->
+			
 			<section class="sec">
-				<h3>Ownership assessment</h3>
+				<h3>Import-time ownership classifications</h3>
+				<p class="small muted">Each percentage below is a share of the {fmt(c.kept)} kept source records.</p>
 				<div class="grid-4 kpis">
 					{#each statuses as s (s)}
-						<!-- The tile filters the owner rows; the ⓘ beside it explains the status. -->
+						<!-- Historical classifications are separate from the current row filter. -->
 						<div class="stile">
-							<button
-								type="button"
-								class={['kpi', status === s && 'on']}
-								aria-pressed={status === s}
-								disabled={imp.listId === null}
-								onclick={() => (status = status === s ? null : s)}
-							>
+							<div class="kpi">
 								<span class="lbl"><Chip tone={STATUS_INFO[s].tone}>{STATUS_INFO[s].label}</Chip></span>
 								<span class="v sm">{fmt(c.byStatus[s])} <small>{share(c.byStatus[s], c.kept)}</small></span>
 								<span class="n">{STATUS_INFO[s].meaning}</span>
-							</button>
+							</div>
 							<span class="stip">
 								<InfoTip label="What “{STATUS_INFO[s].label}” means">
 									<b>{STATUS_INFO[s].label}</b>
@@ -293,25 +416,218 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 				</div>
 			</section>
 
-			<!-- 4. Owner rows -->
-			<section class="sec">
-				<h3>Owner rows</h3>
-				{#if imp.listId === null}
-					<p class="small muted">No rows were saved for this import.</p>
-				{:else}
-					{#key imp.listId}
-						<ImportRows listId={imp.listId} bind:status />
-					{/key}
+			
+
+				{#if showDropped}
+					<section class="sec" id="dropped-rows">
+						<h3>Dropped rows</h3>
+						<DroppedRows importId={imp.id} />
+					</section>
 				{/if}
-			</section>
+			</details>
 		{/if}
 	{/snippet}
 </QueryView>
 
 <style>
-	.sec + .sec,
-	.head + .sec,
-	.notice + .sec {
+	.match {
+		margin-bottom: 1.25rem;
+	}
+	.headline {
+		display: flex;
+		align-items: baseline;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.6rem;
+		margin: 0 0 0.7rem;
+	}
+	.headline .big {
+		font-size: 34px;
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		line-height: 1;
+		font-variant-numeric: tabular-nums;
+		color: var(--green);
+	}
+	.headline .of {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.headline .pc {
+		margin-left: auto;
+		font-size: 20px;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		color: var(--text2);
+	}
+	.stack {
+		display: flex;
+		height: 14px;
+		border-radius: 7px;
+		overflow: hidden;
+		background: var(--card-2);
+		margin-bottom: 0.8rem;
+	}
+	.stack .seg.green,
+	.dot.green {
+		background: var(--green);
+	}
+	.stack .seg.amber,
+	.dot.amber {
+		background: var(--amber);
+	}
+	.stack .seg.blue,
+	.dot.blue {
+		background: var(--blue);
+	}
+	.stack .seg.red,
+	.dot.red {
+		background: var(--red);
+	}
+	.stack .seg.neutral,
+	.dot.neutral {
+		background: var(--muted);
+	}
+	.stack .seg + .seg {
+		box-shadow: inset 2px 0 0 var(--card);
+	}
+	.buckets {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 0.5rem;
+	}
+	.bk {
+		position: relative;
+	}
+	.bkb {
+		display: grid;
+		gap: 0.2rem;
+		width: 100%;
+		text-align: left;
+		padding: 0.6rem 2rem 0.6rem 0.7rem;
+		border: 1px solid var(--sep);
+		border-radius: 10px;
+		background: var(--card);
+		color: var(--text);
+		cursor: pointer;
+	}
+	.bkb:hover {
+		background: var(--hover);
+	}
+	.bkb[aria-pressed='true'] {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 1px var(--accent);
+	}
+	.bl {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text2);
+	}
+	.bn {
+		font-size: 20px;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+	.bn small {
+		font-size: 12.5px;
+		font-weight: 400;
+		color: var(--text2);
+	}
+	.bk-tip {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+	}
+	.aside {
+		margin: 0.7rem 0 0;
+	}
+	.pending {
+		margin: 0 0 0.4rem;
+	}
+	.rows {
+		margin-bottom: 1.5rem;
+	}
+	.rows h3 .hint {
+		font-weight: 400;
+		color: var(--text2);
+	}
+	.cols {
+		margin-bottom: 1.5rem;
+	}
+	.sheets {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+		gap: 0.75rem;
+	}
+	.sheet .cb {
+		display: grid;
+		gap: 0.45rem;
+	}
+	.sheet p {
+		margin: 0;
+	}
+	.check.error {
+		color: var(--red);
+	}
+	.check.warning,
+	.warnline {
+		color: var(--amber);
+	}
+	.warnline .col {
+		display: inline-block;
+		margin: 0 0.25rem 0.2rem 0.4rem;
+		padding: 0 0.4rem;
+		border-radius: 5px;
+		background: var(--amber-bg);
+	}
+	.map {
+		margin: 0;
+		display: grid;
+	}
+	.map > div {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.3rem 0;
+		border-top: 1px solid var(--sep);
+		font-size: 12.5px;
+	}
+	.map dt {
+		color: var(--text2);
+	}
+	.map dd {
+		margin: 0;
+		font-weight: 600;
+		text-align: right;
+		overflow-wrap: anywhere;
+	}
+	@media (max-width: 900px) {
+		.buckets {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	.snapshot { margin-top: 1.5rem; }
+	.row-accounting { font-variant-numeric: tabular-nums; }
+	.kpis { display: block; }
+	.kpis .kpi {
+		display: grid;
+		grid-template-columns: minmax(10rem, 1fr) auto;
+		gap: 0.25rem 1rem;
+		padding: 0.65rem 0;
+		border: 0;
+		border-bottom: 1px solid var(--sep);
+		border-radius: 0;
+		background: transparent;
+		box-shadow: none;
+	}
+	.kpis .kpi .v, .kpis .kpi .v.sm { font-size: 14px; }
+	.kpis .kpi .n { grid-column: 1 / -1; }
+
+	.snapshot > summary { cursor: pointer; font-weight: 600; }
+	.snapshot > :not(summary) { margin-top: 1rem; }
+	.sec + .sec {
 		margin-top: 1.5rem;
 	}
 	.head {
@@ -328,10 +644,7 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 		align-items: center;
 		gap: 0.6rem;
 	}
-	.title h2 {
-		margin: 0;
-		font-size: 18px;
-	}
+
 	.acts,
 	.edit {
 		display: flex;

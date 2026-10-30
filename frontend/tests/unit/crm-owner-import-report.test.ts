@@ -4,7 +4,9 @@ import {
 	failureReasons,
 	importCounts,
 	isFlagged,
-	mappingChecks
+	mappingChecks,
+	STATUS_HELP,
+	STATUS_INFO
 } from '$lib/crm/ownerImportReport'
 
 /* Real summaries and sheet mappings from imports #14 (Westwood) and #15 (JVT JAN 2025). */
@@ -13,6 +15,7 @@ const JVT_SUMMARY = {
 	candidate_rows: 2141,
 	duplicate_rows_collapsed: 45,
 	valid_contacts: 1615,
+	properties_linked_rows: 1961,
 	verified_current_owners: 466,
 	probable_current_owners: 6,
 	unit_linked_unverified: 0,
@@ -71,15 +74,63 @@ describe('importCounts', () => {
 		expect(c.matched).toBe(1961)
 		expect(c.failed).toBe(180)
 		expect(c.matchRate).toBeCloseTo(0.916, 3)
+		expect(c.sourceMatchRate).toBeCloseTo(1961 / 5764)
+		expect(c.validContacts).toBe(1615)
 		expect(c.byStatus.former_owner).toBe(1489)
 	})
 
 	it('reads an import still processing (empty summary) as zeros, not NaN', () => {
 		const c = importCounts({})
 		expect([c.rows, c.kept, c.merged, c.dropped, c.matched, c.failed, c.readyToContact]).toEqual([
-			0, 0, 0, 0, 0, 0, 0
+			0,
+			0,
+			0,
+			0,
+			null,
+			0,
+			0
 		])
 		expect(c.matchRate).toBeNull()
+		expect(c.sourceMatchRate).toBeNull()
+	})
+
+	it('does not turn an explicit seller status into a property match without registry evidence', () => {
+		const c = importCounts({
+			total_rows: 10,
+			candidate_rows: 8,
+			former_owners: 8,
+			properties_linked_rows: 0
+		})
+		expect(c.byStatus.former_owner).toBe(8)
+		expect(c.matched).toBe(0)
+		expect(c.matchRate).toBe(0)
+		expect(c.sourceMatchRate).toBe(0)
+	})
+
+	it('keeps property linkage, ownership and contact data independent with explicit denominators', () => {
+		const c = importCounts({
+			total_rows: 100,
+			candidate_rows: 50,
+			properties_linked_rows: 40,
+			verified_current_owners: 10,
+			probable_current_owners: 5,
+			former_owners: 25,
+			valid_contacts: 30,
+			contact_ready: 3
+		})
+		expect(c.matched).toBe(40)
+		expect(c.matchRate).toBe(0.8)
+		expect(c.sourceMatchRate).toBe(0.4)
+		expect(c.byStatus.verified_current_owner).toBe(10)
+		expect(c.validContacts).toBe(30)
+		expect(c.readyToContact).toBe(3)
+	})
+
+	it('leaves a legacy linkage metric unknown instead of fabricating matches from ownership statuses', () => {
+		const c = importCounts({ candidate_rows: 12, former_owners: 10, verified_current_owners: 2 })
+		expect(c.matched).toBeNull()
+		expect(c.matchRate).toBeNull()
+		expect(c.sourceMatchRate).toBeNull()
 	})
 
 	it('keeps source identifiers, derived groups and plot-only evidence separate', () => {
@@ -225,5 +276,24 @@ describe('failureReasons', () => {
 		expect(
 			failureReasons(importCounts({ candidate_rows: 10, verified_current_owners: 10 }))
 		).toEqual([])
+	})
+})
+
+describe('ownership assessment language', () => {
+	it('keeps uncorroborated seller claims apart from transaction-supported former owners', () => {
+		const counts = importCounts({
+			candidate_rows: 3,
+			former_owners: 1,
+			unverified_former_owners: 2
+		})
+		expect(counts.byStatus.former_owner).toBe(1)
+		expect(counts.byStatus.unverified_former_owner).toBe(2)
+		expect(STATUS_INFO.unverified_former_owner.label).toBe('Seller claim needs review')
+		expect(STATUS_HELP.unverified_former_owner.todo).toContain('Do not treat a seller label alone')
+	})
+
+	it('describes sale matching without promising independent named-person verification', () => {
+		expect(STATUS_INFO.verified_current_owner.label).toBe('Transaction-matched current buyer')
+		expect(STATUS_HELP.verified_current_owner.todo).toContain('does not independently verify')
 	})
 })

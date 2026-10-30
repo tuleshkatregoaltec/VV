@@ -1,16 +1,13 @@
 /*
  * Vitevue CRM styles (CRM v2, 7 Oct), imported by routes/crm/+layout.svelte.
- * Tokens follow the v2 mockup (vitevue-crm-v2.html, styles.css): system type, semantic colour
+ * Tokens follow the v2 mockup (vitevue-crm-v2.html, styles.css): semantic colour
  * tokens per appearance, sidebar + toolbar + side panel. The 1 Oct token names (ink, line, btn…)
  * stay as aliases so every component keeps working. Everything is scoped under .crm-root;
- * dark mode follows :root[data-theme='dark']. The v2 system font stack is set on .crm-root only.
+ * dark mode follows :root[data-theme='dark']. Typography and sidebar colours use the app theme.
  */
 
 .crm-root {
 	color-scheme: light;
-	--font-sans:
-		-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial,
-		sans-serif;
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 	/* v2 tokens */
 	--page: #f4f4f6;
@@ -214,10 +211,9 @@
 			visibility: hidden;
 		}
 		.sb {
-			background: var(--glass);
-			backdrop-filter: saturate(180%) blur(20px);
-			-webkit-backdrop-filter: saturate(180%) blur(20px);
-			border-right: 1px solid var(--sep);
+			background: var(--color-bg-card);
+			border-right: 1px solid var(--color-border);
+			line-height: 1.5;
 			display: flex;
 			flex-direction: column;
 			overflow: hidden;
@@ -235,7 +231,7 @@
 			font-size: 17px;
 			letter-spacing: -0.02em;
 			white-space: nowrap;
-			color: var(--text);
+			color: var(--color-fg-1);
 			text-decoration: none;
 		}
 		.logo i {
@@ -258,41 +254,43 @@
 		.sb-grp {
 			font-size: 11px;
 			font-weight: 600;
-			color: var(--text2);
+			color: var(--color-fg-4);
 			padding: 12px 8px 4px;
 		}
 		.nav-i {
 			display: flex;
 			align-items: center;
-			gap: 9px;
+			gap: 10px;
 			width: 100%;
 			padding: 0 8px;
 			height: 30px;
-			border-radius: 7px;
+			border-radius: var(--radius-md);
+			font-size: 13.5px;
 			text-align: left;
-			color: var(--text);
+			color: var(--color-fg-2);
 			text-decoration: none;
 		}
 		.nav-i:hover {
-			background: var(--hover);
+			background: var(--color-bg-panel);
+			color: var(--color-fg-1);
 		}
 		.nav-i[aria-current="page"] {
-			background: var(--sel);
-			color: var(--accent);
+			background: var(--color-info-bg);
+			color: var(--color-info);
 			font-weight: 600;
 		}
 		.nav-i svg {
 			flex: none;
-			color: var(--accent);
+			color: var(--color-info);
 		}
 		.nav-i .ct {
 			margin-left: auto;
 			font-size: 12px;
-			color: var(--text2);
+			color: var(--color-fg-4);
 			font-weight: 500;
 		}
 		.nav-i[aria-current="page"] .ct {
-			color: var(--accent);
+			color: var(--color-info);
 		}
 		.sb-foot {
 			border-top: 1px solid var(--sep);

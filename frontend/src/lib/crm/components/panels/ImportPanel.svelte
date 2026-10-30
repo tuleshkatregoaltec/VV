@@ -3,7 +3,6 @@ import { createQuery } from '@tanstack/svelte-query'
 import Pencil from 'lucide-svelte/icons/pencil'
 import Trash from 'lucide-svelte/icons/trash-2'
 import { goto } from '$app/navigation'
-import { page } from '$app/state'
 import { crm } from '../../api'
 import type { ImportPreview, OwnerFilePreview, OwnerImportResult } from '../../api/types'
 import { fmt } from '../../format'
@@ -153,15 +152,12 @@ async function send() {
 			data.alreadyImported
 				? null
 				: data.status === 'completed'
-					? `Imported · ${fmt(data.summary.candidateRows)} owners`
+					? `Imported · ${fmt(data.summary.candidateRows)} source records`
 					: null,
 		event: 'import_requested'
 	})
 	sending = false
-	if (r) {
-		result = r.data
-		if (page.url.pathname !== '/crm/owners') await goto('/crm/owners')
-	}
+	if (r) result = r.data
 }
 </script>
 
@@ -190,20 +186,24 @@ async function send() {
 			{:else}
 				<section class="sec">
 					<h3>{result.name}</h3>
+					<p class="small muted">{fmt(s.candidateRows)} source records kept from {fmt(s.totalRows)} rows. Open the report to review ownership evidence.</p>
+					<details>
+						<summary>Processing details</summary>
 					<div class="kv">
 						<Kv k="Rows in the file" v={fmt(s.totalRows)} />
-						<Kv k="Owners kept" v={fmt(s.candidateRows)} o={s.duplicatesCollapsed ? `${fmt(s.duplicatesCollapsed)} duplicates merged` : ''} />
-						{#if s.distinctProperties !== null}<Kv k="Properties" v={fmt(s.distinctProperties)} o="Distinct units, villas or plots" />{/if}
+						<Kv k="Source records kept" v={fmt(s.candidateRows)} o={s.duplicatesCollapsed ? `${fmt(s.duplicatesCollapsed)} duplicates merged` : ''} />
+						{#if s.distinctProperties !== null}<Kv k="Property groups" v={fmt(s.distinctProperties)} o="Includes inferred identities and plot links" />{/if}
 						<Kv k="With a phone or email" v={fmt(s.validContacts)} />
-						<Kv k="Ready to contact" v={fmt(s.contactReady)} />
-						<Kv k="Verified owners" v={fmt(s.verified)} o="Matches a DLD sale" />
+						<Kv k="Contactable candidates" v={fmt(s.contactReady)} o="Verified or probable owner, contact data and linked rental opportunity; review before outreach" />
+						<Kv k="Transaction-matched buyers" v={fmt(s.verified)} o="Matches a DLD sale; named ownership is unverified" />
 						<Kv k="Probable owners" v={fmt(s.probable)} />
 						<Kv k="Unit found, owner not verified" v={fmt(s.unitLinked)} />
-						<Kv k="Former owners" v={fmt(s.former)} o="Sold since" />
+						<Kv k="Former owners" v={fmt(s.former)} o="Source seller or a later observed sale" />
 						<Kv k="Conflicts with DLD" v={fmt(s.conflicting)} />
 						<Kv k="Not matched" v={fmt(s.notMatched)} />
 						<Kv k="Rental opportunities" v={fmt(s.rentalOpportunities)} />
 					</div>
+					</details>
 				</section>
 			{/if}
 		{:else}
@@ -453,6 +453,7 @@ async function send() {
 {/snippet}
 
 <style>
+	summary { cursor: pointer; color: var(--text2); font-size: 12.5px; }
 	.hist {
 		list-style: none;
 		margin: 0;

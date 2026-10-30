@@ -3,7 +3,9 @@ import { createQuery } from '@tanstack/svelte-query'
 import ChartBar from 'lucide-svelte/icons/chart-no-axes-column'
 import Search from 'lucide-svelte/icons/search'
 import Upload from 'lucide-svelte/icons/upload'
+import { page } from '$app/state'
 import type { OwnerListParams, OwnerSource, OwnerTab, PropertyKind } from '$lib/crm/api/types'
+import SourceAuditSummary from '$lib/crm/components/owners/SourceAuditSummary.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
@@ -19,6 +21,14 @@ import { openOwner, panel } from '$lib/crm/stores/panel.svelte'
 import { clearOwnerFilters, ui } from '$lib/crm/stores/ui.svelte'
 import { errorText } from '$lib/crm/write'
 
+const listId = $derived(Number(page.url.searchParams.get('list_id')) || undefined)
+$effect(() => {
+	if (page.url.searchParams.get('scope') === 'needs_review') {
+		ui.ownerTab = 'review'
+		clearOwnerFilters()
+	}
+})
+
 // Search updates the rows as you type; the input keeps focus.
 let q = $state(ui.ownerQ)
 $effect(() => {
@@ -27,17 +37,30 @@ $effect(() => {
 	return () => clearTimeout(t)
 })
 
-// The whole owner file, 50–500 owners a page. A new tab, search, filter or page size goes back to
+// The whole owner file, 10–500 owners a page. A new tab, search, filter or page size goes back to
 // the first page.
-const PAGE_SIZES = [50, 100, 200, 500]
+const PAGE_SIZES = [10, 50, 100, 200, 500]
 let offset = $state(0)
 $effect.pre(() => {
-	void [ui.ownerTab, q, ui.ownerSource, ui.ownerArea, ui.ownerPtype, ui.ownerPageSize]
+	void [
+		ui.ownerTab,
+		ui.ownerOwnership,
+		ui.ownerTransactionMatch,
+		q,
+		ui.ownerSource,
+		ui.ownerArea,
+		ui.ownerPtype,
+		ui.ownerPageSize,
+		listId
+	]
 	offset = 0
 })
 
 const params = $derived<OwnerListParams>({
 	tab: ui.ownerTab,
+	ownership: ui.ownerOwnership,
+	transaction_match_status: ui.ownerTransactionMatch,
+	list_id: listId,
 	q,
 	source: ui.ownerSource,
 	area: ui.ownerArea,
@@ -62,7 +85,9 @@ function goPage(next: number) {
 	offset = next
 	document.querySelector('.owners-table')?.scrollIntoView({ block: 'start' })
 }
-const filtered = $derived(Boolean(ui.ownerQ || ui.ownerSource || ui.ownerArea || ui.ownerPtype))
+const filtered = $derived(
+	Boolean(ui.ownerQ || ui.ownerSource || ui.ownerArea || ui.ownerPtype || ui.ownerTransactionMatch)
+)
 const waiting = $derived(imports.data?.filter((r) => r.status === 'Waiting').length ?? 0)
 
 /** v2 tabs (6 Oct, 11:20): All · 3+ units · Next event ≤ 90 days · Just sold · Update due (My contacts removed). */
@@ -70,21 +95,22 @@ const tabs = $derived(
 	(
 		[
 			['all', 'All'],
-			['multi', '3+ units'],
+			['multi', '3+ associated properties'],
 			['event', 'Next event ≤ 90 days'],
-			// "Former owners" (was "Just sold"): every owner the file or DLD shows as a seller, of any date.
-			// "Update due" is hidden until market updates exist.
-			['sold', 'Former owners']
+			...(o?.source_audit?.mode === 'source_transaction_matched'
+				? []
+				: [['review', o?.source_audit ? 'Unverified candidates' : 'Needs review']])
 		] as [OwnerTab, string][]
 	).map(([id, label]) => ({
 		id,
 		label,
-		count: o?.counts[id],
 		hint: o && o.page.total > o.page.limit && o.pageOnlyTabs.includes(id) ? 'this page' : undefined
 	}))
 )
 
-const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
+const facts = $derived(
+	o ? `${listId ? 'Selected import' : 'Agency file'} · ${fmt(o.on_file)} people` : ''
+)
 </script>
 
 <svelte:head><title>Owners · CRM Beta</title></svelte:head>
@@ -98,7 +124,20 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 	{/snippet}
 </PageHeader>
 
+{#if o?.source_audit}
+	<SourceAuditSummary summary={o.source_audit} />
+{/if}
+
 <Tabs label="Owners" items={tabs} value={ui.ownerTab} onselect={(t) => (ui.ownerTab = t)} />
+
+{#if ui.ownerTab === 'review'}
+	{#if o?.source_audit?.mode === 'source_only'}
+		<div class="notice" role="status">These are unverified source-based candidates. Transaction matching was not run. The workbook audit separately identifies {fmt(o.source_audit.review_reference_count ?? 0)} references needing review; this tab does not represent additional manual review cases.</div>
+	{:else}
+		<div class="notice" role="status">Review people with unresolved claims or properties. Open a person, inspect the original source and transaction evidence, then record a review note. A note does not change the assessment.</div>
+	{/if}
+{/if}
+{#if listId}<p class="small muted">Showing people from the selected import. <a href="/crm/owners?scope=needs_review">{o?.source_audit ? 'All unverified candidates' : 'Review all imports'}</a></p>{/if}
 
 <div class="filters">
 	<label class="search">
@@ -106,6 +145,23 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 		<span class="sr-only">Search owners</span>
 		<input placeholder="Owner, unit, building" autocomplete="off" bind:value={ui.ownerQ} />
 	</label>
+	<label class="psize">
+		<span class="sr-only">Ownership</span>
+		<select aria-label="Ownership" bind:value={ui.ownerOwnership} onchange={() => (ui.ownerTab = 'all')}>
+			<option value="current">Current owners</option>
+			<option value="former">Former owners</option>
+		</select>
+	</label>
+	<label class="psize">
+		<span class="sr-only">Transaction match</span>
+		<select aria-label="Transaction match" bind:value={ui.ownerTransactionMatch}>
+			<option value="">All matches</option>
+			<option value="matched">Matched property</option>
+			<option value="unmatched">Unmatched property</option>
+			<option value="ambiguous">Ambiguous property</option>
+		</select>
+	</label>
+
 	<!-- Every owner comes from an imported file today; "Own contact" and "DLD/Ejari event" have no data yet. -->
 	<FilterMenu
 		label="Source"
@@ -149,7 +205,7 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 		<div class="tblwrap">
 			<table class="tbl">
 				<thead>
-					<tr><th>Owner</th><th>Units</th><th>Next event</th><th>Last contact</th><th>Record</th><th>Source</th></tr>
+					<tr><th>Person or organization</th><th>Associated properties</th><th>Next event</th><th>Latest note</th><th>Record</th><th>Source</th></tr>
 				</thead>
 				<tbody>
 					{#each o.items as x (x.id)}
@@ -157,13 +213,14 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 							<td>
 								<button type="button" class="rowlink" onclick={() => openOwner(x.id)}>{x.name}</button>
 								{#if x.tag}<Chip>{x.tag}</Chip>{/if}
+								{#if x.relationship_role === 'possible_intermediary'}<div class="sub">Possible intermediary · unverified</div>{:else if x.relationship_role === 'organization'}<div class="sub">Organization in source · role unverified</div>{/if}
 								{#if x.lead}
 									<div class="sub">
 										Lead · {stageOf(x.lead.stage).label}{x.lead.id === null ? ` · ${x.lead.agent}` : ''}
 									</div>
 								{/if}
 							</td>
-							<td data-label="Units">
+							<td data-label="Associated properties">
 								<div>
 									<div>{x.units.length}</div>
 									<div class="sub">
@@ -174,7 +231,7 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 							<td data-label="Next event">
 								<div><div>{x.next_event}</div><div class="sub">{x.next_event_label}</div></div>
 							</td>
-							<td data-label="Last contact">
+							<td data-label="Latest note">
 								<span class="nowrap">
 									{x.last_contact}
 									{#if x.market_update_due && x.prior_deal}<Chip tone="amber">Update due</Chip>{/if}
@@ -243,6 +300,8 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 	{/if}
 </div>
 
+<details class="import-requests">
+	<summary>Owner file and import requests · {waiting} waiting</summary>
 <section class="card" aria-labelledby="imports-h">
 	<div class="ch">
 		<h2 id="imports-h">
@@ -278,8 +337,11 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 		{/snippet}
 	</QueryView>
 </section>
+</details>
 
 <style>
+	.import-requests { margin-top: 1rem; }
+	.import-requests > summary { cursor: pointer; color: var(--text2); font-size: 12.5px; padding: 0.5rem 0; }
 	.owners-table {
 		scroll-margin-top: 5rem;
 	}

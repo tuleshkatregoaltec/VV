@@ -113,6 +113,86 @@ async def test_repeated_refresh_does_not_rewrite_existing_links(monkeypatch):
     db.commit.assert_not_awaited()
 
 
+async def test_same_building_unit_in_multiple_communities_never_picks_first_lease(monkeypatch):
+    rows = [
+        {
+            "building_name": "Tower 2",
+            "unit_number": "402",
+            "area_name": area,
+            "project_name": project,
+            "unit_candidate_key": area,
+        }
+        for area, project in [
+            ("Dubai Science Park", "Opalz"),
+            ("Greens", "Golf Towers"),
+            ("Jumeirah Village Circle", "May Residence"),
+        ]
+    ]
+    # Missing project metadata alone is not a contradictory identity.
+    rows += [
+        {
+            "building_name": "Unique Tower",
+            "unit_number": "402",
+            "area_name": "Greens",
+            "project_name": project,
+        }
+        for project in ["", "Golf Towers"]
+    ]
+    monkeypatch.setattr(
+        crm_ownership.owner_queries,
+        "fetch_rental_source_columns",
+        AsyncMock(return_value=[{"has_unit": 1}]),
+    )
+    monkeypatch.setattr(
+        crm_ownership.owner_queries, "fetch_rental_evidence", AsyncMock(return_value=rows)
+    )
+    evidence = await crm_ownership._rental_evidence_for_units(["402"])
+    assert "tower2|402" not in evidence
+    assert "uniquetower|402" in evidence
+
+
+async def test_rental_refresh_does_not_restore_link_for_colliding_sale_identity(monkeypatch):
+    row = claim(lead_id="wrong-event", evidence={"scoped_identity_collision": True})
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.exec.return_value = SimpleNamespace(all=lambda: [row])
+    monkeypatch.setattr(
+        crm_ownership,
+        "_rental_evidence_for_units",
+        AsyncMock(
+            return_value={
+                row.property_key: {"event_key": "wrong-event", "unit_candidate_key": "other-area"}
+            }
+        ),
+    )
+    monkeypatch.setattr(crm_ownership, "_refresh_contact_import_match_summaries", AsyncMock())
+    result = await crm_ownership.refresh_property_contact_rentals(db, organization_id="org")
+    assert result["removed_hits"] == 1
+    assert row.lead_id is None and row.unit_candidate_key is None
+    assert row.ownership_status == "verified_current_owner"
+
+
+async def test_single_rental_from_another_area_cannot_link_on_shared_display_key(monkeypatch):
+    rental = {
+        "event_key": "wrong-lease",
+        "unit_candidate_key": "wrong-property",
+        "area_name": "Dubai Marina",
+    }
+    row = claim(area_name="Business Bay", lead_id="wrong-lease")
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.exec.return_value = SimpleNamespace(all=lambda: [row])
+    monkeypatch.setattr(
+        crm_ownership,
+        "_rental_evidence_for_units",
+        AsyncMock(return_value={row.property_key: rental}),
+    )
+    monkeypatch.setattr(crm_ownership, "_refresh_contact_import_match_summaries", AsyncMock())
+    result = await crm_ownership.refresh_property_contact_rentals(db, organization_id="org")
+    assert result["removed_hits"] == 1
+    assert row.unit_candidate_key is None
+
+
 @pytest.mark.asyncio
 async def test_failed_warehouse_read_does_not_clear_saved_links(monkeypatch):
     row = claim(lead_id="old-event")

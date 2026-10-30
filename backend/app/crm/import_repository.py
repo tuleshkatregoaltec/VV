@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import and_, delete, func, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -83,9 +85,42 @@ async def count_import_distinct_properties(db: AsyncSession, organization_id, re
             CrmPropertyContactClaim.organization_id == organization_id,
             CrmPropertyContactClaim.import_id == record_id,
             CrmPropertyContactClaim.property_key.not_like("source:%"),
+            CrmPropertyContactClaim.property_key != "",
         )
     )
     return int(result.one() or 0)
+
+
+async def count_import_linked_rows(db: AsyncSession, organization_id, record_id) -> int:
+    result = await db.exec(
+        select(func.count())
+        .select_from(CrmPropertyContactClaim)
+        .where(
+            CrmPropertyContactClaim.organization_id == organization_id,
+            CrmPropertyContactClaim.import_id == record_id,
+            or_(
+                CrmPropertyContactClaim.latest_sale_date.is_not(None),
+                and_(
+                    CrmPropertyContactClaim.unit_candidate_key.is_not(None),
+                    CrmPropertyContactClaim.unit_candidate_key != "",
+                ),
+                CrmPropertyContactClaim.property_key.like("dld-land:%"),
+            ),
+        )
+    )
+    return int(result.one() or 0)
+
+
+async def list_claim_matches(db: AsyncSession, organization_id, record_id):
+    """(owner_match, matcher_source) evidence of every claim of an import; None where absent."""
+    evidence = CrmPropertyContactClaim.evidence
+    result = await db.exec(
+        select(evidence["owner_match"], evidence["matcher_source"]).where(
+            CrmPropertyContactClaim.organization_id == organization_id,
+            CrmPropertyContactClaim.import_id == record_id,
+        )
+    )
+    return [(match, source or {}) for match, source in result if isinstance(match, dict)]
 
 
 async def list_import_property_claims(db: AsyncSession, organization_id, record_id, search):
@@ -233,3 +268,33 @@ async def list_import_ids(db: AsyncSession, organization_id):
             select(CrmContactImport.id).where(CrmContactImport.organization_id == organization_id)
         )
     ).all()
+
+
+_SAVED_MAPPING_SCAN = 200
+
+
+async def latest_mapping_for_signature(
+    db: AsyncSession, organization_id: str, signature: str
+) -> dict[str, Any] | None:
+    """The saved mapping of the most recent completed import that has a sheet with this header
+    signature. Failed model answers (``heuristic_fallback``) are never reused."""
+    records = (
+        await db.exec(
+            select(CrmContactImport)
+            .where(
+                CrmContactImport.organization_id == organization_id,
+                CrmContactImport.status == "completed",
+            )
+            .order_by(CrmContactImport.completed_at.desc())
+            .limit(_SAVED_MAPPING_SCAN)
+        )
+    ).all()
+    for record in records:
+        for sheet in (record.mapping or {}).get("sheets", []):
+            if (
+                isinstance(sheet, dict)
+                and sheet.get("signature") == signature
+                and sheet.get("mapping_source") != "heuristic_fallback"
+            ):
+                return sheet
+    return None

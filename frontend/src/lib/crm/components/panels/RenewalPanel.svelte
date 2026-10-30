@@ -3,6 +3,7 @@ import { createQuery } from '@tanstack/svelte-query'
 import { crm } from '../../api'
 import type { RenewalDetail } from '../../api/types'
 import { aed, fullDate } from '../../format'
+import { STATUS_INFO } from '../../ownerImportReport'
 import { crmQueries } from '../../queries'
 import { write } from '../../write'
 import Chip from '../ui/Chip.svelte'
@@ -91,6 +92,20 @@ function start(r: RenewalDetail) {
 				</div>
 			{/if}
 		</section>
+
+		{#if r.owner_evidence.length}
+			<section class="sec">
+				<h3>Imported ownership evidence</h3>
+				<p class="small muted">Assessments from owner files. Only a reliable current-owner match fills the owner fields above.</p>
+				{#each r.owner_evidence as evidence (evidence.id)}
+					<div class="kv">
+						<Kv k="Contact in file" v={evidence.name} o={evidence.source} />
+						<Chip tone={STATUS_INFO[evidence.status].tone}>{STATUS_INFO[evidence.status].label}</Chip>
+						<p class="small muted">{evidence.reason}</p>
+					</div>
+				{/each}
+			</section>
+		{/if}
 
 		<section class="sec">
 			<h3>Why now</h3>
