@@ -44,7 +44,7 @@ test('unresolved owner imports report property evidence separately and reuse dup
         const currentSummary = page.getByRole('region', { name: 'Current ownership summary', exact: true });
         await expect(historical).not.toHaveAttribute('open', '');
         // The unit-by-unit match result leads the report: an unknown building confirms nothing.
-        const stat = (label: string) => page.locator('.stat').filter({ has: page.getByText(label, { exact: true }) });
+        const stat = (label: string) => page.locator('.stat').filter({ hasText: label });
         await expect(stat('Units identified').locator('.big')).toHaveText('1');
         await expect(stat('Units mapped').locator('.big')).toHaveText('0');
         await expect(stat('Units mapped')).toContainText('0% coverage');
@@ -115,7 +115,8 @@ test('unresolved owner imports report property evidence separately and reuse dup
         await page.screenshot({ path: testInfo.outputPath('owners-mobile.png'), fullPage: true, animations: 'disabled' });
         await page.setViewportSize({ width: 1440, height: 900 });
         await page.getByRole('button', { name: 'Synthetic Seller', exact: true }).click();
-        await expect(page.getByText('Professional role has not been established.', { exact: true })).toBeVisible();
+        // Disclaimer copy is gone from the owner panel.
+        await expect(page.getByText('Professional role has not been established.', { exact: true })).toHaveCount(0);
         await page.getByLabel('Add note', { exact: true }).fill('Synthetic review: source seller claim needs corroborating transaction evidence.');
         const savedNote = page.waitForResponse(result => new URL(result.url()).pathname === '/api/v1/crm/owner-workspaces/bulk' && result.request().method() === 'PATCH');
         await page.getByRole('button', { name: 'Save note', exact: true }).click();

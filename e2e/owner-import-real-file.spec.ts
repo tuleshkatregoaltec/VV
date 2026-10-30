@@ -63,7 +63,7 @@ test('a real owner workbook previews its columns, imports and reports units conf
 
         await page.getByRole('button', { name: 'Open report', exact: true }).click();
         await expect(page).toHaveURL(`/crm/owners/imports/${imported.id}`);
-        const mapped = page.locator('.stat').filter({ has: page.getByText('Units mapped', { exact: true }) });
+        const mapped = page.locator('.stat').filter({ hasText: 'Units mapped' });
         await expect(mapped.locator('.big')).toHaveText(units.confirmed.toLocaleString('en-US'), { timeout: 600_000 });
         await expect(mapped).toContainText(`${percent}% coverage`);
 
