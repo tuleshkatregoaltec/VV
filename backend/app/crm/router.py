@@ -17,6 +17,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription
 from app.crm.import_models import (
+    CrmContactImportPreview,
     CrmContactImportRename,
     CrmContactImportResponse,
     CrmContactListDetail,
@@ -36,6 +37,7 @@ from app.crm.imports import (
     list_contact_imports,
     list_dropped_rows,
     list_import_properties,
+    preview_contact_import,
     process_contact_import,
     rename_contact_import,
 )
@@ -353,6 +355,17 @@ async def crm_contact_import(
         organization_id=organization_id,
         mapping_override=mapping_override,
     )
+
+
+@router.post("/contact-imports/preview", response_model=CrmContactImportPreview)
+async def crm_contact_import_preview(
+    file: UploadFile = File(...),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Show which field each column of an owner file feeds, without importing it."""
+    _, organization_id = _auth_ids(context)
+    return await preview_contact_import(db, upload=file, organization_id=organization_id)
 
 
 @router.post(

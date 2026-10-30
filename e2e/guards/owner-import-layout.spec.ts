@@ -80,10 +80,12 @@ test('owners and import reports keep evidence available without a metric dashboa
 	await page.getByRole('button', { name: 'Switch to light', exact: true }).click();
 	await page.goto('/crm/owners/imports');
 	const importedRow = page.locator('tbody tr').filter({ has: page.getByRole('button', { name: imported.name, exact: true }) });
-	for (const [label, count] of [['Rows', '8'], ['Kept', '5'], ['Merged', '2'], ['Dropped', '1']]) {
-		await expect(importedRow.locator(`[data-label="${label}"]`)).toHaveText(count);
-	}
-	await expect(page.locator('tbody tr').filter({ hasText: 'Synthetic pending workbook' }).locator('[data-label="Rows"]')).toHaveText('—');
+	// Like the mock's import requests card: what the file held, then status with what happened to the rows.
+	await expect(importedRow.locator('[data-label="What"]')).toHaveText('Owners · 8 rows');
+	await expect(importedRow.locator('[data-label="Status"]')).toHaveText('Completed · 5 kept · 2 duplicates merged · 1 dropped');
+	const pending = page.locator('tbody tr').filter({ hasText: 'Synthetic pending workbook' });
+	await expect(pending.locator('[data-label="What"]')).toHaveText('Owners');
+	await expect(pending.locator('[data-label="Status"]')).toHaveText('Processing');
 	await importedRow.getByRole('button', { name: imported.name, exact: true }).click();
 	await expect(page.locator('.row-accounting')).toHaveText('8 source rows · 5 kept · 2 merged · 1 dropped.');
 	await expect(page.locator('.kpi:visible')).toHaveCount(0);
@@ -101,7 +103,7 @@ test('owners and import reports keep evidence available without a metric dashboa
 	await expect(page.getByLabel('Import name', { exact: true })).toHaveValue(imported.name);
 	await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 	await page.getByRole('button', { name: 'Delete', exact: true }).click();
-	await expect(page.getByText('Delete this import, its saved list and its rows?', { exact: true })).toBeVisible();
+	await expect(page.getByText('Delete this import, its saved list and its rows? Owner notes stay.', { exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 	const reportPath = testInfo.outputPath('owner-import-report.png');
 	await page.screenshot({ path: reportPath, fullPage: true, animations: 'disabled' });

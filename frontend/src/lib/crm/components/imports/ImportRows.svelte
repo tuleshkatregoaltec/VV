@@ -15,11 +15,13 @@ import { crmQueries } from '../../queries'
 import { openOwner } from '../../stores/panel.svelte'
 import Chip from '../ui/Chip.svelte'
 import QueryView from '../ui/QueryView.svelte'
+import Tabs from '../ui/Tabs.svelte'
 
 /**
  * The kept rows of one owner file, 100 at a time, filtered by match colour and searched by name,
  * phone, building or unit. Each row shows the owner, the property the sheet names, the matcher's
- * outcome, the sale it tied the row to and why, in plain words. Rows of an import that has not been
+ * outcome, the sale it tied the row to and why, in plain words. The result tabs sit above the
+ * search, as on the mock's Owners screen. Rows of an import that has not been
  * re-matched yet carry no outcome; they show their ownership status and reason instead, and the
  * colour chips are hidden (`matched` is false). Changing the filter or the search goes back to the
  * first page; while the new page loads the old rows are dimmed and the pager waits. The search stops
@@ -70,21 +72,10 @@ const usable = (value: string | undefined) =>
 	value && !['0', 'null', 'none', 'n/a', '-'].includes(value.trim().toLowerCase()) ? value : ''
 </script>
 
+{#if matched}
+	<Tabs label="Show rows by result" items={MATCH_FILTERS} value={filter} onselect={(id) => (filter = id)} />
+{/if}
 <div class="filters">
-	{#if matched}
-		<div class="fchips" role="group" aria-label="Show rows by result">
-			{#each MATCH_FILTERS as f (f.id)}
-				<button
-					type="button"
-					class={['fchip', f.id]}
-					aria-pressed={filter === f.id}
-					onclick={() => (filter = f.id)}
-				>
-					{f.label}
-				</button>
-			{/each}
-		</div>
-	{/if}
 	<label class="search">
 		<Search size={15} />
 		<span class="sr-only">Search rows</span>
@@ -196,43 +187,6 @@ const usable = (value: string | undefined) =>
 </QueryView>
 
 <style>
-	.fchips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.35rem;
-	}
-	.fchip {
-		height: 28px;
-		padding: 0 0.7rem;
-		border: 1px solid var(--line-2);
-		border-radius: 999px;
-		background: var(--card);
-		color: var(--text2);
-		font-size: 12.5px;
-		font-weight: 600;
-		cursor: pointer;
-	}
-	.fchip[aria-pressed='true'] {
-		color: var(--text);
-		border-color: var(--accent);
-		box-shadow: 0 0 0 1px var(--accent);
-	}
-	.fchip.confirmed[aria-pressed='true'] {
-		border-color: var(--green);
-		box-shadow: 0 0 0 1px var(--green);
-	}
-	.fchip.review[aria-pressed='true'] {
-		border-color: var(--amber);
-		box-shadow: 0 0 0 1px var(--amber);
-	}
-	.fchip.property_only[aria-pressed='true'] {
-		border-color: var(--blue);
-		box-shadow: 0 0 0 1px var(--blue);
-	}
-	.fchip.not_matched[aria-pressed='true'] {
-		border-color: var(--red);
-		box-shadow: 0 0 0 1px var(--red);
-	}
 	.why,
 	.sale {
 		max-width: 26rem;
@@ -258,9 +212,6 @@ const usable = (value: string | undefined) =>
 		margin-top: 0.75rem;
 	}
 	@media (max-width: 700px) {
-		.fchips {
-			width: 100%;
-		}
 		.why,
 		.sale {
 			max-width: none;

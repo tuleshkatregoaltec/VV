@@ -348,6 +348,24 @@ class CrmSheetMapping(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class CrmPreviewColumn(BaseModel):
+    header: str
+    # The field this column feeds; None when the import will not read it.
+    field: str | None = None
+
+
+class CrmSheetPreview(BaseModel):
+    sheet_name: str
+    rows: int
+    columns: list[CrmPreviewColumn] = Field(default_factory=list)
+    # Some data columns still have no role; the model assigns them when the file is imported.
+    mapped_at_import: bool = False
+
+
+class CrmContactImportPreview(BaseModel):
+    sheets: list[CrmSheetPreview] = Field(default_factory=list)
+
+
 class CrmContactImportResponse(BaseModel):
     id: int
     list_id: int | None = None

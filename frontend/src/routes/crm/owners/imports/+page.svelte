@@ -6,17 +6,19 @@ import { goto } from '$app/navigation'
 import type { OwnerImportDetail } from '$lib/crm/api/types'
 import OwnerImportSummary from '$lib/crm/components/owners/OwnerImportSummary.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
+import Empty from '$lib/crm/components/ui/Empty.svelte'
 import InfoTip from '$lib/crm/components/ui/InfoTip.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import QueryView from '$lib/crm/components/ui/QueryView.svelte'
-import { fmt } from '$lib/crm/format'
+import { fmt, plural } from '$lib/crm/format'
 import { crmQueries } from '$lib/crm/queries'
 import { panel } from '$lib/crm/stores/panel.svelte'
 
 /**
- * Owner imports: source records kept, explicit registry property links and dropped rows.
- * so a manager can see which files need fixing. ⚠ marks a failed import or a sheet whose mapping
- * means its rows were dropped or can't be tied to a property. Totals count completed imports.
+ * Owner files, laid out like the mock's "Owner file and import requests" card: one row per file
+ * with what it held, how many of its distinct units were confirmed with a sale, when it was
+ * imported and its status. ⚠ marks a failed import or a sheet whose mapping dropped rows or left
+ * them without a property. The org-wide ownership summary sits below the files.
  */
 const imports = createQuery(() => crmQueries.ownerImportDetails())
 
@@ -26,17 +28,36 @@ const STATUS = {
 	failed: { label: 'Failed', tone: 'red' }
 } as const
 
-function totals(list: OwnerImportDetail[]) {
-	const done = list.filter((i) => i.status === 'completed')
-	const sum = (k: 'rows' | 'kept' | 'merged' | 'dropped') =>
-		done.reduce((t, i) => t + i.counts[k], 0)
+/** "Completed · 30,312 kept · 62 dropped", like the mock's "Approved · 198 added · 16 duplicates merged". */
+function statusText(i: OwnerImportDetail) {
+	if (i.status !== 'completed') return STATUS[i.status].label
+	const c = i.counts
 	return [
-		{ label: 'Imports', v: list.length },
-		{ label: 'Source rows', v: sum('rows') },
-		{ label: 'Source records kept', v: sum('kept') },
-		{ label: 'Duplicate rows merged', v: sum('merged') },
-		{ label: 'Dropped rows', v: sum('dropped') }
+		'Completed',
+		`${fmt(c.kept)} kept`,
+		c.merged ? `${fmt(c.merged)} duplicates merged` : '',
+		c.dropped ? `${fmt(c.dropped)} dropped` : ''
 	]
+		.filter(Boolean)
+		.join(' · ')
+}
+
+/** The header's facts: files, rows and units confirmed across completed files. */
+function facts(list: OwnerImportDetail[] | undefined) {
+	if (!list?.length) return 'Upload an owner file to check it against sales'
+	const done = list.filter((i) => i.status === 'completed')
+	const rows = done.reduce((t, i) => t + i.counts.rows, 0)
+	const matched = done.flatMap((i) => (i.counts.ownerMatch ? [i.counts.ownerMatch.headline] : []))
+	const units = matched.reduce((t, h) => t + h.units, 0)
+	const total = matched.reduce((t, h) => t + h.total, 0)
+	return [
+		plural(list.length, 'file'),
+		`${fmt(rows)} rows`,
+		total ? `${fmt(units)} of ${fmt(total)} units confirmed with a sale` : '',
+		'checked against DXBI and DLD sales'
+	]
+		.filter(Boolean)
+		.join(' · ')
 }
 
 /** Why an import is flagged: the failure, then each sheet's error-level mapping checks. */
@@ -46,47 +67,40 @@ const problems = (i: OwnerImportDetail) => [
 		s.checks.filter((c) => c.level === 'error').map((c) => ({ sheet: s.name, text: c.text }))
 	)
 ]
+const upload = () => panel.open({ kind: 'new-import', ownersOnly: true })
 </script>
 
 <svelte:head><title>Owner imports · CRM Beta</title></svelte:head>
 
-<PageHeader title="Owner imports" facts="Upload files and review their processing reports">
+<PageHeader title="Owner imports" facts={facts(imports.data)}>
 	{#snippet right()}
 		<a class="btn ghost" href="/crm/owners"><ArrowLeft size={15} /><span>Owners</span></a>
-		<button type="button" class="btn ghost" onclick={() => panel.open({ kind: 'new-import', ownersOnly: true })}>
-			<Upload size={15} /><span>Upload</span>
-		</button>
+		<button type="button" class="btn" onclick={upload}><Upload size={15} /><span>Upload</span></button>
 	{/snippet}
 </PageHeader>
 
-<OwnerImportSummary processing={imports.data?.some((i) => i.status === 'processing')} />
-
-<QueryView query={imports} rows={6}>
-	{#snippet children(list)}
-		{#if !list.length}
-			<div class="card empty-imports">
-				<p>No owner files imported yet.</p>
-				<button type="button" class="btn" onclick={() => panel.open({ kind: 'new-import', ownersOnly: true })}>
-					<Upload size={15} /><span>Upload</span>
-				</button>
-			</div>
-		{:else}
-
-			<p class="hint">Completed files: source rows = kept + merged + dropped. Open a file to review its records and ownership evidence.</p>
-			<div class="card">
+<section class="card" aria-labelledby="files-h">
+	<div class="ch">
+		<h2 id="files-h">
+			Owner files
+			<span class="facts">Vitevue does not provide or sell owner data · each file stays in your workspace</span>
+		</h2>
+		<button type="button" class="btn ghost sm" onclick={upload}>Import a file</button>
+	</div>
+	<QueryView query={imports} rows={6}>
+		{#snippet children(list)}
+			{#if !list.length}
+				<Empty text="No owner files imported yet. Upload a CSV or XLSX of owners to check it against sales." />
+			{:else}
 				<div class="tblwrap">
 					<table class="tbl">
 						<thead>
 							<tr>
-								<th>Import</th>
-								<th>Date</th>
-								<th class="r">Rows</th>
-								<th class="r">Kept</th>
-								<th class="r">Merged</th>
-								<th class="r">Dropped</th>
-								<th class="r">Units confirmed</th>
+								<th>File</th>
+								<th>What</th>
+								<th>Units confirmed</th>
+								<th>Imported</th>
 								<th>Status</th>
-								<th><span class="sr-only">Problems</span></th>
 							</tr>
 						</thead>
 						<tbody>
@@ -96,70 +110,62 @@ const problems = (i: OwnerImportDetail) => [
 										<button type="button" class="rowlink" onclick={() => goto(`/crm/owners/imports/${i.id}`)}>
 											{i.name}
 										</button>
-										<div class="sub">{i.file}</div>
-										{#if i.status === 'completed' && i.counts.rows !== i.counts.kept + i.counts.merged + i.counts.dropped}
-											<div class="sub">Row totals need review</div>
-										{/if}
+										<div class="sub mono">{i.file}</div>
 									</td>
-									<td data-label="Date" class="nowrap">{i.at}</td>
-									<td data-label="Rows" class="r">{i.status === 'completed' ? fmt(i.counts.rows) : '—'}</td>
-									<td data-label="Kept" class="r">{i.status === 'completed' ? fmt(i.counts.kept) : '—'}</td>
-									<td data-label="Merged" class="r">{i.status === 'completed' ? fmt(i.counts.merged) : '—'}</td>
-									<td data-label="Dropped" class="r">{i.status === 'completed' ? fmt(i.counts.dropped) : '—'}</td>
-									<td data-label="Units confirmed" class="r">
+									<td data-label="What" class="nowrap">
+										Owners{i.status === 'completed' ? ` · ${fmt(i.counts.rows)} rows` : ''}
+									</td>
+									<td data-label="Units confirmed" class="nowrap">
 										{#if i.status !== 'completed'}
-											—
+											<span class="sub">—</span>
 										{:else if i.counts.ownerMatch}
 											{@const h = i.counts.ownerMatch.headline}
-											<span class="uc">{h.percent}%</span> <span class="sub">of {fmt(h.total)}</span>
+											<b class="uc">{h.percent}%</b> <span class="sub">{fmt(h.units)} of {fmt(h.total)}</span>
 										{:else}
 											<span class="sub">Re-match pending</span>
 										{/if}
 									</td>
-									<td data-label="Status"><Chip tone={STATUS[i.status].tone}>{STATUS[i.status].label}</Chip></td>
-									<td data-label="Problems">
-										{#if i.flagged}
-											<InfoTip label="Why {i.name} needs a look" glyph="⚠" tone="amber">
-												<b>Needs a look</b>
-												<ul class="probs">
-													{#each problems(i) as p, n (n)}
-														<li>{#if p.sheet}<span class="sheet">{p.sheet}:</span>{/if} {p.text}</li>
-													{/each}
-												</ul>
-											</InfoTip>
-										{/if}
+									<td data-label="Imported" class="nowrap">{i.at}</td>
+									<td data-label="Status">
+										<span class="st">
+											<Chip tone={STATUS[i.status].tone}>{statusText(i)}</Chip>
+											{#if i.flagged}
+												<InfoTip label="Why {i.name} needs a look" glyph="⚠" tone="amber">
+													<b>Needs a look</b>
+													<ul class="probs">
+														{#each problems(i) as p, n (n)}
+															<li>{#if p.sheet}<span class="sheet">{p.sheet}:</span>{/if} {p.text}</li>
+														{/each}
+													</ul>
+												</InfoTip>
+											{/if}
+										</span>
 									</td>
 								</tr>
 							{/each}
 						</tbody>
 					</table>
 				</div>
-			</div>
-			<details class="snapshot">
-				<summary>Import-time processing totals · historical</summary>
-			<div class="totals">
-				{#each totals(list) as t (t.label)}
-					<div class="total">
-						<span class="label">{t.label}</span>
-						<span class="v">{t.v === null ? '—' : fmt(t.v)}</span>
-					</div>
-				{/each}
-			</div>
-			<p class="hint">Row totals cover completed imports at processing time. Property links and people are counted separately in each report’s evidence details.</p>
+			{/if}
+		{/snippet}
+	</QueryView>
+</section>
 
-			</details>
-		{/if}
-	{/snippet}
-</QueryView>
+<section class="sec org" aria-label="Ownership across all imports">
+	<h3>Ownership across all imports</h3>
+	<OwnerImportSummary processing={imports.data?.some((i) => i.status === 'processing')} />
+</section>
 
 <style>
-	.snapshot { margin: 1rem 0; }
-	.snapshot > summary { cursor: pointer; margin-bottom: 0.75rem; }
-	.totals { margin: 0.75rem 0; }
-	.total { display: flex; justify-content: space-between; gap: 1rem; padding: 0.45rem 0; border-bottom: 1px solid var(--sep); font-size: 12.5px; }
-	.label { color: var(--text2); }
-	.uc { font-weight: 600; font-variant-numeric: tabular-nums; }
-	.v { font-variant-numeric: tabular-nums; font-weight: 600; }
+	.uc {
+		font-variant-numeric: tabular-nums;
+	}
+	.st {
+		display: inline-flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+	}
 	.probs {
 		margin: 0;
 		padding-left: 1.1rem;
@@ -169,14 +175,7 @@ const problems = (i: OwnerImportDetail) => [
 	.probs .sheet {
 		font-weight: 600;
 	}
-	.hint {
-		color: var(--text2);
-		font-size: 12px;
-	}
-	.empty-imports {
-		display: grid;
-		justify-items: start;
-		gap: 0.75rem;
-		padding: 1.25rem;
+	.org {
+		margin-top: 1.5rem;
 	}
 </style>

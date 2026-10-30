@@ -112,13 +112,41 @@ function pick(key: MatchBucketKey) {
 	document.getElementById('source-rows')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
 }
 const filterLabel = (id: MatchFilterId) => MATCH_FILTERS.find((f) => f.id === id)?.label
+
+/** The header's facts, like the mock's "Agency file · 214 rows uploaded 28 Sep · checked against DLD and Ejari". */
+const facts = (i: OwnerImportDetail) =>
+	[
+		i.file,
+		i.status === 'completed' ? `${fmt(i.counts.rows)} rows` : STATUS[i.status].label,
+		`imported ${i.at}`,
+		`import #${i.id}`
+	].join(' · ')
 const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : '—')
 </script>
 <svelte:head><title>{imp ? `${imp.name} · ` : ''}Owner imports · CRM Beta</title></svelte:head>
 
-<PageHeader title={imp?.name ?? 'Import report'} facts={imp ? `${imp.file} · ${imp.at}` : ''}>
+<PageHeader title={imp?.name ?? 'Import report'} facts={imp ? facts(imp) : ''}>
 	{#snippet right()}
 		<a class="btn ghost" href="/crm/owners/imports"><ArrowLeft size={15} /><span>All imports</span></a>
+		{#if imp}
+			<button
+				type="button"
+				class="btn ghost"
+				onclick={() => {
+					confirming = false
+					draft = imp.name
+					editing = true
+				}}>Rename</button
+			>
+			<button
+				type="button"
+				class="btn ghost"
+				onclick={() => {
+					editing = false
+					confirming = true
+				}}>Delete</button
+			>
+		{/if}
 	{/snippet}
 </PageHeader>
 
@@ -131,46 +159,28 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 		{:else}
 			{@const c = imp.counts}
 			{@const m = c.ownerMatch}
-			<!-- 1. Header -->
-			<section class="card head">
-				{#if editing}
-					<form
-						class="edit"
-						onsubmit={(e) => {
-							e.preventDefault()
-							rename(imp)
-						}}
-					>
-						<input aria-label="Import name" maxlength="200" bind:value={draft} disabled={busy} />
-						<button type="submit" class="btn sm" disabled={busy || !draft.trim()}>Save</button>
-						<button type="button" class="btn ghost sm" onclick={() => (editing = false)}>Cancel</button>
-					</form>
-				{:else}
-					<div class="title">
-						<span class="small muted">Import #{imp.id}</span>
-						<Chip tone={STATUS[imp.status].tone}>{STATUS[imp.status].label}</Chip>
-					</div>
-					<div class="acts">
-						{#if confirming}
-							<span class="small">Delete this import, its saved list and its rows?</span>
-							<button type="button" class="btn danger sm" disabled={busy} onclick={() => remove(imp)}>
-								{busy ? 'Deleting…' : 'Delete'}
-							</button>
-							<button type="button" class="btn ghost sm" onclick={() => (confirming = false)}>Cancel</button>
-						{:else}
-							<button
-								type="button"
-								class="btn ghost sm"
-								onclick={() => {
-									draft = imp.name
-									editing = true
-								}}>Rename</button
-							>
-							<button type="button" class="btn ghost sm" onclick={() => (confirming = true)}>Delete</button>
-						{/if}
-					</div>
-				{/if}
-			</section>
+			<!-- 1. Rename or delete, opened from the header -->
+			{#if editing}
+				<form
+					class="card bar-form"
+					onsubmit={(e) => {
+						e.preventDefault()
+						rename(imp)
+					}}
+				>
+					<input aria-label="Import name" maxlength="200" bind:value={draft} disabled={busy} />
+					<button type="submit" class="btn sm" disabled={busy || !draft.trim()}>Save</button>
+					<button type="button" class="btn ghost sm" onclick={() => (editing = false)}>Cancel</button>
+				</form>
+			{:else if confirming}
+				<div class="card bar-form" role="alert">
+					<span class="small">Delete this import, its saved list and its rows? Owner notes stay.</span>
+					<button type="button" class="btn danger sm" disabled={busy} onclick={() => remove(imp)}>
+						{busy ? 'Deleting…' : 'Delete'}
+					</button>
+					<button type="button" class="btn ghost sm" onclick={() => (confirming = false)}>Cancel</button>
+				</div>
+			{/if}
 
 			{#if imp.status === 'failed'}
 				<div class="notice" role="alert">This import failed (import #{imp.id}). Fix the file and upload it again.</div>
@@ -181,7 +191,9 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 			<!-- 2. Match result -->
 			{#if imp.status === 'completed'}
 				<section class="card match" aria-labelledby="match-h">
-					<div class="ch"><h2 id="match-h">Match result</h2></div>
+					<div class="ch">
+						<h2 id="match-h">Match result<span class="facts">Distinct units, checked against DXBI and DLD sales</span></h2>
+					</div>
 					{#if !m}
 						<div class="cb">
 							<p class="pending"><Chip tone="amber">Re-match pending</Chip></p>
@@ -630,32 +642,15 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 	.sec + .sec {
 		margin-top: 1.5rem;
 	}
-	.head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 0.75rem;
-		padding: 0.9rem 1rem;
-		margin-bottom: 1rem;
-	}
-	.title {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-	}
-
-	.acts,
-	.edit {
+	.bar-form {
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
 		gap: 0.4rem;
+		padding: 0.75rem 1rem;
+		margin-bottom: 1rem;
 	}
-	.edit {
-		flex: 1;
-	}
-	.edit input {
+	.bar-form input {
 		flex: 1;
 		min-width: 12rem;
 	}

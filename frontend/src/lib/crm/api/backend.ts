@@ -12,6 +12,7 @@ import { ApiError, client } from '$lib/api/client'
 import type {
 	AuthMeResponse,
 	CrmAreaPreferencesResponse,
+	CrmContactImportPreview,
 	CrmContactImportResponse,
 	CrmContactListDetail,
 	CrmDroppedRowsResponse,
@@ -43,6 +44,7 @@ import {
 	importCounts,
 	isFlagged,
 	mappingChecks,
+	ownerMatchView,
 	STATUS_INFO
 } from '../ownerImportReport'
 import type {
@@ -1237,12 +1239,61 @@ function headerRow(rows: string[][]): number {
 	return best
 }
 
+/** How the backend will read the file: per sheet, its columns and the field each feeds. */
+async function backendColumns(file: File): Promise<CrmContactImportPreview | null> {
+	const fd = new FormData()
+	fd.append('file', file)
+	try {
+		return await client.post<CrmContactImportPreview>(`${CRM}/contact-imports/preview`, fd)
+	} catch {
+		return null
+	}
+}
+
+const cellKey = (c: string) => c.trim().toLowerCase()
+
 /**
- * Read an owners file in the browser so the agent can check it before upload: the header row,
- * the number of data rows and the first five. Nothing is sent; the backend maps the columns.
+ * The backend's columns laid over the browser's grid: the header row is the one holding most of
+ * the backend's header labels, and each label takes the first unused cell with that text.
+ */
+function alignColumns(grid: string[][], labels: string[]) {
+	const wanted = new Set(labels.map(cellKey))
+	let header = 0
+	let best = -1
+	grid.slice(0, HEADER_SCAN_ROWS).forEach((row, i) => {
+		const hits = row.filter((c) => wanted.has(cellKey(c))).length
+		if (hits > best) {
+			header = i
+			best = hits
+		}
+	})
+	const used = new Set<number>()
+	const positions = labels.map((label) => {
+		const i = grid[header].findIndex((c, j) => !used.has(j) && cellKey(c) === cellKey(label))
+		if (i >= 0) used.add(i)
+		return i
+	})
+	return { header, positions }
+}
+
+/**
+ * Read an owners file so the agent can check it before upload: its rows, its columns with the
+ * field each feeds, and the first five rows. The browser reads the cells; the backend says which
+ * row is the header and how each column is read, so the preview matches the import. Nothing is
+ * stored until the file is imported. Without the backend's answer the fullest of the first 15
+ * rows is taken as the header and no fields are shown.
  */
 export async function previewOwnerFile(file: File): Promise<OwnerFilePreview> {
-	const base = { file: file.name, size: file.size, sheets: 0, rows: 0, headers: [], sample: [] }
+	const base = {
+		file: file.name,
+		size: file.size,
+		sheets: 0,
+		rows: 0,
+		headers: [],
+		sample: [],
+		fields: null,
+		readAtImport: false
+	}
 	const problem = ownerFileProblem(file)
 	if (problem) return { ...base, problem }
 	let workbook: import('xlsx').WorkBook
@@ -1255,10 +1306,8 @@ export async function previewOwnerFile(file: File): Promise<OwnerFilePreview> {
 			problem: 'This file could not be read. Save it again as CSV or XLSX without a password.'
 		}
 	}
+	const grids: { name: string; grid: string[][] }[] = []
 	let rows = 0
-	let sheets = 0
-	let headers: string[] = []
-	let sample: string[][] = []
 	for (const sheetName of workbook.SheetNames) {
 		const grid = XLSX.utils
 			.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], {
@@ -1268,28 +1317,51 @@ export async function previewOwnerFile(file: File): Promise<OwnerFilePreview> {
 				raw: false
 			})
 			.map((r) => r.map((c) => String(c ?? '').trim()))
-		if (!grid.length) continue
-		const h = headerRow(grid)
-		const data = grid.slice(h + 1).filter((r) => r.some((c) => c))
+		const data = grid.slice(headerRow(grid) + 1).filter((r) => r.some((c) => c))
 		if (!data.length) continue
-		sheets += 1
+		grids.push({ name: sheetName, grid })
 		rows += data.length
-		if (!headers.length) {
-			const cols = grid[h]
-				.slice(0, MAX_COLUMNS)
-				.map((c, i) => ({ c, i }))
-				.filter(({ c }) => c && !PLACEHOLDER_HEADER.test(c))
-			headers = cols.map(({ c }) => c)
-			sample = data.slice(0, 5).map((r) => cols.map(({ i }) => r[i] ?? ''))
+	}
+	if (!rows) return { ...base, problem: 'File is empty, so nothing will be imported.' }
+
+	const server = await backendColumns(file)
+	const sheets = server?.sheets ?? []
+	const read = sheets.find((s) => grids.some((g) => g.name === s.sheet_name)) ?? sheets[0]
+	const own = grids.find((g) => g.name === read?.sheet_name) ?? grids[0]
+	const columns = (read?.columns ?? []).slice(0, MAX_COLUMNS)
+	if (read && columns.length) {
+		const { header, positions } = alignColumns(
+			own.grid,
+			columns.map((c) => c.header)
+		)
+		const data = own.grid.slice(header + 1).filter((r) => r.some((c) => c))
+		return {
+			...base,
+			sheets: Math.max(grids.length, sheets.length),
+			rows: sheets.reduce((t, s) => t + s.rows, 0) || rows,
+			headers: columns.map((c) => c.header),
+			sample: data.slice(0, 5).map((r) => positions.map((i) => (i >= 0 ? (r[i] ?? '') : ''))),
+			fields: columns.map((c) => c.field ?? null),
+			readAtImport: read.mapped_at_import ?? false,
+			problem: null
 		}
 	}
+	const h = headerRow(own.grid)
+	const cols = own.grid[h]
+		.slice(0, MAX_COLUMNS)
+		.map((c, i) => ({ c, i }))
+		.filter(({ c }) => c && !PLACEHOLDER_HEADER.test(c))
 	return {
 		...base,
-		sheets,
+		sheets: grids.length,
 		rows,
-		headers,
-		sample,
-		problem: rows ? null : 'File is empty, so nothing will be imported.'
+		headers: cols.map(({ c }) => c),
+		sample: own.grid
+			.slice(h + 1)
+			.filter((r) => r.some((c) => c))
+			.slice(0, 5)
+			.map((r) => cols.map(({ i }) => r[i] ?? '')),
+		problem: null
 	}
 }
 
@@ -1304,6 +1376,7 @@ function ownerImportResult(
 		status: r.status,
 		alreadyImported,
 		createdAt: r.created_at,
+		match: ownerMatchView(s.owner_match),
 		summary: {
 			totalRows: s.total_rows ?? 0,
 			candidateRows: s.candidate_rows ?? 0,

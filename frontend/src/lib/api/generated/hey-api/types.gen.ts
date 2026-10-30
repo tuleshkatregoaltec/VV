@@ -492,6 +492,16 @@ export type BodyCrmCrmContactImport = {
 };
 
 /**
+ * Body_crm-crm_contact_import_preview
+ */
+export type BodyCrmCrmContactImportPreview = {
+    /**
+     * File
+     */
+    file: Blob | File;
+};
+
+/**
  * Body_crm-crm_inbound_import
  */
 export type BodyCrmCrmInboundImport = {
@@ -1244,6 +1254,16 @@ export type CrmContactClaimResponse = {
      */
     match_warnings?: Array<string>;
     matched_sale?: CrmMatchedSale | null;
+};
+
+/**
+ * CrmContactImportPreview
+ */
+export type CrmContactImportPreview = {
+    /**
+     * Sheets
+     */
+    sheets?: Array<CrmSheetPreview>;
 };
 
 /**
@@ -2807,6 +2827,20 @@ export type CrmOwnerWorkspaceSummary = {
 };
 
 /**
+ * CrmPreviewColumn
+ */
+export type CrmPreviewColumn = {
+    /**
+     * Header
+     */
+    header: string;
+    /**
+     * Field
+     */
+    field?: string | null;
+};
+
+/**
  * CrmPriceIndex
  */
 export type CrmPriceIndex = {
@@ -3295,6 +3329,28 @@ export type CrmSheetMapping = {
      * Warnings
      */
     warnings?: Array<string>;
+};
+
+/**
+ * CrmSheetPreview
+ */
+export type CrmSheetPreview = {
+    /**
+     * Sheet Name
+     */
+    sheet_name: string;
+    /**
+     * Rows
+     */
+    rows: number;
+    /**
+     * Columns
+     */
+    columns?: Array<CrmPreviewColumn>;
+    /**
+     * Mapped At Import
+     */
+    mapped_at_import?: boolean;
 };
 
 /**
@@ -12421,6 +12477,31 @@ export type CrmCrmContactImportResponses = {
 };
 
 export type CrmCrmContactImportResponse = CrmCrmContactImportResponses[keyof CrmCrmContactImportResponses];
+
+export type CrmCrmContactImportPreviewData = {
+    body: BodyCrmCrmContactImportPreview;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/contact-imports/preview';
+};
+
+export type CrmCrmContactImportPreviewErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactImportPreviewError = CrmCrmContactImportPreviewErrors[keyof CrmCrmContactImportPreviewErrors];
+
+export type CrmCrmContactImportPreviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmContactImportPreview;
+};
+
+export type CrmCrmContactImportPreviewResponse = CrmCrmContactImportPreviewResponses[keyof CrmCrmContactImportPreviewResponses];
 
 export type CrmCrmSourceOnlyImportData = {
     body: BodyCrmCrmSourceOnlyImport;

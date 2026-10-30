@@ -11,7 +11,13 @@ import type {
 	CrmOwnerProperty,
 	CrmSourceAuditSummary
 } from '$lib/api/generated/hey-api/types.gen'
-import type { ClaimStatus, DropReason, ImportCounts, SheetCheck } from '../ownerImportReport'
+import type {
+	ClaimStatus,
+	DropReason,
+	ImportCounts,
+	OwnerMatchView,
+	SheetCheck
+} from '../ownerImportReport'
 
 /** `owner`: a Vitevue lease lead not yet classified as seller or landlord. */
 export type LeadType = 'buyer' | 'seller' | 'tenant' | 'landlord' | 'owner'
@@ -1007,6 +1013,10 @@ export interface OwnerFilePreview {
 	rows: number
 	headers: string[]
 	sample: string[][]
+	/** The field each header feeds (null: not read); null when the backend could not say. */
+	fields: (string | null)[] | null
+	/** Some columns get their field from the model when the file is imported. */
+	readAtImport: boolean
 	problem: string | null
 }
 
@@ -1191,6 +1201,8 @@ export interface OwnerImportResult {
 	/** The same file was uploaded before; the backend returned that import. */
 	alreadyImported: boolean
 	createdAt: string
+	/** Distinct units confirmed with a sale; null when the file was not matched unit by unit. */
+	match: OwnerMatchView | null
 	summary: {
 		totalRows: number
 		candidateRows: number

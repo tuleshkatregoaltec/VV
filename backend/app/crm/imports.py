@@ -40,6 +40,7 @@ from app.crm.import_mapping import (
 )
 from app.crm.import_models import (
     CrmContactImport,
+    CrmContactImportPreview,
     CrmContactImportResponse,
     CrmContactImportSummary,
     CrmContactList,
@@ -47,8 +48,10 @@ from app.crm.import_models import (
     CrmImportPropertiesResponse,
     CrmImportProperty,
     CrmImportPropertyRecord,
+    CrmPreviewColumn,
     CrmPropertyContactClaim,
     CrmSheetMapping,
+    CrmSheetPreview,
 )
 from app.crm.import_parsing import (
     SheetProfile,
@@ -116,6 +119,60 @@ async def _resolve_sheet_mappings(
     return profiles
 
 
+async def _read_upload(upload: UploadFile) -> tuple[str, str, bytes]:
+    """The file name, its suffix and its bytes, after the checks every owner upload gets."""
+    filename = Path(upload.filename or "").name
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".xlsx", ".csv"}:
+        raise HTTPException(status_code=400, detail="Upload an XLSX or CSV file")
+    data = await upload.read(_MAX_FILE_BYTES + 1)
+    if not data:
+        raise HTTPException(status_code=400, detail=_EMPTY_FILE)
+    if len(data) > _MAX_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="The uploaded file exceeds 50 MB")
+    return filename, suffix, data
+
+
+async def preview_contact_import(
+    db: AsyncSession, *, upload: UploadFile, organization_id: str
+) -> CrmContactImportPreview:
+    """Which field each column of an owner file feeds, before it is imported.
+
+    Aliases, then a mapping saved for the same headers, are applied as the import applies them.
+    Nothing is stored and the model is never called: a sheet that would still need it says so,
+    and its unread columns get their role when the file is imported.
+    """
+    filename, suffix, data = await _read_upload(upload)
+    inspector = _inspect_xlsx if suffix == ".xlsx" else _inspect_csv
+    profiles = await asyncio.to_thread(inspector, data, filename)
+    sheets: list[CrmSheetPreview] = []
+    for profile in profiles:
+        saved = None
+        if needs_model_mapping(profile):
+            signature = header_signature([header.key for header in profile.headers])
+            saved = await import_repository.latest_mapping_for_signature(
+                db, organization_id, signature
+            )
+            if saved:
+                apply_saved_mapping(profile, saved, replace=False, source="reused")
+        roles = {key: field for field, key in profile.field_map.items()}
+        for field, keys in profile.fallback_map.items():
+            for key in keys:
+                roles.setdefault(key, field)
+        sheets.append(
+            CrmSheetPreview(
+                sheet_name=profile.name,
+                rows=profile.meaningful_rows,
+                columns=[
+                    CrmPreviewColumn(header=header.label, field=roles.get(header.key))
+                    for header in profile.headers
+                ],
+                mapped_at_import=saved is None and needs_model_mapping(profile),
+            )
+        )
+    return CrmContactImportPreview(sheets=sheets)
+
+
 async def process_contact_import(
     db: AsyncSession,
     *,
@@ -126,15 +183,7 @@ async def process_contact_import(
     reprocess_import_id: int | None = None,
     mapping_override: dict[str, Any] | None = None,
 ) -> CrmContactImportResponse:
-    filename = Path(upload.filename or "").name
-    suffix = Path(filename).suffix.lower()
-    if suffix not in {".xlsx", ".csv"}:
-        raise HTTPException(status_code=400, detail="Upload an XLSX or CSV file")
-    data = await upload.read(_MAX_FILE_BYTES + 1)
-    if not data:
-        raise HTTPException(status_code=400, detail=_EMPTY_FILE)
-    if len(data) > _MAX_FILE_BYTES:
-        raise HTTPException(status_code=413, detail="The uploaded file exceeds 50 MB")
+    filename, suffix, data = await _read_upload(upload)
     sha256 = hashlib.sha256(data).hexdigest()
     now = datetime.now(timezone.utc)
     replay = reprocess_import_id is not None

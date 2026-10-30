@@ -43,7 +43,12 @@ test('unresolved owner imports report property evidence separately and reuse dup
         const historical = page.locator('details.snapshot');
         const currentSummary = page.getByRole('region', { name: 'Current ownership summary', exact: true });
         await expect(historical).not.toHaveAttribute('open', '');
-        await expect(currentSummary.locator('details')).not.toHaveAttribute('open', '');
+        // The unit-by-unit match result leads the report: an unknown building confirms nothing.
+        await expect(page.locator('.headline .big')).toHaveText('0');
+        await expect(page.locator('.headline .of')).toHaveText('of 1 distinct units confirmed with a sale');
+        await page.getByRole('tab', { name: 'Not matched', exact: true }).click();
+        await expect(page.locator('#source-rows .count')).toHaveText('Showing 1–2 of 2');
+        await page.getByRole('tab', { name: 'All', exact: true }).click();
         await expect(page.locator('.row-accounting')).toHaveText('2 source rows · 2 kept · 0 merged · 0 dropped.');
         await expect(page.getByRole('heading', { name: 'Source rows', exact: true })).toBeVisible();
         await expect(page.locator('.kpi:visible')).toHaveCount(0);
@@ -53,6 +58,7 @@ test('unresolved owner imports report property evidence separately and reuse dup
         console.log('Owner import UI screenshot:', reportScreenshot);
         // The same evidence remains available through a keyboard-operated disclosure.
         await historical.getByText('Processing details', { exact: true }).click();
+        await expect(currentSummary.locator('details')).not.toHaveAttribute('open', '');
         const evidenceDisclosure = currentSummary.getByText('Evidence and counting details', { exact: true });
         await evidenceDisclosure.focus();
         await page.keyboard.press('Enter');
@@ -76,9 +82,11 @@ test('unresolved owner imports report property evidence separately and reuse dup
         await sourceHistory.getByRole('button', { name: file.name, exact: true }).click();
         await expect(page.getByRole('region', { name: 'Ownership source history', exact: true })).not.toBeVisible();
         await expect(page.getByRole('heading', { name: 'Source rows', exact: true })).toBeVisible();
-        expect(imported.summary.unverified_former_owners).toBe(1);
+        // No sale backs either row, so neither is presented as a former or current owner.
+        expect(imported.summary.unverified_former_owners).toBe(0);
         expect(imported.summary.former_owners).toBe(0);
-        await expect(page.locator('tbody tr').filter({ hasText: 'Synthetic Seller' })).toContainText('Seller claim needs review');
+        expect(imported.summary.unmatched).toBe(1);
+        await expect(page.locator('#source-rows tbody tr').filter({ hasText: 'Synthetic Seller' }).locator('[data-label="Result"]')).toHaveText('Not matched');
         await page.getByRole('button', { name: 'Inspect current property records', exact: true }).click();
         const propertiesResponse = await page.request.get(`${importUrl}/${imported.id}/properties`, { headers: authorization });
         expect(propertiesResponse.ok()).toBeTruthy();
@@ -112,7 +120,7 @@ test('unresolved owner imports report property evidence separately and reuse dup
         await page.getByRole('button', { name: 'Save review note', exact: true }).click();
         expect((await savedNote).ok()).toBeTruthy();
         await expect(page.getByText('Synthetic review: source seller claim needs corroborating transaction evidence.', { exact: true })).toBeVisible();
-        await expect(page.getByText('Seller claim needs review', { exact: true }).first()).toBeVisible();
+        await expect(page.getByText('Needs review', { exact: true }).first()).toBeVisible();
         await page.goto('/crm/owners/imports');
         await page.getByRole('button', { name: 'Upload', exact: true }).first().click();
         await page.locator('input[type=file]').setInputFiles(file);

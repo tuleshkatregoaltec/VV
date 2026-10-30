@@ -346,7 +346,7 @@ export const crm = {
 		preview: (file: File): Promise<ImportPreview> => backend.previewImport(file),
 		/** The import endpoints take no areas, so `areas` is not sent. */
 		create: (file: File, _areas: string) => backend.createImport(file),
-		/** An owners file is read in the browser first; nothing is sent until it is imported. */
+		/** An owners file is read in the browser; the backend only says which field each column feeds. */
 		previewOwners: (file: File): Promise<OwnerFilePreview> => backend.previewOwnerFile(file),
 		/** Upload, match against DLD and save an owners file (/contact-imports). */
 		importOwners: (file: File, name: string): Promise<Written<OwnerImportResult>> =>

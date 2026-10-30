@@ -309,3 +309,67 @@ async def test_second_sheet_with_the_same_headers_reuses_the_first_sheets_answer
 
     assert len(calls) == 1
     assert (first.mapping_source, second.mapping_source) == ("llm", "reused")
+
+
+def _upload(header_line: str, *rows: str):
+    from io import BytesIO
+
+    from fastapi import UploadFile
+
+    data = (header_line + "\n" + "\n".join(rows) + "\n").encode()
+    return UploadFile(file=BytesIO(data), filename="owners.csv")
+
+
+async def test_preview_shows_the_field_each_column_feeds_as_the_import_reads_it(monkeypatch):
+    # The preview is what the agent checks before importing, so it must agree with the import.
+    _provider(monkeypatch, AssertionError("a preview must never call the model"))
+    _lookup(monkeypatch, {})
+    row = "Ahmed Khan,0501234567,Tower A,101,500000"
+
+    preview = await imports.preview_contact_import(
+        MagicMock(), upload=_upload(BASE, row), organization_id="organization-1"
+    )
+    (imported,) = await _resolve([_profile(BASE, row)])
+
+    (sheet,) = preview.sheets
+    assert sheet.rows == 1 and not sheet.mapped_at_import
+    by_header = {column.header: column.field for column in sheet.columns}
+    assert by_header == {key: field for field, key in imported.field_map.items()}
+    assert by_header["BuildingNameEn"] == "building_name"
+
+
+async def test_preview_reuses_the_mapping_saved_for_the_same_headers(monkeypatch):
+    header_line = BASE + ",Villa Ref"
+    row = "Ahmed Khan,0501234567,Tower A,101,500000,V-17"
+    profile = _profile(header_line, row)
+    profile.field_map["building_number"] = "Villa Ref"
+    _lookup(
+        monkeypatch,
+        {header_signature([h.key for h in profile.headers]): saved_sheet_mapping(profile)},
+    )
+    _provider(monkeypatch, AssertionError("a preview must never call the model"))
+
+    preview = await imports.preview_contact_import(
+        MagicMock(), upload=_upload(header_line, row), organization_id="organization-1"
+    )
+
+    (sheet,) = preview.sheets
+    assert {c.header: c.field for c in sheet.columns}["Villa Ref"] == "building_number"
+    assert not sheet.mapped_at_import
+
+
+async def test_preview_of_new_headers_leaves_unknown_columns_to_the_import(monkeypatch):
+    # Without a saved mapping the model maps the column at import; the preview must not guess.
+    _lookup(monkeypatch, {})
+    calls = _provider(monkeypatch, {"field_map": {"building_number": "Villa Ref"}})
+
+    preview = await imports.preview_contact_import(
+        MagicMock(),
+        upload=_upload(BASE + ",Villa Ref", "Ahmed Khan,0501234567,Tower A,101,500000,V-17"),
+        organization_id="organization-1",
+    )
+
+    (sheet,) = preview.sheets
+    assert calls == []
+    assert {c.header: c.field for c in sheet.columns}["Villa Ref"] is None
+    assert sheet.mapped_at_import

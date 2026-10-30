@@ -2528,6 +2528,49 @@
 				}
 			}
 		},
+		"/api/v1/crm/contact-imports/preview": {
+			"post": {
+				"tags": [
+					"crm",
+					"crm"
+				],
+				"summary": "Crm Contact Import Preview",
+				"description": "Show which field each column of an owner file feeds, without importing it.",
+				"operationId": "crm-crm_contact_import_preview",
+				"requestBody": {
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"$ref": "#/components/schemas/Body_crm-crm_contact_import_preview"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmContactImportPreview"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/contact-imports/source-only": {
 			"post": {
 				"tags": [
@@ -11510,6 +11553,20 @@
 				],
 				"title": "Body_crm-crm_contact_import"
 			},
+			"Body_crm-crm_contact_import_preview": {
+				"properties": {
+					"file": {
+						"type": "string",
+						"format": "binary",
+						"title": "File"
+					}
+				},
+				"type": "object",
+				"required": [
+					"file"
+				],
+				"title": "Body_crm-crm_contact_import_preview"
+			},
 			"Body_crm-crm_inbound_import": {
 				"properties": {
 					"file": {
@@ -12814,6 +12871,19 @@
 					"owner_key"
 				],
 				"title": "CrmContactClaimResponse"
+			},
+			"CrmContactImportPreview": {
+				"properties": {
+					"sheets": {
+						"items": {
+							"$ref": "#/components/schemas/CrmSheetPreview"
+						},
+						"type": "array",
+						"title": "Sheets"
+					}
+				},
+				"type": "object",
+				"title": "CrmContactImportPreview"
 			},
 			"CrmContactImportRename": {
 				"properties": {
@@ -15575,6 +15645,30 @@
 				],
 				"title": "CrmOwnerWorkspaceSummary"
 			},
+			"CrmPreviewColumn": {
+				"properties": {
+					"header": {
+						"type": "string",
+						"title": "Header"
+					},
+					"field": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Field"
+					}
+				},
+				"type": "object",
+				"required": [
+					"header"
+				],
+				"title": "CrmPreviewColumn"
+			},
 			"CrmPriceIndex": {
 				"properties": {
 					"name": {
@@ -16452,6 +16546,36 @@
 					"confidence"
 				],
 				"title": "CrmSheetMapping"
+			},
+			"CrmSheetPreview": {
+				"properties": {
+					"sheet_name": {
+						"type": "string",
+						"title": "Sheet Name"
+					},
+					"rows": {
+						"type": "integer",
+						"title": "Rows"
+					},
+					"columns": {
+						"items": {
+							"$ref": "#/components/schemas/CrmPreviewColumn"
+						},
+						"type": "array",
+						"title": "Columns"
+					},
+					"mapped_at_import": {
+						"type": "boolean",
+						"title": "Mapped At Import",
+						"default": false
+					}
+				},
+				"type": "object",
+				"required": [
+					"sheet_name",
+					"rows"
+				],
+				"title": "CrmSheetPreview"
 			},
 			"CrmSourceAuditSummary": {
 				"properties": {

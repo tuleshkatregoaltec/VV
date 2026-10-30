@@ -782,7 +782,8 @@ const FIELD_LABEL: Record<string, string> = {
 	municipality_sub_number: 'Municipality sub-number'
 }
 
-const fieldLabel = (field: string) => {
+/** A field's name as people say it: "Building", "Sale price (AED)". */
+export const fieldLabel = (field: string) => {
 	if (FIELD_LABEL[field]) return FIELD_LABEL[field]
 	const words = field.replaceAll('_', ' ')
 	return words.charAt(0).toUpperCase() + words.slice(1)
