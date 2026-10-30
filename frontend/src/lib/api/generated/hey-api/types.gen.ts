@@ -2424,6 +2424,26 @@ export type CrmOwnerHistorySummary = {
 };
 
 /**
+ * CrmOwnerMatchSales
+ *
+ * Distinct sales that confirmed rows are tied to, by where the sale came from.
+ */
+export type CrmOwnerMatchSales = {
+    /**
+     * Transactions
+     */
+    transactions?: number;
+    /**
+     * Registry
+     */
+    registry?: number;
+    /**
+     * Total
+     */
+    total?: number;
+};
+
+/**
  * CrmOwnerMatchSummary
  *
  * What the property-first matcher made of an import's rows.
@@ -2444,6 +2464,13 @@ export type CrmOwnerMatchSummary = {
      * Rows Without Unit
      */
     rows_without_unit: number;
+    /**
+     * Review Reasons
+     */
+    review_reasons?: {
+        [key: string]: number;
+    };
+    sales_matched?: CrmOwnerMatchSales;
 };
 
 /**
@@ -12730,7 +12757,7 @@ export type CrmCrmContactListData = {
         /**
          * Match Outcome
          *
-         * Keep rows with one of these match outcomes (for example `lender`).
+         * Keep rows with one of these match outcomes (for example `lender` or `broker`).
          */
         match_outcome?: Array<string> | null;
         /**

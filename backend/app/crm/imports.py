@@ -12,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import import_repository, owner_repository
 from app.crm.ai import _llm_mapping
+from app.crm.brokers import load_broker_index
 from app.crm.identity import (
     _candidate_owner_key,
     _claim_owner_key,
@@ -285,7 +286,7 @@ async def process_contact_import(
         await asyncio.to_thread(annotate_source_lifecycle, candidates)
         # The property-first matcher decides; the legacy stages above only found the property
         # keys, leases and lifecycle that renewal leads and the ownership projection read.
-        await run_owner_matching(candidates)
+        await run_owner_matching(candidates, await load_broker_index(db))
         for candidate in candidates:
             _apply_evidence(candidate, sales=sales, rentals=rentals)
         # Each source event is persisted independently. Repeated owner/property

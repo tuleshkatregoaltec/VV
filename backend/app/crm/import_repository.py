@@ -44,10 +44,18 @@ async def list_claims_for_rematch(
 
 
 async def count_import_claim_metrics(db: AsyncSession, organization_id, record_id):
-    has_contact = or_(
-        CrmPropertyContactClaim.phone_primary.is_not(None),
-        CrmPropertyContactClaim.phone_alternate.is_not(None),
-        CrmPropertyContactClaim.email_primary.is_not(None),
+    # A channel marked as a licensed broker's (evidence["broker_contact"]) is not the owner's.
+    broker = CrmPropertyContactClaim.evidence["broker_contact"]
+    has_contact = and_(
+        or_(
+            CrmPropertyContactClaim.phone_primary.is_not(None),
+            CrmPropertyContactClaim.phone_alternate.is_not(None),
+            CrmPropertyContactClaim.email_primary.is_not(None),
+        ),
+        or_(
+            broker["usable_contact"].as_string().is_(None),
+            broker["usable_contact"].as_string() != "false",
+        ),
     )
     metrics_result = await db.exec(
         select(

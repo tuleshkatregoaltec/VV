@@ -221,6 +221,16 @@ class CrmOwnerMatchUnits(BaseModel):
     not_matched: int  # red or grey
 
 
+class CrmOwnerMatchSales(BaseModel):
+    """Distinct sales that confirmed rows are tied to, by where the sale came from."""
+
+    model_config = ConfigDict(json_schema_mode_override="serialization")
+
+    transactions: int = 0  # found in the Transactions data
+    registry: int = 0  # a sale event of the property registry
+    total: int = 0
+
+
 class CrmOwnerMatchSummary(BaseModel):
     """What the property-first matcher made of an import's rows."""
 
@@ -232,6 +242,10 @@ class CrmOwnerMatchSummary(BaseModel):
     rows: dict[str, int]  # outcome -> rows
     units: CrmOwnerMatchUnits
     rows_without_unit: int
+    # Rows in review (amber) by their one primary reason: unit_differs, two_units_named,
+    # share_differs, size_differs, unit_unverified, type_differs, other. Only non-zero keys.
+    review_reasons: dict[str, int] = Field(default_factory=dict)
+    sales_matched: CrmOwnerMatchSales = Field(default_factory=CrmOwnerMatchSales)
 
 
 class CrmContactImportSummary(BaseModel):

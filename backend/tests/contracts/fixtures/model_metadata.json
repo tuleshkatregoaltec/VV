@@ -113,6 +113,12 @@
       "CREATE INDEX ix_crm_lead_workspaces_user_id ON crm_lead_workspaces (user_id)"
     ]
   },
+  "crm_licensed_brokers": {
+    "ddl": "\nCREATE TABLE crm_licensed_brokers (\n\tbroker_number SERIAL NOT NULL, \n\tname_key VARCHAR NOT NULL, \n\tphones JSON NOT NULL, \n\temails JSON NOT NULL, \n\tcard_expiry_date DATE, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (broker_number)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_licensed_brokers_name_key ON crm_licensed_brokers (name_key)"
+    ]
+  },
   "crm_owner_notes": {
     "ddl": "\nCREATE TABLE crm_owner_notes (\n\tid SERIAL NOT NULL, \n\tworkspace_id INTEGER NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tbody TEXT NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(workspace_id) REFERENCES crm_owner_workspaces (id) ON DELETE CASCADE\n)\n\n",
     "indexes": [

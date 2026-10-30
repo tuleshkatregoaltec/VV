@@ -2815,10 +2815,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Keep rows with one of these match outcomes (for example `lender`).",
+							"description": "Keep rows with one of these match outcomes (for example `lender` or `broker`).",
 							"title": "Match Outcome"
 						},
-						"description": "Keep rows with one of these match outcomes (for example `lender`)."
+						"description": "Keep rows with one of these match outcomes (for example `lender` or `broker`)."
 					},
 					{
 						"name": "search",
@@ -14119,6 +14119,28 @@
 				"title": "CrmOwnerHistorySummary",
 				"description": "Source rows and evidence associations, not a legal ownership guarantee."
 			},
+			"CrmOwnerMatchSales": {
+				"properties": {
+					"transactions": {
+						"type": "integer",
+						"title": "Transactions",
+						"default": 0
+					},
+					"registry": {
+						"type": "integer",
+						"title": "Registry",
+						"default": 0
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"title": "CrmOwnerMatchSales",
+				"description": "Distinct sales that confirmed rows are tied to, by where the sale came from."
+			},
 			"CrmOwnerMatchSummary": {
 				"properties": {
 					"version": {
@@ -14138,6 +14160,16 @@
 					"rows_without_unit": {
 						"type": "integer",
 						"title": "Rows Without Unit"
+					},
+					"review_reasons": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Review Reasons"
+					},
+					"sales_matched": {
+						"$ref": "#/components/schemas/CrmOwnerMatchSales"
 					}
 				},
 				"type": "object",

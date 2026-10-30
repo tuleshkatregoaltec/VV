@@ -555,6 +555,7 @@ def _finish_assessment(rows, valid, sales, checked_at, warehouse_status) -> Owne
         match = (row.get("evidence") or {}).get("owner_match") or {}
         row["match_outcome"] = match.get("outcome")
         row["match_colour"] = match.get("colour")
+        row["broker_contact"] = (row.get("evidence") or {}).get("broker_contact")
         row.pop("evidence", None)
     del valid, sales
     if warehouse_status == "unavailable":

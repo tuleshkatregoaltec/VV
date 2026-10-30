@@ -11,6 +11,7 @@ import asyncio
 from collections import defaultdict
 from typing import Any
 
+from app.crm.brokers import BrokerIndex, annotate_broker_contacts
 from app.crm.identity import ParsedContact
 from app.crm.import_parsing import matcher_source_from_evidence
 from app.crm.owner_match_loader import load_sales_index, match_sources
@@ -49,11 +50,17 @@ def _match_import(
     ]
 
 
-async def run_owner_matching(candidates: list[ParsedContact]) -> None:
+async def run_owner_matching(
+    candidates: list[ParsedContact], brokers: BrokerIndex | None = None
+) -> None:
     """Store ``evidence["owner_match"]`` (and the source it was matched from) on every row.
 
     Rows are matched per import (``source_import_scope``; a new import is one scope), because the
-    learned unit aliases belong to the import they were read from."""
+    learned unit aliases belong to the import they were read from. ``brokers`` (loaded once by the
+    caller; an empty index applies no rule and clears old marks) sets ``evidence["broker_contact"]``;
+    None leaves the rows' stored marks alone."""
+    if brokers is not None:
+        annotate_broker_contacts(candidates, brokers)
     scopes: dict[str, list[ParsedContact]] = defaultdict(list)
     for candidate in candidates:
         scopes[str(candidate.evidence.get("source_import_scope") or "")].append(candidate)

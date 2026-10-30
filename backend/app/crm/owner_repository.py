@@ -139,6 +139,7 @@ async def list_owner_history_rows(
             column("inferred_file_context", JSON),
             column("source_registry_location_resolution", JSON),
             column("owner_match", JSON),
+            column("broker_contact", JSON),
         )
         .render_derived(with_types=True)
         .lateral("history_evidence")
@@ -231,6 +232,8 @@ async def list_owner_history_rows(
                     metadata.c.source_audit,
                     "owner_match",
                     metadata.c.owner_match,
+                    "broker_contact",
+                    metadata.c.broker_contact,
                 )
             )
             .cast(String)

@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import opportunities, workspace_repository
-from app.crm.identity import ParsedContact, _normalize_email, _normalize_phone
+from app.crm.identity import ParsedContact, has_usable_contact
 from app.crm.import_models import (
     CrmOwnerBulkUpdate,
     CrmOwnerNote,
@@ -165,10 +165,11 @@ async def list_owner_workspaces(
             and _source_contact_ready(
                 row.get("event_assessed_status", row["assessed_status"]), row.get("party_role")
             )
-            and (
-                _normalize_phone(row.get("phone_primary"))
-                or _normalize_phone(row.get("phone_alternate"))
-                or _normalize_email(row.get("email_primary"))
+            and has_usable_contact(
+                row.get("phone_primary"),
+                row.get("phone_alternate"),
+                row.get("email_primary"),
+                row.get("broker_contact"),
             )
         ):
             ready_keys.add(read_keys[canonical])

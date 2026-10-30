@@ -527,7 +527,7 @@ async def crm_contact_list(
     ),
     match_outcome: list[str] | None = Query(
         default=None,
-        description="Keep rows with one of these match outcomes (for example `lender`).",
+        description="Keep rows with one of these match outcomes (for example `lender` or `broker`).",
     ),
     search: str | None = Query(default=None, max_length=160),
     limit: int = Query(default=100, ge=1, le=500),

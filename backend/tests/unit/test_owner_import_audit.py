@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import UploadFile
 
 from app.crm import import_context, imports, ownership, registry_fallback
+from app.crm.brokers import BrokerIndex
 from app.crm.import_models import CrmContactImport, CrmContactList
 from scripts.crm import audit_owner_import as audit
 
@@ -43,6 +44,7 @@ async def test_audit_retains_source_accounting_without_promoting_a_mortgage(tmp_
     # The property-first matcher has its own tests; this one compares the legacy stages.
     monkeypatch.setattr(audit, "run_owner_matching", AsyncMock())
     monkeypatch.setattr(imports, "run_owner_matching", AsyncMock())
+    monkeypatch.setattr(imports, "load_broker_index", AsyncMock(return_value=BrokerIndex()))
 
     result = await audit.evaluate_file(source)
 

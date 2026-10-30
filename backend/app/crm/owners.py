@@ -20,6 +20,8 @@ from app.crm.identity import (
     _normalize_phone,
     _normalize_unit,
     _usable_project_name,
+    has_usable_contact,
+    usable_channels,
 )
 from app.crm.import_context import property_details
 from app.crm.import_models import (
@@ -193,10 +195,11 @@ def _assessed_list_summary(
             and _source_contact_ready(
                 row.get("event_assessed_status", row["assessed_status"]), row.get("party_role")
             )
-            and bool(
-                _normalize_phone(row.get("phone_primary"))
-                or _normalize_phone(row.get("phone_alternate"))
-                or _normalize_email(row.get("email_primary"))
+            and has_usable_contact(
+                row.get("phone_primary"),
+                row.get("phone_alternate"),
+                row.get("email_primary"),
+                row.get("broker_contact"),
             )
             for row in best
         ),
@@ -585,19 +588,18 @@ def _assessed_profiles(
             )
         )
         best = max(events, key=lambda row: (row["confidence_score"], row["id"]))
-        phones = list(
-            dict.fromkeys(
-                phone
-                for row in events
-                for field in ("phone_primary", "phone_alternate")
-                if (phone := _normalize_phone(row.get(field)))
+        # a licensed broker's number or address is not the owner's: never a channel to reach them
+        channels = [
+            usable_channels(
+                row.get("phone_primary"),
+                row.get("phone_alternate"),
+                row.get("email_primary"),
+                row.get("broker_contact"),
             )
-        )
-        emails = list(
-            dict.fromkeys(
-                email for row in events if (email := _normalize_email(row.get("email_primary")))
-            )
-        )
+            for row in events
+        ]
+        phones = list(dict.fromkeys(phone for found, _ in channels for phone in found))
+        emails = list(dict.fromkeys(email for _, found in channels for email in found))
         profile = CrmOwnerProfile(
             owner_key=read_keys[canonical],
             contact_name=best["contact_name"],
