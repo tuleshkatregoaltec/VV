@@ -21,7 +21,7 @@ const error = $derived(
 	organizationsQuery.isError
 		? organizationsQuery.error instanceof ApiError
 			? organizationsQuery.error.message
-			: 'Could not load organizations'
+			: 'Failed to load organizations'
 		: ''
 )
 
@@ -38,7 +38,7 @@ async function activateOrg(org: OrganizationListResponse) {
 			(current = []) => current.map((item) => (item.id === org.id ? updated : item))
 		)
 	} catch (e) {
-		alert(e instanceof ApiError ? e.message : 'Could not activate')
+		alert(e instanceof ApiError ? e.message : 'Failed to activate')
 	} finally {
 		activatingOrgId = null
 	}
@@ -56,14 +56,10 @@ async function deleteOrg() {
 		)
 		confirmDeleteOrg = null
 	} catch (e) {
-		alert(e instanceof ApiError ? e.message : 'Could not delete')
+		alert(e instanceof ApiError ? e.message : 'Failed to delete')
 	} finally {
 		deletingOrgId = null
 	}
-}
-
-function statusLabel(status: string) {
-	return status.replace(/_/g, ' ')
 }
 
 function statusBadge(status: string) {
@@ -98,6 +94,9 @@ function formatDate(d: string) {
 				<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
 					Organizations
 				</h1>
+				<p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+					Review workspace owners, subscription state, member capacity, and admin actions.
+				</p>
 			</div>
 			<button
 				onclick={() => (showCreateUser = true)}
@@ -158,7 +157,7 @@ function formatDate(d: string) {
 										org.subscription_status
 									)}"
 								>
-									{statusLabel(org.subscription_status)}
+									{org.subscription_status}
 								</span>
 							</td>
 							<td class="px-5 py-4 text-sm text-fg-4">{formatDate(org.created_at)}</td>
@@ -177,7 +176,7 @@ function formatDate(d: string) {
 										onclick={() => goto(`/admin/organizations/${org.id}`)}
 										class="rounded-md px-2.5 py-1 text-xs font-medium text-primary-light transition-colors hover:bg-navy-pale hover:text-navy"
 									>
-										View
+										View →
 									</button>
 									<button
 										onclick={() => (confirmDeleteOrg = org)}
@@ -205,7 +204,7 @@ function formatDate(d: string) {
 <ConfirmModal
 	open={confirmDeleteOrg !== null}
 	title="Delete organization"
-	message={`Delete '${confirmDeleteOrg?.name}'? Its data is removed and users lose access.`}
+	message={`Delete '${confirmDeleteOrg?.name}'? This removes the org and all its data. Users will lose access.`}
 	confirmText={deletingOrgId ? 'Deleting...' : 'Delete'}
 	confirmVariant="danger"
 	onConfirm={deleteOrg}

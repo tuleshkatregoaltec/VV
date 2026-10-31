@@ -41,11 +41,11 @@ onMount(async () => {
 		}
 
 		status = 'failed'
-		error = `Subscription status: ${result.status}. Contact support if this persists.`
+		error = `Subscription status: ${result.status}. Please contact support if this persists.`
 	} catch (err: unknown) {
 		status = 'failed'
 		error =
-			err instanceof Error ? err.message : 'Could not confirm your subscription. Contact support.'
+			err instanceof Error ? err.message : 'Failed to sync subscription. Please contact support.'
 	}
 })
 
@@ -117,14 +117,20 @@ async function handleSendInvitations() {
 	title={status === 'syncing'
 		? 'Activating your workspace'
 		: status === 'failed'
-			? 'Setup could not be completed'
+			? 'We could not finish setup'
 			: 'Invite your team'}
+	description={status === 'syncing'
+		? 'We are confirming your subscription and preparing the organization you just created.'
+		: status === 'failed'
+			? 'Your payment returned, but we could not finish syncing the subscription automatically.'
+			: 'Your workspace is active. Add teammates now or skip and invite them later from organization settings.'}
 	eyebrow="Workspace setup"
 	step="3"
 	totalSteps={3}
 	stepLabel="Finish"
-	sideAccent="Workspace ready"
-	sideTitle="Add the people who will work in your workspace."
+	sideAccent="Activation complete"
+	sideTitle="Billing is done. This final step is just about getting the right people in."
+	sideCopy="You can skip invites entirely and do them later. We only ask now because it is the most convenient moment to set up the team."
 >
 	<svelte:fragment slot="account">
 		<AccountContextBar email={currentEmail} label="Owner account" redirectTo="/auth" />
@@ -140,7 +146,12 @@ async function handleSendInvitations() {
 					{seats || '1'}
 					{seats === 1 ? ' seat' : ' seats'}
 				</p>
+				<p class="mt-2 text-sm leading-6 text-on-navy-muted">Available immediately after activation.</p>
 			</div>
+			<p class="text-sm leading-6 text-on-navy-muted">
+				If you skip this step, your workspace is still live and you can invite people later from
+				settings.
+			</p>
 		</div>
 	</svelte:fragment>
 
@@ -150,12 +161,16 @@ async function handleSendInvitations() {
 				class="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-border border-t-action"
 			></div>
 			<p class="mt-6 text-lg font-semibold text-fg-1">Confirming payment</p>
+			<p class="mt-2 text-sm text-fg-3">This usually takes only a moment.</p>
 		</div>
 	{:else if status === 'failed'}
 		<div class="space-y-5">
 			<div class="rounded-lg border border-error-border bg-error-bg p-6">
 				<p class="text-sm font-semibold text-error">
-					{error || 'Contact support to finish setup.'}
+					Setup could not be completed automatically
+				</p>
+				<p class="mt-2 text-sm leading-6 text-error">
+					{error || 'Something went wrong with your payment return.'}
 				</p>
 			</div>
 			<div class="flex flex-col gap-3 sm:flex-row">
@@ -189,6 +204,9 @@ async function handleSendInvitations() {
 			<div class="flex items-center justify-between gap-4">
 				<div>
 					<p class="text-sm font-semibold text-fg-1">Invite teammates</p>
+					<p class="mt-1 text-sm text-fg-4">
+						We’ll email each invitee a secure sign-in link and onboarding flow.
+					</p>
 				</div>
 				<div
 					class="rounded-md bg-panel px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-fg-3"

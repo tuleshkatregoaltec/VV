@@ -57,7 +57,7 @@ async function saveLimit() {
 		onUpdated()
 		onClose()
 	} catch (e) {
-		error = e instanceof ApiError ? e.message : 'Could not update token limit'
+		error = e instanceof ApiError ? e.message : 'Failed to update token limit'
 	} finally {
 		saving = false
 	}
@@ -85,7 +85,7 @@ function fullName(u: OrgUserResponse): string {
 			<div class="mb-4">
 				<div class="flex justify-between text-sm mb-1">
 					<span class="font-medium {getUsageTextColor(user.usage_percentage)}">
-						{formatNumber(user.tokens_used_today)} / {formatNumber(user.daily_token_limit)}
+						{formatNumber(user.tokens_used_today)} / {formatNumber(user.daily_token_limit)} tokens
 					</span>
 					<span class="font-medium {getUsageTextColor(user.usage_percentage)}">
 						{user.usage_percentage.toFixed(1)}%
@@ -132,6 +132,7 @@ function fullName(u: OrgUserResponse): string {
 					step="1000"
 					class="w-full rounded-md border border-border px-3 py-2 text-fg-1 shadow-sm focus:outline-none focus:ring-2 focus:ring-focus"
 				/>
+				<p class="mt-1 text-xs text-fg-4">Set to 0 for unlimited usage (not recommended)</p>
 			</div>
 
 			{#if error}

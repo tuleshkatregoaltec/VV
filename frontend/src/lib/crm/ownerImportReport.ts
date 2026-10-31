@@ -415,7 +415,7 @@ export function dropDetail(r: DroppedRowFacts): DropDetail {
 			return {
 				stage,
 				what: `The procedure is “${r.procedure}”, which is not a sale.`,
-				rule: 'A Buyer/Seller row is kept only when its procedure is empty or contains “sale”, “sell” or “delayed sell”. Mortgages, gifts and grants do not change who bought the property, and their amount is not a sale price, so they cannot be checked against DLD sales.',
+				rule: 'A Buyer/Seller row is kept only when its procedure is empty or contains “sale”, “sell” or “delayed sell”. Mortgages, gifts and grants are not sales.',
 				fix: 'Nothing to fix: the owner is usually kept from the row of the actual sale.'
 			}
 		case 'no_unit':

@@ -52,15 +52,15 @@ async function submit() {
 	success = ''
 
 	if (!email || !password || !firstName || !lastName) {
-		error = 'All fields are required'
+		error = 'All fields are required.'
 		return
 	}
 	if (orgMode === 'new' && !newOrgName.trim()) {
-		error = 'Organization name is required'
+		error = 'Organization name is required.'
 		return
 	}
 	if (orgMode === 'existing' && !existingOrgId) {
-		error = 'Select an organization'
+		error = 'Please select an organization.'
 		return
 	}
 
@@ -83,7 +83,7 @@ async function submit() {
 			onClose()
 		}, 1500)
 	} catch (e) {
-		error = e instanceof ApiError ? e.message : 'Could not create user'
+		error = e instanceof ApiError ? e.message : 'Failed to create user'
 	} finally {
 		submitting = false
 	}
@@ -174,6 +174,7 @@ async function submit() {
 					placeholder="Organization name"
 					class="w-full rounded-md border border-border px-3 py-2 text-sm text-fg-1 focus:outline-none focus:ring-2 focus:ring-focus"
 				/>
+				<p class="mt-1 text-xs text-fg-4">Subscription will be set to active automatically.</p>
 			{:else}
 				<select
 					id="create-user-existing-org"
@@ -181,9 +182,10 @@ async function submit() {
 					class="w-full rounded-md border border-border px-3 py-2 text-sm text-fg-1 focus:outline-none focus:ring-2 focus:ring-focus"
 				>
 					{#each orgs as org (org.id)}
-						<option value={org.id}>{org.name} ({org.subscription_status.replace(/_/g, ' ')})</option>
+						<option value={org.id}>{org.name} ({org.subscription_status})</option>
 					{/each}
 				</select>
+				<p class="mt-1 text-xs text-fg-4">User will be added as a member.</p>
 			{/if}
 		</div>
 

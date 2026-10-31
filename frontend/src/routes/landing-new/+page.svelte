@@ -27,14 +27,14 @@ type PreviewFeature = {
 
 const audienceCards: AudienceCard[] = [
 	{
-		title: 'Institutional investors',
+		title: 'Institutional Investors',
 		description:
 			'Deploy capital with greater clarity using transparent assumptions, comparable intelligence, and outputs your committee can challenge.',
 		pill: 'Strategic market intelligence',
 		icon: Building2
 	},
 	{
-		title: 'Developers and advisory teams',
+		title: 'Developers & Advisory Teams',
 		description:
 			'Track supply, pressure-test positioning, benchmark against live comps, and prepare sharper materials for internal and client-facing decisions.',
 		pill: 'Research and positioning workflows',
@@ -78,7 +78,7 @@ const previewFeatures: PreviewFeature[] = [
 		imageAlt: 'Vitevue chat interface'
 	},
 	{
-		tag: 'Comparables and analytics',
+		tag: 'Comparables & Analytics',
 		title: 'Build evidence packs with institutional clarity.',
 		description:
 			'Compare projects, benchmark performance, and prepare outputs suited for partner, IC, and client-facing discussions.',
@@ -147,8 +147,8 @@ onMount(() => {
 			<img src="/logos/vitevue-navbar-white.png" alt="Vitevue" />
 		</a>
 		<nav>
-			<a href="/auth">Sign in</a>
-			<a class="btn ghost" href="/auth">Request access</a>
+			<a href="/auth">Sign In</a>
+			<a class="btn ghost" href="/auth">Request Access</a>
 		</nav>
 	</header>
 
@@ -156,7 +156,7 @@ onMount(() => {
 		<section class="hero is-visible" data-reveal data-variant="fade-up">
 			<div class="hero-grid">
 				<div class="hero-copy-block">
-					<p class="eyebrow">Real estate intelligence platform</p>
+					<p class="eyebrow">Real Estate Intelligence Platform</p>
 					<h1 class="is-visible" data-reveal data-variant="fly-right">
 						Built for teams that deploy capital with precision.
 					</h1>
@@ -167,29 +167,29 @@ onMount(() => {
 					</p>
 					<div class="hero-actions">
 						<a class="btn solid" href="/auth">
-							Book a platform walkthrough
+							Book a Platform Walkthrough
 							<ArrowRight size={18} />
 						</a>
-						<a class="btn ghost" href="#platform-overview">See platform overview</a>
+						<a class="btn ghost" href="#platform-overview">See Platform Overview</a>
 					</div>
 					<div class="metrics">
 						<div>
-							<p>Market coverage</p>
-							<strong>10M+ transactions</strong>
+							<p>Market Coverage</p>
+							<strong>10M+ Transactions</strong>
 						</div>
 						<div>
-							<p>Tracked inventory</p>
-							<strong>3000+ projects</strong>
+							<p>Tracked Inventory</p>
+							<strong>3000+ Projects</strong>
 						</div>
 						<div>
-							<p>Update cadence</p>
-							<strong>Live market signals</strong>
+							<p>Update Cadence</p>
+							<strong>Live Market Signals</strong>
 						</div>
 					</div>
 				</div>
 				<div class="hero-side is-visible" data-reveal data-variant="fly-left" aria-hidden="true">
 					<div class="hero-side-panel">
-						<p class="side-kicker">Market intelligence</p>
+						<p class="side-kicker">Superior market intelligence</p>
 						<h2>Operate with an edge.</h2>
 						<div class="side-line"></div>
 						<ul>
@@ -235,7 +235,7 @@ onMount(() => {
 
 		<section class="capabilities">
 			<div class="section-head" data-reveal data-variant="fade-up">
-				<p class="eyebrow">Core platform</p>
+				<p class="eyebrow">Core Platform</p>
 				<h2>Institutional clarity, built for decisive teams.</h2>
 			</div>
 			<div class="capability-grid">
@@ -256,7 +256,7 @@ onMount(() => {
 
 		<section class="preview" id="platform-overview">
 			<div class="section-head" data-reveal data-variant="fade-up">
-				<p class="eyebrow">Platform overview</p>
+				<p class="eyebrow">Platform Overview</p>
 				<h2>A product surface built for speed, scrutiny, and positioning.</h2>
 			</div>
 			<div class="preview-stack">
@@ -280,6 +280,8 @@ onMount(() => {
 						<div class="preview-media">
 							<div class="media-shell">
 								<img src={feature.image} alt={feature.imageAlt} loading="lazy" />
+								<div class="media-badge media-badge-a">Signal locked</div>
+								<div class="media-badge media-badge-b">Live intel</div>
 							</div>
 						</div>
 					</article>
@@ -289,7 +291,7 @@ onMount(() => {
 
 		<section class="process">
 			<div class="section-head" data-reveal data-variant="fade-up">
-				<p class="eyebrow">How teams operate</p>
+				<p class="eyebrow">How Teams Operate</p>
 				<h2>One continuous workflow from target discovery to investment memo.</h2>
 			</div>
 			<ol>
@@ -331,7 +333,7 @@ onMount(() => {
 				Whether you are allocating institutional capital or building developer strategy, Vitevue
 				gives your team the signal edge to move first and communicate clearly.
 			</p>
-			<a class="btn solid" href="/auth">Get early access</a>
+			<a class="btn solid" href="/auth">Get Early Access</a>
 		</section>
 	</main>
 
@@ -811,6 +813,37 @@ onMount(() => {
 		width: 100%;
 		height: auto;
 		border-radius: 0.65rem;
+	}
+
+	.media-badge {
+		position: absolute;
+		z-index: 1;
+		padding: 0.32rem 0.52rem;
+		border-radius: 999px;
+		border: 1px solid rgba(176, 201, 246, 0.28);
+		background: rgba(7, 18, 39, 0.82);
+		backdrop-filter: blur(10px);
+		font-size: 0.68rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: #d3e5ff;
+		opacity: 0;
+		transform: translateY(10px);
+		transition:
+			opacity 420ms ease,
+			transform 420ms ease;
+	}
+
+	.media-badge-a {
+		top: 0.9rem;
+		right: 1rem;
+		transition-delay: 90ms;
+	}
+
+	.media-badge-b {
+		left: 1rem;
+		bottom: 0.95rem;
+		transition-delay: 150ms;
 	}
 
 	.capabilities {
