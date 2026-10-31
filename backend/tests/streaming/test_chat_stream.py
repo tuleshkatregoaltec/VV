@@ -1,9 +1,18 @@
+import asyncio
 import json
-from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from app.chat import service
+from app.chat.dependencies import ChatDependencies
+
+
+@pytest.fixture(autouse=True)
+def offline_admission(monkeypatch):
+    monkeypatch.setattr(service.admission, "acquire", AsyncMock(return_value="lease"))
+    monkeypatch.setattr(service.admission, "finish", AsyncMock())
 
 
 def decode(events):
@@ -22,29 +31,31 @@ async def test_missing_conversation_emits_only_error(monkeypatch):
     save.assert_not_awaited()
 
 
-async def test_provider_failure_keeps_user_message_and_emits_no_done(monkeypatch):
+async def test_provider_failure_keeps_user_message_and_emits_no_done(monkeypatch, caplog):
     monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=SimpleNamespace(id=3)))
     save = AsyncMock()
     monkeypatch.setattr(service, "add_message", save)
     monkeypatch.setattr(service, "get_conversation_messages", AsyncMock(return_value=[]))
 
-    @asynccontextmanager
     async def fail(*args, **kwargs):
-        raise RuntimeError("provider unavailable")
-        yield  # pragma: no cover
+        assert kwargs["deps"] == ChatDependencies(
+            user_id="owner", organization_id="org", conversation_id=3
+        )
+        raise RuntimeError("private SQL parameters and customer phone must never reach the client")
 
-    monkeypatch.setattr(service, "agent", SimpleNamespace(iter=fail))
-    events = [
-        event async for event in service.stream_chat_response(None, 3, "hello", "owner", "org")
-    ]
+    monkeypatch.setattr(service, "agent", SimpleNamespace(run=fail))
+    db = AsyncMock()
+    events = [event async for event in service.stream_chat_response(db, 3, "hello", "owner", "org")]
     assert decode(events) == [
         {"type": "thinking"},
-        {"type": "error", "error": "provider unavailable"},
+        {"type": "error", "error": "Unable to complete this answer. Please try again."},
     ]
-    save.assert_awaited_once_with(None, 3, "user", "hello", user_id="owner", organization_id="org")
+    save.assert_awaited_once_with(db, 3, "user", "hello", user_id="owner", organization_id="org")
+    assert service.admission.finish.await_args.kwargs["successful"] is False
+    assert "private SQL parameters" not in caplog.text
 
 
-async def test_text_turn_records_usage_before_assistant_and_done(monkeypatch):
+async def test_text_turn_settles_shared_observed_usage_after_answer(monkeypatch):
     from pydantic_ai.models.test import TestModel
 
     monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=SimpleNamespace(id=3)))
@@ -54,14 +65,16 @@ async def test_text_turn_records_usage_before_assistant_and_done(monkeypatch):
     async def save(db, conversation_id, role, content, meta_data=None, **scope):
         actions.append((role, content, meta_data))
 
-    async def usage(**kwargs):
-        actions.append(("usage", kwargs["total_tokens"]))
+    async def usage(lease_id, observed, *, successful):
+        assert lease_id == "lease" and successful
+        actions.append(("usage", observed.total_tokens))
 
     monkeypatch.setattr(service, "add_message", save)
-    monkeypatch.setattr(service.token_usage_service, "record_usage", usage)
+    monkeypatch.setattr(service.admission, "finish", usage)
     with service.agent.override(model=TestModel(call_tools=[], custom_output_text="Known answer")):
         events = [
-            event async for event in service.stream_chat_response(None, 3, "hello", "owner", "org")
+            event
+            async for event in service.stream_chat_response(AsyncMock(), 3, "hello", "owner", "org")
         ]
     decoded = decode(events)
     assert decoded[0] == {"type": "thinking"}
@@ -69,6 +82,62 @@ async def test_text_turn_records_usage_before_assistant_and_done(monkeypatch):
         "".join(item["content"] for item in decoded if item["type"] == "content") == "Known answer"
     )
     assert decoded[-1] == {"type": "done"}
-    assert [action[0] for action in actions] == ["user", "usage", "assistant"]
-    assert actions[2][1] == "Known answer"
-    assert actions[2][2] == {"total_tokens": actions[1][1]}
+    assert [action[0] for action in actions] == ["user", "assistant", "usage"]
+    assert actions[1][1] == "Known answer"
+    assert actions[1][2] == {
+        "total_tokens": actions[2][1],
+        "guardrail_version": 1,
+        "private": False,
+    }
+
+
+async def test_cancellation_settles_partial_observed_usage_without_refunding_reservation(
+    monkeypatch,
+):
+    monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=True))
+    monkeypatch.setattr(service, "get_conversation_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "add_message", AsyncMock())
+    started = asyncio.Event()
+
+    async def run(*args, usage, **kwargs):
+        usage.input_tokens = 123
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(service, "agent", SimpleNamespace(run=run))
+
+    async def consume():
+        return [
+            item
+            async for item in service.stream_chat_response(AsyncMock(), 3, "hello", "owner", "org")
+        ]
+
+    task = asyncio.create_task(consume())
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    service.admission.finish.assert_awaited_once()
+    call = service.admission.finish.await_args
+    assert call.args[1].input_tokens == 123 and call.kwargs["successful"] is False
+
+
+async def test_admission_rejection_never_saves_or_calls_model(monkeypatch):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=True))
+    save, run = AsyncMock(), AsyncMock()
+    monkeypatch.setattr(service, "add_message", save)
+    monkeypatch.setattr(service, "agent", SimpleNamespace(run=run))
+    db = AsyncMock()
+
+    async def reject(**kwargs):
+        db.commit.assert_awaited_once()  # Release the connection before acquiring another.
+        raise HTTPException(429, "Turn capacity exhausted")
+
+    monkeypatch.setattr(service.admission, "acquire", reject)
+    events = [item async for item in service.stream_chat_response(db, 3, "hello", "owner", "org")]
+    assert decode(events) == [{"type": "error", "error": "Turn capacity exhausted"}]
+    save.assert_not_awaited()
+    run.assert_not_awaited()
+    service.admission.finish.assert_not_awaited()

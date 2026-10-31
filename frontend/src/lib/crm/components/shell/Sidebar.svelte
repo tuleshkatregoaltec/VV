@@ -24,17 +24,15 @@ interface Item {
 	countLabel?: string
 }
 
-/**
- * v2 sidebar (6 Oct): Agent · Home, Leads, Inbox, Matches, Owners, Deals, Calendar, Assistant; Assets
- * stays until the founders decide (open question 3). Manager · Manager view (8 Oct) opens the lead
- * handout setting the Inbox depends on; the rest of Manager view is out of this build.
- * Counts: new leads, inbox waiting for me, open deals, today's events.
- */
+/** Group CRM workflows by purpose, following the Market sidebar hierarchy. */
 const groups = $derived<{ label: string; items: Item[] }[]>([
 	{
-		label: 'Agent',
+		label: 'CRM',
+		items: [{ href: '/crm', label: 'Home', icon: House, count: null }]
+	},
+	{
+		label: 'Leads and contacts',
 		items: [
-			{ href: '/crm', label: 'Home', icon: House, count: null },
 			{
 				href: '/crm/leads',
 				label: 'Leads',
@@ -50,7 +48,12 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 				countLabel: 'open'
 			},
 			{ href: '/crm/matches', label: 'Matches', icon: CircleDot, count: null },
-			{ href: '/crm/owners', label: 'Owners', icon: Building2, count: null },
+			{ href: '/crm/owners', label: 'Owners', icon: Building2, count: null }
+		]
+	},
+	{
+		label: 'Deals and properties',
+		items: [
 			{
 				href: '/crm/deals',
 				label: 'Deals',
@@ -58,6 +61,12 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 				count: counts?.open_deals ?? null,
 				countLabel: 'open'
 			},
+			{ href: '/crm/assets', label: 'Assets', icon: LayoutGrid, count: null }
+		]
+	},
+	{
+		label: 'Tools',
+		items: [
 			{
 				href: '/crm/calendar',
 				label: 'Calendar',
@@ -65,12 +74,11 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 				count: counts?.events_today ?? null,
 				countLabel: 'today'
 			},
-			{ href: '/crm/assistant', label: 'Assistant', icon: Send, count: null },
-			{ href: '/crm/assets', label: 'Assets', icon: LayoutGrid, count: null }
+			{ href: '/crm/assistant', label: 'Assistant', icon: Send, count: null }
 		]
 	},
 	{
-		label: 'Manager',
+		label: 'Management',
 		items: [
 			{
 				href: '/crm/settings',
@@ -99,10 +107,10 @@ const path = $derived(page.url.pathname.replace(/\/$/, ''))
 					class="nav-i"
 					href={it.href}
 					title={it.label}
-					aria-current={path === it.href ? 'page' : undefined}
+					aria-current={path === it.href || (it.href !== '/crm' && path.startsWith(`${it.href}/`)) ? 'page' : undefined}
 					onclick={() => (chrome.sbOpen = false)}
 				>
-					<it.icon size={17} aria-hidden="true" />
+					<it.icon size={16} aria-hidden="true" />
 					<span class="lbltxt">{it.label}</span>
 					{#if it.count}<span class="ct" aria-label="{it.count} {it.countLabel}">{it.count}</span>{/if}
 				</a>

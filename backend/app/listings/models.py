@@ -78,6 +78,7 @@ class ListingCardResponse(BaseModel):
     agent_image_url: str | None = None
     broker_name: str | None = None
     broker_logo_url: str | None = None
+    captured_at: AwareDatetime | None = None
     listed_date: AwareDatetime | None = None
     listing_age_days: int | None = None
     price_per_sqft_aed: float | None = None

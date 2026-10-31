@@ -506,7 +506,7 @@ $effect(() => {
 					<p class="mt-1">
 						{visibleMapProjects.length.toLocaleString()} visible projects · {radarAreas.length} area bubbles
 						{#if showDDAPlots}
-							· {renderedDDAFeatures.length.toLocaleString()} DDA {visibleDDALabel}
+							· {renderedDDAFeatures.length.toLocaleString()} {visibleDDALabel}
 						{/if}
 					</p>
 			</div>
@@ -553,7 +553,7 @@ $effect(() => {
 							<button
 								type="button"
 								class="flex h-10 w-10 items-center justify-center rounded-md {showDDAPlots ? 'bg-amber-50 text-amber-700' : 'text-slate-400 hover:bg-slate-100'}"
-								aria-label="Toggle DDA planning layer"
+								aria-label="Toggle planning layer"
 								onclick={() => (showDDAPlots = !showDDAPlots)}
 							>
 							<Layers3 size={18} />
@@ -597,7 +597,7 @@ $effect(() => {
 								</p>
 							</div>
 							<div class="rounded-md bg-slate-50 px-3 py-2">
-								<p class="text-[11px] text-slate-500">DDA plots</p>
+								<p class="text-[11px] text-slate-500">Planning plots</p>
 								<p class="text-sm font-semibold text-slate-950">
 									{formatCompact(stats?.dda_plot_count)}
 								</p>
@@ -661,7 +661,7 @@ $effect(() => {
 													{area.area_name}
 												</p>
 												<p class="truncate text-xs text-slate-500">
-													{formatCompact(area.pipeline_units)} pipeline units · {area.dda_plot_count.toLocaleString()} DDA plots
+													{formatCompact(area.pipeline_units)} pipeline units · {area.dda_plot_count.toLocaleString()} Planning plots
 												</p>
 											</div>
 											<span class="rounded-sm bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700">
@@ -759,7 +759,7 @@ $effect(() => {
 									class="flex items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors {showDDAPlots ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}"
 									onclick={() => (showDDAPlots = !showDDAPlots)}
 								>
-									<span class="flex items-center gap-2"><Layers3 size={15} /> DDA planning</span>
+									<span class="flex items-center gap-2"><Layers3 size={15} /> Planning</span>
 									{#if showDDAPlots}<Eye size={14} />{:else}<EyeOff size={14} />{/if}
 								</button>
 								<button
@@ -922,7 +922,7 @@ $effect(() => {
 												</p>
 											</div>
 											<div>
-												<p class="text-slate-500">DDA plots</p>
+												<p class="text-slate-500">Planning plots</p>
 												<p class="font-semibold text-slate-950">
 													{formatCompact(selectedArea.dda_plot_count)}
 												</p>
@@ -986,7 +986,7 @@ $effect(() => {
 											</p>
 										</div>
 										<div class="rounded-md bg-slate-50 px-3 py-2">
-											<p class="text-[11px] text-slate-500">DDA GFA</p>
+											<p class="text-[11px] text-slate-500">Planned GFA</p>
 											<p class="text-sm font-semibold text-slate-950">
 												{formatCompact(selectedArea.dda_total_gfa_sqft)} sq ft
 											</p>

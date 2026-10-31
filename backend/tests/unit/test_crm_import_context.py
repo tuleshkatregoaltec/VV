@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import AsyncMock
 
 from app.crm import owner_queries
@@ -138,14 +138,14 @@ def test_project_names_starting_with_v_are_not_villa_numbers():
     assert all(not row.unit_number for row in rows)
 
 
-async def test_wrong_exact_date_property_does_not_hide_compatible_nearby_sale(monkeypatch):
+async def test_audited_context_cannot_invent_a_unit_from_date_price_and_size(monkeypatch):
     rows, _ = parse(
-        "NameEn,Project,Regis,ProcedureValue,ProcedureNameEn,ProcedurePartyTypeNameEn\n"
-        "Example,Vardon,2020-01-01,1000000,Sale,Buyer\n"
+        "NameEn,Project,Regis,ProcedureValue,ProcedureNameEn,ProcedurePartyTypeNameEn,AreaSqft\n"
+        "Example,Vardon,2020-01-01,1000000,Sale,Buyer,1000\n"
     )
     row = rows[0]
     row.evidence["file_context"] = {"locations": ["Damac Hills 2"]}
-    nearby = sale(transaction_date=date(2020, 1, 3))
+    nearby = sale(transaction_date=date(2020, 1, 3), size_sqft=1000)
     query = AsyncMock(
         return_value=[
             sale(building_name="Pacifica", unit_number="V202", unit_key="v202"),
@@ -154,22 +154,10 @@ async def test_wrong_exact_date_property_does_not_hide_compatible_nearby_sale(mo
     )
     monkeypatch.setattr(owner_queries, "fetch_import_context_sales", query)
     await recover_from_file_context(rows)
-    assert row.unit_number == "V101"
-    assert row.evidence["property_identity_resolution"]["date_delta_days"] == 2
-    assert query.call_args.args[0]["start_date"] == date(2020, 1, 1) - timedelta(days=14)
-    # Later history is deliberately outside the source-file search window.
-    _apply_evidence(
-        row,
-        sales={
-            row.property_key: [
-                nearby,
-                sale(sale_key="resale", transaction_date=date(2025, 1, 1)),
-            ]
-        },
-        rentals={},
-    )
-    assert row.ownership_status == "former_owner"
-    assert row.later_sale_date == date(2025, 1, 1)
+    assert not row.unit_number
+    assert "property_identity_resolution" not in row.evidence
+    assert row.evidence["context_lookup"]["status"] == "qualified_match_review"
+    query.assert_not_awaited()
 
 
 async def test_same_price_different_properties_stays_ambiguous(monkeypatch):
@@ -190,7 +178,7 @@ async def test_same_price_different_properties_stays_ambiguous(monkeypatch):
     )
     await recover_from_file_context(rows)
     assert not rows[0].unit_number
-    assert rows[0].evidence["context_lookup"]["status"] == "ambiguous"
+    assert rows[0].evidence["context_lookup"]["status"] == "qualified_match_review"
 
 
 async def test_full_history_stays_on_identified_property_and_has_no_file_date_limit(monkeypatch):
@@ -218,6 +206,9 @@ async def test_full_history_stays_on_identified_property_and_has_no_file_date_li
     assert history.call_args.args[0] == {"unit_keys": ["v101"]}
     assert [s["sale_key"] for s in sales[row.property_key]] == ["acquisition", "resale"]
     _apply_evidence(row, sales=sales, rentals={})
+    # The exact source date identifies the historical acquisition; the other
+    # equal-price registration is years away and cannot be a nearby collision.
+    assert row.ownership_status == "former_owner"
     assert row.later_sale_date == date(2026, 1, 1)
 
 

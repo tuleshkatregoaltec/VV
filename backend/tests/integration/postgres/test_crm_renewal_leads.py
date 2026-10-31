@@ -26,6 +26,25 @@ AS_OF = date(2026, 10, 9)
 JVC = "Jumeirah Village Circle"
 
 
+@pytest.fixture(autouse=True)
+def synthetic_owner_registry(monkeypatch):
+    async def sales(candidates):
+        return {
+            candidate.property_key: [
+                {
+                    "sale_key": f"sale-{candidate.unit_number}",
+                    "transaction_date": date(2025, 1, 1),
+                    "sale_amount_aed": 0
+                    if candidate.contact_name == "Imported But Overridden"
+                    else 1_000_000,
+                }
+            ]
+            for _, candidate in candidates
+        }
+
+    monkeypatch.setattr("app.crm.owner_assessment._fresh_sales", sales)
+
+
 def _row(event_key, candidate):
     return {
         "event_key": event_key,
@@ -139,7 +158,15 @@ async def test_owner_is_blank_unless_entered_or_import_matched_as_current_owner(
                 source_row_number=row,
                 row_fingerprint=str(row),
                 owner_key=f"owner-{row}",
-                property_key=candidate,
+                property_key=f"tower|{row}",
+                area_name=JVC,
+                building_name="Tower",
+                unit_number=str(row),
+                party_role="Buyer",
+                procedure_type="Sale",
+                transaction_date=date(2020, 1, 1) if status == "former_owner" else date(2025, 1, 1),
+                transaction_price_aed=1_000_000,
+                lead_id=f"lease-{candidate.removeprefix('unit-')}",
                 contact_name=name,
                 phone_primary="+971500000000",
                 ownership_status=status,
@@ -252,6 +279,38 @@ async def test_a_vitevue_lease_becomes_one_shared_undecided_lead_per_unit(pg_ses
     assert first.criteria["unit_number"] == "216"
 
 
+async def test_later_owner_evidence_updates_same_lead_and_preserves_agent_correction(pg_session):
+    org, agent = str(uuid4()), str(uuid4())
+
+    async def open_owner(name):
+        return await inbound.open_vitevue_lease_enquiry(
+            pg_session,
+            organization_id=org,
+            user_id=agent,
+            unit_key="unit-refresh",
+            owner_name=name,
+            owner_phone=None,
+            owner_email=None,
+            criteria={},
+            lease={},
+        )
+
+    empty = await open_owner("")
+    identified = await open_owner("Imported Example")
+    assert identified.id == empty.id
+    assert identified.contact.full_name == "Imported Example"
+    withdrawn = await open_owner("")
+    assert withdrawn.id == empty.id and withdrawn.contact.full_name == ""
+    await open_owner("Imported Example")
+    contact = await pg_session.get(CrmInboundContact, identified.contact.id)
+    contact.full_name = "Agent Corrected Example"
+    pg_session.add(contact)
+    await pg_session.commit()
+    refreshed = await open_owner("Different Imported Example")
+    assert refreshed.id == empty.id
+    assert refreshed.contact.full_name == "Agent Corrected Example"
+
+
 async def test_owner_import_fills_the_owner_and_the_agent_can_correct_it(pg_session, monkeypatch):
     now = datetime.now(timezone.utc)
     org, agent = str(uuid4()), str(uuid4())
@@ -287,7 +346,15 @@ async def test_owner_import_fills_the_owner_and_the_agent_can_correct_it(pg_sess
             source_row_number=1,
             row_fingerprint="1",
             owner_key="owner-1",
-            property_key="unit-owned",
+            property_key="tower|101",
+            area_name=JVC,
+            building_name="Tower",
+            unit_number="101",
+            party_role="Buyer",
+            procedure_type="Sale",
+            transaction_date=date(2025, 1, 1),
+            transaction_price_aed=1_000_000,
+            lead_id="lease-owned",
             contact_name="Huda Saeed",
             phone_primary="0501234567",
             ownership_status="verified_current_owner",

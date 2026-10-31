@@ -54,7 +54,7 @@ function selectDubaiMarket() {
 						Project scope
 					</p>
 					<p class="mt-1 text-sm text-fg-3">
-						DXBI sales and rentals. Search a project, building or community. Upcoming supply uses DLD.
+						Explore sales, rentals and upcoming supply. Search a project, building or community.
 					</p>
 				</div>
 				<button

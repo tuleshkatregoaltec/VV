@@ -184,7 +184,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Unit</th>
 				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Note</th>
 			</tr>
-			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Plot area</td><td class={VALUE}>{fmtSqft(massing.plotAreaSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">From plot file / DDA data.</td></tr>
+			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Plot area</td><td class={VALUE}>{fmtSqft(massing.plotAreaSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">From plot data.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Maximum GFA</td><td class={VALUE}>{fmtSqft(massing.maxGfaSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">Regulatory GFA used by the model.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Building form</td><td class={VALUE}>{formLabel(massing.buildingForm)}</td><td class={UNIT}></td><td class="px-2 py-[3px] text-slate-500">Classified from max storeys.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Covered footprint</td><td class={VALUE}>{fmtSqft(massing.coveredFootprintSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">Plot area x applied coverage.</td></tr>

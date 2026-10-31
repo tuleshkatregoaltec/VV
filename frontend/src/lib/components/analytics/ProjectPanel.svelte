@@ -240,27 +240,6 @@ function getDeveloperNames(summary: ProjectAnalyticsResponse): string[] {
 	return uniqueNormalized([...(project?.developer_names ?? []), project?.developer_name])
 }
 
-// Where a header value came from: "Developer, Handover: DXBInteract's building list".
-const FIELD_LABELS: Record<string, string> = {
-	developer_name: 'Developer',
-	completion_date: 'Handover',
-	percent_completed: 'Completion',
-	no_of_units: 'Units',
-	no_of_buildings: 'Buildings',
-	area_name: 'Area'
-}
-const SOURCE_LABELS: Record<string, string> = {
-	dxbi_buildings: "DXBInteract's building list",
-	dld_units: "DLD's unit register",
-	dld_projects: "DLD's project register",
-	buildings: 'its buildings added up',
-	dld_land_plots: "DLD's land register (villa plots)",
-	units_traded: 'units with a recorded sale or lease (no register count)',
-	unit_numbers: 'counted from the unit numbers in our records',
-	projects_rollup: 'its projects added up',
-	dxbi_records: 'DXBI buildings with records'
-}
-
 // Registered units as shown: "at least" when only the units that traded are known.
 function unitsLabel(project: ProjectAnalyticsResponse['project']): string {
 	if (!project?.no_of_units) return '—'
@@ -290,16 +269,6 @@ function selectBuilding(building: { building_id: string; name: string }) {
 		project: project?.project_name ?? '',
 		master: project?.master_name ?? ''
 	})
-}
-
-function fieldSourceNote(sources: Record<string, string> | undefined): string {
-	const bySource = new Map<string, string[]>()
-	for (const [field, source] of Object.entries(sources ?? {})) {
-		bySource.set(source, [...(bySource.get(source) ?? []), FIELD_LABELS[field] ?? field])
-	}
-	return [...bySource]
-		.map(([source, fields]) => `${fields.join(', ')}: ${SOURCE_LABELS[source] ?? source}`)
-		.join(' · ')
 }
 
 function getDeveloperLabel(
@@ -1281,15 +1250,10 @@ onMount(() => {
 					</div>
 				{/if}
 			</div>
-			{#if fieldSourceNote(summary.project?.field_sources)}
-				<p class="mt-2 text-[11px] text-fg-4" data-testid="analytics-field-sources">
-					Sources: {fieldSourceNote(summary.project?.field_sources)}
-				</p>
-			{/if}
 			{/if}
             <p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
-                DXBI transactions · {summary.usage === 'Commercial' ? 'Commercial' : 'Residential'} properties. Summary cards and usage counts: {summaryDays ? `last ${summaryDays} days, including today (Dubai time)` : 'all recorded dates'}. Sales use sale dates; rentals use lease start dates.
-                {#if !hasProjectDetails}Registered unit stock and delivery forecasts are unavailable from this source.{/if}
+                Transactions · {summary.usage === 'Commercial' ? 'Commercial' : 'Residential'} properties. Summary cards and usage counts: {summaryDays ? `last ${summaryDays} days, including today (Dubai time)` : 'all recorded dates'}. Sales use sale dates; rentals use lease start dates.
+                {#if !hasProjectDetails}Registered unit stock and delivery forecasts are unavailable for this selection.{/if}
             </p>
 		</section>
 
@@ -1318,7 +1282,7 @@ onMount(() => {
 											{building.name}
 										</button>
 									</td>
-									<td class="py-2 pr-4 text-right tabular-nums text-fg-2" title={building.units_source ? (SOURCE_LABELS[building.units_source] ?? building.units_source) : ''}>
+									<td class="py-2 pr-4 text-right tabular-nums text-fg-2">
 										{building.units ? (building.units_at_least ? `≥ ${fmtNumber(building.units)}` : fmtNumber(building.units)) : '—'}
 									</td>
 									<td class="py-2 pr-4 text-right tabular-nums text-fg-2">{fmtNumber(building.sales)}</td>
@@ -1753,7 +1717,7 @@ onMount(() => {
 
 			{#if pipeline}
 				<p class="mt-2 text-xs text-fg-3">
-					DLD source. Completed stock uses recorded completion dates. Scheduled deliveries are planned.
+					Completed stock uses recorded completion dates. Scheduled deliveries are planned.
 					{#if pipeline.reference_date}As of {pipeline.reference_date}.{/if}
 				</p>
 				{#if pipeline.overdue_units || pipeline.undated_units}

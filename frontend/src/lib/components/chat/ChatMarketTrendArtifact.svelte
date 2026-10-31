@@ -161,14 +161,11 @@ $effect(() => {
 		</div>
 
 		<div class="rounded-md border border-border bg-panel p-3 text-xs leading-5 text-fg-3">
-			<span class="font-semibold text-fg-2">Source:</span>
-			DLD sales transactions
 			{#if periodLabel()}
-				<span class="mx-1 text-fg-5">/</span>
 				<span class="font-semibold text-fg-2">Period:</span>
 				{periodLabel()}
 			{/if}
-			<span class="mx-1 text-fg-5">/</span>
+			{#if periodLabel()}<span class="mx-1 text-fg-5">/</span>{/if}
 			Latest average price:
 			<span class="font-semibold text-fg-1">{formatMoney(points[points.length - 1]?.avg_price)}</span>
 		</div>

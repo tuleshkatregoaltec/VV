@@ -187,7 +187,7 @@ async function handleExport(format: TransactionExportFormat) {
 />
 
 <div class="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-fg-3">
-    <span>DXBI rentals · Dated by lease start</span>
+    <span>Rental records · Dated by lease start</span>
     <span aria-live="polite">{#if rentalsQuery.isPlaceholderData}Updating matching contracts…{:else}{formatCount(totalRecords)} matching contracts{/if}</span>
 </div>
 
@@ -195,7 +195,7 @@ async function handleExport(format: TransactionExportFormat) {
 	title="Rental contracts"
 	description={selectedContractIds.size > 0
 		? `Exporting ${selectedContractIds.size} selected rows as Excel or CSV.`
-		: 'Export the filtered DXBI rows as Excel or CSV, up to 50,000 rows.'}
+		: 'Export the filtered rows as Excel or CSV, up to 50,000 rows.'}
 	exportActions={[
 		{
 			label: 'Excel',

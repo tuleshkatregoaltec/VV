@@ -96,6 +96,23 @@ async def test_rental_only_scope_is_searchable_and_empty_sales_are_json_safe(dxb
     json.dumps(summary.model_dump(mode="json"), allow_nan=False)
 
 
+async def test_chat_search_to_profile_reads_stored_lease_without_inventing_sales(dxbi):  # noqa: F811
+    from app.chat.tools import get_project_profile, search_database_locations
+
+    await dxbi(leases=[lease("chat-rental-only")])
+    matches = await search_database_locations(None, "Iris")
+    assert len(matches["projects"]) == 1
+    match = matches["projects"][0]
+    profile = await get_project_profile(None, match["name"], match["filter_type"])
+    assert profile["sales"] == {"transaction_count": 0}
+    assert profile["rentals"]["contract_count"] == 1
+    assert profile["rentals"]["median_annual_rent"] == 160_000
+    assert "avg_sale_price" not in profile["by_rooms"][0]
+    assert profile["by_rooms"][0]["median_annual_rent"] == 160_000
+    assert profile["project"]["no_of_units"] is None
+    assert profile["scope"] == {"name": "Iris Blue", "filter_type": "project"}
+
+
 async def test_configuration_periods_end_on_the_newest_sale_and_keep_old_sparse_bedrooms(
     dxbi,  # noqa: F811
 ):

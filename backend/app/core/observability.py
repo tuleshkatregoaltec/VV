@@ -234,7 +234,7 @@ async def provider_request(client, url, **kwargs):
 
 def warehouse_query(function):
     @wraps(function)
-    async def observed(sql, parameters=None):
+    async def observed(sql, parameters=None, **kwargs):
         with tracer().start_as_current_span(
             "clickhouse.query",
             attributes={"db.system": "clickhouse", "app.query.sha256": sha256(sql)},
@@ -242,7 +242,7 @@ def warehouse_query(function):
             set_status_on_exception=False,
         ) as span:
             try:
-                result = await function(sql, parameters)
+                result = await function(sql, parameters, **kwargs)
                 span.set_attribute("app.query.row_count", len(result))
                 return result
             except BaseException:

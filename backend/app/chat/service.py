@@ -1,22 +1,28 @@
-import json
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, List, Optional
 
-from pydantic_ai import Agent as PydanticAgent
-from pydantic_ai.messages import (
-    FunctionToolResultEvent,
-    ToolCallPart,
-)
-from pydantic_ai.models.openrouter import OpenRouterModelSettings
+from fastapi import HTTPException
+from pydantic_ai.usage import RunUsage
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.chat import repository
+from app.chat import admission, repository
 from app.chat.agent import _convert_to_pydantic_messages, agent
-from app.chat.artifacts import _artifact_shell, _fetch_artifact
+from app.chat.dependencies import ChatDependencies
 from app.chat.events import encode_sse as _sse
 from app.chat.models import Conversation, Message
-from app.token_usage.service import token_usage_service
+from app.chat.security import (
+    REFUSAL,
+    RESTRICTED_HISTORY,
+    fingerprint,
+    input_refusal,
+    safe_answer,
+    safe_data,
+)
+from app.chat.workflows import LIMITS
+from app.crm.assistant import has_current_access, query_my_records
+from app.crm.assistant_models import CrmAssistantQuery
 
 logger = logging.getLogger(__name__)
 
@@ -80,12 +86,150 @@ async def delete_conversation(
     return True
 
 
+async def _evidence_accessible(db, evidence, user_id, organization_id) -> bool:
+    if evidence and not await has_current_access(
+        db, user_id=user_id, organization_id=organization_id
+    ):
+        return False
+    for reference in evidence:
+        try:
+            if reference.get("type") == "assignee_lookup":
+                from app.assistant_actions.service import lookup_assignees
+
+                result = await lookup_assignees(
+                    db,
+                    user_id=user_id,
+                    organization_id=organization_id,
+                    search=reference["search"],
+                )
+                if fingerprint(result) != reference["fingerprint"]:
+                    return False
+                continue
+            result = await query_my_records(
+                db,
+                CrmAssistantQuery.model_validate(reference["query"]),
+                user_id=user_id,
+                organization_id=organization_id,
+            )
+            payload = safe_data(result.model_dump(mode="json"))
+            payload["source"] = "Your CRM records"
+            if fingerprint(payload) != reference["fingerprint"]:
+                return False
+        except Exception:
+            return False
+    return True
+
+
+async def _current_record_handles(db, messages, user_id, organization_id):
+    """Reauthorize at most twenty handles from the latest relevant private answer.
+
+    Fact changes invalidate historical prose without invalidating a still-owned
+    resource's identity. Never carry names, values or search strings in this context.
+    """
+    if not await has_current_access(db, user_id=user_id, organization_id=organization_id):
+        return None, []
+    for index in range(len(messages) - 1, -1, -1):
+        metadata = messages[index].meta_data or {}
+        references = [
+            ref
+            for evidence in metadata.get("evidence", [])
+            for ref in evidence.get("resource_refs", [])
+        ][:20]
+        if not references:
+            continue
+        current = []
+        seen = set()
+        for ref in references:
+            try:
+                request = CrmAssistantQuery(
+                    resource=ref["resource"], record_id=ref["record_id"], limit=1
+                )
+                key = (request.resource, request.record_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                result = await query_my_records(
+                    db, request, user_id=user_id, organization_id=organization_id
+                )
+                if result.available and any(
+                    row.get("id") == request.record_id for row in result.records
+                ):
+                    current.append({"resource": request.resource, "record_id": request.record_id})
+            except Exception:
+                continue
+        return index, current
+    return None, []
+
+
 async def get_conversation_messages(
-    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str, limit: int = 100
+    db: AsyncSession,
+    conversation_id: int,
+    user_id: str,
+    organization_id: str,
+    limit: int = 100,
+    before_id: int | None = None,
+    include_retrieval_context: bool = False,
 ) -> List[Message]:
-    return await repository.get_conversation_messages(
-        db, conversation_id, user_id, organization_id, limit
+    messages = await repository.get_conversation_messages(
+        db, conversation_id, user_id, organization_id, limit, before_id
     )
+    visible = []
+    for message in messages:
+        if message.role != "assistant":
+            visible.append(message)
+            continue
+        metadata = dict(message.meta_data or {})
+        permitted = metadata.get("guardrail_version") == 1
+        if metadata.get("private"):
+            permitted = permitted and await has_current_access(
+                db, user_id=user_id, organization_id=organization_id
+            )
+            evidence = metadata.get("evidence", [])
+            permitted = permitted and bool(evidence or metadata.get("actions"))
+            permitted = permitted and await _evidence_accessible(
+                db, evidence, user_id, organization_id
+            )
+            if metadata.get("actions"):
+                from app.assistant_actions.service import get_action
+
+                for action in metadata["actions"]:
+                    try:
+                        action_response = await get_action(
+                            db,
+                            user_id=user_id,
+                            organization_id=organization_id,
+                            action_id=action["id"],
+                        )
+                        permitted = (
+                            permitted and action_response.preview.get("available") is not False
+                        )
+                    except Exception:
+                        permitted = False
+        # A copied model avoids dirtying ORM state while preparing an authorized response.
+        public_metadata = {
+            key: value
+            for key, value in metadata.items()
+            if key not in {"evidence", "_retrieval_context"}
+        }
+        if not permitted or not safe_answer(message.content):
+            visible.append(
+                message.model_copy(
+                    update={
+                        "content": RESTRICTED_HISTORY,
+                        "meta_data": {"restricted": True, "private": True},
+                    }
+                )
+            )
+        else:
+            visible.append(message.model_copy(update={"meta_data": public_metadata}))
+    if include_retrieval_context:
+        index, handles = await _current_record_handles(db, messages, user_id, organization_id)
+        if index is not None and handles:
+            visible[index].meta_data = {
+                **(visible[index].meta_data or {}),
+                "_retrieval_context": handles,
+            }
+    return visible
 
 
 async def add_message(
@@ -130,125 +274,96 @@ async def stream_chat_response(
     user_id: str,
     organization_id: str,
 ) -> AsyncGenerator[str, None]:
-    """Stream chat response using Pydantic AI agent via SSE"""
-    # Verify conversation ownership
+    """Only validated complete answers cross the SSE/persistence boundary."""
     conversation = await get_conversation(db, conversation_id, user_id, organization_id)
     if not conversation:
-        yield f"data: {json.dumps({'type': 'error', 'error': 'Conversation not found'})}\n\n"
+        yield _sse({"type": "error", "error": "Conversation not found"})
         return
     scope = {"user_id": user_id, "organization_id": organization_id}
-
-    # Save user message
-    await add_message(db, conversation_id, "user", user_message, **scope)
-
-    # Get conversation history
-    messages = await get_conversation_messages(db, conversation_id, **scope)
-    message_history = _convert_to_pydantic_messages(messages[:-1])  # Exclude the just-added message
-
-    assistant_message = ""
-    total_tokens = 0
-    prompt_tokens = 0
-    completion_tokens = 0
-    artifacts: list[dict[str, Any]] = []
-    tool_names_by_call_id: dict[str, str] = {}
-
+    refusal = input_refusal(user_message)
+    # Do not persist submitted credentials, dump requests or oversized input.
+    if refusal:
+        yield _sse({"type": "content", "content": refusal})
+        yield _sse({"type": "done"})
+        return
+    # Request auth and conversation lookup may already hold a read connection.
+    await db.commit()
+    try:
+        async with asyncio.timeout(30):
+            lease_id = await admission.acquire(**scope, conversation_id=conversation_id)
+    except HTTPException as exc:
+        yield _sse({"type": "error", "error": exc.detail})
+        return
+    usage = RunUsage()
+    provider_completed = False
     try:
         yield _sse({"type": "thinking"})
-
-        async with agent.iter(
-            user_message,
-            message_history=message_history,
-            model_settings=OpenRouterModelSettings(openrouter_reasoning={"effort": "low"}),
-        ) as run:
-            async for node in run:
-                if PydanticAgent.is_model_request_node(node):
-                    async with node.stream(run.ctx) as stream:
-                        async for chunk_text in stream.stream_text(delta=True, debounce_by=0.01):
-                            assistant_message += chunk_text
-                            yield _sse({"type": "content", "content": chunk_text})
-                elif PydanticAgent.is_call_tools_node(node):
-                    for part in node.model_response.parts:
-                        if not isinstance(part, ToolCallPart):
-                            continue
-                        tool_names_by_call_id[part.tool_call_id] = part.tool_name
-                        yield _sse(
-                            {
-                                "type": "tool_call_start",
-                                "tool": part.tool_name,
-                                "tool_call_id": part.tool_call_id,
-                            }
-                        )
-                        if part.tool_name in {"show_listings", "show_market_trend", "show_chart"}:
-                            yield _sse(
-                                {
-                                    "type": "artifact_opened",
-                                    "artifact": _artifact_shell(
-                                        part.tool_name, part.tool_call_id, part.args_as_dict()
-                                    ),
-                                }
-                            )
-                        artifact = await _fetch_artifact(
-                            db,
-                            part.tool_name,
-                            part.tool_call_id,
-                            part.args_as_dict(),
-                            user_message,
-                        )
-                        if artifact is not None:
-                            artifacts = [item for item in artifacts if item["id"] != artifact["id"]]
-                            artifacts.append(artifact)
-                            yield _sse({"type": "artifact_updated", "artifact": artifact})
-
-                    async with node.stream(run.ctx) as tool_stream:
-                        async for event in tool_stream:
-                            if isinstance(event, FunctionToolResultEvent):
-                                tool_call_id = getattr(event.result, "tool_call_id", "")
-                                tool_name = getattr(event.result, "tool_name", None)
-                                yield _sse(
-                                    {
-                                        "type": "tool_call_result",
-                                        "tool_call_id": tool_call_id,
-                                        "tool": tool_name
-                                        or tool_names_by_call_id.get(tool_call_id, "tool"),
-                                    }
-                                )
-
-            usage = run.usage()
-            total_tokens = getattr(usage, "total_tokens", 0)
-            prompt_tokens = getattr(usage, "request_tokens", 0)
-            completion_tokens = getattr(usage, "response_tokens", 0)
-
-            if total_tokens:
-                logger.info(
-                    f"Token usage: prompt={prompt_tokens}, "
-                    f"completion={completion_tokens}, "
-                    f"total={total_tokens}"
-                )
-
-                await token_usage_service.record_usage(
-                    db=db,
-                    user_id=user_id,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    total_tokens=total_tokens,
-                )
-
-        # Save assistant message with metadata
-        if assistant_message or artifacts:
-            meta_data = {}
-            if total_tokens:
-                meta_data["total_tokens"] = total_tokens
-            if artifacts:
-                meta_data["artifacts"] = artifacts
-            if not assistant_message:
-                assistant_message = "I added the requested view below."
-
-            await add_message(
-                db, conversation_id, "assistant", assistant_message, meta_data, **scope
+        async with asyncio.timeout(300):
+            await add_message(db, conversation_id, "user", user_message, **scope)
+            messages = await get_conversation_messages(
+                db, conversation_id, **scope, include_retrieval_context=True
             )
+            history = _convert_to_pydantic_messages(messages[:-1])
+            # Release the read transaction and pool connection before nested tools
+            # open their own sessions during provider latency.
+            await db.commit()
+            deps = ChatDependencies(**scope, conversation_id=conversation_id)
+            result = await agent.run(
+                user_message, deps=deps, message_history=history, usage_limits=LIMITS, usage=usage
+            )
+            provider_completed = True
+            answer = result.output
+            # A target can be reassigned while the provider is composing its answer.
+            if (deps.evidence or deps.proposals) and (
+                not await has_current_access(db, user_id=user_id, organization_id=organization_id)
+                or not await _evidence_accessible(db, deps.evidence, user_id, organization_id)
+            ):
+                answer = RESTRICTED_HISTORY
+                deps.proposals.clear()
+            if deps.proposals:
+                from app.assistant_actions.service import get_action
 
+                current_proposals = []
+                try:
+                    for proposal in deps.proposals:
+                        current = await get_action(
+                            db,
+                            user_id=user_id,
+                            organization_id=organization_id,
+                            action_id=proposal["id"],
+                        )
+                        if (
+                            current.preview.get("available") is False
+                            or current.status != "awaiting_confirmation"
+                        ):
+                            raise PermissionError("Action target is no longer accessible")
+                        current_proposals.append(current.model_dump(mode="json"))
+                except Exception:
+                    answer = RESTRICTED_HISTORY
+                    deps.proposals.clear()
+                else:
+                    deps.proposals[:] = current_proposals
+            if not safe_answer(answer):
+                answer = REFUSAL
+            metadata = {"guardrail_version": 1, "private": bool(deps.evidence or deps.proposals)}
+            if usage.total_tokens:
+                metadata["total_tokens"] = usage.total_tokens
+            if deps.evidence:
+                metadata["evidence"] = deps.evidence
+            if deps.proposals:
+                metadata["actions"] = [{"id": item["id"]} for item in deps.proposals]
+            await add_message(db, conversation_id, "assistant", answer, metadata, **scope)
+            yield _sse({"type": "content", "content": answer})
+            for proposal in deps.proposals:
+                yield _sse({"type": "action_proposed", "action": safe_data(proposal)})
         yield _sse({"type": "done"})
-
-    except Exception as e:
-        logger.exception("Error during chat streaming")
-        yield _sse({"type": "error", "error": str(e)})
+    except Exception as exc:
+        logger.error("Chat execution failed (%s)", type(exc).__name__)
+        yield _sse({"type": "error", "error": "Unable to complete this answer. Please try again."})
+    finally:
+        try:
+            await asyncio.shield(admission.finish(lease_id, usage, successful=provider_completed))
+        except Exception as exc:
+            # The committed reservation remains charged and its capacity lease
+            # expires; a database outage must not turn failed cleanup into credit.
+            logger.error("Chat admission settlement failed (%s)", type(exc).__name__)

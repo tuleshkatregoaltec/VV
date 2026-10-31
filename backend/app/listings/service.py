@@ -96,6 +96,9 @@ async def list_listings_from_clickhouse(
     price_period: str | None = None,
     price_basis: str = "raw",
     include_filters: bool = True,
+    building: str | None = None,
+    min_age_days: int | None = None,
+    max_age_days: int | None = None,
 ) -> ListingListResponse:
     filters = dict(
         mode=mode,
@@ -109,6 +112,9 @@ async def list_listings_from_clickhouse(
         price_max=price_max,
         price_period=price_period,
         price_basis=price_basis,
+        building=building,
+        min_age_days=min_age_days,
+        max_age_days=max_age_days,
     )
     count_task = asyncio.create_task(queries.fetch_listing_count(filters))
     filters_task = asyncio.create_task(_filters(mode, asset_class)) if include_filters else None

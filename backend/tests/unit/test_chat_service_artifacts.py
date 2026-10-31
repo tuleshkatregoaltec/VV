@@ -10,7 +10,7 @@ from app.listings.models import ListingFiltersResponse, ListingListResponse
 from app.market.reference import SQM_TO_SQFT
 
 
-def test_pydantic_history_includes_rendered_artifact_context():
+def test_legacy_rendered_artifacts_are_not_replayed_as_fresh_evidence():
     messages = [
         Message(
             conversation_id=1,
@@ -55,14 +55,7 @@ def test_pydantic_history_includes_rendered_artifact_context():
 
     history = chat_agent._convert_to_pydantic_messages(messages)
 
-    content = history[0].parts[0].content
-    assert "[Rendered card context for follow-up references]" in content
-    assert "Al Furjan: Gross yield 9.52, 305 records" in content
-    assert "Dubai South: Gross yield 8.84, 412 records" in content
-    assert (
-        "Rendered listings card: Sales listings; mode sale; area Al Furjan; exact matches 0."
-        in content
-    )
+    assert history == []
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ from app.crm.identity import ParsedContact, _location_key, _normalize_unit
 from app.crm.import_parsing import _inspect_csv, _parse_csv
 from app.crm.ownership import _apply_evidence
 from app.crm.registry_fallback import _apply_registry_unit_fallbacks
+from app.market.reference import unit_lookup_key
 
 
 def _contact(**overrides) -> ParsedContact:
@@ -32,8 +33,8 @@ def _contact(**overrides) -> ParsedContact:
 
 def _sale(unit_number, building_name, sale_key, transaction_date, price=9_200_000):
     return {
-        "unit_key": unit_number.lower(),
-        "short_unit_key": _normalize_unit(unit_number).lower(),
+        "unit_key": unit_lookup_key(unit_number),
+        "short_unit_key": unit_lookup_key(_normalize_unit(unit_number)),
         "unit_number": unit_number,
         "building_name": building_name,
         "building_key": _location_key(building_name),

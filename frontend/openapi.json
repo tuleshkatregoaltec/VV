@@ -1614,10 +1614,27 @@
 						"required": false,
 						"schema": {
 							"type": "integer",
-							"maximum": 500,
+							"maximum": 100,
 							"minimum": 1,
 							"default": 100,
 							"title": "Limit"
+						}
+					},
+					{
+						"name": "before_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Before Id"
 						}
 					}
 				],
@@ -1679,6 +1696,277 @@
 				"responses": {
 					"200": {
 						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/proposals": {
+			"post": {
+				"tags": ["assistant_actions", "Assistant actions"],
+				"summary": "Propose Action",
+				"operationId": "assistant_actions-propose_action",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ActionProposalRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ActionProposalResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"tags": ["assistant_actions", "Assistant actions"],
+				"summary": "List Actions",
+				"operationId": "assistant_actions-list_actions",
+				"parameters": [
+					{
+						"name": "conversation_id",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"exclusiveMinimum": 0,
+							"title": "Conversation Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/ActionProposalResponse"
+									},
+									"title": "Response Assistant Actions-List Actions"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/reminders": {
+			"get": {
+				"tags": ["assistant_actions", "Assistant actions"],
+				"summary": "List Reminders",
+				"operationId": "assistant_actions-list_reminders",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/ReminderResponse"
+									},
+									"type": "array",
+									"title": "Response Assistant Actions-List Reminders"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/viewings": {
+			"get": {
+				"tags": ["assistant_actions", "Assistant actions"],
+				"summary": "List Viewings",
+				"operationId": "assistant_actions-list_viewings",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/ViewingResponse"
+									},
+									"type": "array",
+									"title": "Response Assistant Actions-List Viewings"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/listing-drafts": {
+			"get": {
+				"tags": ["assistant_actions", "Assistant actions"],
+				"summary": "List Listing Drafts",
+				"operationId": "assistant_actions-list_listing_drafts",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/ListingDraftResponse"
+									},
+									"type": "array",
+									"title": "Response Assistant Actions-List Listing Drafts"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/{action_id}": {
+			"get": {
+				"tags": ["assistant_actions", "Assistant actions"],
+				"summary": "Get Action",
+				"operationId": "assistant_actions-get_action",
+				"parameters": [
+					{
+						"name": "action_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Action Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ActionProposalResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/{action_id}/confirm": {
+			"post": {
+				"tags": ["assistant_actions", "Assistant actions"],
+				"summary": "Confirm Action",
+				"operationId": "assistant_actions-confirm_action",
+				"parameters": [
+					{
+						"name": "action_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Action Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ActionProposalResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/{action_id}/cancel": {
+			"post": {
+				"tags": ["assistant_actions", "Assistant actions"],
+				"summary": "Cancel Action",
+				"operationId": "assistant_actions-cancel_action",
+				"parameters": [
+					{
+						"name": "action_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Action Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ActionProposalResponse"
+								}
+							}
+						}
 					},
 					"422": {
 						"description": "Validation Error",
@@ -2378,6 +2666,86 @@
 				}
 			}
 		},
+		"/api/v1/crm/contact-imports/preview": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Contact Import Preview",
+				"description": "Show which field each column of an owner file feeds, without importing it.",
+				"operationId": "crm-crm_contact_import_preview",
+				"requestBody": {
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"$ref": "#/components/schemas/Body_crm-crm_contact_import_preview"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmContactImportPreview"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/contact-imports/source-only": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Source Only Import",
+				"description": "Import reviewed source history without requesting registry evidence.",
+				"operationId": "crm-crm_source_only_import",
+				"requestBody": {
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"$ref": "#/components/schemas/Body_crm-crm_source_only_import"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmContactImportResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/contact-imports/{import_id}": {
 			"patch": {
 				"tags": ["crm", "crm"],
@@ -2688,7 +3056,7 @@
 							"anyOf": [
 								{
 									"type": "string",
-									"pattern": "^(verified_current_owner|probable_current_owner|unit_linked_unverified|former_owner|conflicting_claim|insufficient_property_data|registry_not_observed|unmatched)$"
+									"pattern": "^(verified_current_owner|probable_current_owner|unit_linked_unverified|former_owner|unverified_former_owner|conflicting_claim|insufficient_property_data|registry_not_observed|unmatched)$"
 								},
 								{
 									"type": "null"
@@ -2696,6 +3064,49 @@
 							],
 							"title": "Status"
 						}
+					},
+					{
+						"name": "match_colour",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "array",
+									"items": {
+										"enum": ["green", "amber", "blue", "red", "grey"],
+										"type": "string"
+									}
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Keep rows whose property-first match is one of these colours.",
+							"title": "Match Colour"
+						},
+						"description": "Keep rows whose property-first match is one of these colours."
+					},
+					{
+						"name": "match_outcome",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Keep rows with one of these match outcomes (for example `lender`).",
+							"title": "Match Outcome"
+						},
+						"description": "Keep rows with one of these match outcomes (for example `lender`)."
 					},
 					{
 						"name": "search",
@@ -2775,7 +3186,7 @@
 						"required": false,
 						"schema": {
 							"type": "string",
-							"pattern": "^(all|rental_ready|registry|prior_owners)$",
+							"pattern": "^(all|current_owners|rental_ready|registry|prior_owners|needs_review)$",
 							"default": "all",
 							"title": "Scope"
 						}
@@ -2805,13 +3216,30 @@
 							"anyOf": [
 								{
 									"type": "string",
-									"pattern": "^(verified_current_owner|probable_current_owner|unit_linked_unverified|former_owner|conflicting_claim|insufficient_property_data|registry_not_observed|unmatched)$"
+									"pattern": "^(verified_current_owner|probable_current_owner|unit_linked_unverified|former_owner|unverified_former_owner|conflicting_claim|insufficient_property_data|registry_not_observed|unmatched)$"
 								},
 								{
 									"type": "null"
 								}
 							],
 							"title": "Status"
+						}
+					},
+					{
+						"name": "transaction_match_status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"pattern": "^(matched|unmatched|ambiguous|excluded)$"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Transaction Match Status"
 						}
 					},
 					{
@@ -3065,6 +3493,177 @@
 									},
 									"type": "array",
 									"title": "Response Crm-Crm Bulk Update Owner Workspaces"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/owner-history/summary": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Owner History Summary",
+				"description": "Count source events and scoped owner/property evidence across imports.",
+				"operationId": "crm-crm_owner_history_summary",
+				"parameters": [
+					{
+						"name": "import_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Import Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmOwnerHistorySummary"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/contact-imports/{import_id}/owner-summary": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Contact Import Owner Summary",
+				"description": "Count this file's associations using current evidence from all tenant imports.",
+				"operationId": "crm-crm_contact_import_owner_summary",
+				"parameters": [
+					{
+						"name": "import_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Import Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmOwnerHistorySummary"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/owners/{owner_key}/history": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Owner History",
+				"description": "Page one owner's individual source events across organization imports.",
+				"operationId": "crm-crm_owner_history",
+				"parameters": [
+					{
+						"name": "owner_key",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Owner Key"
+						}
+					},
+					{
+						"name": "import_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Import Id"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 50,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmOwnerHistoryResponse"
 								}
 							}
 						}
@@ -9915,6 +10514,175 @@
 				"title": "AcceptInviteResponse",
 				"description": "Response for accepting invitation"
 			},
+			"ActionKind": {
+				"type": "string",
+				"enum": [
+					"create_lead",
+					"update_lead",
+					"assign_lead",
+					"delete_lead",
+					"add_note",
+					"create_reminder",
+					"update_reminder",
+					"delete_reminder",
+					"schedule_viewing",
+					"cancel_viewing",
+					"create_listing_draft",
+					"update_listing_draft",
+					"send_message",
+					"publish_listing",
+					"book_external_viewing"
+				],
+				"title": "ActionKind"
+			},
+			"ActionProposalRequest": {
+				"properties": {
+					"kind": {
+						"$ref": "#/components/schemas/ActionKind"
+					},
+					"conversation_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Conversation Id"
+					},
+					"payload": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CreateLead"
+							},
+							{
+								"$ref": "#/components/schemas/UpdateLead"
+							},
+							{
+								"$ref": "#/components/schemas/AssignLead"
+							},
+							{
+								"$ref": "#/components/schemas/LeadTarget"
+							},
+							{
+								"$ref": "#/components/schemas/AddNote"
+							},
+							{
+								"$ref": "#/components/schemas/CreateReminder"
+							},
+							{
+								"$ref": "#/components/schemas/UpdateReminder"
+							},
+							{
+								"$ref": "#/components/schemas/DeleteReminder"
+							},
+							{
+								"$ref": "#/components/schemas/ScheduleViewing"
+							},
+							{
+								"$ref": "#/components/schemas/CancelViewing"
+							},
+							{
+								"$ref": "#/components/schemas/CreateListingDraft"
+							},
+							{
+								"$ref": "#/components/schemas/UpdateListingDraft"
+							},
+							{
+								"$ref": "#/components/schemas/SendMessage"
+							},
+							{
+								"$ref": "#/components/schemas/PublishListing"
+							}
+						],
+						"title": "Payload"
+					},
+					"idempotency_key": {
+						"type": "string",
+						"maxLength": 128,
+						"minLength": 8,
+						"pattern": "^[A-Za-z0-9_-]+$",
+						"title": "Idempotency Key"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["kind", "conversation_id", "payload", "idempotency_key"],
+				"title": "ActionProposalRequest"
+			},
+			"ActionProposalResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"kind": {
+						"$ref": "#/components/schemas/ActionKind"
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"awaiting_confirmation",
+							"succeeded",
+							"cancelled",
+							"expired",
+							"failed",
+							"not_connected",
+							"queued",
+							"unknown"
+						],
+						"title": "Status"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"preview": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Preview"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"expires_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Expires At"
+					},
+					"result": {
+						"anyOf": [
+							{
+								"additionalProperties": true,
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Result"
+					}
+				},
+				"type": "object",
+				"required": ["id", "kind", "status", "title", "preview", "created_at", "expires_at"],
+				"title": "ActionProposalResponse"
+			},
+			"AddNote": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"body": {
+						"type": "string",
+						"maxLength": 4000,
+						"minLength": 1,
+						"title": "Body"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["lead_id", "body"],
+				"title": "AddNote"
+			},
 			"AnalyticsResponse": {
 				"properties": {
 					"timeframe_days": {
@@ -10592,6 +11360,25 @@
 				],
 				"title": "AreaProjectSnapshot"
 			},
+			"AssignLead": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"assignee_id": {
+						"type": "string",
+						"maxLength": 128,
+						"minLength": 1,
+						"title": "Assignee Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["lead_id", "assignee_id"],
+				"title": "AssignLead"
+			},
 			"AuthMeResponse": {
 				"properties": {
 					"id": {
@@ -10689,11 +11476,29 @@
 						"maxLength": 200,
 						"title": "Name",
 						"default": ""
+					},
+					"mapping_json": {
+						"type": "string",
+						"maxLength": 50000,
+						"title": "Mapping Json",
+						"default": ""
 					}
 				},
 				"type": "object",
 				"required": ["file"],
 				"title": "Body_crm-crm_contact_import"
+			},
+			"Body_crm-crm_contact_import_preview": {
+				"properties": {
+					"file": {
+						"type": "string",
+						"format": "binary",
+						"title": "File"
+					}
+				},
+				"type": "object",
+				"required": ["file"],
+				"title": "Body_crm-crm_contact_import_preview"
 			},
 			"Body_crm-crm_inbound_import": {
 				"properties": {
@@ -10742,6 +11547,24 @@
 				"type": "object",
 				"required": ["file"],
 				"title": "Body_crm-crm_preview_inbound_import"
+			},
+			"Body_crm-crm_source_only_import": {
+				"properties": {
+					"file": {
+						"type": "string",
+						"format": "binary",
+						"title": "File"
+					},
+					"name": {
+						"type": "string",
+						"maxLength": 200,
+						"title": "Name",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"required": ["file"],
+				"title": "Body_crm-crm_source_only_import"
 			},
 			"Body_upload-upload_chunked": {
 				"properties": {
@@ -10984,6 +11807,19 @@
 				"required": ["rooms_en", "count", "percentage", "avg_area_sqft"],
 				"title": "BuildingUnitType",
 				"description": "Bedroom/type breakdown for a specific building"
+			},
+			"CancelViewing": {
+				"properties": {
+					"viewing_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Viewing Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["viewing_id"],
+				"title": "CancelViewing"
 			},
 			"CheckoutSessionRequest": {
 				"properties": {
@@ -11378,6 +12214,125 @@
 				"title": "CreateConversationRequest",
 				"description": "Request model for creating a new conversation"
 			},
+			"CreateLead": {
+				"properties": {
+					"full_name": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Full Name"
+					},
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 80
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 320
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					},
+					"intent": {
+						"type": "string",
+						"enum": ["unknown", "buy", "rent", "sell", "let"],
+						"title": "Intent",
+						"default": "unknown"
+					},
+					"notes": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 4000
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Notes"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["full_name"],
+				"title": "CreateLead"
+			},
+			"CreateListingDraft": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"description": {
+						"type": "string",
+						"maxLength": 8000,
+						"minLength": 1,
+						"title": "Description"
+					},
+					"price_aed": {
+						"type": "integer",
+						"maximum": 100000000000.0,
+						"exclusiveMinimum": 0.0,
+						"title": "Price Aed"
+					},
+					"location": {
+						"type": "string",
+						"maxLength": 500,
+						"minLength": 1,
+						"title": "Location"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["title", "description", "price_aed", "location"],
+				"title": "CreateListingDraft"
+			},
+			"CreateReminder": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"due_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Due At"
+					},
+					"lead_id": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"exclusiveMinimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["title", "due_at"],
+				"title": "CreateReminder"
+			},
 			"CreateUserRequest": {
 				"properties": {
 					"email": {
@@ -11724,6 +12679,7 @@
 							"probable_current_owner",
 							"unit_linked_unverified",
 							"former_owner",
+							"unverified_former_owner",
 							"conflicting_claim",
 							"insufficient_property_data",
 							"registry_not_observed",
@@ -11834,6 +12790,53 @@
 						},
 						"type": "array",
 						"title": "Source Rows"
+					},
+					"match_outcome": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Match Outcome"
+					},
+					"match_colour": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["green", "amber", "blue", "red", "grey"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Match Colour"
+					},
+					"match_reasons": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Match Reasons"
+					},
+					"match_warnings": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Match Warnings"
+					},
+					"matched_sale": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmMatchedSale"
+							},
+							{
+								"type": "null"
+							}
+						]
 					}
 				},
 				"type": "object",
@@ -11853,6 +12856,19 @@
 					"owner_key"
 				],
 				"title": "CrmContactClaimResponse"
+			},
+			"CrmContactImportPreview": {
+				"properties": {
+					"sheets": {
+						"items": {
+							"$ref": "#/components/schemas/CrmSheetPreview"
+						},
+						"type": "array",
+						"title": "Sheets"
+					}
+				},
+				"type": "object",
+				"title": "CrmContactImportPreview"
 			},
 			"CrmContactImportRename": {
 				"properties": {
@@ -11942,6 +12958,26 @@
 			},
 			"CrmContactImportSummary": {
 				"properties": {
+					"owner_match": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmOwnerMatchSummary"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"source_audit": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmSourceAuditSummary"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
 					"total_rows": {
 						"type": "integer",
 						"title": "Total Rows",
@@ -11983,6 +13019,17 @@
 							}
 						],
 						"title": "Rows With Sales History"
+					},
+					"properties_linked_rows": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Properties Linked Rows"
 					},
 					"plot_only_rows": {
 						"anyOf": [
@@ -12028,6 +13075,11 @@
 					"former_owners": {
 						"type": "integer",
 						"title": "Former Owners",
+						"default": 0
+					},
+					"unverified_former_owners": {
+						"type": "integer",
+						"title": "Unverified Former Owners",
 						"default": 0
 					},
 					"conflicting_claims": {
@@ -12542,6 +13594,11 @@
 						},
 						"type": "array",
 						"title": "Records"
+					},
+					"records_truncated": {
+						"type": "boolean",
+						"title": "Records Truncated",
+						"default": false
 					}
 				},
 				"type": "object",
@@ -13054,6 +14111,16 @@
 					"lead": {
 						"$ref": "#/components/schemas/CrmLead"
 					},
+					"owner": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmRenewalOwner"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
 					"timeline": {
 						"items": {
 							"$ref": "#/components/schemas/CrmTimelineEvent"
@@ -13147,6 +14214,7 @@
 							"probable_current_owner",
 							"unit_linked_unverified",
 							"former_owner",
+							"unverified_former_owner",
 							"conflicting_claim",
 							"insufficient_property_data",
 							"registry_not_observed",
@@ -13233,6 +14301,65 @@
 				"required": ["id", "body", "created_at", "updated_at"],
 				"title": "CrmLeadNoteResponse"
 			},
+			"CrmMatchedSale": {
+				"properties": {
+					"unit": {
+						"type": "string",
+						"title": "Unit",
+						"default": ""
+					},
+					"building": {
+						"type": "string",
+						"title": "Building",
+						"default": ""
+					},
+					"project": {
+						"type": "string",
+						"title": "Project",
+						"default": ""
+					},
+					"area": {
+						"type": "string",
+						"title": "Area",
+						"default": ""
+					},
+					"amount_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Amount Aed"
+					},
+					"date": {
+						"type": "string",
+						"title": "Date",
+						"default": ""
+					},
+					"sqft": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sqft"
+					},
+					"source": {
+						"type": "string",
+						"title": "Source",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"title": "CrmMatchedSale",
+				"description": "The sale a row was matched to: a DXBI event or a Transactions (DLD) row."
+			},
 			"CrmNoteCreate": {
 				"properties": {
 					"body": {
@@ -13307,8 +14434,362 @@
 				"required": ["owner_keys"],
 				"title": "CrmOwnerBulkUpdate"
 			},
+			"CrmOwnerHistoryEvent": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"import_id": {
+						"type": "integer",
+						"title": "Import Id"
+					},
+					"source_filename": {
+						"type": "string",
+						"title": "Source Filename"
+					},
+					"source_sheet": {
+						"type": "string",
+						"title": "Source Sheet"
+					},
+					"source_row_number": {
+						"type": "integer",
+						"title": "Source Row Number"
+					},
+					"contact_name": {
+						"type": "string",
+						"title": "Contact Name"
+					},
+					"property_key": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Property Key"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"building_name": {
+						"type": "string",
+						"title": "Building Name"
+					},
+					"unit_number": {
+						"type": "string",
+						"title": "Unit Number"
+					},
+					"property_type": {
+						"type": "string",
+						"title": "Property Type"
+					},
+					"party_role": {
+						"type": "string",
+						"title": "Party Role"
+					},
+					"procedure_type": {
+						"type": "string",
+						"title": "Procedure Type"
+					},
+					"event_family": {
+						"type": "string",
+						"title": "Event Family"
+					},
+					"transaction_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Transaction Date"
+					},
+					"transaction_price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Transaction Price Aed"
+					},
+					"observed_ownership_status": {
+						"type": "string",
+						"enum": [
+							"verified_current_owner",
+							"probable_current_owner",
+							"unit_linked_unverified",
+							"former_owner",
+							"unverified_former_owner",
+							"conflicting_claim",
+							"insufficient_property_data",
+							"registry_not_observed",
+							"unmatched"
+						],
+						"title": "Observed Ownership Status"
+					},
+					"current_ownership_status": {
+						"type": "string",
+						"enum": [
+							"verified_current_owner",
+							"probable_current_owner",
+							"unit_linked_unverified",
+							"former_owner",
+							"unverified_former_owner",
+							"conflicting_claim",
+							"insufficient_property_data",
+							"registry_not_observed",
+							"unmatched"
+						],
+						"title": "Current Ownership Status"
+					},
+					"confidence_score": {
+						"type": "integer",
+						"title": "Confidence Score"
+					},
+					"evidence_reason": {
+						"type": "string",
+						"title": "Evidence Reason"
+					},
+					"current_evidence_reason": {
+						"type": "string",
+						"title": "Current Evidence Reason"
+					},
+					"resolver_version": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Resolver Version"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"import_id",
+					"source_filename",
+					"source_sheet",
+					"source_row_number",
+					"contact_name",
+					"area_name",
+					"project_name",
+					"building_name",
+					"unit_number",
+					"property_type",
+					"party_role",
+					"procedure_type",
+					"event_family",
+					"observed_ownership_status",
+					"current_ownership_status",
+					"confidence_score",
+					"evidence_reason",
+					"current_evidence_reason"
+				],
+				"title": "CrmOwnerHistoryEvent"
+			},
+			"CrmOwnerHistoryResponse": {
+				"properties": {
+					"owner_key": {
+						"type": "string",
+						"title": "Owner Key"
+					},
+					"summary": {
+						"$ref": "#/components/schemas/CrmOwnerHistorySummary"
+					},
+					"events": {
+						"items": {
+							"$ref": "#/components/schemas/CrmOwnerHistoryEvent"
+						},
+						"type": "array",
+						"title": "Events"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": ["owner_key", "summary", "events", "total", "limit", "offset"],
+				"title": "CrmOwnerHistoryResponse"
+			},
+			"CrmOwnerHistorySummary": {
+				"properties": {
+					"source_event_count": {
+						"type": "integer",
+						"title": "Source Event Count"
+					},
+					"identifiable_property_count": {
+						"type": "integer",
+						"title": "Identifiable Property Count"
+					},
+					"owner_property_count": {
+						"type": "integer",
+						"title": "Owner Property Count"
+					},
+					"verified_current_count": {
+						"type": "integer",
+						"title": "Verified Current Count"
+					},
+					"probable_current_count": {
+						"type": "integer",
+						"title": "Probable Current Count"
+					},
+					"former_count": {
+						"type": "integer",
+						"title": "Former Count"
+					},
+					"unresolved_count": {
+						"type": "integer",
+						"title": "Unresolved Count"
+					},
+					"invalid_identity_source_count": {
+						"type": "integer",
+						"title": "Invalid Identity Source Count"
+					},
+					"legacy_source_event_count": {
+						"type": "integer",
+						"title": "Legacy Source Event Count"
+					},
+					"resolver_versions": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Resolver Versions"
+					},
+					"unverified_former_count": {
+						"type": "integer",
+						"title": "Unverified Former Count",
+						"default": 0
+					},
+					"checked_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Checked At"
+					},
+					"warehouse_status": {
+						"type": "string",
+						"enum": ["available", "unavailable", "not_requested"],
+						"title": "Warehouse Status",
+						"default": "unavailable"
+					},
+					"assessment_version": {
+						"type": "string",
+						"title": "Assessment Version",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"required": [
+					"source_event_count",
+					"identifiable_property_count",
+					"owner_property_count",
+					"verified_current_count",
+					"probable_current_count",
+					"former_count",
+					"unresolved_count",
+					"invalid_identity_source_count",
+					"legacy_source_event_count",
+					"resolver_versions"
+				],
+				"title": "CrmOwnerHistorySummary",
+				"description": "Source rows and evidence associations, not a legal ownership guarantee."
+			},
+			"CrmOwnerMatchSummary": {
+				"properties": {
+					"version": {
+						"type": "string",
+						"title": "Version"
+					},
+					"rows": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Rows"
+					},
+					"units": {
+						"$ref": "#/components/schemas/CrmOwnerMatchUnits"
+					},
+					"rows_without_unit": {
+						"type": "integer",
+						"title": "Rows Without Unit"
+					}
+				},
+				"type": "object",
+				"required": ["version", "rows", "units", "rows_without_unit"],
+				"title": "CrmOwnerMatchSummary",
+				"description": "What the property-first matcher made of an import's rows."
+			},
+			"CrmOwnerMatchUnits": {
+				"properties": {
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"confirmed": {
+						"type": "integer",
+						"title": "Confirmed"
+					},
+					"review": {
+						"type": "integer",
+						"title": "Review"
+					},
+					"property_only": {
+						"type": "integer",
+						"title": "Property Only"
+					},
+					"not_matched": {
+						"type": "integer",
+						"title": "Not Matched"
+					}
+				},
+				"type": "object",
+				"required": ["total", "confirmed", "review", "property_only", "not_matched"],
+				"title": "CrmOwnerMatchUnits",
+				"description": "Distinct units (building or project label + identifier keys) by their best row's tier."
+			},
 			"CrmOwnerProfile": {
 				"properties": {
+					"phone_numbers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Phone Numbers"
+					},
 					"owner_key": {
 						"type": "string",
 						"title": "Owner Key"
@@ -13357,6 +14838,7 @@
 							"probable_current_owner",
 							"unit_linked_unverified",
 							"former_owner",
+							"unverified_former_owner",
 							"conflicting_claim",
 							"insufficient_property_data",
 							"registry_not_observed",
@@ -13402,6 +14884,50 @@
 						},
 						"type": "array",
 						"title": "Properties"
+					},
+					"history_summary": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmOwnerHistorySummary"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"relationship_role": {
+						"type": "string",
+						"enum": ["unknown", "possible_intermediary", "organization"],
+						"title": "Relationship Role",
+						"default": "unknown"
+					},
+					"role_signals": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Role Signals"
+					},
+					"developer_side_seller": {
+						"type": "boolean",
+						"title": "Developer Side Seller",
+						"default": false
+					},
+					"current_property_count": {
+						"type": "integer",
+						"title": "Current Property Count",
+						"default": 0
+					},
+					"total_property_count": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Total Property Count"
 					}
 				},
 				"type": "object",
@@ -13419,6 +14945,16 @@
 			},
 			"CrmOwnerProperty": {
 				"properties": {
+					"source_reference": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmOwnerSourceReference"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
 					"property_key": {
 						"type": "string",
 						"title": "Property Key"
@@ -13450,6 +14986,7 @@
 							"probable_current_owner",
 							"unit_linked_unverified",
 							"former_owner",
+							"unverified_former_owner",
 							"conflicting_claim",
 							"insufficient_property_data",
 							"registry_not_observed",
@@ -13736,9 +15273,26 @@
 			},
 			"CrmOwnerRegistryResponse": {
 				"properties": {
+					"source_audit": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmSourceAuditSummary"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
 					"scope": {
 						"type": "string",
-						"enum": ["all", "rental_ready", "registry", "prior_owners"],
+						"enum": [
+							"all",
+							"current_owners",
+							"rental_ready",
+							"registry",
+							"prior_owners",
+							"needs_review"
+						],
 						"title": "Scope"
 					},
 					"owners": {
@@ -13798,6 +15352,82 @@
 				},
 				"type": "object",
 				"title": "CrmOwnerRegistrySummary"
+			},
+			"CrmOwnerSourceReference": {
+				"properties": {
+					"transaction_match_status": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["matched", "unmatched", "ambiguous", "excluded"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Transaction Match Status"
+					},
+					"ownership_evidence_basis": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["transaction_supported", "workbook_only"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Ownership Evidence Basis"
+					},
+					"reference_id": {
+						"type": "string",
+						"title": "Reference Id"
+					},
+					"kind": {
+						"type": "string",
+						"title": "Kind"
+					},
+					"source_key": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Source Key"
+					},
+					"building_number": {
+						"type": "string",
+						"title": "Building Number",
+						"default": ""
+					},
+					"land_number": {
+						"type": "string",
+						"title": "Land Number",
+						"default": ""
+					},
+					"dm_sub_number": {
+						"type": "string",
+						"title": "Dm Sub Number",
+						"default": ""
+					},
+					"size_sqm": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Sqm"
+					},
+					"disposition": {
+						"type": "string",
+						"title": "Disposition"
+					}
+				},
+				"type": "object",
+				"required": ["reference_id", "kind", "source_key", "disposition"],
+				"title": "CrmOwnerSourceReference"
 			},
 			"CrmOwnerWorkspaceSummary": {
 				"properties": {
@@ -13868,6 +15498,28 @@
 				"type": "object",
 				"required": ["owner_key", "pipeline_status", "highlight_color", "updated_at"],
 				"title": "CrmOwnerWorkspaceSummary"
+			},
+			"CrmPreviewColumn": {
+				"properties": {
+					"header": {
+						"type": "string",
+						"title": "Header"
+					},
+					"field": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Field"
+					}
+				},
+				"type": "object",
+				"required": ["header"],
+				"title": "CrmPreviewColumn"
 			},
 			"CrmPriceIndex": {
 				"properties": {
@@ -14262,7 +15914,7 @@
 				"type": "object",
 				"required": ["source"],
 				"title": "CrmRenewalOwner",
-				"description": "Owner contact for a renewal lead, only when entered by the agent or import-matched."
+				"description": "A manual owner or one unambiguous, verified imported owner."
 			},
 			"CrmRenewalsResponse": {
 				"properties": {
@@ -14665,7 +16317,7 @@
 					},
 					"mapping_source": {
 						"type": "string",
-						"enum": ["heuristic", "llm", "heuristic_fallback"],
+						"enum": ["heuristic", "llm", "reused", "override", "heuristic_fallback"],
 						"title": "Mapping Source"
 					},
 					"confidence": {
@@ -14699,6 +16351,127 @@
 					"confidence"
 				],
 				"title": "CrmSheetMapping"
+			},
+			"CrmSheetPreview": {
+				"properties": {
+					"sheet_name": {
+						"type": "string",
+						"title": "Sheet Name"
+					},
+					"rows": {
+						"type": "integer",
+						"title": "Rows"
+					},
+					"columns": {
+						"items": {
+							"$ref": "#/components/schemas/CrmPreviewColumn"
+						},
+						"type": "array",
+						"title": "Columns"
+					},
+					"mapped_at_import": {
+						"type": "boolean",
+						"title": "Mapped At Import",
+						"default": false
+					}
+				},
+				"type": "object",
+				"required": ["sheet_name", "rows"],
+				"title": "CrmSheetPreview"
+			},
+			"CrmSourceAuditSummary": {
+				"properties": {
+					"mode": {
+						"type": "string",
+						"enum": ["source_only", "source_transaction_matched"],
+						"title": "Mode",
+						"default": "source_only"
+					},
+					"matched_reference_count": {
+						"type": "integer",
+						"title": "Matched Reference Count",
+						"default": 0
+					},
+					"matched_registry_property_count": {
+						"type": "integer",
+						"title": "Matched Registry Property Count",
+						"default": 0
+					},
+					"unmatched_reference_count": {
+						"type": "integer",
+						"title": "Unmatched Reference Count",
+						"default": 0
+					},
+					"ambiguous_reference_count": {
+						"type": "integer",
+						"title": "Ambiguous Reference Count",
+						"default": 0
+					},
+					"excluded_match_reference_count": {
+						"type": "integer",
+						"title": "Excluded Match Reference Count",
+						"default": 0
+					},
+					"current_owner_association_count": {
+						"type": "integer",
+						"title": "Current Owner Association Count",
+						"default": 0
+					},
+					"former_owner_association_count": {
+						"type": "integer",
+						"title": "Former Owner Association Count",
+						"default": 0
+					},
+					"import_count": {
+						"type": "integer",
+						"title": "Import Count",
+						"default": 0
+					},
+					"reference_count": {
+						"type": "integer",
+						"title": "Reference Count",
+						"default": 0
+					},
+					"owner_candidate_reference_count": {
+						"type": "integer",
+						"title": "Owner Candidate Reference Count",
+						"default": 0
+					},
+					"bank_reference_count": {
+						"type": "integer",
+						"title": "Bank Reference Count",
+						"default": 0
+					},
+					"excluded_nonownership_reference_count": {
+						"type": "integer",
+						"title": "Excluded Nonownership Reference Count",
+						"default": 0
+					},
+					"review_reference_count": {
+						"type": "integer",
+						"title": "Review Reference Count",
+						"default": 0
+					},
+					"excluded_scope_reference_count": {
+						"type": "integer",
+						"title": "Excluded Scope Reference Count",
+						"default": 0
+					},
+					"source_row_count": {
+						"type": "integer",
+						"title": "Source Row Count",
+						"default": 0
+					},
+					"disposition_counts": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Disposition Counts"
+					}
+				},
+				"type": "object",
+				"title": "CrmSourceAuditSummary"
 			},
 			"CrmSourcePropertyCounts": {
 				"properties": {
@@ -15555,6 +17328,19 @@
 				],
 				"title": "DDAPlotFeature",
 				"description": "DDA GIS plot polygon for map overlay."
+			},
+			"DeleteReminder": {
+				"properties": {
+					"reminder_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Reminder Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["reminder_id"],
+				"title": "DeleteReminder"
 			},
 			"DeliveryGroupRow": {
 				"properties": {
@@ -19069,6 +20855,19 @@
 				],
 				"title": "LandSaleEvidence"
 			},
+			"LeadTarget": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["lead_id"],
+				"title": "LeadTarget"
+			},
 			"ListingAnalyticsResponse": {
 				"properties": {
 					"total": {
@@ -19449,6 +21248,18 @@
 							}
 						],
 						"title": "Broker Logo Url"
+					},
+					"captured_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Captured At"
 					},
 					"listed_date": {
 						"anyOf": [
@@ -19868,6 +21679,18 @@
 						],
 						"title": "Broker Logo Url"
 					},
+					"captured_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Captured At"
+					},
 					"listed_date": {
 						"anyOf": [
 							{
@@ -20198,6 +22021,39 @@
 				"type": "object",
 				"required": ["listing_id", "listing_mode", "asset_class", "title"],
 				"title": "ListingDetailResponse"
+			},
+			"ListingDraftResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"description": {
+						"type": "string",
+						"title": "Description"
+					},
+					"price_aed": {
+						"type": "integer",
+						"title": "Price Aed"
+					},
+					"location": {
+						"type": "string",
+						"title": "Location"
+					},
+					"publication": {
+						"type": "string",
+						"const": "draft_only",
+						"title": "Publication",
+						"default": "draft_only"
+					}
+				},
+				"type": "object",
+				"required": ["id", "title", "description", "price_aed", "location"],
+				"title": "ListingDraftResponse"
 			},
 			"ListingFiltersResponse": {
 				"properties": {
@@ -24982,6 +26838,19 @@
 				"required": ["property_type", "count", "avg_price", "pct_of_total"],
 				"title": "PropertyTypeBreakdown"
 			},
+			"PublishListing": {
+				"properties": {
+					"listing_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Listing Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["listing_id"],
+				"title": "PublishListing"
+			},
 			"RadarBuildingPin": {
 				"properties": {
 					"location_id": {
@@ -25129,6 +26998,37 @@
 				"type": "object",
 				"required": ["reg_type", "count", "avg_price", "pct_of_total"],
 				"title": "RegTypeBreakdown"
+			},
+			"ReminderResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"lead_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Id"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"due_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Due At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "lead_id", "title", "due_at"],
+				"title": "ReminderResponse"
 			},
 			"RentalAnalyticsResponse": {
 				"properties": {
@@ -25755,10 +27655,71 @@
 				"title": "RoomAnalytics",
 				"description": "Combined sales + rental + yield metrics per bedroom count"
 			},
+			"ScheduleViewing": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"starts_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Starts At"
+					},
+					"ends_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Ends At"
+					},
+					"location": {
+						"type": "string",
+						"maxLength": 500,
+						"minLength": 1,
+						"title": "Location"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["lead_id", "title", "starts_at", "ends_at", "location"],
+				"title": "ScheduleViewing"
+			},
+			"SendMessage": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"channel": {
+						"type": "string",
+						"enum": ["email", "sms", "whatsapp"],
+						"title": "Channel"
+					},
+					"body": {
+						"type": "string",
+						"maxLength": 4000,
+						"minLength": 1,
+						"title": "Body"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["lead_id", "channel", "body"],
+				"title": "SendMessage"
+			},
 			"SendMessageRequest": {
 				"properties": {
 					"message": {
 						"type": "string",
+						"maxLength": 8000,
+						"minLength": 1,
 						"title": "Message"
 					}
 				},
@@ -27407,6 +29368,119 @@
 				"title": "UpdateConversationRequest",
 				"description": "Request model for updating a conversation"
 			},
+			"UpdateLead": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"status": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"new",
+									"needs_review",
+									"assigned",
+									"attempted",
+									"contacted",
+									"qualified",
+									"viewing",
+									"valuation",
+									"signed",
+									"active",
+									"won",
+									"nurture",
+									"closed_lost",
+									"disqualified"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Status"
+					},
+					"intent": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["unknown", "buy", "rent", "sell", "let"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Intent"
+					},
+					"next_follow_up": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Next Follow Up"
+					},
+					"lost_reason": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 500
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lost Reason"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["lead_id"],
+				"title": "UpdateLead"
+			},
+			"UpdateListingDraft": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"description": {
+						"type": "string",
+						"maxLength": 8000,
+						"minLength": 1,
+						"title": "Description"
+					},
+					"price_aed": {
+						"type": "integer",
+						"maximum": 100000000000.0,
+						"exclusiveMinimum": 0.0,
+						"title": "Price Aed"
+					},
+					"location": {
+						"type": "string",
+						"maxLength": 500,
+						"minLength": 1,
+						"title": "Location"
+					},
+					"listing_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Listing Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["title", "description", "price_aed", "location", "listing_id"],
+				"title": "UpdateListingDraft"
+			},
 			"UpdateOrgRequest": {
 				"properties": {
 					"max_users": {
@@ -27461,6 +29535,30 @@
 				"type": "object",
 				"required": ["success", "first_name", "last_name"],
 				"title": "UpdateProfileResponse"
+			},
+			"UpdateReminder": {
+				"properties": {
+					"reminder_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Reminder Id"
+					},
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"due_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Due At"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["reminder_id", "title", "due_at"],
+				"title": "UpdateReminder"
 			},
 			"UpdateSubscriptionRequest": {
 				"properties": {
@@ -27757,6 +29855,49 @@
 				"type": "object",
 				"required": ["loc", "msg", "type"],
 				"title": "ValidationError"
+			},
+			"ViewingResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"lead_id": {
+						"type": "integer",
+						"title": "Lead Id"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"location": {
+						"type": "string",
+						"title": "Location"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"starts_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Starts At"
+					},
+					"ends_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Ends At"
+					},
+					"delivery": {
+						"type": "string",
+						"const": "internal_only",
+						"title": "Delivery",
+						"default": "internal_only"
+					}
+				},
+				"type": "object",
+				"required": ["id", "lead_id", "title", "location", "status", "starts_at", "ends_at"],
+				"title": "ViewingResponse"
 			},
 			"WebhookStatusResponse": {
 				"properties": {

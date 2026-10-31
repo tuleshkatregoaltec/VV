@@ -51,6 +51,8 @@ export const ui = $state({
 	renewalProject: '',
 	renewalBuilding: '',
 	ownerTab: 'all' as OwnerTab,
+	ownerOwnership: 'current' as 'current' | 'former',
+	ownerTransactionMatch: '' as '' | 'matched' | 'unmatched' | 'ambiguous' | 'excluded',
 	/** Owners search: owner, unit, building (v2). */
 	ownerQ: '',
 	ownerSource: '' as OwnerSource | '',
@@ -60,8 +62,8 @@ export const ui = $state({
 	ownerBeds: '',
 	ownerPtype: '' as OwnerPropertyKind | '',
 	ownerUnits: '',
-	/** Owners per page on the Owners table: 50, 100, 200 or 500. */
-	ownerPageSize: 50,
+	/** Owners per page on the Owners table: 10, 50, 100, 200 or 500. */
+	ownerPageSize: 10,
 	/** YYYY-MM-DD; empty = today */
 	weekDay: '',
 	/** YYYY-MM; empty = this month */
@@ -88,6 +90,7 @@ export function clearLeadFilters() {
 }
 
 export function clearOwnerFilters() {
+	ui.ownerTransactionMatch = ''
 	ui.ownerQ = ''
 	ui.ownerSource = ''
 	ui.ownerArea = ''

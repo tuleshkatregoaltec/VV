@@ -133,7 +133,7 @@ def test_embedded_property_identifiers_are_recovered_from_building_field():
 
 
 @pytest.mark.asyncio
-async def test_unique_transaction_signature_recovers_canonical_property(monkeypatch):
+async def test_unique_transaction_signature_cannot_invent_a_missing_source_unit(monkeypatch):
     contact = _contact(
         area_name="",
         project_name="Sidra 2",
@@ -164,13 +164,9 @@ async def test_unique_transaction_signature_recovers_canonical_property(monkeypa
 
     result = await _recover_property_identity_from_transaction([contact])
 
-    assert result["unique"] == 1
-    assert contact.area_name == "Dubai Hills Estate"
-    assert contact.building_name == "Sidra 2"
-    assert contact.unit_number == "DE-SIDRA2-V-117"
-    assert (
-        contact.evidence["property_identity_resolution"]["method"] == "unique_transaction_signature"
-    )
+    assert result["resolved"] == 0
+    assert contact.unit_number == "NULL"
+    assert "property_identity_resolution" not in contact.evidence
 
 
 @pytest.mark.asyncio
@@ -262,7 +258,7 @@ async def test_transaction_collision_requires_unique_location_context(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_near_transaction_date_recovers_unit_with_project_context(monkeypatch):
+async def test_near_date_and_project_cannot_replace_an_original_unit_identifier(monkeypatch):
     contact = _contact(
         area_name="",
         project_name="Sidra 2",
@@ -293,12 +289,9 @@ async def test_near_transaction_date_recovers_unit_with_project_context(monkeypa
 
     result = await _recover_property_identity_from_near_transaction([contact])
 
-    assert result["resolved"] == 1
-    assert contact.building_name == "Sidra 2"
-    assert contact.unit_number == "DESIDRA2-V-57"
-    resolution = contact.evidence["property_identity_resolution"]
-    assert resolution["method"] == "near_transaction_signature_with_location"
-    assert resolution["date_delta_days"] == 1
+    assert result["resolved"] == 0
+    assert contact.unit_number == "NULL"
+    assert "property_identity_resolution" not in contact.evidence
 
 
 @pytest.mark.asyncio

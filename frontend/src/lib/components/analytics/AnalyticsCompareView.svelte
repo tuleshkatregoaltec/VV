@@ -542,7 +542,7 @@ onMount(() => {
 						Shared price trend
 					</p>
 					<h2 class="mt-1 text-lg font-semibold text-fg-1">One market signal, two selections</h2>
-                    <p class="mt-1 text-xs text-fg-4">DXBI monthly observations · 365-day lookback</p>
+                    <p class="mt-1 text-xs text-fg-4">Monthly observations · 365-day lookback</p>
 				</div>
 				<div class="ui-segmented self-start md:self-auto">
 					<button
@@ -702,7 +702,7 @@ onMount(() => {
 		</div>
 
 		<p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
-            DXBI transactions · Residential properties · All recorded dates
+            Transactions · Residential properties · All recorded dates
             {#if isMasterSelection(selection) && developmentCount != null}
                 · {fmtNumber(developmentCount)} project/building scopes
             {/if}

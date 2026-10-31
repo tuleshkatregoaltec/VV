@@ -11,6 +11,8 @@ from datetime import date, datetime
 
 import pytest
 
+from app.analytics.assistant import get_comparable_evidence
+from app.analytics.assistant_models import ComparableRequest
 from app.analytics.market_metrics import get_market_metrics
 from app.analytics.models import MarketMetricsRequest
 
@@ -186,6 +188,18 @@ async def test_last_month_average_sale_price_in_jvc(served):
     assert "Small sample: 3 eligible records." in result.limitations
 
 
+async def test_chat_coverage_counts_only_eligible_stored_records(served):
+    from app.chat.tools import get_database_coverage
+
+    result = await get_database_coverage(None, "sales")
+    # Three September JVC sales, one Business Bay sale and two outside September.
+    # Unserved duplicates, mortgages, gifts and zero-price rows are excluded.
+    assert result["eligible_record_count"] == 6
+    assert (result["data_from"], result["data_to"]) == ("2026-08-31", "2026-10-01")
+    assert "release_id" not in result
+    assert result["load_evidence"]["ranges"] == verified(("2026-08-31", "2026-10-01"))
+
+
 async def test_market_wide_median_of_an_even_count_averages_the_middle_pair(served):
     result = await get_market_metrics(request(dataset="sales", metrics=["median_aed", "mean_aed"]))
     # September sales: 1m, 1m, 4m (JVC) and 7m (Business Bay).
@@ -331,7 +345,9 @@ async def test_api_and_chat_tool_return_the_database_result(served, client):
         assert result["total"]["values"] == expected
         assert (result["period"]["start"], result["period"]["end"]) == ("2026-09-01", "2026-09-30")
         assert result["coverage"]["status"] == "complete"
-    assert api == chat
+    from app.chat.security import safe_data
+
+    assert safe_data(api) == chat
 
 
 async def test_registered_chat_agent_executes_the_tool_against_the_database(served, client):
@@ -345,7 +361,7 @@ async def test_registered_chat_agent_executes_the_tool_against_the_database(serv
     from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
     from pydantic_ai.models.function import FunctionModel
 
-    from app.chat.agent import agent
+    from app.chat.workflows import market_agent as agent
 
     arguments = {
         "dataset": "sales",
@@ -374,7 +390,9 @@ async def test_registered_chat_agent_executes_the_tool_against_the_database(serv
         await agent.run("What was the average sale price in JVC last month?")
 
     api = (await client.post("/api/v1/analytics/market-metrics", json=arguments)).json()
-    assert returned and json.loads(json.dumps(returned[0])) == api
+    from app.chat.security import safe_data
+
+    assert returned and json.loads(json.dumps(returned[0])) == safe_data(api)
     assert api["total"]["count"] == 3
     assert api["total"]["values"] == {"mean_aed": 2_000_000, "median_aed": 1_000_000}
 
@@ -525,3 +543,55 @@ async def test_an_expired_pin_fails_closed_instead_of_reading_a_dropped_version(
                 await get_market_metrics(request(dataset="sales"))
         finally:
             releases._pinned.reset(token)
+
+
+async def test_comparable_filters_exclude_other_dates_and_bound_sample_without_losing_count(served):
+    result = await get_comparable_evidence(
+        ComparableRequest(
+            dataset="sales",
+            location="JVC",
+            building="Tower A",
+            bedrooms="1",
+            period={"type": "previous_month"},
+            reference_date=date(2026, 10, 3),
+            target_size_sqft=1076.39,
+            size_tolerance=0.01,
+            limit=1,
+        )
+    )
+    assert result["matching_count"] == 2 and result["sample_count"] == 1
+    assert result["median_aed"] == 2_500_000
+    assert result["middle_50_percent_range_aed"] == [1_750_000, 3_250_000]
+    assert result["records"][0]["amount_aed"] == 4_000_000
+    assert result["records"][0]["event_date"] == date(2026, 9, 30)
+    assert (
+        result["indicative_value_aed"] is None
+    )  # insufficient evidence must not fabricate appraisal
+    assert result["coverage"]["status"] == "complete"
+    assert (
+        not {"row_key", "transaction_id", "unit_number", "contact_name"}
+        & result["records"][0].keys()
+    )
+
+
+async def test_comparable_location_injection_is_literal_and_date_window_is_bounded(served):
+    request = ComparableRequest(
+        dataset="sales",
+        location="JVC",
+        building="Tower A' OR 1=1 --",
+        bedrooms="1",
+        period={"type": "previous_month"},
+        reference_date=date(2026, 10, 3),
+    )
+    result = await get_comparable_evidence(request)
+    assert result["matching_count"] == 0 and result["records"] == []
+    with pytest.raises(ValueError, match="two years"):
+        await get_comparable_evidence(
+            request.model_copy(
+                update={
+                    "period": request.period.model_copy(
+                        update={"type": "rolling_days", "days": 1000}
+                    )
+                }
+            )
+        )

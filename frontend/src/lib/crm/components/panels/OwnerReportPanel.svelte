@@ -25,7 +25,7 @@ function send() {
 				<div class="pf"><span>{row.unit}</span><span>{row.line}</span></div>
 			{/each}
 			<div class="pf"><span>Next event</span><span>{r.next_event}</span></div>
-			<div class="foot">Area figures: DLD and Ejari, last 12 months (sample).</div>
+			<div class="foot">Area figures: sales and rental records, last 12 months (sample).</div>
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn" onclick={send}>Send PDF</button>

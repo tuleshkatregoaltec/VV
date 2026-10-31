@@ -53,9 +53,11 @@ def pipeline(monkeypatch):
         imports.import_repository, "find_import_by_digest", AsyncMock(return_value=None)
     )
     monkeypatch.setattr(imports, "_llm_mapping", same)
+    monkeypatch.setattr(
+        imports.import_repository, "latest_mapping_for_signature", AsyncMock(return_value=None)
+    )
     monkeypatch.setattr(imports, "prepare_file_context", AsyncMock())
     monkeypatch.setattr(imports, "recover_from_file_context", AsyncMock())
-    monkeypatch.setattr(imports, "resolve_cadastral_plots", AsyncMock())
     monkeypatch.setattr(imports, "_recover_property_identity_from_transaction", AsyncMock())
     monkeypatch.setattr(imports, "_recover_property_identity_from_near_transaction", AsyncMock())
     monkeypatch.setattr(imports, "_sales_evidence", AsyncMock(return_value={}))

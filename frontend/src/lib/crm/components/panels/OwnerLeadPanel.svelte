@@ -69,7 +69,7 @@ async function submit(e: SubmitEvent) {
 				<div class="fld">
 					<label for="ol-unit">Unit</label>
 					<select id="ol-unit" bind:value={unitKey}>
-						{#each o.unit_rows as u (u.key)}
+						{#each o.unit_rows as u (u.id)}
 							<option value={u.key}>{u.building} #{u.number} · {u.status_chip.label}</option>
 						{/each}
 					</select>

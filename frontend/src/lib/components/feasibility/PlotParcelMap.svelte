@@ -90,7 +90,7 @@ function selectPlot(plot: DdaPlotFeature) {
 			viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
 			class="block h-full min-h-[240px] w-full"
 			role="img"
-			aria-label="DDA parcel map"
+			aria-label="Plot parcel map"
 		>
 			<defs>
 				<pattern id="parcel-map-grid" width="40" height="40" patternUnits="userSpaceOnUse">

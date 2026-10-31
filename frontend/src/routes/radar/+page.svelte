@@ -96,7 +96,7 @@ let renderedDDAFeatures = $state<DdaMapFeature[]>([])
 let renderedDDAMode = $state<DdaLayerMode>('outlines')
 
 const heatmapLayerOptions: Array<{ value: ZoneHeatmapLayer; label: string; caption: string }> = [
-	{ value: 'transaction_activity', label: 'Activity', caption: 'DLD sales and Ejari leases' },
+	{ value: 'transaction_activity', label: 'Activity', caption: 'Sales and rental activity' },
 	{ value: 'avg_price_sqft', label: 'Price / sq ft', caption: 'Sales rate' },
 	{ value: 'rental_yield', label: 'Yield', caption: 'Gross rent yield' }
 ]
@@ -107,7 +107,7 @@ const activityPeriodOptions: Array<{ value: RadarPeriodDays; label: string }> = 
 	{ value: 30, label: '30d' }
 ]
 const projectPinModeOptions: Array<{ value: ProjectPinMode; label: string; caption: string }> = [
-	{ value: 'status', label: 'Status', caption: 'Official DLD status colours' },
+	{ value: 'status', label: 'Status', caption: 'Project status colours' },
 	{ value: 'risk', label: 'Risk', caption: 'Internal risk overlay' },
 	{ value: 'developer', label: 'Developer', caption: 'Portfolio geography' }
 ]
@@ -283,14 +283,14 @@ const projectPinHint = $derived.by(() => {
 })
 const buildingPinHint = $derived.by(() => {
 	if (!showBuildingPins) return 'Tower pins off'
-	if (mapZoom < RADAR_BUILDING_MIN_ZOOM) return 'Zoom in for PF towers'
+	if (mapZoom < RADAR_BUILDING_MIN_ZOOM) return 'Zoom in for towers'
 	if (radarBuildingPinsQuery.isFetching && radarBuildingPins.length === 0) {
 		return 'Loading tower pins'
 	}
 	if (radarBuildingPins.length > 0) {
-		return `${radarBuildingPins.length.toLocaleString()} visible PF towers`
+		return `${radarBuildingPins.length.toLocaleString()} visible towers`
 	}
-	return 'No PF towers in this viewport'
+	return 'No towers in this viewport'
 })
 
 const searchResults = $derived.by(() => {
@@ -720,7 +720,7 @@ $effect(() => {
 									Radar
 								</div>
 								<h1 class="truncate text-sm font-semibold text-slate-950">
-									DLD & Ejari market map
+									Dubai market map
 								</h1>
 								{#if stats}
 									<p class="truncate text-[10px] text-slate-500">
@@ -796,8 +796,8 @@ $effect(() => {
 									type="button"
 									class="radar-layer-button {showBuildingPins ? 'is-active' : ''}"
 									aria-pressed={showBuildingPins}
-									aria-label="PF towers"
-									title="Property Finder tower coordinates"
+									aria-label="towers"
+									title="Building locations"
 									onclick={() => (showBuildingPins = !showBuildingPins)}
 								>
 									<MapPinned size={16} />
@@ -809,7 +809,7 @@ $effect(() => {
 										class="radar-layer-button {showDDAPlots ? 'is-planning' : ''}"
 										aria-pressed={showDDAPlots}
 										aria-label="Planning"
-										title="DDA planning"
+										title="Planning layer"
 										onclick={togglePlanningLayer}
 									>
 									<Layers3 size={16} />
@@ -1095,7 +1095,7 @@ $effect(() => {
 								<div class="border-t border-slate-200 pt-3">
 									<div class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
 										<BadgeCheck size={14} />
-										DLD project record
+										Project record
 									</div>
 									<div class="grid grid-cols-3 gap-2 text-xs">
 										<div>
@@ -1156,7 +1156,7 @@ $effect(() => {
 													</p>
 											</div>
 											<div>
-												<p class="text-slate-500">DDA plots</p>
+												<p class="text-slate-500">Planning plots</p>
 												<p class="font-semibold text-slate-950">
 													{formatCompact(selectedArea.dda_plot_count)}
 												</p>
@@ -1215,7 +1215,7 @@ $effect(() => {
 										</p>
 									</div>
 									<div>
-										<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Ejari leases</p>
+										<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Rental contracts</p>
 										<p class="mt-1 text-base font-semibold tabular-nums text-fg-1">
 											{(selectedArea.rental_contract_count ?? 0).toLocaleString()}
 										</p>

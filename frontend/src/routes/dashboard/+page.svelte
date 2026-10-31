@@ -93,7 +93,7 @@ const SUGGESTIONS = [
 					{username ? `${username}'s workspace` : 'Market overview'}
 				</h1>
 				<p class="mt-1.5 text-sm text-fg-3">
-					DLD market data · ask anything below or browse the latest transactions.
+					Dubai market insights · ask anything below or browse the latest transactions.
 				</p>
 			</div>
 

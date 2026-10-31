@@ -116,7 +116,8 @@ async def delete_conversation_endpoint(
 async def get_conversation_messages_endpoint(
     conversation_id: int,
     context: AuthContext = Depends(require_active_subscription),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=100),
+    before_id: int | None = Query(default=None, ge=1),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get messages for a conversation"""
@@ -133,6 +134,7 @@ async def get_conversation_messages_endpoint(
         user_id=context.user.id,
         organization_id=context.organization.id,
         limit=limit,
+        before_id=before_id,
     )
     return [MessageResponse.model_validate(m) for m in messages]
 
@@ -161,7 +163,7 @@ async def send_message(
             ):
                 yield chunk
         except Exception as e:
-            logger.exception(f"Error in send_message endpoint: {e}")
+            logger.error("Chat endpoint failed (%s)", type(e).__name__)
             yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
 
     return StreamingResponse(

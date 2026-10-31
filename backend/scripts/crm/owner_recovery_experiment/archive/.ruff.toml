@@ -1,0 +1,2 @@
+# Verbatim historical source snapshots: lint maintained wrappers, not this archive.
+exclude = ["**"]

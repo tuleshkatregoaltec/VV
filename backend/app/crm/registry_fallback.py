@@ -9,9 +9,11 @@ from app.crm.identity import (
     _location_key,
     _location_tokens,
     _normalize_unit,
+    _registry_type_compatible,
     _transaction_location_score,
     _usable_project_name,
 )
+from app.market.reference import unit_lookup_key
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,11 @@ def _registry_identity(row: dict[str, Any]) -> PropertyIdentity:
     building_key = str(row.get("building_key") or "") or _location_key(
         str(row.get("building_name") or row.get("project_name") or "")
     )
-    return (str(row.get("area_key") or ""), building_key, str(row.get("unit_key") or ""))
+    return (
+        str(row.get("area_key") or ""),
+        building_key,
+        unit_lookup_key(str(row.get("unit_number") or row.get("unit_key") or "")),
+    )
 
 
 def _resolved_property_key(row: dict[str, Any]) -> str:
@@ -68,7 +74,13 @@ async def _resolve_by_identified_sale(
         for row in await owner_queries.fetch_sales_by_keys({"sale_keys": chunk}):
             sale_rows[str(row["sale_key"])] = row
 
-    unit_keys = sorted({str(row.get("unit_key") or "") for row in sale_rows.values()} - {""})
+    unit_keys = sorted(
+        {
+            unit_lookup_key(str(row.get("unit_number") or row.get("unit_key") or ""))
+            for row in sale_rows.values()
+        }
+        - {""}
+    )
     history: dict[PropertyIdentity, list[dict[str, Any]]] = {}
     for chunk in _chunks(unit_keys):
         for row in await owner_queries.fetch_unit_sales({"unit_keys": chunk}):
@@ -81,8 +93,16 @@ async def _resolve_by_identified_sale(
         if not rows:
             continue
         for candidate in matched_candidates:
+            compatible_rows = [row for row in rows if _registry_type_compatible(candidate, row)]
+            if not compatible_rows:
+                continue
             score = int(candidate.evidence["property_identity_resolution"].get("score") or 100)
-            resolutions[id(candidate)] = ("identified_sale_registry_unit", score, rows, 1)
+            resolutions[id(candidate)] = (
+                "identified_sale_registry_unit",
+                score,
+                compatible_rows,
+                1,
+            )
     return resolutions
 
 
@@ -116,16 +136,16 @@ async def _resolve_by_source_unit(
     by_candidate = {
         id(candidate): key
         for candidate in candidates
-        if (key := str(candidate.evidence.get("source_unit_number") or "").lower())
+        if (key := unit_lookup_key(str(candidate.evidence.get("source_unit_number") or "")))
     }
     if not by_candidate:
         return {}
     properties: dict[str, dict[PropertyIdentity, list[dict[str, Any]]]] = {}
     for chunk in _chunks(sorted(set(by_candidate.values()))):
         for row in await owner_queries.fetch_unit_sales({"unit_keys": chunk}):
-            properties.setdefault(str(row["unit_key"]), {}).setdefault(
-                _registry_identity(row), []
-            ).append(row)
+            properties.setdefault(
+                unit_lookup_key(str(row.get("unit_number") or row["unit_key"])), {}
+            ).setdefault(_registry_identity(row), []).append(row)
 
     resolutions: dict[int, tuple[str, int, list[dict[str, Any]], int]] = {}
     for candidate in candidates:
@@ -134,9 +154,15 @@ async def _resolve_by_source_unit(
             continue
         source_tokens = _source_location_tokens(candidate)
         fitting = [
-            rows
+            compatible_rows
             for rows in grouped.values()
-            if source_tokens and source_tokens <= _row_tokens(rows[0])
+            if (
+                compatible_rows := [
+                    row for row in rows if _registry_type_compatible(candidate, row)
+                ]
+            )
+            and source_tokens
+            and source_tokens <= _row_tokens(compatible_rows[0])
         ]
         if not fitting:
             continue
@@ -165,7 +191,7 @@ async def _resolve_by_short_unit(
     Uses the same location score and the same 55-point / 12-point acceptance rule as the
     primary unit + location step; a row it cannot separate stays unresolved.
     """
-    unit_keys = sorted({candidate.unit_number.lower() for candidate in candidates})
+    unit_keys = sorted({unit_lookup_key(candidate.unit_number) for candidate in candidates})
     properties: dict[str, dict[PropertyIdentity, list[dict[str, Any]]]] = {}
     for chunk in _chunks(unit_keys):
         for row in await owner_queries.fetch_unit_sales_by_short_key({"unit_keys": chunk}):
@@ -174,14 +200,24 @@ async def _resolve_by_short_unit(
 
     resolutions: dict[int, tuple[str, int, list[dict[str, Any]], int]] = {}
     for candidate in candidates:
-        grouped = properties.get(candidate.unit_number.lower())
+        grouped = properties.get(unit_lookup_key(candidate.unit_number))
         if not grouped:
             continue
         ranked = sorted(
-            ((_transaction_location_score(candidate, rows[0]), rows) for rows in grouped.values()),
+            (
+                (_transaction_location_score(candidate, compatible_rows[0]), compatible_rows)
+                for rows in grouped.values()
+                if (
+                    compatible_rows := [
+                        row for row in rows if _registry_type_compatible(candidate, row)
+                    ]
+                )
+            ),
             key=lambda item: item[0],
             reverse=True,
         )
+        if not ranked:
+            continue
         best_score, rows = ranked[0]
         runner_up = ranked[1][0] if len(ranked) > 1 else 0
         if best_score < 55 or (len(ranked) > 1 and best_score - runner_up < 12):
@@ -208,7 +244,10 @@ async def _apply_registry_unit_fallbacks(
     pending = [
         candidate
         for candidate in candidates
-        if candidate.unit_number and candidate.property_key and candidate.property_key not in sales
+        if candidate.unit_number
+        and candidate.property_key
+        and candidate.property_key not in sales
+        and "original_identifiers" not in candidate.evidence
     ]
     if not pending:
         return {"pending": 0, "resolved": 0, "collisions": 0}
@@ -268,6 +307,10 @@ async def _apply_registry_unit_fallbacks(
             canonical.get("building_name") or canonical.get("project_name") or ""
         )
         candidate.unit_number = _normalize_unit(canonical.get("unit_number"))
+        candidate.evidence["registry_property_scope"] = {
+            field: str(canonical.get(field) or "")
+            for field in ("area_name", "project_name", "building_name", "unit_number")
+        }
         candidate.evidence.pop("sales_lookup", None)
         candidate.evidence["registry_unit_fallback"] = {
             "method": method,

@@ -12,6 +12,7 @@ import { ApiError, client } from '$lib/api/client'
 import type {
 	AuthMeResponse,
 	CrmAreaPreferencesResponse,
+	CrmContactImportPreview,
 	CrmContactImportResponse,
 	CrmContactListDetail,
 	CrmDroppedRowsResponse,
@@ -27,7 +28,6 @@ import type {
 	CrmRenewalLeadsResponse,
 	CrmRenewalOwner,
 	CrmRenewalsResponse,
-	CrmWorkspaceResponse,
 	InboundEnquiryListResponse,
 	InboundEnquiryResponse,
 	InboundEnquiryUpdate,
@@ -44,6 +44,7 @@ import {
 	importCounts,
 	isFlagged,
 	mappingChecks,
+	ownerMatchView,
 	STATUS_INFO
 } from '../ownerImportReport'
 import type {
@@ -80,6 +81,9 @@ import type {
 	OwnerDroppedRows,
 	OwnerDroppedRowsParams,
 	OwnerFilePreview,
+	OwnerHistory,
+	OwnerHistoryParams,
+	OwnerHistorySummary,
 	OwnerImport,
 	OwnerImportDetail,
 	OwnerImportResult,
@@ -745,19 +749,25 @@ export async function shortlistMatch(
 
 /* ── owners ── */
 
-const OWNERSHIP: Record<CrmOwnerProperty['ownership_status'], Chip> = {
-	verified_current_owner: { tone: 'green', label: 'Verified owner' },
-	probable_current_owner: { tone: 'green', label: 'Probable owner' },
-	unit_linked_unverified: { tone: 'amber', label: 'Not verified' },
-	former_owner: { tone: 'neutral', label: 'Sold' },
-	conflicting_claim: { tone: 'red', label: 'Conflicting claim' },
-	insufficient_property_data: { tone: 'neutral', label: 'Not enough data' },
-	registry_not_observed: { tone: 'neutral', label: 'Not in registry' },
-	unmatched: { tone: 'neutral', label: 'Unmatched' }
-}
+const OWNERSHIP: Record<CrmOwnerProperty['ownership_status'], Chip> = STATUS_INFO
 
-const unitLabel = (p: CrmOwnerProperty) =>
-	[p.building_name || p.project_name, p.unit_number].filter(Boolean).join(' #')
+const unitLabel = (p: CrmOwnerProperty) => {
+	const location = p.building_name || p.project_name
+	if (p.unit_number) return [location, p.unit_number].filter(Boolean).join(' #')
+	const ref = p.source_reference
+	return (
+		[
+			location,
+			ref?.land_number && `Land ${ref.land_number}`,
+			ref?.building_number && `Building ${ref.building_number}`,
+			ref?.dm_sub_number && `DM sub ${ref.dm_sub_number}`
+		]
+			.filter(Boolean)
+			.join(' · ') ||
+		p.property_type ||
+		'Property reference'
+	)
+}
 const bedsOf = (p: CrmOwnerProperty) => {
 	const b = p.registry_bedrooms?.trim().toLowerCase()
 	if (!b) return null
@@ -768,15 +778,40 @@ const bedsOf = (p: CrmOwnerProperty) => {
 const soldLater = (p: CrmOwnerProfile) =>
 	(p.properties ?? []).some((x) => x.later_sale_date || x.ownership_status === 'former_owner')
 
+const unverifiedOwnerAssociation = (p: CrmOwnerProperty) => {
+	const ref = p.source_reference
+	return Boolean(
+		ref &&
+			(['unmatched', 'ambiguous'].includes(ref.transaction_match_status ?? '') ||
+				(p.ownership_status === 'former_owner' && ref.ownership_evidence_basis === 'workbook_only'))
+	)
+}
+const ownerPropertyChip = (p: CrmOwnerProperty): Chip =>
+	unverifiedOwnerAssociation(p)
+		? {
+				label:
+					p.ownership_status === 'former_owner'
+						? 'Unverified former owner'
+						: 'Unverified current candidate',
+				tone: 'amber'
+			}
+		: OWNERSHIP[p.ownership_status]
+
 function ownerRow(p: CrmOwnerProfile, ws: CrmOwnerWorkspaceSummary | undefined): OwnerRow {
+	const properties = p.properties ?? []
 	const end = p.next_lease_end ?? null
 	const days = end ? daysFromToday(end) : null
 	return {
 		id: p.owner_key,
+		relationship_role: p.relationship_role ?? 'unknown',
+		role_signals: p.role_signals ?? [],
 		name: p.contact_name,
 		sources: ['agency_import'],
 		source_label: 'Agency file',
 		units: (p.properties ?? []).map(unitLabel),
+		units_total: p.total_property_count ?? p.property_count,
+		units_current: p.current_property_count ?? 0,
+		developer_side_seller: p.developer_side_seller ?? false,
 		next_event: end ? 'Lease ends' : 'No event on record',
 		next_event_date: end ?? '',
 		next_event_label:
@@ -784,7 +819,11 @@ function ownerRow(p: CrmOwnerProfile, ws: CrmOwnerWorkspaceSummary | undefined):
 				? ''
 				: `${days >= 0 ? `in ${days} days` : `${-days} days ago`} · ${dayMonth(end as string)}`,
 		last_contact: ws?.last_note ? dayMonth(ws.updated_at) : 'Never',
-		tag: OWNERSHIP[p.highest_ownership_status].label,
+		tag: properties.some(unverifiedOwnerAssociation)
+			? properties.every(unverifiedOwnerAssociation)
+				? ownerPropertyChip(properties[0]).label
+				: 'Includes unverified properties'
+			: OWNERSHIP[p.highest_ownership_status].label,
 		market_update_due: false,
 		mine: Boolean(ws),
 		on_file: true,
@@ -811,9 +850,11 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 		},
 		p.later_sale_date && { when: p.later_sale_date, what: 'Sold on', aed: null }
 	].filter(Boolean) as { when: string; what: string; aed: number | null }[]
-	const chip = OWNERSHIP[p.ownership_status]
+	const chip = ownerPropertyChip(p)
 	return {
+		source_reference: p.source_reference,
 		key: p.property_key,
+		id: p.property_key,
 		number: p.unit_number,
 		building: p.building_name || p.project_name,
 		area: p.area_name,
@@ -860,12 +901,12 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 			},
 			// Same wording as the import report, so the panel and the report agree.
 			result: {
-				label: STATUS_INFO[p.ownership_status].label,
+				label: chip.label,
 				confidence: p.confidence_score,
 				reason: p.match_reason,
 				chip: {
-					tone: STATUS_INFO[p.ownership_status].tone,
-					label: STATUS_INFO[p.ownership_status].label
+					tone: chip.tone,
+					label: chip.label
 				}
 			},
 			lease: p.lease_end ? { end: p.lease_end, aed: p.annual_rent_aed ?? null } : null
@@ -918,7 +959,8 @@ const SERVER_TABS = {
 	all: { scope: 'all' },
 	sold: { scope: 'prior_owners' },
 	multi: { scope: 'all', min_properties: 3 },
-	event: { scope: 'all', next_event_days: 90 }
+	event: { scope: 'all', next_event_days: 90 },
+	review: { scope: 'needs_review' }
 } as const
 type ServerTab = keyof typeof SERVER_TABS
 const isServerTab = (t: OwnerTab): t is ServerTab => t in SERVER_TABS
@@ -934,6 +976,11 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 		client.get<CrmOwnerRegistryResponse>(
 			client.withQuery(`${CRM}/owner-registry`, {
 				...SERVER_TABS[tab],
+				...(p.ownership && ['all', 'multi', 'event'].includes(tab)
+					? { scope: p.ownership === 'former' ? 'prior_owners' : 'current_owners' }
+					: {}),
+				list_id: p.list_id,
+				transaction_match_status: p.transaction_match_status || undefined,
 				search: p.q || undefined,
 				limit,
 				offset
@@ -990,6 +1037,13 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 		multi: ({ o }) => (o.properties ?? []).length >= 3,
 		event: ({ o }) => inEvent(o),
 		sold: ({ o }) => soldLater(o),
+		review: ({ o }) =>
+			(o.properties ?? []).some(
+				(x) =>
+					!['verified_current_owner', 'probable_current_owner', 'former_owner'].includes(
+						x.ownership_status
+					)
+			),
 		update: ({ row }) => row.market_update_due
 	}
 	const counts = Object.fromEntries(
@@ -1005,6 +1059,7 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 	const items = (isServerTab(p.tab) ? matching : matching.filter(TABS[p.tab])).map(({ row }) => row)
 
 	return {
+		source_audit: res.source_audit,
 		items,
 		counts,
 		total: items.length,
@@ -1021,6 +1076,25 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 	}
 }
 
+/** Current association assessments across all imported evidence, or one source import. */
+export function getOwnerHistorySummary(importId?: number): Promise<OwnerHistorySummary> {
+	return client.get<OwnerHistorySummary>(
+		importId === undefined
+			? `${CRM}/owner-history/summary`
+			: `${CRM}/contact-imports/${importId}/owner-summary`
+	)
+}
+
+/** Source events retain their import provenance; repeated source rows are not transactions. */
+export function getOwnerHistory(id: string, p: OwnerHistoryParams = {}): Promise<OwnerHistory> {
+	const params = new URLSearchParams({
+		limit: String(p.limit ?? 50),
+		offset: String(p.offset ?? 0)
+	})
+	if (p.import_id !== undefined) params.set('import_id', String(p.import_id))
+	return client.get<OwnerHistory>(`${CRM}/owners/${encodeURIComponent(id)}/history?${params}`)
+}
+
 export async function getOwner(id: string): Promise<OwnerDetail> {
 	const [o, ws, imports] = await Promise.all([
 		client.get<CrmOwnerProfile>(`${CRM}/owners/${encodeURIComponent(id)}`),
@@ -1030,7 +1104,14 @@ export async function getOwner(id: string): Promise<OwnerDetail> {
 	const w = ws.find((x) => x.owner_key === id)
 	return {
 		...ownerRow(o, w),
-		unit_rows: (o.properties ?? []).map(ownerUnit),
+		phone_numbers: [
+			...new Set(
+				[...(o.phone_numbers ?? []), o.phone_primary, o.phone_alternate].filter(
+					(phone): phone is string => Boolean(phone)
+				)
+			)
+		],
+		unit_rows: rowIds((o.properties ?? []).map(ownerUnit)),
 		imported_from: ownerImportSources(o.properties ?? [], imports),
 		matched: [],
 		// The workspace keeps the latest note only.
@@ -1040,6 +1121,17 @@ export async function getOwner(id: string): Promise<OwnerDetail> {
 		relationship: [],
 		create_lead: null
 	}
+}
+
+/** One owner can hold the same property on two source rows (a sale and a resale, two imports);
+ * each row gets its own id so lists and open states stay apart. */
+function rowIds(units: OwnerUnit[]): OwnerUnit[] {
+	const seen = new Map<string, number>()
+	return units.map((u) => {
+		const n = (seen.get(u.key) ?? 0) + 1
+		seen.set(u.key, n)
+		return { ...u, id: n === 1 ? u.key : `${u.key}#${n}` }
+	})
 }
 
 export async function addOwnerNote(id: string, note: string): Promise<Written<OwnerRow>> {
@@ -1162,12 +1254,61 @@ function headerRow(rows: string[][]): number {
 	return best
 }
 
+/** How the backend will read the file: per sheet, its columns and the field each feeds. */
+async function backendColumns(file: File): Promise<CrmContactImportPreview | null> {
+	const fd = new FormData()
+	fd.append('file', file)
+	try {
+		return await client.post<CrmContactImportPreview>(`${CRM}/contact-imports/preview`, fd)
+	} catch {
+		return null
+	}
+}
+
+const cellKey = (c: string) => c.trim().toLowerCase()
+
 /**
- * Read an owners file in the browser so the agent can check it before upload: the header row,
- * the number of data rows and the first five. Nothing is sent; the backend maps the columns.
+ * The backend's columns laid over the browser's grid: the header row is the one holding most of
+ * the backend's header labels, and each label takes the first unused cell with that text.
+ */
+function alignColumns(grid: string[][], labels: string[]) {
+	const wanted = new Set(labels.map(cellKey))
+	let header = 0
+	let best = -1
+	grid.slice(0, HEADER_SCAN_ROWS).forEach((row, i) => {
+		const hits = row.filter((c) => wanted.has(cellKey(c))).length
+		if (hits > best) {
+			header = i
+			best = hits
+		}
+	})
+	const used = new Set<number>()
+	const positions = labels.map((label) => {
+		const i = grid[header].findIndex((c, j) => !used.has(j) && cellKey(c) === cellKey(label))
+		if (i >= 0) used.add(i)
+		return i
+	})
+	return { header, positions }
+}
+
+/**
+ * Read an owners file so the agent can check it before upload: its rows, its columns with the
+ * field each feeds, and the first five rows. The browser reads the cells; the backend says which
+ * row is the header and how each column is read, so the preview matches the import. Nothing is
+ * stored until the file is imported. Without the backend's answer the fullest of the first 15
+ * rows is taken as the header and no fields are shown.
  */
 export async function previewOwnerFile(file: File): Promise<OwnerFilePreview> {
-	const base = { file: file.name, size: file.size, sheets: 0, rows: 0, headers: [], sample: [] }
+	const base = {
+		file: file.name,
+		size: file.size,
+		sheets: 0,
+		rows: 0,
+		headers: [],
+		sample: [],
+		fields: null,
+		readAtImport: false
+	}
 	const problem = ownerFileProblem(file)
 	if (problem) return { ...base, problem }
 	let workbook: import('xlsx').WorkBook
@@ -1180,10 +1321,8 @@ export async function previewOwnerFile(file: File): Promise<OwnerFilePreview> {
 			problem: 'This file could not be read. Save it again as CSV or XLSX without a password.'
 		}
 	}
+	const grids: { name: string; grid: string[][] }[] = []
 	let rows = 0
-	let sheets = 0
-	let headers: string[] = []
-	let sample: string[][] = []
 	for (const sheetName of workbook.SheetNames) {
 		const grid = XLSX.utils
 			.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], {
@@ -1193,28 +1332,51 @@ export async function previewOwnerFile(file: File): Promise<OwnerFilePreview> {
 				raw: false
 			})
 			.map((r) => r.map((c) => String(c ?? '').trim()))
-		if (!grid.length) continue
-		const h = headerRow(grid)
-		const data = grid.slice(h + 1).filter((r) => r.some((c) => c))
+		const data = grid.slice(headerRow(grid) + 1).filter((r) => r.some((c) => c))
 		if (!data.length) continue
-		sheets += 1
+		grids.push({ name: sheetName, grid })
 		rows += data.length
-		if (!headers.length) {
-			const cols = grid[h]
-				.slice(0, MAX_COLUMNS)
-				.map((c, i) => ({ c, i }))
-				.filter(({ c }) => c && !PLACEHOLDER_HEADER.test(c))
-			headers = cols.map(({ c }) => c)
-			sample = data.slice(0, 5).map((r) => cols.map(({ i }) => r[i] ?? ''))
+	}
+	if (!rows) return { ...base, problem: 'File is empty, so nothing will be imported.' }
+
+	const server = await backendColumns(file)
+	const sheets = server?.sheets ?? []
+	const read = sheets.find((s) => grids.some((g) => g.name === s.sheet_name)) ?? sheets[0]
+	const own = grids.find((g) => g.name === read?.sheet_name) ?? grids[0]
+	const columns = (read?.columns ?? []).slice(0, MAX_COLUMNS)
+	if (read && columns.length) {
+		const { header, positions } = alignColumns(
+			own.grid,
+			columns.map((c) => c.header)
+		)
+		const data = own.grid.slice(header + 1).filter((r) => r.some((c) => c))
+		return {
+			...base,
+			sheets: Math.max(grids.length, sheets.length),
+			rows: sheets.reduce((t, s) => t + s.rows, 0) || rows,
+			headers: columns.map((c) => c.header),
+			sample: data.slice(0, 5).map((r) => positions.map((i) => (i >= 0 ? (r[i] ?? '') : ''))),
+			fields: columns.map((c) => c.field ?? null),
+			readAtImport: read.mapped_at_import ?? false,
+			problem: null
 		}
 	}
+	const h = headerRow(own.grid)
+	const cols = own.grid[h]
+		.slice(0, MAX_COLUMNS)
+		.map((c, i) => ({ c, i }))
+		.filter(({ c }) => c && !PLACEHOLDER_HEADER.test(c))
 	return {
 		...base,
-		sheets,
+		sheets: grids.length,
 		rows,
-		headers,
-		sample,
-		problem: rows ? null : 'File is empty, so nothing will be imported.'
+		headers: cols.map(({ c }) => c),
+		sample: own.grid
+			.slice(h + 1)
+			.filter((r) => r.some((c) => c))
+			.slice(0, 5)
+			.map((r) => cols.map(({ i }) => r[i] ?? '')),
+		problem: null
 	}
 }
 
@@ -1229,6 +1391,7 @@ function ownerImportResult(
 		status: r.status,
 		alreadyImported,
 		createdAt: r.created_at,
+		match: ownerMatchView(s.owner_match),
 		summary: {
 			totalRows: s.total_rows ?? 0,
 			candidateRows: s.candidate_rows ?? 0,
@@ -1306,6 +1469,7 @@ export async function listOwnerImportDetails(): Promise<OwnerImportDetail[]> {
 				at: stamp(r.created_at),
 				createdAt: r.created_at,
 				listId: r.list_id ?? null,
+				source_audit: r.summary.source_audit,
 				counts: importCounts(r.summary),
 				sheets: mappings.map((m) => ({
 					name: m.sheet_name,
@@ -1332,6 +1496,8 @@ export async function listOwnerImportRows(
 	const res = await client.get<CrmContactListDetail>(
 		client.withQuery(`${CRM}/contact-lists/${listId}`, {
 			status: p.status ?? undefined,
+			match_colour: p.matchColour?.length ? p.matchColour : undefined,
+			match_outcome: p.matchOutcome?.length ? p.matchOutcome : undefined,
 			search: p.search.trim() || undefined,
 			limit: OWNER_ROWS_LIMIT,
 			offset: p.offset
@@ -1358,7 +1524,12 @@ export async function listOwnerImportRows(
 				confidence: c.confidence_score,
 				reason: c.match_reason,
 				sheet: c.source_sheet,
-				rowNumber: c.source_row_number
+				rowNumber: c.source_row_number,
+				matchOutcome: c.match_outcome ?? null,
+				matchColour: c.match_colour ?? null,
+				matchReasons: c.match_reasons ?? [],
+				matchWarnings: c.match_warnings ?? [],
+				matchedSale: c.matched_sale ?? null
 			})
 		),
 		total: res.total,
@@ -1433,6 +1604,7 @@ export async function listOwnerImportProperties(
 			currentOwner: r.current_owner ?? null,
 			latestDate: r.latest_date ?? null,
 			latestPrice: r.latest_price_aed ?? null,
+			recordsTruncated: r.records_truncated ?? false,
 			records: r.records.map((x) => ({
 				name: x.name,
 				procedure: x.procedure ?? '',
@@ -1491,7 +1663,7 @@ function marketListing(l: ListingCardResponse): MarketListing | null {
 		value_from_comparables_aed: Math.round(value),
 		discount_pct: discount,
 		discount_chip: discountChip(discount),
-		portal: l.broker_name ? `Property Finder · ${l.broker_name}` : 'Property Finder',
+		portal: l.broker_name || 'Market listing',
 		days_listed: l.listing_age_days ?? 0,
 		// Not tracked by the listings feed.
 		price_cuts: 0,
@@ -1521,9 +1693,6 @@ export async function getMarket(id: string): Promise<MarketListingDetail> {
 }
 
 /* ── lease renewals (Assets › Renewals and the Leads inbox) ── */
-
-/** Owner-import claims that tie a contact to the unit as its owner today. */
-const CURRENT_OWNER = new Set(['verified_current_owner', 'probable_current_owner'])
 
 function renewalUnit(l: CrmLead): string {
 	const place = l.building_name || l.project_name || l.area_name || 'Unit'
@@ -1600,36 +1769,25 @@ export async function listRenewals(
 }
 
 /**
- * One lease with its property history (/leads/{id}) and owner. The owner is the one saved on
- * the agent's lead workspace, else a current-owner match from an owner import, else nobody.
+ * One lease with its history and the same server-resolved owner used by the renewal feed.
+ * Imported claims remain separate evidence; they never override the resolved owner here.
  */
 export async function getRenewal(id: string): Promise<RenewalDetail> {
 	const key = encodeURIComponent(id)
-	const [detail, workspace, contacts] = await Promise.all([
+	const [detail, contacts] = await Promise.all([
 		client.get<CrmLeadDetailResponse>(`${CRM}/leads/${key}`),
-		client.get<CrmWorkspaceResponse>(`${CRM}/workspaces/${key}`),
 		client.get<CrmLeadImportedContact[]>(`${CRM}/leads/${key}/contacts`)
 	])
-	const typed = workspace.owner_name || workspace.owner_phone || workspace.owner_email
-	const matched = contacts.find((c) => CURRENT_OWNER.has(c.ownership_status))
-	const owner: RenewalOwner | null = typed
-		? {
-				name: workspace.owner_name ?? null,
-				phone: workspace.owner_phone ?? null,
-				email: workspace.owner_email ?? null,
-				source: 'Saved on this lead'
-			}
-		: matched
-			? {
-					name: matched.contact_name || null,
-					phone: matched.phone_primary || matched.phone_alternate || null,
-					email: matched.email_primary ?? null,
-					source: `Owner import · ${matched.list_name}`
-				}
-			: null
 	const l = detail.lead
 	return {
-		...renewal(l, owner),
+		...renewal(l, renewalOwner(detail.owner)),
+		owner_evidence: contacts.map((c) => ({
+			id: c.claim_id,
+			name: c.contact_name,
+			status: c.ownership_status,
+			reason: c.match_reason,
+			source: c.list_name
+		})),
 		reason: l.lead_reason,
 		action: l.recommended_action,
 		last_purchase: l.last_purchase_date

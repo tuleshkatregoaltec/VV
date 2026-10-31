@@ -7,19 +7,11 @@ import { fade, fly } from 'svelte/transition'
 import { browser } from '$app/environment'
 import { chat, type MessageResponse } from '$lib/api/chat'
 import { artifactSortValue, type ChatArtifact, isChatArtifact } from '$lib/chat/artifacts'
+import { safeChatHref } from '$lib/chat/safeLinks'
+import ChatActionCard from '$lib/components/chat/ChatActionCard.svelte'
 import ChatArtifactBubble from '$lib/components/chat/ChatArtifactBubble.svelte'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 import { chatKeys, chatQueries } from '$lib/queries/chat'
-
-// Add target="_blank" rel="noopener noreferrer" to all links
-marked.use({
-	renderer: {
-		link({ href, title, text }: any) {
-			const titleAttr = title ? ` title="${title}"` : ''
-			return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`
-		}
-	}
-})
 
 const SANITIZE_CONFIG = {
 	ALLOWED_TAGS: [
@@ -41,7 +33,19 @@ const SANITIZE_CONFIG = {
 
 function renderMarkdown(content: string): string {
 	if (!browser) return content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-	return DOMPurify.sanitize(marked.parse(content) as string, SANITIZE_CONFIG)
+	const fragment = DOMPurify.sanitize(marked.parse(content) as string, {
+		...SANITIZE_CONFIG,
+		RETURN_DOM_FRAGMENT: true
+	})
+	for (const link of fragment.querySelectorAll('a')) {
+		const href = safeChatHref(link.getAttribute('href') ?? '', window.location.origin)
+		if (href) link.setAttribute('href', href)
+		else link.removeAttribute('href')
+		link.setAttribute('rel', 'noopener noreferrer')
+	}
+	const container = document.createElement('div')
+	container.append(fragment)
+	return container.innerHTML
 }
 
 let {
@@ -69,6 +73,7 @@ interface DisplayMessage {
 	content: string
 	toolCalls?: string[]
 	artifacts?: ChatArtifact[]
+	actionIds?: string[]
 }
 
 type ToolCallState = 'start' | 'done'
@@ -82,6 +87,11 @@ let textareaRef = $state<HTMLTextAreaElement>()
 let messagesEndRef = $state<HTMLDivElement>()
 let activeStreamConversationId: number | null = $state(null)
 let tokenLimitModalOpen = $state(false)
+let olderMessages = $state<MessageResponse[]>([])
+let loadingOlder = $state(false)
+let hasOlder = $state(true)
+let suppressScroll = false
+let latestLoadedMessages: MessageResponse[] = []
 let localMessageSequence = 0
 const queryClient = useQueryClient()
 const messagesQuery = createQuery(() => chatQueries.messages(conversationId))
@@ -97,7 +107,8 @@ function toDisplayMessages(loadedMessages: MessageResponse[]): DisplayMessage[] 
 		role: m.role,
 		content: m.content,
 		toolCalls: [],
-		artifacts: artifactsFromMessage(m)
+		artifacts: artifactsFromMessage(m),
+		actionIds: actionsFromMessage(m)
 	}))
 }
 
@@ -123,15 +134,26 @@ function messagesHaveSameVisibleContent(
 		return (
 			message.role === nextMessage.role &&
 			message.content === nextMessage.content &&
-			artifactSignature(message.artifacts) === artifactSignature(nextMessage.artifacts)
+			artifactSignature(message.artifacts) === artifactSignature(nextMessage.artifacts) &&
+			(message.actionIds ?? []).join(',') === (nextMessage.actionIds ?? []).join(',')
 		)
 	})
 }
 
 function preserveVisibleMessageIds(nextMessages: DisplayMessage[]): DisplayMessage[] {
-	return nextMessages.map((message, index) => {
-		const currentMessage = messages[index]
+	const reused = new Set<string>()
+	return nextMessages.map((message) => {
+		const currentMessage =
+			messages.find((current) => current.id === message.id) ??
+			messages.find(
+				(current) =>
+					!reused.has(current.id) &&
+					current.id.startsWith('local:') &&
+					current.role === message.role &&
+					current.content === message.content
+			)
 		if (currentMessage && currentMessage.role === message.role) {
+			reused.add(currentMessage.id)
 			return { ...message, id: currentMessage.id }
 		}
 		return message
@@ -141,6 +163,33 @@ function preserveVisibleMessageIds(nextMessages: DisplayMessage[]): DisplayMessa
 function replaceMessagesIfChanged(nextMessages: DisplayMessage[]) {
 	if (messagesHaveSameVisibleContent(messages, nextMessages)) return
 	messages = preserveVisibleMessageIds(nextMessages)
+}
+
+function actionsFromMessage(message: MessageResponse): string[] {
+	const metadata = message.meta_data as { actions?: unknown[] } | null | undefined
+	return (Array.isArray(metadata?.actions) ? metadata.actions : []).flatMap((action) =>
+		typeof action === 'object' && action !== null && 'id' in action && typeof action.id === 'string'
+			? [action.id]
+			: []
+	)
+}
+
+async function loadOlderMessages() {
+	const id = conversationId
+	const oldest = olderMessages[0] ?? messagesQuery.data?.[0]
+	if (!id || !oldest || loadingOlder) return
+	loadingOlder = true
+	try {
+		const older = await chat.getMessages(id, { before_id: oldest.id })
+		if (id !== conversationId) return
+		suppressScroll = true
+		olderMessages = [...older, ...olderMessages]
+		hasOlder = older.length === 100
+	} catch {
+		error = 'Could not load older messages. Please try again.'
+	} finally {
+		loadingOlder = false
+	}
 }
 
 function artifactsFromMessage(message: MessageResponse): ChatArtifact[] | undefined {
@@ -160,6 +209,34 @@ function mergeArtifact(artifacts: ChatArtifact[], artifact: ChatArtifact): ChatA
 
 function toolDisplayLabel(tool: string | undefined, state: ToolCallState, cached = false): string {
 	const labels: Record<string, { start: string; done: string }> = {
+		query_my_crm_records: {
+			start: 'Reading your CRM records',
+			done: 'Your CRM records ready'
+		},
+		get_database_coverage: {
+			start: 'Checking stored data coverage',
+			done: 'Stored data coverage ready'
+		},
+		search_database_locations: {
+			start: 'Finding stored locations',
+			done: 'Stored location matches ready'
+		},
+		get_project_profile: {
+			start: 'Reading stored project profile',
+			done: 'Stored project profile ready'
+		},
+		query_market_metrics: {
+			start: 'Querying stored market records',
+			done: 'Stored market metrics ready'
+		},
+		get_listing_inventory: {
+			start: 'Checking stored listing inventory',
+			done: 'Stored listing inventory ready'
+		},
+		get_project_delivery_summary: {
+			start: 'Checking registered project deliveries',
+			done: 'Registered project deliveries ready'
+		},
 		show_listings: {
 			start: 'Searching matching records',
 			done: 'Matched records ready'
@@ -227,6 +304,9 @@ $effect(() => {
 		}
 
 		messages = []
+		olderMessages = []
+		latestLoadedMessages = []
+		hasOlder = true
 		error = null
 
 		previousConversationId = conversationId
@@ -236,12 +316,23 @@ $effect(() => {
 $effect(() => {
 	const loadedMessages = messagesQuery.data
 	if (!conversationId || !loadedMessages || activeStreamConversationId === conversationId) return
-	replaceMessagesIfChanged(toDisplayMessages(loadedMessages))
+	// Keep the boundary messages when a refreshed newest page moves forward.
+	if (olderMessages.length > 0 && latestLoadedMessages !== loadedMessages) {
+		const knownIds = new Set([...olderMessages, ...loadedMessages].map((message) => message.id))
+		const retained = latestLoadedMessages.filter((message) => !knownIds.has(message.id))
+		if (retained.length > 0) olderMessages = [...olderMessages, ...retained]
+	}
+	latestLoadedMessages = loadedMessages
+	replaceMessagesIfChanged(toDisplayMessages([...olderMessages, ...loadedMessages]))
 })
 
 // Auto-scroll to bottom when messages change
 $effect(() => {
 	scrollSignal
+	if (suppressScroll) {
+		suppressScroll = false
+		return
+	}
 	if (messages.length > 0 && messagesEndRef) {
 		setTimeout(() => {
 			messagesEndRef?.scrollIntoView({ behavior: streamController ? 'auto' : 'smooth' })
@@ -273,7 +364,7 @@ async function refreshMessagesAfterStream(conversationIdToRefresh: number) {
 		const loadedMessages = await chat.getMessages(conversationIdToRefresh)
 		queryClient.setQueryData(chatKeys.messages(conversationIdToRefresh), loadedMessages)
 		if (conversationId === conversationIdToRefresh) {
-			replaceMessagesIfChanged(toDisplayMessages(loadedMessages))
+			replaceMessagesIfChanged(toDisplayMessages([...olderMessages, ...loadedMessages]))
 		}
 	} catch (err) {
 		console.error('Failed to refresh streamed messages:', err)
@@ -341,6 +432,12 @@ async function handleSubmit() {
 				isThinking = false
 				currentArtifacts = mergeArtifact(currentArtifacts, data.artifact)
 				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
+			} else if (data.type === 'action_proposed' && typeof data.action?.id === 'string') {
+				isThinking = false
+				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
+				const last = messages[messages.length - 1]
+				last.actionIds = [...new Set([...(last.actionIds ?? []), data.action.id])]
+				messages = [...messages]
 			} else if (data.type === 'done') {
 				isThinking = false
 				if (currentToolCalls.some((toolCall) => toolCall.endsWith('...'))) {
@@ -370,7 +467,7 @@ async function handleSubmit() {
 				if (data.error === 'token_limit_exceeded') {
 					tokenLimitModalOpen = true
 				} else {
-					error = `Error: ${data.error}`
+					error = 'The assistant could not complete this request. Please try again.'
 				}
 				streamController = null
 				activeStreamConversationId = null
@@ -400,7 +497,8 @@ function updateLastMessage(
 			role,
 			content,
 			toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined,
-			artifacts: nextArtifacts
+			artifacts: nextArtifacts,
+			actionIds: lastMsg.actionIds
 		}
 		messages = [...messages]
 	} else {
@@ -444,7 +542,7 @@ function stopStreaming() {
 					<h1 class="text-sm font-semibold text-fg-1">Vitevue AI</h1>
 				</div>
 				<p class="mt-1 text-xs text-fg-4">
-					Ask about transactions, yields, pricing, projects, and feasibility context.
+					Ask about market data or your own CRM records. Changes require your confirmation.
 				</p>
 			</div>
 			<div
@@ -526,7 +624,7 @@ function stopStreaming() {
 							class="mx-auto mb-6 max-w-md text-sm leading-6 text-fg-3"
 							in:fly={{ y: 20, duration: 500, delay: 300, easing: cubicOut }}
 						>
-							Start with a market question, comp basket, pricing trend, or feasibility assumption.
+							Ask about your CRM leads, owner imports, follow-ups, or stored market data.
 						</p>
 						<div
 							class="mx-auto grid max-w-xl grid-cols-1 gap-2 text-[13px] sm:grid-cols-3"
@@ -535,28 +633,28 @@ function stopStreaming() {
 							<button
 								onclick={() =>
 									startConversationWithPrompt(
-										'What changed in Dubai Marina 2BR yields this quarter?'
+										'Summarize my CRM leads by status.'
 									)}
 								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
 								<span class="mr-1 text-fg-5">→</span>
-								Dubai Marina 2BR yields
+								My CRM pipeline
 							</button>
 							<button
 								onclick={() =>
-									startConversationWithPrompt('Compare Dubai Marina pricing against JBR.')}
+									startConversationWithPrompt('Which of my CRM leads have follow-ups due today or earlier?')}
 								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
 								<span class="mr-1 text-fg-5">→</span>
-								Compare to JBR
+								My follow-ups due
 							</button>
 							<button
 								onclick={() =>
-									startConversationWithPrompt('Build a comp basket for Business Bay offices.')}
+									startConversationWithPrompt('What was the median annual rent for 2-bedroom apartments in Dubai Marina last month?')}
 								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
 								<span class="mr-1 text-fg-5">→</span>
-								Build a comp basket
+								Dubai Marina 2BR rents
 							</button>
 						</div>
 					</div>
@@ -583,6 +681,11 @@ function stopStreaming() {
 				</div>
 			</div>
 		{:else}
+			{#if hasOlder && (olderMessages.length > 0 || (messagesQuery.data?.length ?? 0) >= 100)}
+				<button type="button" class="ui-button px-3 py-2 text-xs" disabled={loadingOlder} onclick={loadOlderMessages}>
+					{loadingOlder ? 'Loading older messages…' : 'Load older messages'}
+				</button>
+			{/if}
 			{#each messages as msg, i (msg.id)}
 				<div
 					class="flex {msg.role === 'user' ? 'justify-end' : 'justify-start'}"
@@ -645,6 +748,13 @@ function stopStreaming() {
 										<div class="{msg.content ? 'mb-3' : ''} space-y-3">
 											{#each msg.artifacts as artifact (artifact.id)}
 												<ChatArtifactBubble {artifact} />
+											{/each}
+										</div>
+									{/if}
+									{#if msg.actionIds?.length}
+										<div class="mb-3 space-y-3">
+											{#each msg.actionIds as actionId (actionId)}
+												<ChatActionCard {actionId} />
 											{/each}
 										</div>
 									{/if}

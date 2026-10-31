@@ -3,8 +3,15 @@
 This module explicitly registers domain SQLModel classes for Alembic migrations. Runtime callers import models from their owning domains.
 """
 
+from app.assistant_actions.models import (
+    AssistantAction,
+    AssistantListingDraft,
+    AssistantOutbox,
+    AssistantReminder,
+    AssistantViewing,
+)
 from app.billing.models import Subscription
-from app.chat.models import Conversation, Message
+from app.chat.models import ChatTurnLease, Conversation, Message
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactList,
@@ -27,6 +34,11 @@ from app.organization.models import Organization, OrganizationInvitation, Organi
 from app.token_usage.models import UserTokenUsage
 
 __all__ = [
+    "AssistantAction",
+    "AssistantListingDraft",
+    "AssistantOutbox",
+    "AssistantReminder",
+    "AssistantViewing",
     # Auth & User Management
     "Organization",
     "OrganizationMembership",
@@ -38,6 +50,7 @@ __all__ = [
     "NewsArticle",
     # Chat
     "Conversation",
+    "ChatTurnLease",
     "Message",
     # CRM
     "CrmSavedLead",

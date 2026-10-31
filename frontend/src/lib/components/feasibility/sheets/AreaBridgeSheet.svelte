@@ -25,7 +25,7 @@ type BridgeRow = { label: string; sqft: string; note: string; isTotal?: boolean;
 const bridgeRows = $derived<BridgeRow[]>(
 	area
 		? [
-				{ label: 'Plot Area', sqft: fmt(toSqft(area.plotAreaSqm)), note: 'From DDA plot data' },
+				{ label: 'Plot Area', sqft: fmt(toSqft(area.plotAreaSqm)), note: 'From plot data' },
 				{
 					label: 'Max GFA (Regulatory)',
 					sqft: fmt(toSqft(area.maxGfaSqm)),

@@ -346,10 +346,7 @@ $effect(() => {
 
 		<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-panel p-3 text-xs leading-5 text-fg-3">
 			<span>
-				<span class="font-semibold text-fg-2">Source:</span>
-				{artifact.data?.data_source ?? 'DLD data'}
 				{#if periodLabel()}
-					<span class="mx-1 text-fg-5">/</span>
 					<span class="font-semibold text-fg-2">Period:</span>
 					{periodLabel()}
 				{/if}

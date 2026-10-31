@@ -9,6 +9,7 @@ import type {
 	ListingStatus,
 	MatchOptions,
 	OwnerDroppedRowsParams,
+	OwnerHistoryParams,
 	OwnerImportDetail,
 	OwnerImportRowsParams,
 	OwnerListParams,
@@ -48,6 +49,10 @@ export const crmKeys = {
 	marketListing: (id: string) => [...crmKeys.all, 'market', id] as const,
 	owners: (p: OwnerListParams) => [...crmKeys.all, 'owners', p] as const,
 	owner: (id: string) => [...crmKeys.all, 'owner', id] as const,
+	ownerHistory: (id: string, p: OwnerHistoryParams) =>
+		[...crmKeys.all, 'owner', id, 'history', p] as const,
+	ownerHistorySummary: (importId?: number) =>
+		[...crmKeys.all, 'owner-history-summary', importId ?? 'all'] as const,
 	ownerReport: (id: string) => [...crmKeys.all, 'owner', id, 'report'] as const,
 	imports: () => [...crmKeys.all, 'imports'] as const,
 	ownerImports: () => [...crmKeys.all, 'imports', 'owners'] as const,
@@ -144,6 +149,14 @@ export const crmQueries = {
 		placeholderData: keepPreviousData
 	}),
 	owner: (id: string) => ({ queryKey: crmKeys.owner(id), queryFn: () => crm.owners.get(id) }),
+	ownerHistory: (id: string, p: OwnerHistoryParams = {}) => ({
+		queryKey: crmKeys.ownerHistory(id, p),
+		queryFn: () => crm.owners.history(id, p)
+	}),
+	ownerHistorySummary: (importId?: number) => ({
+		queryKey: crmKeys.ownerHistorySummary(importId),
+		queryFn: () => crm.owners.historySummary(importId)
+	}),
 	ownerReport: (id: string) => ({
 		queryKey: crmKeys.ownerReport(id),
 		queryFn: () => crm.owners.report(id)

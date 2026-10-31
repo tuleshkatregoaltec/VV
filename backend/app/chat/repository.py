@@ -1,10 +1,10 @@
 from typing import List, Optional
 
-from sqlalchemy import delete
+from sqlalchemy import delete, func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.chat.models import Conversation, Message
+from app.chat.models import ChatTurnLease, Conversation, Message
 
 # Every statement is scoped to the trusted (user, organization) pair from AuthContext. A user
 # who moves to another organization keeps the same user_id, so user_id alone is not a boundary.
@@ -47,7 +47,12 @@ async def get_conversation(
 
 
 async def get_conversation_messages(
-    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str, limit: int = 100
+    db: AsyncSession,
+    conversation_id: int,
+    user_id: str,
+    organization_id: str,
+    limit: int = 100,
+    before_id: int | None = None,
 ) -> List[Message]:
     """Get messages for a conversation the caller owns"""
     stmt = (
@@ -57,11 +62,12 @@ async def get_conversation_messages(
                 _owned_conversation_ids(conversation_id, user_id, organization_id)
             )
         )
-        .order_by(Message.created_at.asc())
+        .where(Message.id < before_id if before_id is not None else True)
+        .order_by(Message.id.desc())
         .limit(limit)
     )
     result = await db.exec(stmt)
-    return list(result.all())
+    return list(reversed(result.all()))
 
 
 def save_conversation(db: AsyncSession, conversation: Conversation):
@@ -70,6 +76,36 @@ def save_conversation(db: AsyncSession, conversation: Conversation):
 
 def save_message(db: AsyncSession, message: Message):
     db.add(message)
+
+
+async def lock_turn_admission(db, user_id, organization_id):
+    for key in (f"chat:tenant:{organization_id}", f"chat:user:{user_id}"):
+        await db.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(key, 0))))
+
+
+async def active_turn_count(db, field, value, now):
+    return (
+        await db.exec(
+            select(func.count())
+            .select_from(ChatTurnLease)
+            .where(
+                ChatTurnLease.status == "active",
+                ChatTurnLease.expires_at > now,
+                getattr(ChatTurnLease, field) == value,
+            )
+        )
+    ).one()
+
+
+async def locked_turn_lease(db, lease_id):
+    return (
+        await db.exec(
+            select(ChatTurnLease)
+            .where(ChatTurnLease.id == lease_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).first()
 
 
 async def delete_conversation_records(

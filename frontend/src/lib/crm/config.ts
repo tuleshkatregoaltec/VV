@@ -260,7 +260,7 @@ export const EVENT_KIND_ORDER: EventKind[] = [
 export const OWNER_SOURCES: { id: OwnerSource; label: string }[] = [
 	{ id: 'agent_contact', label: 'Own contact' },
 	{ id: 'agency_import', label: 'Agency file' },
-	{ id: 'dld_event', label: 'DLD/Ejari event' }
+	{ id: 'dld_event', label: 'Transaction event' }
 ]
 
 export const INVOICE: Record<InvoiceStatus, { label: string; tone: Tone }> = {
@@ -281,4 +281,4 @@ export const ORIGIN_TONE: Record<Origin, Tone> = {
 export const scoreClass = (score: number) => (score >= 70 ? '' : score >= 45 ? 'mid' : 'low')
 
 export const ownerSourceTone = (label: string): Tone =>
-	label === 'DLD/Ejari event' ? 'blue' : 'neutral'
+	label === 'Transaction event' ? 'blue' : 'neutral'

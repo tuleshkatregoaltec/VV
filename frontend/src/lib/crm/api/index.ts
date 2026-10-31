@@ -64,6 +64,9 @@ import type {
 	OwnerDroppedRows,
 	OwnerDroppedRowsParams,
 	OwnerFilePreview,
+	OwnerHistory,
+	OwnerHistoryParams,
+	OwnerHistorySummary,
 	OwnerImport,
 	OwnerImportDetail,
 	OwnerImportResult,
@@ -319,6 +322,10 @@ export const crm = {
 	owners: {
 		list: (p: OwnerListParams): Promise<OwnerListResponse> => backend.listOwners(p),
 		get: (id: string): Promise<OwnerDetail> => backend.getOwner(id),
+		history: (id: string, p: OwnerHistoryParams = {}): Promise<OwnerHistory> =>
+			backend.getOwnerHistory(id, p),
+		historySummary: (importId?: number): Promise<OwnerHistorySummary> =>
+			backend.getOwnerHistorySummary(importId),
 		createLead: (_id: string, _body: OwnerLeadCreate) =>
 			notOnBackend<Written<LeadDetail>>('A lead from an owner'),
 		create: (_body: { name: string; units: string[] }) =>
@@ -339,7 +346,7 @@ export const crm = {
 		preview: (file: File): Promise<ImportPreview> => backend.previewImport(file),
 		/** The import endpoints take no areas, so `areas` is not sent. */
 		create: (file: File, _areas: string) => backend.createImport(file),
-		/** An owners file is read in the browser first; nothing is sent until it is imported. */
+		/** An owners file is read in the browser; the backend only says which field each column feeds. */
 		previewOwners: (file: File): Promise<OwnerFilePreview> => backend.previewOwnerFile(file),
 		/** Upload, match against DLD and save an owners file (/contact-imports). */
 		importOwners: (file: File, name: string): Promise<Written<OwnerImportResult>> =>

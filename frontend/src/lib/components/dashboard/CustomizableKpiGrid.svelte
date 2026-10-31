@@ -40,7 +40,6 @@ type KpiCard = {
 	value: string
 	subtitle: string
 	trend?: { value: string; direction: 'up' | 'down' }
-	isDefault?: boolean
 	loading?: boolean
 }
 
@@ -48,7 +47,6 @@ type CardDefinition = {
 	id: CardId
 	title: string
 	description: string
-	isDefault?: boolean
 }
 
 type DateRange = {
@@ -77,32 +75,27 @@ const CARD_CATALOG: CardDefinition[] = [
 	{
 		id: 'mtd-transactions',
 		title: 'Latest month transactions',
-		description: 'Count and AED value for the latest month available in DLD data.',
-		isDefault: true
+		description: 'Count and AED value for the latest month available in market data.'
 	},
 	{
 		id: 'avg-price-sqft',
 		title: 'Avg price/sq ft',
-		description: 'Dubai-wide residential sale price converted to square feet.',
-		isDefault: true
+		description: 'Dubai-wide residential sale price converted to square feet.'
 	},
 	{
 		id: 'completed-units-ytd',
 		title: 'Completed units YTD',
-		description: 'Completed unit movement through the latest available data month.',
-		isDefault: true
+		description: 'Completed unit movement through the latest available data month.'
 	},
 	{
 		id: 'active-offplan-projects',
 		title: 'Active off-plan projects',
-		description: 'Active and upcoming project count from the supply catalogue.',
-		isDefault: true
+		description: 'Active and upcoming project count from the supply catalogue.'
 	},
 	{
 		id: 'gross-yield',
 		title: 'Residential gross yield',
-		description: 'Median registered rent divided by median sale price.',
-		isDefault: true
+		description: 'Median registered rent divided by median sale price.'
 	},
 	{
 		id: 'avg-sale-price',
@@ -364,8 +357,7 @@ function buildCard(id: CardId): KpiCard {
 	const definition = cardDefinition(id)
 	const base = {
 		id,
-		title: definition.title,
-		isDefault: definition.isDefault
+		title: definition.title
 	}
 
 	if (id === 'mtd-transactions') {
@@ -624,7 +616,7 @@ function resetCards() {
 	<div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<p class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Market KPIs</p>
-			<h2 class="mt-1 text-base font-semibold text-fg-1">Default DLD dashboard</h2>
+			<h2 class="mt-1 text-base font-semibold text-fg-1">Key metrics</h2>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<button
@@ -644,7 +636,7 @@ function resetCards() {
 					onclick={resetCards}
 				>
 					<RotateCcw size={15} strokeWidth={1.8} />
-					Reset DLD defaults
+					Reset defaults
 				</button>
 			{/if}
 		</div>
@@ -698,13 +690,6 @@ function resetCards() {
 							<div class="min-w-0 flex-1">
 								<div class="flex items-center gap-2">
 									<p class="truncate text-sm font-semibold text-fg-1">{card.title}</p>
-									{#if card.isDefault}
-										<span
-											class="rounded-sm border border-border bg-card px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-fg-4"
-										>
-											DLD
-										</span>
-									{/if}
 								</div>
 								<p class="mt-1 line-clamp-2 text-xs leading-4 text-fg-4">{card.description}</p>
 							</div>
@@ -750,13 +735,6 @@ function resetCards() {
 							<span class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">
 								{card.title}
 							</span>
-							{#if card.isDefault}
-								<span
-									class="mt-1 block w-fit rounded-sm border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-fg-4"
-								>
-									DLD default
-								</span>
-							{/if}
 						</div>
 						<div class="flex items-center gap-2 text-fg-4">
 							{#if editMode}
