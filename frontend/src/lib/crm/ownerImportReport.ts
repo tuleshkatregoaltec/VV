@@ -325,8 +325,8 @@ export function insufficientReason(row: {
 					? 'No building or project in the file'
 					: 'The unit could not be tied to a property'
 	return row.date && row.price
-		? `${missing}. Its sale date and price did not match one DLD sale in this location.`
-		: `${missing}, and no sale date and price to look the property up in DLD.`
+		? `${missing}. Its sale date and price did not match a recorded sale in this location.`
+		: `${missing}, and no sale date and price to look the property up in sales records.`
 }
 
 export type DropReason = 'no_name' | 'not_buyer_seller' | 'not_a_sale' | 'no_unit'
@@ -810,21 +810,27 @@ function sameTypeFamily(a: string, b: string): boolean {
 	return TYPE_FAMILIES.some((family) => family.includes(x) && family.includes(y))
 }
 
-/** A matcher reason or warning in plain words; text it does not know is returned as it came. */
+/** Keep provider names out of matcher diagnostics, including older server responses. */
+function publicMatchText(text: string): string {
+	return text.replace(
+		/\b(?:Dubai Land Department|DXB\s*Interact|DXBI|DLD)(?:['’]s)?\b/gi,
+		'market data'
+	)
+}
+
+/** A matcher reason or warning in plain words, without internal provider attribution. */
 export function explainMatch(code: string): string {
 	const text = code.trim()
 	if (!text) return ''
 	for (const [pattern, say] of EXPLAINERS) {
 		const m = pattern.exec(text)
 		if (m) {
-			const said = say(text, m).replace(/\bDXBI\b/g, 'Transactions')
-			return said ? sentence(said) : ''
+			const said = say(text, m)
+			return said ? sentence(publicMatchText(said)) : ''
 		}
 	}
-	return text.replace(/\bDXBI\b/g, 'Transactions')
+	return publicMatchText(text)
 }
-
-const SOURCE_LABEL: Record<string, string> = { dxbi: '', dld: 'Land registry' }
 
 /** "1203 · Burj Crown · AED 2,150,000 · 21 Mar 2024": the sale a row was tied to. */
 export function matchedSaleLine(sale: MatchedSale | null | undefined): string {
@@ -834,8 +840,7 @@ export function matchedSaleLine(sale: MatchedSale | null | undefined): string {
 		sale.unit,
 		place,
 		sale.amount_aed ? aed(sale.amount_aed) : '',
-		sale.date ? fullDate(sale.date.slice(0, 10)) : '',
-		sale.source ? (SOURCE_LABEL[sale.source.toLowerCase()] ?? sale.source) : ''
+		sale.date ? fullDate(sale.date.slice(0, 10)) : ''
 	]
 		.filter(Boolean)
 		.join(' · ')

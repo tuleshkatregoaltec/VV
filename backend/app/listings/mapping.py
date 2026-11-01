@@ -249,6 +249,8 @@ def _card_from_row(row: Any) -> ListingCardResponse:
         agent_image_url=agent.image_url if agent else None,
         broker_name=broker.name if broker else None,
         broker_logo_url=broker.logo_url if broker else None,
+        captured_at=_parse_datetime(row.get("snapshot_at"))
+        or _parse_datetime(row.get("scraped_at")),
         listed_date=listed_date,
         listing_age_days=_int_or_none(row.get("listing_age_days")),
         price_per_sqft_aed=price_per_sqft,

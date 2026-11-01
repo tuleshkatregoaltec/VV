@@ -171,6 +171,9 @@ def _where_sql(
     asset_class: ListingAssetClass | None = None,
     price_period: str | None = None,
     price_basis: str = "raw",
+    building: str | None = None,
+    min_age_days: int | None = None,
+    max_age_days: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
     clauses = ["category_id IN {category_ids:Array(UInt16)}", "is_available = 1"]
     params: dict[str, Any] = {"category_ids": list(_category_ids(mode, asset_class))}
@@ -211,6 +214,20 @@ def _where_sql(
     if price_max is not None:
         clauses.append(f"{price_filter_expr} <= {{price_max:Int64}}")
         params["price_max"] = price_max
+    if building:
+        clauses.append(f"lowerUTF8({PEER_LOCATION_EXPR}) = lowerUTF8({{building:String}})")
+        params["building"] = building
+    if min_age_days is not None or max_age_days is not None:
+        clauses.append(
+            f"{LISTED_AT_EXPR} >= toDateTime('2010-01-01') AND {LISTED_AT_EXPR} <= {SCRAPED_AT_EXPR}"
+        )
+        age = f"dateDiff('day', {LISTED_AT_EXPR}, {SCRAPED_AT_EXPR})"
+        if min_age_days is not None:
+            clauses.append(f"{age} >= {{min_age_days:UInt32}}")
+            params["min_age_days"] = min_age_days
+        if max_age_days is not None:
+            clauses.append(f"{age} <= {{max_age_days:UInt32}}")
+            params["max_age_days"] = max_age_days
     return " AND ".join(clauses), params
 
 
@@ -412,7 +429,7 @@ async def fetch_listing_rows(filters, *, limit: int, offset: int):
             {SIZE_BUCKET_EXPR} AS benchmark_size_bucket,
             {VALID_BENCHMARK_SIZE_EXPR} AS has_valid_benchmark_size,
             {LISTED_AT_EXPR} AS listed_at,
-            coalesce({SCRAPED_AT_EXPR}, now()) AS snapshot_at,
+            {SCRAPED_AT_EXPR} AS snapshot_at,
             {market_price_expr} AS market_price_aed,
             {SIZE_VALUE_EXPR} AS size_sqft,
             if(
@@ -540,7 +557,7 @@ async def fetch_listing_analytics(filters):
                     {SIZE_BUCKET_EXPR} AS benchmark_size_bucket,
                     {VALID_BENCHMARK_SIZE_EXPR} AS has_valid_benchmark_size,
                     {LISTED_AT_EXPR} AS listed_at,
-                    coalesce({SCRAPED_AT_EXPR}, now()) AS snapshot_at,
+                    {SCRAPED_AT_EXPR} AS snapshot_at,
                     {market_price_expr} AS market_price_aed,
                     {SIZE_VALUE_EXPR} AS size_sqft
                 FROM {LISTINGS_TABLE}
@@ -598,7 +615,7 @@ async def fetch_listing_trend(filters):
         FROM (
             SELECT
                 {LISTED_AT_EXPR} AS listed_at,
-                coalesce({SCRAPED_AT_EXPR}, now()) AS snapshot_at,
+                {SCRAPED_AT_EXPR} AS snapshot_at,
                 {market_price_expr} AS market_price_aed,
                 {SIZE_VALUE_EXPR} AS size_sqft
             FROM {LISTINGS_TABLE}

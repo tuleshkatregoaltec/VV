@@ -240,7 +240,12 @@ async function stream(endpoint: string, onChunk: StreamCallback, options: Stream
 			}
 
 			if (!terminalEventSeen) {
-				onChunk(JSON.stringify({ type: 'done' }))
+				onChunk(
+					JSON.stringify({
+						type: 'error',
+						error: 'Stream ended before completion. Please try again.'
+					})
+				)
 			}
 		})
 		.catch((error) => {

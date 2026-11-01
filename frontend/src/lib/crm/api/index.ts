@@ -17,6 +17,7 @@ import type {
 	CalendarSide,
 	CommissionAmounts,
 	CommissionPatch,
+	CompanyListingFilter,
 	Connection,
 	ConversationMessage,
 	DealCreate,
@@ -207,7 +208,10 @@ export const crm = {
 
 	inbox: {
 		/** Backend: /api/v1/crm/inbound/enquiries. Read only until the handout system exists. */
-		list: (filter: InboxFilter): Promise<InboxResponse> => backend.listInbox(filter),
+		list: (filter: InboxFilter, days?: number): Promise<InboxResponse> =>
+			backend.listInbox(filter, days),
+		/** A recently sold owner → a possible buyer lead (preferences filled in by the agent). */
+		approve: (id: string) => backend.approveRecentSeller(Number(id)),
 		ask: (_id: string) => notOnBackend<Written<InboxItem>>('Asking for an enquiry'),
 		withdraw: (_id: string) => notOnBackend<Written<InboxItem>>('Withdrawing a request'),
 		release: (_id: string) => notOnBackend<Written<InboxItem>>('Releasing an enquiry'),
@@ -264,12 +268,23 @@ export const crm = {
 		goaml: (_id: string) => notOnBackend<{ status: string }>('goAML')
 	},
 
-	/** The agency's own listings have no backend yet (portal listings are under `market`). */
+	companyListings: {
+		selectSource: backend.selectCompanyListingSource,
+		clearSource: backend.clearCompanyListingSource
+	},
+
+	/** Company inventory from the Property Finder broker selected by the organization owner. */
 	listings: {
-		list: async (_scope: ListingScope, _status?: ListingStatus): Promise<ListingListResponse> => ({
-			items: [],
-			counts: { live: 0, pocket: 0, expired: 0 }
-		}),
+		list: async (
+			scope: ListingScope,
+			status?: ListingStatus,
+			limit = 100,
+			offset = 0,
+			companyAgent?: CompanyListingFilter
+		): Promise<ListingListResponse> =>
+			scope === 'company'
+				? backend.listCompanyListings(status, limit, offset, companyAgent)
+				: { items: [], counts: { live: 0, pocket: 0, expired: 0 } },
 		get: (_id: string) => notOnBackend<ListingDetail>('Listings'),
 		create: (_body: ListingCreate) =>
 			notOnBackend<Written<ListingCreateResult>>('Creating a listing'),

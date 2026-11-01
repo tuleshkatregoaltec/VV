@@ -28,7 +28,8 @@ import Seg from '../ui/Seg.svelte'
  * fields (found or not found) and never prints the file's own column headers. Renaming and
  * deleting a file are on its report.
  */
-let { ownersOnly = false }: { ownersOnly?: boolean } = $props()
+let { ownersOnly = false, leadsOnly = false }: { ownersOnly?: boolean; leadsOnly?: boolean } =
+	$props()
 let kind = $state<'Owners' | 'Leads'>('Owners')
 let areas = $state('')
 /** Owners: the name of the import and its saved list; empty uses the file name. */
@@ -43,7 +44,7 @@ let sending = $state(false)
 let drag = $state(false)
 let input: HTMLInputElement | undefined = $state()
 
-const owners = $derived(ownersOnly || kind === 'Owners')
+const owners = $derived(ownersOnly || (!leadsOnly && kind === 'Owners'))
 
 async function openReport(id: number) {
 	panel.closeAll()
@@ -194,7 +195,7 @@ async function send() {
 				</section>
 			{/if}
 		{:else}
-			{#if !ownersOnly}
+			{#if !ownersOnly && !leadsOnly}
 				<div class="fld">
 					<span class="fl">What is in the file</span>
 					<Seg

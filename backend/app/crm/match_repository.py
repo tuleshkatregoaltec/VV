@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import or_
+from sqlalchemy import or_, update
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -59,13 +59,24 @@ async def get_crm_inbound_enquiry(db: AsyncSession, key):
 
 
 async def mark_refreshable_matches_stale(db: AsyncSession, enquiry_id):
+    # An ORM update also updates matches already loaded in this session; a table update would
+    # leave them "suggested" in memory, so one found again would never be set back from stale.
     return await db.exec(
-        CrmInboundMatch.__table__.update()
+        update(CrmInboundMatch)
         .where(
             CrmInboundMatch.enquiry_id == enquiry_id,
             CrmInboundMatch.state.notin_(["saved", "dismissed"]),
         )
         .values(state="stale", updated_at=_utcnow())
+    )
+
+
+async def mark_algorithm_version(db: AsyncSession, enquiry_id, version):
+    """Every stored match of the lead was considered by this run, kept or not."""
+    return await db.exec(
+        update(CrmInboundMatch)
+        .where(CrmInboundMatch.enquiry_id == enquiry_id)
+        .values(algorithm_version=version)
     )
 
 

@@ -144,3 +144,48 @@ async def test_native_agent_spans_keep_stable_identity_and_template_versions(mon
     assert len(root.attributes["app.prompt.sha256"]) == 64
     assert len(root.attributes["app.tools.sha256"]) == 64
     assert all("PRIVATE" not in span.to_json() for span in spans)
+
+
+def test_app_initialization_cannot_enable_legacy_content_export_with_logfire_token():
+    import os
+    import subprocess
+    import sys
+
+    source = """
+from unittest.mock import Mock
+import logfire
+from pydantic_ai import Agent
+logfire.configure = Mock()
+def forbidden(*args, **kwargs):
+    raise AssertionError("Legacy instrumentation could export private content")
+logfire.instrument_fastapi = forbidden
+logfire.instrument_pydantic_ai = forbidden
+Agent.instrument_all(True)
+import app.main
+logfire.configure.assert_called_once_with(send_to_logfire=False)
+assert Agent._instrument_default is False
+assert app.main.observability_provider is None
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", source],
+        env={
+            **os.environ,
+            "AI_TELEMETRY_ENABLED": "false",
+            "LOGFIRE_TOKEN": "synthetic-not-a-real-token",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+async def test_postgres_engine_hides_private_sql_parameters(monkeypatch):
+    from app.postgres import client
+
+    monkeypatch.setattr(client, "_engine", None)
+    monkeypatch.setattr(client, "_session_factory", None)
+    monkeypatch.setattr(client, "instrument_postgres", lambda engine: None)
+    engine = client.get_postgres_engine()
+    assert engine.sync_engine.hide_parameters is True
+    await engine.dispose()

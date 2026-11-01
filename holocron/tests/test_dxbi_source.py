@@ -9,6 +9,7 @@ import pytest
 from holocron.sources import DXBI_SOURCE, registry
 from holocron.sources.dxbi.extract import (
     _apply_date_slice,
+    _detail_urls,
     _extract_heatmap_files,
     _extract_table_rows,
     _heatmap_client_signature,
@@ -24,6 +25,18 @@ from holocron.sources.dxbi.source import DateSlice, DxbiConfig, build_date_slice
 
 def test_dxbi_source_is_registered() -> None:
     assert registry.get("dxbi_transactions") is DXBI_SOURCE
+
+
+def test_history_links_preserve_current_and_legacy_dxbi_unit_details() -> None:
+    assert _detail_urls(
+        [
+            {"href": "/sold/t-dnu88"},
+            {"href": "https://dxbinteract.com/sold/t-dnu88"},
+            {"href": "https://dxb.is/hjldwudy"},
+            {"href": "https://example.com/sold/unrelated"},
+            {"href": "/agents/example"},
+        ]
+    ) == ["https://dxbinteract.com/sold/t-dnu88", "https://dxb.is/hjldwudy"]
 
 
 def test_incremental_date_slices_use_lookback_window() -> None:

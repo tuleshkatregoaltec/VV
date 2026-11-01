@@ -39,8 +39,8 @@ import type {
 } from '$lib/api/generated/hey-api/types.gen'
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { currentUser } from '$lib/stores/user.svelte'
-import { groupOf, LEAD_TYPES, ownerPropertyKind, SOURCE_OPTIONS } from '../config'
-import { aed, fmt, plural, short } from '../format'
+import { groupOf, LEAD_TYPES, ownerPropertyKind, PROPERTY_TYPES, SOURCE_OPTIONS } from '../config'
+import { aed, fmt, fullDate, plural, short } from '../format'
 import { crmScopeKey, onCrmIdentityChange } from '../identity.svelte'
 import { IMPORT_STATUS } from '../importStatus'
 import {
@@ -53,6 +53,9 @@ import {
 } from '../ownerImportReport'
 import type {
 	Chip,
+	CompanyListingAgentInventory,
+	CompanyListingCompany,
+	CompanyListingFilter,
 	FeedArea,
 	FeedPreferences,
 	FeedSummary,
@@ -74,6 +77,9 @@ import type {
 	LeadStage,
 	LeadStageMove,
 	LeadType,
+	ListingCard,
+	ListingListResponse,
+	ListingStatus,
 	MarketListing,
 	MarketListingDetail,
 	MatchClient,
@@ -102,6 +108,7 @@ import type {
 	OwnerRow,
 	OwnerTab,
 	OwnerUnit,
+	RecentSale,
 	Renewal,
 	RenewalDetail,
 	RenewalListParams,
@@ -131,6 +138,8 @@ function sharedRead<T>(url: string): Promise<T> {
 const OFF_PLAN_TAG = 'off-plan'
 /** Source of the leads Vitevue supplies from lease data (backend VITEVUE_LEASE_SOURCE). */
 const VITEVUE_SOURCE = 'Vitevue lease lead'
+/** Owners on the agency file whose unit just resold (backend SOLD_OWNER_SOURCE). */
+const SOLD_OWNER_SOURCE = 'Owner file · recently sold'
 
 type Intent = InboundEnquiryResponse['intent']
 type Status = InboundEnquiryResponse['status']
@@ -203,7 +212,7 @@ export async function me(): Promise<Me> {
 		.join('')
 		.slice(0, 2)
 		.toUpperCase()
-	return { name, initials, role: 'agent', today: localToday(), areas: [] }
+	return { name, initials, role: 'agent', is_owner: u.is_owner, today: localToday(), areas: [] }
 }
 
 /* ── leads ── */
@@ -270,6 +279,7 @@ function statusOf(stage: LeadStage): Status {
 
 /** UI field → backend criteria key, where the backend already names it (matching reads these). */
 const CRITERIA_KEY: Partial<Record<LeadFieldKey, string>> = {
+	wants: 'property_type',
 	budget_aed: 'budget_max_aed',
 	target_price_aed: 'expected_price_aed',
 	finance: 'financing',
@@ -295,6 +305,34 @@ function wantsOf(c: Criteria): string | null {
 	return parts.length ? parts.join(' ') : null
 }
 
+/** Imported synonyms, shown as the portal type the Wants dropdown offers. */
+const TYPE_SYNONYMS: Record<string, string> = {
+	flat: 'Apartment',
+	unit: 'Apartment',
+	residential: 'Apartment',
+	'residential flat': 'Apartment',
+	'residential flats': 'Apartment',
+	apartments: 'Apartment',
+	villas: 'Villa',
+	townhouses: 'Townhouse'
+}
+
+/** The Wants option for a stored property type; an unknown name is kept as it is. */
+function wantsOption(v: unknown): string | null {
+	const raw = text(v)
+	if (!raw) return null
+	const key = raw.trim().toLowerCase()
+	return PROPERTY_TYPES.find((t) => t.toLowerCase() === key) ?? TYPE_SYNONYMS[key] ?? raw
+}
+
+/** The Bedrooms option for a saved range: 0 is a studio, 7 with no upper bound is 7+. */
+function bedroomsOption(c: Criteria): string | null {
+	const beds = num(c.bedrooms_min)
+	if (beds === null) return null
+	if (beds === 0) return 'Studio'
+	return beds >= 7 && num(c.bedrooms_max) === null ? '7+' : String(beds)
+}
+
 function fieldsOf(c: Criteria): LeadFields {
 	const out: LeadFields = {}
 	const keys = Object.keys(LEAD_TYPES).flatMap((t) =>
@@ -305,7 +343,9 @@ function fieldsOf(c: Criteria): LeadFields {
 		const v = k.endsWith('_aed') ? num(raw) : text(raw)
 		if (v !== null) out[k] = v
 	}
-	out.wants ??= wantsOf(c)
+	// Wants is the property type matching filters on, not the older free text under `wants`.
+	out.wants = wantsOption(c.property_type)
+	out.bedrooms = bedroomsOption(c)
 	out.budget_aed ??= num(c.budget_min_aed)
 	if (!out.unit) {
 		const unit = [text(c.building), text(c.unit_number)].filter(Boolean).join(' #')
@@ -317,7 +357,19 @@ function fieldsOf(c: Criteria): LeadFields {
 
 function criteriaWith(current: Criteria, fields: LeadFields): Criteria {
 	const next = { ...current }
+	// Wants now saves as property_type; drop the older free text so it cannot drift from it.
+	if ('wants' in fields) delete next.wants
 	for (const [k, v] of Object.entries(fields)) {
+		if (k === 'bedrooms') {
+			// One choice is a range for matching: Studio = 0, "7+" = 7 and up, else exactly that.
+			delete next.bedrooms_min
+			delete next.bedrooms_max
+			if (v === null || v === undefined || v === '') continue
+			const beds = v === 'Studio' ? 0 : Number.parseInt(String(v), 10)
+			next.bedrooms_min = beds
+			if (v !== '7+') next.bedrooms_max = beds
+			continue
+		}
 		const key = CRITERIA_KEY[k as LeadFieldKey] ?? k
 		if (v === null || v === undefined || v === '') delete next[key]
 		else if (key === 'locations')
@@ -333,15 +385,17 @@ function criteriaWith(current: Criteria, fields: LeadFields): Criteria {
 const sourceOf = (label: string): Source =>
 	label === VITEVUE_SOURCE
 		? 'vitevue'
-		: (SOURCE_OPTIONS.find((o) => o.label.toLowerCase() === label.toLowerCase())?.source ??
-			'inbound')
+		: label === SOLD_OWNER_SOURCE
+			? 'file'
+			: (SOURCE_OPTIONS.find((o) => o.label.toLowerCase() === label.toLowerCase())?.source ??
+				'inbound')
 
-function summaryOf(type: LeadType, f: LeadFields): { line: string; sub: string } {
+function summaryOf(type: LeadType, f: LeadFields, c: Criteria): { line: string; sub: string } {
 	const money = (v: unknown) => (num(v) ? `AED ${short(Number(v))}` : null)
 	const join = (xs: (string | number | null | undefined)[]) => xs.filter(Boolean).join(' · ')
 	if (groupOf(type) === 'bt') {
 		return {
-			line: String(f.wants ?? 'Not stated'),
+			line: wantsOf(c) ?? text(c.wants) ?? 'Not stated',
 			sub: join([money(f.budget_aed), f.finance, f.timeline, f.move_in])
 		}
 	}
@@ -396,11 +450,13 @@ function leadRow(e: InboundEnquiryResponse, u: AuthMeResponse): LeadRow {
 		gated: false,
 		owner_id: null,
 		fields,
-		summary: lease && type === 'owner' ? vitevueSummary(lease) : summaryOf(type, fields),
+		summary:
+			lease && type === 'owner' ? vitevueSummary(lease) : summaryOf(type, fields, e.criteria),
 		known: knownOf(e),
 		source_short: e.source,
 		listing: null,
-		lease
+		lease,
+		recent_sales: recentSales(e)
 	}
 }
 
@@ -457,7 +513,11 @@ const isVilla = (propertyType: unknown) => /villa|townhouse/i.test(String(proper
 export async function listLeads(p: LeadListParams): Promise<LeadListResponse> {
 	const [res, u, leaseResult] = await Promise.all([
 		sharedRead<InboundEnquiryListResponse>(
-			client.withQuery(`${CRM}/inbound/enquiries`, { search: p.q || undefined, limit: LIST_LIMIT })
+			client.withQuery(`${CRM}/inbound/enquiries`, {
+				search: p.q || undefined,
+				leads_only: true,
+				limit: LIST_LIMIT
+			})
 		),
 		whoAmI(),
 		// The agency's own leads still show when the lease data cannot load; the page says so.
@@ -674,9 +734,12 @@ const LANES: Record<
 	'bt' | 'sl',
 	{ lane: string; title: string; kind: MatchRow['kind']; line: MatchRow['line'] }[]
 > = {
+	// 26 Oct call: the agency's own listings first (it can earn both sides), then the owner
+	// file, then portal listings.
 	bt: [
-		{ lane: 'listings', title: 'Portal listings', kind: 'public', line: 'in' },
+		{ lane: 'company', title: 'Company listings', kind: 'colleague_listing', line: 'own' },
 		{ lane: 'owners', title: 'Owners on your file', kind: 'owner', line: 'vv' },
+		{ lane: 'listings', title: 'Portal listings', kind: 'public', line: 'in' },
 		{ lane: 'units', title: 'Units on record', kind: 'owner', line: 'vv' },
 		{ lane: 'offplan', title: 'Off-plan projects', kind: 'allocation', line: 'own' }
 	],
@@ -696,9 +759,31 @@ export async function refreshLeadMatches(id: number): Promise<Written<null>> {
 }
 
 export async function leadMatches(id: number): Promise<LeadMatches> {
-	const [e, res, u] = await Promise.all([getEnquiry(id), loadMatches(id), whoAmI()])
+	const [e, u] = await Promise.all([getEnquiry(id), whoAmI()])
 	const lead = leadRow(e, u)
 	const side = groupOf(lead.lead_type)
+	const brief = LEAD_TYPES[lead.lead_type].fields
+		.filter((f) => lead.fields[f.key])
+		.map((f) => ({
+			k: f.label,
+			v: f.money ? aed(Number(lead.fields[f.key])) : String(lead.fields[f.key])
+		}))
+	const tab = side === 'sl' ? 'sell' : lead.off_plan ? 'offplan' : 'ready'
+	// Matching needs a qualified brief (the backend refuses otherwise): ask the agent for one.
+	if (!e.qualification_complete) {
+		return {
+			tab,
+			lead,
+			brief,
+			move_by: null,
+			shortlist: 0,
+			tiers: [],
+			status: null,
+			own_listing: null,
+			needs_brief: true
+		}
+	}
+	const res = await loadMatches(id)
 	const live = (lane: string) => (res.lanes[lane] ?? []).filter((m) => m.state !== 'dismissed')
 
 	const tiers: MatchTier[] = LANES[side].map((t, i) => ({
@@ -748,21 +833,17 @@ export async function leadMatches(id: number): Promise<LeadMatches> {
 	}))
 
 	return {
-		tab: side === 'sl' ? 'sell' : lead.off_plan ? 'offplan' : 'ready',
+		tab,
 		lead,
-		brief: LEAD_TYPES[lead.lead_type].fields
-			.filter((f) => lead.fields[f.key])
-			.map((f) => ({
-				k: f.label,
-				v: f.money ? aed(Number(lead.fields[f.key])) : String(lead.fields[f.key])
-			})),
+		brief,
 		move_by: null,
 		shortlist: Object.values(res.lanes)
 			.flat()
 			.filter((m) => m.state === 'saved').length,
 		tiers,
 		status: null,
-		own_listing: null
+		own_listing: null,
+		needs_brief: false
 	}
 }
 
@@ -1980,7 +2061,8 @@ function unopenedVitevueLead(item: CrmRenewalLeadsResponse['items'][number]): Le
 			: 'Owner not identified yet',
 		source_short: VITEVUE_SOURCE,
 		listing: null,
-		lease
+		lease,
+		recent_sales: null
 	}
 }
 
@@ -1988,6 +2070,15 @@ function unopenedVitevueLead(item: CrmRenewalLeadsResponse['items'][number]): Le
 export async function openVitevueLead(leaseId: string): Promise<Written<LeadDetail>> {
 	const [e, u] = await Promise.all([
 		client.post<InboundEnquiryResponse>(`${CRM}/renewal-leads/${encodeURIComponent(leaseId)}/lead`),
+		whoAmI()
+	])
+	return done(leadDetail(e, u))
+}
+
+/** Approve a recently sold owner in the Inbox as a possible buyer lead (no brief yet). */
+export async function approveRecentSeller(id: number): Promise<Written<LeadDetail>> {
+	const [e, u] = await Promise.all([
+		client.post<InboundEnquiryResponse>(`${CRM}/inbound/enquiries/${id}/approve-buyer`),
 		whoAmI()
 	])
 	return done(leadDetail(e, u))
@@ -2008,10 +2099,47 @@ const BAND: Record<string, string> = {
 	standard: 'Standard'
 }
 
+/** A recently sold owner's sales, newest first: "Recently sold · 2 sales · latest 5 Oct · AED 2.4M". */
+/** The sales stored on a recently sold owner (Inbox item or the lead approved from it). */
+function recentSales(e: InboundEnquiryResponse): RecentSale[] | null {
+	if (e.source !== SOLD_OWNER_SOURCE) return null
+	return (e.observed_data?.recent_sales ?? []) as RecentSale[]
+}
+
+function soldLine(e: InboundEnquiryResponse): string | null {
+	if (e.source !== SOLD_OWNER_SOURCE) return null
+	const sales = (e.observed_data?.recent_sales ?? []) as {
+		sold_on: string
+		price_aed: number | null
+		bought_price_aed?: number | null
+		est_cash_in_hand_aed?: number | null
+	}[]
+	const latest = sales[0]
+	if (!latest) return 'Recently sold'
+	// What the latest sale made over the owner's purchase: the cash the seller freed up.
+	const gain =
+		latest.price_aed && latest.bought_price_aed ? latest.price_aed - latest.bought_price_aed : null
+	return [
+		'Recently sold',
+		`${sales.length} ${sales.length === 1 ? 'sale' : 'sales'}`,
+		`latest ${dayMonth(latest.sold_on)}`,
+		latest.price_aed ? `AED ${short(latest.price_aed)}` : null,
+		gain === null ? null : gain < 0 ? `Loss −AED ${short(-gain)}` : `Profit +AED ${short(gain)}`,
+		// Sale less the loan DLD recorded at purchase; repayments since are unknown, so "≈".
+		latest.est_cash_in_hand_aed != null
+			? `Est. cash in hand ≈ AED ${short(latest.est_cash_in_hand_aed)}`
+			: latest.price_aed
+				? 'Cash in hand: mortgage unknown'
+				: null
+	]
+		.filter(Boolean)
+		.join(' · ')
+}
+
 function inboxItem(e: InboundEnquiryResponse, u: AuthMeResponse): InboxItem {
 	const type = typeOf(e)
 	const typed = e.intent !== 'unknown'
-	const summary = summaryOf(type, fieldsOf(e.criteria))
+	const summary = summaryOf(type, fieldsOf(e.criteria), e.criteria)
 	const name = e.contact.full_name || 'Unnamed contact'
 	const dismissed = e.status === 'disqualified'
 	const mine = e.assigned_user_id === u.id
@@ -2041,31 +2169,39 @@ function inboxItem(e: InboundEnquiryResponse, u: AuthMeResponse): InboxItem {
 		requests: [],
 		want_line: typed
 			? [LEAD_TYPES[type].label, summary.line, summary.sub].filter(Boolean).join(' · ')
-			: 'Not yet qualified as a buyer, seller, tenant or landlord',
+			: (soldLine(e) ?? 'Not yet qualified as a buyer, seller, tenant or landlord'),
 		// Only a typed enquiry opens as a lead; an unqualified contact has no lead type yet.
 		lead_id: typed ? e.id : null,
 		conversation: e.raw_notes
 			? [{ from: 'client', who: name, at: stamp(e.enquiry_date), text: e.raw_notes }]
 			: [],
-		can: { ask: false, withdraw: false, release: false, dismiss: false, restore: false },
+		can: {
+			ask: false,
+			withdraw: false,
+			release: false,
+			dismiss: false,
+			restore: false,
+			approve: e.source === SOLD_OWNER_SOURCE && e.intent === 'unknown'
+		},
 		my_request: null
 	}
 }
 
 /**
  * Inbox: typed enquiries still waiting for a first response (the backend's inbox rule) and
- * contacts not yet qualified; Not real lists disqualified ones. Vitevue lease leads live in Leads.
+ * contacts not yet qualified. Vitevue lease leads live in Leads. Dismissed (disqualified) items are
+ * left out: the Not real tab was removed (28 Oct), nothing on the backend marks items not real.
  * Read only: asking for, releasing and dismissing enquiries need the handout system.
  */
-export async function listInbox(filter: InboxFilter): Promise<InboxResponse> {
-	const get = (q: Record<string, string>) =>
+export async function listInbox(filter: InboxFilter, days = 30): Promise<InboxResponse> {
+	const get = (q: Record<string, string>, limit = LIST_LIMIT) =>
 		sharedRead<InboundEnquiryListResponse>(
-			client.withQuery(`${CRM}/inbound/enquiries`, { ...q, limit: LIST_LIMIT })
+			client.withQuery(`${CRM}/inbound/enquiries`, { ...q, within_days: days, limit })
 		)
-	const [inbox, unqualified, disqualified, u] = await Promise.all([
+	const [inbox, unqualified, u] = await Promise.all([
 		get({ workspace: 'inbox' }),
-		get({ workspace: 'unqualified' }),
-		get({ status: 'disqualified' }),
+		// Recent sellers are unqualified contacts: up to 1,000, so 90 days fits.
+		get({ workspace: 'unqualified' }, 1000),
 		whoAmI()
 	])
 	const seen = new Set<number>()
@@ -2074,21 +2210,19 @@ export async function listInbox(filter: InboxFilter): Promise<InboxResponse> {
 		.filter((e) => !seen.has(e.id) && Boolean(seen.add(e.id)))
 		.sort((a, b) => b.enquiry_date.localeCompare(a.enquiry_date))
 		.map((e) => inboxItem(e, u))
-	const dismissed = disqualified.enquiries.filter((e) => !isVitevue(e)).map((e) => inboxItem(e, u))
 	const lists: Record<InboxFilter, InboxItem[]> = {
 		all: open,
 		mine: open.filter((x) => x.agent === fullName(u)),
-		waiting: open.filter((x) => x.state === 'waiting'),
-		dismissed
+		waiting: open.filter((x) => x.state === 'waiting')
 	}
 	return {
-		limited: [inbox, unqualified, disqualified].some((page) => page.total > page.enquiries.length),
+		limited: [inbox, unqualified].some((page) => page.total > page.enquiries.length),
 		items: lists[filter],
+		lists,
 		counts: {
 			all: lists.all.length,
 			mine: lists.mine.length,
-			waiting: lists.waiting.length,
-			dismissed: lists.dismissed.length
+			waiting: lists.waiting.length
 		},
 		today: open.filter((x) => x.ago === 'today').length,
 		waiting: lists.waiting.length,
@@ -2144,3 +2278,103 @@ export async function matchClients(): Promise<MatchClients> {
 
 /** A write (or a single record) the backend has no endpoint for yet: a 501, never a fake success. */
 export const notOnBackend = <T>(what: string): Promise<T> => Promise.reject(notSaved(what))
+
+/* ── company listings (/company-listings) ── */
+
+/** GET /crm/company-listings row (not in the generated client yet). */
+interface CompanyListingResponse {
+	reference: string
+	agent_name: string
+	agent_phone: string | null
+	mode: string
+	title: string
+	property_type: string
+	bedrooms: number | null
+	size_sqft: number | null
+	price_aed: number
+	area_name: string
+	building_name: string | null
+	unit_number: string | null
+	status: string
+	listed_at: string
+}
+
+interface CompanyListingsResponse {
+	company: CompanyListingCompany | null
+	matching_company: CompanyListingCompany | null
+	companies: CompanyListingCompany[]
+	agents: CompanyListingAgentInventory[]
+	items: CompanyListingResponse[]
+	total: number
+	limit: number
+	offset: number
+}
+
+/** Active or under offer is live; pocket is off-market (not advertised); sold or withdrawn is expired. */
+const companyStatus = (s: string): ListingStatus =>
+	s === 'active' || s === 'under_offer' ? 'live' : s === 'pocket' ? 'pocket' : 'expired'
+
+function companyCard(r: CompanyListingResponse): ListingCard {
+	return {
+		id: r.reference,
+		unit: r.title,
+		area: r.area_name,
+		bedrooms: r.bedrooms ?? 0,
+		size_sqft: r.size_sqft ?? 0,
+		price_aed: r.price_aed,
+		deal_type: r.mode === 'rent' ? 'rent' : 'sale',
+		status: companyStatus(r.status),
+		scope: 'company',
+		agent: r.agent_name,
+		owner: '',
+		portals: '',
+		days_live: Math.max(0, Math.floor((Date.now() - Date.parse(r.listed_at)) / 86_400_000)),
+		enquiries: 0,
+		permit: null,
+		// No permit is recorded for company listings yet; the card's chip shows the type instead.
+		permit_chip: { tone: 'neutral', label: r.property_type },
+		form_a_expires: null,
+		form_a_chip: null,
+		comparables_note: '',
+		from_lead_id: null
+	}
+}
+
+export async function listCompanyListings(
+	status?: ListingStatus,
+	limit = 100,
+	offset = 0,
+	filter?: CompanyListingFilter
+): Promise<ListingListResponse> {
+	const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+	if (filter?.brokerId) params.set('broker_id', filter.brokerId)
+	if (filter?.allCompanies) params.set('all_companies', 'true')
+	if (filter?.agentId) params.set('agent_id', filter.agentId)
+	else if (filter?.agentName) params.set('agent_name', filter.agentName)
+	if (filter?.search) params.set('search', filter.search)
+	const r = await client.get<CompanyListingsResponse>(`${CRM}/company-listings?${params}`)
+	const cards = r.items.map(companyCard)
+	const count = (s: ListingStatus) => (s === 'live' ? r.total : 0)
+	return {
+		items: status ? cards.filter((c) => c.status === status) : cards,
+		counts: { live: count('live'), pocket: count('pocket'), expired: count('expired') },
+		company: r.company,
+		matching_company: r.matching_company,
+		companies: r.companies,
+		agent_inventory: r.agents,
+		total: r.total,
+		limit: r.limit,
+		offset: r.offset
+	}
+}
+
+/** Stop matching buyers and tenants against any company's listings (owners only). */
+export async function clearCompanyListingSource() {
+	return client.delete<void>(`${CRM}/company-listings/source`)
+}
+
+export async function selectCompanyListingSource(broker_id: string) {
+	return client.put<{ broker_id: string; broker_name: string }>(`${CRM}/company-listings/source`, {
+		broker_id
+	})
+}

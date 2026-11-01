@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 from openpyxl import load_workbook
@@ -49,7 +50,15 @@ RENTAL_ROW = {
 }
 
 
-async def test_sales_excel_export_names_dxbi_and_caps_rows(monkeypatch):
+def assert_no_provider_attribution(workbook):
+    # Metadata and hidden sheets are part of what the customer downloads, too.
+    for sheet in workbook:
+        for row in sheet.values:
+            for value in row:
+                assert not re.search(r"\b(DLD|DXBI|DXBInteract)\b", str(value), re.I)
+
+
+async def test_sales_excel_export_keeps_metadata_without_exposing_providers(monkeypatch):
     seen = {}
 
     async def fake_query(sql, params):
@@ -71,16 +80,14 @@ async def test_sales_excel_export_names_dxbi_and_caps_rows(monkeypatch):
     workbook = load_workbook(stream)
     assert workbook.sheetnames[:2] == ["Metadata", "Sales Transactions"]
     metadata = workbook["Metadata"]
-    assert (metadata["B1"].value, metadata["B4"].value) == (
-        "Vitevue",
-        "DXBInteract (DXBI) sold transactions",
-    )
-    assert metadata["B5"].value == 1
-    assert metadata["B6"].value == transaction_service.MAX_TRANSACTION_EXPORT_ROWS
-    assert "location=Dubai Marina" in metadata["B7"].value
+    assert metadata["B1"].value == "Vitevue"
+    assert metadata["B4"].value == 1
+    assert metadata["B5"].value == transaction_service.MAX_TRANSACTION_EXPORT_ROWS
+    assert "location=Dubai Marina" in metadata["B6"].value
+    assert_no_provider_attribution(workbook)
     sheet = workbook["Sales Transactions"]
-    assert [cell.value for cell in sheet[6]] == transaction_service.SALES_EXPORT_HEADERS
-    assert (sheet["A7"].value, sheet["C7"].value, sheet["P7"].value) == ("T-1", "1904", 1_500)
+    assert [cell.value for cell in sheet[5]] == transaction_service.SALES_EXPORT_HEADERS
+    assert (sheet["A6"].value, sheet["C6"].value, sheet["P6"].value) == ("T-1", "1904", 1_500)
 
 
 async def test_sales_csv_export_is_the_raw_rows_without_workbook_metadata(monkeypatch):
@@ -121,11 +128,11 @@ async def test_exports_escape_spreadsheet_formula_strings(monkeypatch):
 
     excel_stream = await transaction_service.export_sales_transactions(SalesFilters())
     worksheet = load_workbook(excel_stream)["Sales Transactions"]
-    assert worksheet["C7"].value == "'@malicious"
-    assert worksheet["D7"].value == "'+SUM(1,1)"
-    assert worksheet["E7"].value.startswith("'=HYPERLINK")
-    assert worksheet["J7"].value == "'-2+3"
-    assert worksheet["K7"].value == "'\t=cmd"
+    assert worksheet["C6"].value == "'@malicious"
+    assert worksheet["D6"].value == "'+SUM(1,1)"
+    assert worksheet["E6"].value.startswith("'=HYPERLINK")
+    assert worksheet["J6"].value == "'-2+3"
+    assert worksheet["K6"].value == "'\t=cmd"
 
 
 async def test_rental_export_selected_ids_override_filters(monkeypatch):
@@ -146,11 +153,11 @@ async def test_rental_export_selected_ids_override_filters(monkeypatch):
     assert "location_name = {location:String}" not in seen["sql"]
     assert seen["params"]["ids"] == ["R-1", "R-2"]
     workbook = load_workbook(stream)
-    assert workbook["Metadata"]["B4"].value == "DXBInteract (DXBI) rental contracts"
+    assert_no_provider_attribution(workbook)
     sheet = workbook["Rental Contracts"]
-    assert [cell.value for cell in sheet[6]] == transaction_service.RENTAL_EXPORT_HEADERS
-    assert sheet["A7"].value == "R-1"
-    assert sheet["D7"].value == "G29"
+    assert [cell.value for cell in sheet[5]] == transaction_service.RENTAL_EXPORT_HEADERS
+    assert sheet["A6"].value == "R-1"
+    assert sheet["D6"].value == "G29"
 
 
 async def test_selected_export_metadata_does_not_claim_ignored_filters(monkeypatch):
@@ -163,7 +170,7 @@ async def test_selected_export_metadata_does_not_claim_ignored_filters(monkeypat
     stream = await transaction_service.export_rental_contracts(
         RentalFilters(location="Elsewhere", timeframe_days=7), contract_ids="R-1"
     )
-    metadata = load_workbook(stream)["Metadata"]["B7"].value
+    metadata = load_workbook(stream)["Metadata"]["B6"].value
     assert "contract_ids=R-1" in metadata
     assert "location=Elsewhere" not in metadata
     assert "timeframe_days=7" not in metadata
@@ -177,9 +184,9 @@ async def test_selected_sale_export_metadata_omits_unapplied_filters(monkeypatch
     stream = await transaction_service.export_sales_transactions(
         SalesFilters(location="Elsewhere", timeframe_days=7), transaction_ids=" T-1, "
     )
-    assert load_workbook(stream)["Metadata"]["B7"].value == "transaction_ids=T-1"
+    assert load_workbook(stream)["Metadata"]["B6"].value == "transaction_ids=T-1"
 
     stream = await transaction_service.export_sales_transactions(
         SalesFilters(location="Dubai Marina"), transaction_ids=" , "
     )
-    assert "location=Dubai Marina" in load_workbook(stream)["Metadata"]["B7"].value
+    assert "location=Dubai Marina" in load_workbook(stream)["Metadata"]["B6"].value

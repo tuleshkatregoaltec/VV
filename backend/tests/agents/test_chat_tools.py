@@ -2,15 +2,12 @@ from app.chat.agent import agent
 
 
 def test_registered_chat_tools_preserve_existing_capabilities():
-    # Artifact dispatch recognizes more names; extraction must not enable them.
     assert set(agent._function_toolset.tools) == {
-        "get_market_pulse",
-        "rank_areas",
-        "get_similar_projects",
-        # Database-grounded market capabilities; each calls one public domain operation.
-        "query_market_metrics",
-        "get_listing_inventory",
-        "get_project_delivery_summary",
+        "research_market",
+        "analyze_pricing",
+        "retrieve_personal_crm",
+        "plan_followups",
+        "prepare_action",
     }
 
 

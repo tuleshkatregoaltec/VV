@@ -2,6 +2,7 @@
 import { PanelLeft, X } from 'lucide-svelte'
 import { get } from 'svelte/store'
 import { page } from '$app/stores'
+import { createConversationSelection } from '$lib/chat/conversationSelection.svelte'
 import ChatBox from '$lib/components/dashboard/ChatBox.svelte'
 import ConversationSidebar from '$lib/components/dashboard/ConversationSidebar.svelte'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
@@ -14,13 +15,13 @@ type ChatNavigationState = {
 
 const initialState = get(page).state as ChatNavigationState
 
-let selectedConversationId = $state<number | null>(initialState?.conversationId ?? null)
+const selection = createConversationSelection(initialState?.conversationId ?? null)
 let initialMessage = $state<string | null>(initialState?.initialMessage ?? null)
 let autoSendPending = $state(Boolean(initialState?.conversationId && initialState?.initialMessage))
 let mobileHistoryOpen = $state(false)
 
 function selectConversation(id: number) {
-	selectedConversationId = id
+	selection.id = id
 	mobileHistoryOpen = false
 }
 
@@ -33,7 +34,7 @@ $effect(() => {
 	const state = $page.state as ChatNavigationState
 
 	if (state?.conversationId && state?.initialMessage) {
-		selectedConversationId = state.conversationId
+		selection.id = state.conversationId
 		initialMessage = state.initialMessage
 		autoSendPending = true
 	}
@@ -57,7 +58,7 @@ $effect(() => {
 				aria-label="Conversation history"
 			>
 				<ConversationSidebar
-					bind:selectedId={selectedConversationId}
+					bind:selectedId={selection.id}
 					onSelect={selectConversation}
 				/>
 			</aside>
@@ -71,6 +72,9 @@ $effect(() => {
 							<img src="/icon.svg" alt="" class="h-3.5 w-3.5" />
 							<h1 class="text-sm font-semibold text-fg-1">Vitevue AI</h1>
 						</div>
+						<p class="mt-1 text-xs text-fg-4">
+							Ask about market data or your own CRM records. Changes require your confirmation.
+						</p>
 					</div>
 					<button
 						type="button"
@@ -87,7 +91,7 @@ $effect(() => {
 					class="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card shadow-sm"
 				>
 					<ChatBox
-						bind:conversationId={selectedConversationId}
+						bind:conversationId={selection.id}
 						{initialMessage}
 						autoSend={autoSendPending}
 						showHeader={false}
@@ -125,7 +129,7 @@ $effect(() => {
 			aria-label="Conversation history"
 		>
 			<ConversationSidebar
-				bind:selectedId={selectedConversationId}
+				bind:selectedId={selection.id}
 				onSelect={selectConversation}
 			/>
 		</div>

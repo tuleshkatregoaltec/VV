@@ -3,14 +3,15 @@ from datetime import datetime, timezone
 from typing import LiteralString, Optional
 
 from pydantic import BaseModel
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column, DateTime, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
 class UserTokenUsage(SQLModel, table=True):
     """Daily token usage tracking per user"""
 
-    __tablename__: LiteralString = "user_token_usage"
+    __tablename__: LiteralString = "user_token_usage_totals"
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_user_token_usage_day"),)
 
     # Primary key
     id: Optional[int] = Field(default=None, primary_key=True)

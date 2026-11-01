@@ -32,14 +32,12 @@ def _add_export_metadata(
     generated_at: datetime,
     row_count: int,
     filters: dict[str, object],
-    source: str,
 ) -> None:
     metadata = workbook.create_sheet("Metadata", 0)
     rows = [
         ("Publisher", "Vitevue"),
         ("Dataset", title),
         ("Generated at", generated_at.isoformat()),
-        ("Data source", source),
         ("Rows exported", row_count),
         ("Maximum filtered rows", MAX_TRANSACTION_EXPORT_ROWS),
         ("Filters applied", _active_export_filters(filters)),
@@ -55,12 +53,10 @@ def _add_export_header(
     *,
     title: str,
     generated_at: datetime,
-    source: str,
 ) -> None:
     worksheet.append(["Vitevue"])
     worksheet.append([title])
     worksheet.append([f"Generated at {generated_at.isoformat()}"])
-    worksheet.append([f"Source: {source}"])
     worksheet.append([])
     worksheet["A1"].font = Font(bold=True, size=14)
     worksheet["A2"].font = Font(bold=True)
@@ -97,7 +93,6 @@ def _rows_to_csv(headers: list[str], rows: list[list[object]]) -> BytesIO:
 def _workbook(
     *,
     title: str,
-    source: str,
     filters: dict[str, object],
     headers: list[str],
     rows: list[list[object]],
@@ -112,11 +107,10 @@ def _workbook(
         generated_at=generated_at,
         row_count=len(rows),
         filters=filters,
-        source=source,
     )
-    _add_export_header(ws, title=title, generated_at=generated_at, source=source)
+    _add_export_header(ws, title=title, generated_at=generated_at)
     ws.append(headers)
-    for cell in ws[6]:
+    for cell in ws[5]:
         cell.font = Font(bold=True)
     for row in rows:
         ws.append(_sanitize_spreadsheet_row(row))
@@ -133,7 +127,7 @@ SALES_EXPORT_HEADERS = [
     "Building",
     "Project",
     "Master Project",
-    "DLD Area",
+    "District",
     "Full Location",
     "Map",
     "Location",
@@ -153,7 +147,7 @@ RENTAL_EXPORT_HEADERS = [
     "Building",
     "Project",
     "Master Project",
-    "DLD Area",
+    "District",
     "Full Location",
     "Map",
     "Location",
@@ -199,7 +193,6 @@ async def export_sales_transactions(
         return _rows_to_csv(SALES_EXPORT_HEADERS, rows)
     return _workbook(
         title="Sales Transactions",
-        source="DXBInteract (DXBI) sold transactions",
         filters=(
             {"transaction_ids": ",".join(queries._ids(transaction_ids))}
             if queries._ids(transaction_ids)
@@ -244,7 +237,6 @@ async def export_rental_contracts(
         return _rows_to_csv(RENTAL_EXPORT_HEADERS, rows)
     return _workbook(
         title="Rental Contracts",
-        source="DXBInteract (DXBI) rental contracts",
         filters=(
             {"contract_ids": ",".join(queries._ids(contract_ids))}
             if queries._ids(contract_ids)

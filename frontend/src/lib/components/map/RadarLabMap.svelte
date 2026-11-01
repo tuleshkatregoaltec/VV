@@ -289,7 +289,6 @@ function projectFeature(project: ProjectRadarProject): GeoJSON.Feature {
 			sales_transaction_count: project.sales_transaction_count,
 			rental_contract_count: project.rental_contract_count,
 			gross_yield_pct: project.gross_yield_pct ?? 0,
-			coordinate_source: coordinateSourceLabel(radarProject),
 			detail_point_count: radarProject.detail_point_count ?? 0,
 			building_point_count: radarProject.building_point_count ?? 0,
 			land_point_count: radarProject.land_point_count ?? 0,
@@ -388,9 +387,7 @@ function towerPopupHtml(props: Record<string, unknown>) {
 		)} · median rent ${formatAedCompact(Number(props.median_annual_rent || 0))}</div>` +
 		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${Number(
 			props.listing_inventory_count || 0
-		).toLocaleString()} PF listings · ${Number(
-			props.matched_source_signatures || 0
-		).toLocaleString()} matched address signatures</div>` +
+		).toLocaleString()} listings</div>` +
 		`</div>`
 	)
 }
@@ -409,14 +406,6 @@ function escapeHtml(value: unknown) {
 		.replaceAll('>', '&gt;')
 		.replaceAll('"', '&quot;')
 		.replaceAll("'", '&#39;')
-}
-
-function coordinateSourceLabel(project: RadarProjectPin) {
-	if (project.coordinate_source === 'dld_mashrooi') return 'DLD Mashrooi'
-	if (project.coordinate_source === 'pf_reelly_consensus') return 'PF + Reelly coordinate consensus'
-	if (project.coordinate_source === 'pf_location_hierarchy') return 'PF location hierarchy'
-	if (project.coordinate_source === 'reelly_catalogue') return 'Reelly project catalogue'
-	return 'DLD building centroid'
 }
 
 function detailPointLabel(pin: RadarGeoPin) {

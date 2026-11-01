@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from app.analytics import market_metric_queries as queries
 from app.analytics.models import (
@@ -311,6 +311,28 @@ def _change(current: MarketMetricRow, previous: MarketMetricRow) -> dict[str, fl
     return {
         name: round((now - before) / before * 100, 2) if now is not None and before else None
         for name, (now, before) in pairs.items()
+    }
+
+
+@operation
+async def get_market_data_coverage(dataset: Literal["sales", "rentals"]) -> dict[str, Any]:
+    """Describe the served dataset without mistaking its date bounds for verified coverage."""
+    release = await queries.fetch_release(dataset)
+    count = int(release.get("eligible_count") or 0)
+    return {
+        "dataset": dataset,
+        "eligible_record_count": count,
+        "data_from": str(release["data_from"]) if count else None,
+        "data_to": str(release["data_to"]) if count else None,
+        "release_id": release.get("release_id") or None,
+        "built_at": str(release["built_at"]) if count else None,
+        "load_evidence": release.get("coverage") or {},
+        "eligibility": ELIGIBILITY[dataset],
+        "limitation": (
+            "Earliest and latest record dates do not prove complete coverage between them. "
+            "Use period-specific metrics to check verified coverage for the question's dates. "
+            "Counts include only eligible stored records, not all market activity."
+        ),
     }
 
 

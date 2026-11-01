@@ -16,7 +16,12 @@ from fastapi import (
 )
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.dependencies import AuthContext, require_active_subscription
+from app.core.dependencies import AuthContext, require_active_owner, require_active_subscription
+from app.crm.company_listings import (
+    clear_company_source,
+    list_company_listings,
+    select_company_source,
+)
 from app.crm.execution import expensive_crm
 from app.crm.import_models import (
     CrmContactImportPreview,
@@ -78,6 +83,9 @@ from app.crm.matching import (
 from app.crm.models import (
     CrmAreaPreferencesResponse,
     CrmAreaPreferencesUpdate,
+    CrmCompanyListingSourceResponse,
+    CrmCompanyListingSourceUpdate,
+    CrmCompanyListingsResponse,
     CrmDashboardResponse,
     CrmLeadDetailResponse,
     CrmNoteCreate,
@@ -99,6 +107,7 @@ from app.crm.owners import (
     list_contact_lists,
     list_lead_imported_contacts,
 )
+from app.crm.recently_sold import approve_recent_seller
 from app.crm.renewal_leads import (
     get_area_preferences,
     get_renewal_detail,
@@ -176,12 +185,19 @@ async def crm_inbound_enquiries(
     workspace: str | None = Query(default=None, pattern="^(inbox|unqualified|qualified|closed)$"),
     status: str | None = Query(default=None, max_length=40),
     search: str | None = Query(default=None, max_length=160),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    within_days: int | None = Query(default=None, ge=1, le=365),
+    leads_only: bool = Query(default=False),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """List organization-visible inbound enquiries and review exceptions."""
+    """List organization-visible inbound enquiries and review exceptions.
+
+    `within_days` keeps items dated within that many days (Inbox "Last 30 days"); a recently
+    sold owner is dated by the sale. `leads_only` leaves out contacts that are not leads yet
+    (the Leads list), so Inbox contacts cannot crowd leads out of a page.
+    """
     _, organization_id = _auth_ids(context)
     return await list_inbound_enquiries(
         db,
@@ -192,6 +208,21 @@ async def crm_inbound_enquiries(
         search=search,
         limit=limit,
         offset=offset,
+        within_days=within_days,
+        leads_only=leads_only,
+    )
+
+
+@router.post("/inbound/enquiries/{enquiry_id}/approve-buyer", response_model=InboundEnquiryResponse)
+async def crm_approve_recent_seller(
+    enquiry_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Approve a recently sold owner from the Inbox as a possible buyer lead (no brief yet)."""
+    user_id, organization_id = _auth_ids(context)
+    return await approve_recent_seller(
+        db, enquiry_id=enquiry_id, user_id=user_id, organization_id=organization_id
     )
 
 
@@ -340,6 +371,67 @@ async def crm_preview_inbound_import(
 ):
     """Inspect headers and samples without storing contacts or creating enquiries."""
     return await preview_inbound_import(file, campaign_context)
+
+
+@router.get("/company-listings", response_model=CrmCompanyListingsResponse)
+async def crm_company_listings(
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    broker_id: str | None = Query(default=None, max_length=80),
+    all_companies: bool = Query(default=False),
+    agent_id: str | None = Query(default=None, max_length=120),
+    agent_name: str | None = Query(default=None, max_length=200),
+    search: str | None = Query(default=None, max_length=120),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Current Property Finder listings for the connected or requested company.
+
+    `search` matches a listing's title, building or area (property name).
+    """
+    if (agent_id or agent_name) and not broker_id:
+        raise HTTPException(status_code=422, detail="Select a company before filtering by agent")
+    _, organization_id = _auth_ids(context)
+    return await list_company_listings(
+        db,
+        organization_id,
+        limit=limit,
+        offset=offset,
+        broker_id=broker_id,
+        all_companies=all_companies,
+        agent_id=agent_id,
+        agent_name=agent_name,
+        search=search,
+    )
+
+
+@router.put("/company-listings/source", response_model=CrmCompanyListingSourceResponse)
+async def crm_select_company_listing_source(
+    payload: CrmCompanyListingSourceUpdate,
+    context: AuthContext = Depends(require_active_owner),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Set the Property Finder broker whose inventory belongs in the organization CRM."""
+    user_id, organization_id = _auth_ids(context)
+    source = await select_company_source(
+        db,
+        organization_id=organization_id,
+        user_id=user_id,
+        broker_id=payload.broker_id,
+    )
+    return CrmCompanyListingSourceResponse(
+        broker_id=source.broker_id, broker_name=source.broker_name
+    )
+
+
+@router.delete("/company-listings/source", status_code=204)
+async def crm_clear_company_listing_source(
+    context: AuthContext = Depends(require_active_owner),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Stop using a Property Finder company for buyer and tenant matching."""
+    _, organization_id = _auth_ids(context)
+    await clear_company_source(db, organization_id=organization_id)
 
 
 @router.get("/inbound/imports", response_model=list[InboundImportResponse])

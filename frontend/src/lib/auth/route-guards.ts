@@ -35,6 +35,8 @@ export function matchesCategory(pathname: string, paths: string[]): boolean {
 }
 
 export function getRouteCategory(pathname: string): RouteCategory {
+	// Only this sample-data preview is public; CRM and adjacent routes keep their guards.
+	if (pathname.replace(/\/$/, '') === '/demo/assistant') return 'public'
 	if (matchesCategory(pathname, PUBLIC_PATHS)) return 'public'
 	if (matchesCategory(pathname, AUTH_PATHS)) return 'auth'
 	if (matchesCategory(pathname, ONBOARDING_PATHS)) return 'onboarding'

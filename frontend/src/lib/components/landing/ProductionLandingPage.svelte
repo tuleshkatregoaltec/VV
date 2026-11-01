@@ -422,10 +422,10 @@ onMount(() => {
 					<h3
 						class="font-display text-[clamp(1.75rem,3.2vw,2.625rem)] leading-tight font-normal text-ink-1"
 					>
-						Build the comp set from DLD and Ejari records.
+						Build the comp set from sales and rental records.
 					</h3>
 					<p class="mt-4 max-w-[38ch] text-[17px] leading-relaxed text-ink-3">
-						Scope DLD sales and Ejari rental contracts down to the evidence set behind a memo,
+						Scope sales and rental contracts down to the evidence set behind a memo,
 						valuation note or client pack.
 					</p>
 				</div>

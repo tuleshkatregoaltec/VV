@@ -340,6 +340,7 @@ async def fetch_release(dataset: str) -> dict[str, Any]:
     rows = await query(
         f"""
         SELECT any(release_id) AS release_id,
+               count() AS eligible_count,
                min({ds.event_date}) AS data_from,
                max({ds.event_date}) AS data_to,
                max(built_at) AS built_at
@@ -359,3 +360,41 @@ async def fetch_release(dataset: str) -> dict[str, Any]:
         if ledger:
             release["coverage"] = json.loads(ledger[0]["coverage_json"] or "{}")
     return release
+
+
+async def fetch_comparable_evidence(
+    dataset: str,
+    filters: MetricFilters,
+    *,
+    size_min: float | None,
+    size_max: float | None,
+    limit: int,
+) -> tuple[dict, list[dict]]:
+    """Exact aggregate plus a bounded recent comparable sample; no contact or unit IDs."""
+    ds = DATASETS[dataset]
+    where, params = where_clause(ds, filters)
+    if size_min is not None:
+        where += f" AND {ds.area_sqm} * {SQM_TO_SQFT} BETWEEN {{size_min:Float64}} AND {{size_max:Float64}}"
+        params |= {"size_min": size_min, "size_max": size_max}
+    expressions = metric_expressions(ds)
+    aggregate = await query(
+        f"SELECT {', '.join(expressions[name] + ' AS ' + name for name in ('count', 'median_aed', 'p25_aed', 'p75_aed', 'rated_count', 'median_aed_per_sqft'))} FROM {_from(dataset)} WHERE {where}",
+        params,
+    )
+    rental = (
+        ", version_en AS contract_version, toDate(contract_end_date) AS contract_end, toFloat64(contract_amount) AS contract_amount_aed"
+        if dataset == "rentals"
+        else ", reg_type_en AS registration"
+    )
+    rows = await query(
+        f"""SELECT {ds.event_date} AS event_date, {ds.value} AS amount_aed,
+            if({ds.area_sqm} > 0, {ds.area_sqm} * {SQM_TO_SQFT}, NULL) AS size_sqft,
+            if({ds.area_sqm} > 0, {_rate(ds)}, NULL) AS amount_per_sqft_aed,
+            {ds.building} AS building, {ds.bedrooms} AS bedrooms, source_system AS source
+            {rental}
+            FROM {_from(dataset)} WHERE {where}
+            ORDER BY {ds.event_date} DESC, {ds.value}, {ds.building}
+            LIMIT {{limit:UInt32}}""",
+        params | {"limit": limit},
+    )
+    return aggregate[0] if aggregate else {}, rows

@@ -27,6 +27,61 @@ export interface FieldDef {
 	required?: boolean
 }
 
+/**
+ * Wants: the property types portal listings use (listing filters, sale and rent). Matching
+ * compares the chosen name with the listing's type exactly, so these are the portal's own names.
+ */
+export const PROPERTY_TYPES = [
+	'Apartment',
+	'Villa',
+	'Townhouse',
+	'Penthouse',
+	'Duplex',
+	'Bungalow',
+	'Compound',
+	'Hotel & Hotel Apartment',
+	'Whole Building',
+	'Full Floor',
+	'Half Floor',
+	'Bulk Sale Unit',
+	'Bulk Rent Unit',
+	'Office Space',
+	'Business Centre',
+	'Co-working space',
+	'Retail',
+	'Shop',
+	'Show Room',
+	'Warehouse',
+	'Factory',
+	'Labor Camp',
+	'Staff Accommodation',
+	'Land',
+	'Farm'
+]
+
+/** Bedrooms: what portal listings record (studio, 1 to 7, 7+). */
+export const BEDROOM_OPTIONS = ['Studio', '1', '2', '3', '4', '5', '6', '7+']
+/** Wants types that have bedrooms; for the rest (offices, shops, land…) Bedrooms is hidden. */
+const BEDROOM_TYPES = new Set([
+	'Apartment',
+	'Villa',
+	'Townhouse',
+	'Penthouse',
+	'Duplex',
+	'Bungalow',
+	'Hotel & Hotel Apartment'
+])
+
+/**
+ * Whether a lead form shows a field for what is filled in so far. A hidden field is saved as
+ * empty, so a bedroom range left from an apartment is not applied to an office.
+ */
+export function fieldShown(f: FieldDef, values: Partial<Record<string, unknown>>): boolean {
+	if (f.key !== 'bedrooms') return true
+	const wants = String(values.wants ?? '').trim()
+	return !wants || BEDROOM_TYPES.has(wants)
+}
+
 export const LEAD_TYPE_ORDER: LeadType[] = ['buyer', 'seller', 'tenant', 'landlord']
 
 export const LEAD_TYPES: Record<
@@ -48,7 +103,8 @@ export const LEAD_TYPES: Record<
 		tone: 'blue',
 		areaRequired: true,
 		fields: [
-			{ key: 'wants', label: 'Wants' },
+			{ key: 'wants', label: 'Wants', options: PROPERTY_TYPES },
+			{ key: 'bedrooms', label: 'Bedrooms', options: BEDROOM_OPTIONS },
 			{ key: 'budget_aed', label: 'Budget', money: true, required: true },
 			{ key: 'finance', label: 'Finance' },
 			{ key: 'purpose', label: 'Buying to', options: ['Live in', 'Invest'] },
@@ -76,7 +132,8 @@ export const LEAD_TYPES: Record<
 		tone: 'green',
 		areaRequired: true,
 		fields: [
-			{ key: 'wants', label: 'Wants' },
+			{ key: 'wants', label: 'Wants', options: PROPERTY_TYPES },
+			{ key: 'bedrooms', label: 'Bedrooms', options: BEDROOM_OPTIONS },
 			{ key: 'budget_aed', label: 'Budget a year', money: true, required: true },
 			{ key: 'cheques', label: 'Cheques' },
 			{ key: 'move_in', label: 'Move-in' }
@@ -260,7 +317,7 @@ export const EVENT_KIND_ORDER: EventKind[] = [
 export const OWNER_SOURCES: { id: OwnerSource; label: string }[] = [
 	{ id: 'agent_contact', label: 'Own contact' },
 	{ id: 'agency_import', label: 'Agency file' },
-	{ id: 'dld_event', label: 'DLD/Ejari event' }
+	{ id: 'dld_event', label: 'Transaction event' }
 ]
 
 export const INVOICE: Record<InvoiceStatus, { label: string; tone: Tone }> = {
@@ -288,4 +345,4 @@ export const ORIGIN_LABEL: Record<Origin, string> = {
 }
 
 export const ownerSourceTone = (label: string): Tone =>
-	label === 'DLD/Ejari event' ? 'blue' : 'neutral'
+	label === 'Transaction event' ? 'blue' : 'neutral'

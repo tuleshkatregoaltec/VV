@@ -700,7 +700,7 @@ function resetCards() {
 										<span
 											class="rounded-sm border border-border bg-card px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-fg-4"
 										>
-											DLD
+											Default
 										</span>
 									{/if}
 								</div>

@@ -1716,10 +1716,27 @@
 						"required": false,
 						"schema": {
 							"type": "integer",
-							"maximum": 500,
+							"maximum": 100,
 							"minimum": 1,
 							"default": 100,
 							"title": "Limit"
+						}
+					},
+					{
+						"name": "before_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Before Id"
 						}
 					}
 				],
@@ -1798,6 +1815,301 @@
 				}
 			}
 		},
+		"/api/v1/assistant/actions/proposals": {
+			"post": {
+				"tags": [
+					"assistant_actions",
+					"Assistant actions"
+				],
+				"summary": "Propose Action",
+				"operationId": "assistant_actions-propose_action",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ActionProposalRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ActionProposalResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"tags": [
+					"assistant_actions",
+					"Assistant actions"
+				],
+				"summary": "List Actions",
+				"operationId": "assistant_actions-list_actions",
+				"parameters": [
+					{
+						"name": "conversation_id",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"exclusiveMinimum": 0,
+							"title": "Conversation Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/ActionProposalResponse"
+									},
+									"title": "Response Assistant Actions-List Actions"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/reminders": {
+			"get": {
+				"tags": [
+					"assistant_actions",
+					"Assistant actions"
+				],
+				"summary": "List Reminders",
+				"operationId": "assistant_actions-list_reminders",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/ReminderResponse"
+									},
+									"type": "array",
+									"title": "Response Assistant Actions-List Reminders"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/viewings": {
+			"get": {
+				"tags": [
+					"assistant_actions",
+					"Assistant actions"
+				],
+				"summary": "List Viewings",
+				"operationId": "assistant_actions-list_viewings",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/ViewingResponse"
+									},
+									"type": "array",
+									"title": "Response Assistant Actions-List Viewings"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/listing-drafts": {
+			"get": {
+				"tags": [
+					"assistant_actions",
+					"Assistant actions"
+				],
+				"summary": "List Listing Drafts",
+				"operationId": "assistant_actions-list_listing_drafts",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/ListingDraftResponse"
+									},
+									"type": "array",
+									"title": "Response Assistant Actions-List Listing Drafts"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/{action_id}": {
+			"get": {
+				"tags": [
+					"assistant_actions",
+					"Assistant actions"
+				],
+				"summary": "Get Action",
+				"operationId": "assistant_actions-get_action",
+				"parameters": [
+					{
+						"name": "action_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Action Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ActionProposalResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/{action_id}/confirm": {
+			"post": {
+				"tags": [
+					"assistant_actions",
+					"Assistant actions"
+				],
+				"summary": "Confirm Action",
+				"operationId": "assistant_actions-confirm_action",
+				"parameters": [
+					{
+						"name": "action_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Action Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ActionProposalResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/assistant/actions/{action_id}/cancel": {
+			"post": {
+				"tags": [
+					"assistant_actions",
+					"Assistant actions"
+				],
+				"summary": "Cancel Action",
+				"operationId": "assistant_actions-cancel_action",
+				"parameters": [
+					{
+						"name": "action_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Action Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ActionProposalResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/inbound/enquiries": {
 			"post": {
 				"tags": [
@@ -1846,7 +2158,7 @@
 					"crm"
 				],
 				"summary": "Crm Inbound Enquiries",
-				"description": "List organization-visible inbound enquiries and review exceptions.",
+				"description": "List organization-visible inbound enquiries and review exceptions.\n\n`within_days` keeps items dated within that many days (Inbox \"Last 30 days\"); a recently\nsold owner is dated by the sale. `leads_only` leaves out contacts that are not leads yet\n(the Leads list), so Inbox contacts cannot crowd leads out of a page.",
 				"operationId": "crm-crm_inbound_enquiries",
 				"parameters": [
 					{
@@ -1923,7 +2235,7 @@
 						"required": false,
 						"schema": {
 							"type": "integer",
-							"maximum": 500,
+							"maximum": 1000,
 							"minimum": 1,
 							"default": 100,
 							"title": "Limit"
@@ -1939,6 +2251,34 @@
 							"default": 0,
 							"title": "Offset"
 						}
+					},
+					{
+						"name": "within_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"maximum": 365,
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Within Days"
+						}
+					},
+					{
+						"name": "leads_only",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"default": false,
+							"title": "Leads Only"
+						}
 					}
 				],
 				"responses": {
@@ -1948,6 +2288,50 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/InboundEnquiryListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/inbound/enquiries/{enquiry_id}/approve-buyer": {
+			"post": {
+				"tags": [
+					"crm",
+					"crm"
+				],
+				"summary": "Crm Approve Recent Seller",
+				"description": "Approve a recently sold owner from the Inbox as a possible buyer lead (no brief yet).",
+				"operationId": "crm-crm_approve_recent_seller",
+				"parameters": [
+					{
+						"name": "enquiry_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Enquiry Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/InboundEnquiryResponse"
 								}
 							}
 						}
@@ -2420,6 +2804,199 @@
 								}
 							}
 						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/company-listings": {
+			"get": {
+				"tags": [
+					"crm",
+					"crm"
+				],
+				"summary": "Crm Company Listings",
+				"description": "Current Property Finder listings for the connected or requested company.\n\n`search` matches a listing's title, building or area (property name).",
+				"operationId": "crm-crm_company_listings",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 1000,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					},
+					{
+						"name": "broker_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 80
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Broker Id"
+						}
+					},
+					{
+						"name": "all_companies",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"default": false,
+							"title": "All Companies"
+						}
+					},
+					{
+						"name": "agent_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Agent Id"
+						}
+					},
+					{
+						"name": "agent_name",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 200
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Agent Name"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmCompanyListingsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/company-listings/source": {
+			"put": {
+				"tags": [
+					"crm",
+					"crm"
+				],
+				"summary": "Crm Select Company Listing Source",
+				"description": "Set the Property Finder broker whose inventory belongs in the organization CRM.",
+				"operationId": "crm-crm_select_company_listing_source",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CrmCompanyListingSourceUpdate"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmCompanyListingSourceResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": [
+					"crm",
+					"crm"
+				],
+				"summary": "Crm Clear Company Listing Source",
+				"description": "Stop using a Property Finder company for buyer and tenant matching.",
+				"operationId": "crm-crm_clear_company_listing_source",
+				"responses": {
+					"204": {
+						"description": "Successful Response"
 					}
 				}
 			}
@@ -10755,6 +11332,191 @@
 				"title": "AcceptInviteResponse",
 				"description": "Response for accepting invitation"
 			},
+			"ActionKind": {
+				"type": "string",
+				"enum": [
+					"create_lead",
+					"update_lead",
+					"assign_lead",
+					"delete_lead",
+					"add_note",
+					"create_reminder",
+					"update_reminder",
+					"delete_reminder",
+					"schedule_viewing",
+					"cancel_viewing",
+					"create_listing_draft",
+					"update_listing_draft",
+					"send_message",
+					"publish_listing",
+					"book_external_viewing"
+				],
+				"title": "ActionKind"
+			},
+			"ActionProposalRequest": {
+				"properties": {
+					"kind": {
+						"$ref": "#/components/schemas/ActionKind"
+					},
+					"conversation_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Conversation Id"
+					},
+					"payload": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CreateLead"
+							},
+							{
+								"$ref": "#/components/schemas/UpdateLead"
+							},
+							{
+								"$ref": "#/components/schemas/AssignLead"
+							},
+							{
+								"$ref": "#/components/schemas/LeadTarget"
+							},
+							{
+								"$ref": "#/components/schemas/AddNote"
+							},
+							{
+								"$ref": "#/components/schemas/CreateReminder"
+							},
+							{
+								"$ref": "#/components/schemas/UpdateReminder"
+							},
+							{
+								"$ref": "#/components/schemas/DeleteReminder"
+							},
+							{
+								"$ref": "#/components/schemas/ScheduleViewing"
+							},
+							{
+								"$ref": "#/components/schemas/CancelViewing"
+							},
+							{
+								"$ref": "#/components/schemas/CreateListingDraft"
+							},
+							{
+								"$ref": "#/components/schemas/UpdateListingDraft"
+							},
+							{
+								"$ref": "#/components/schemas/SendMessage"
+							},
+							{
+								"$ref": "#/components/schemas/PublishListing"
+							}
+						],
+						"title": "Payload"
+					},
+					"idempotency_key": {
+						"type": "string",
+						"maxLength": 128,
+						"minLength": 8,
+						"pattern": "^[A-Za-z0-9_-]+$",
+						"title": "Idempotency Key"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"kind",
+					"conversation_id",
+					"payload",
+					"idempotency_key"
+				],
+				"title": "ActionProposalRequest"
+			},
+			"ActionProposalResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"kind": {
+						"$ref": "#/components/schemas/ActionKind"
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"awaiting_confirmation",
+							"succeeded",
+							"cancelled",
+							"expired",
+							"failed",
+							"not_connected",
+							"queued",
+							"unknown"
+						],
+						"title": "Status"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"preview": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Preview"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"expires_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Expires At"
+					},
+					"result": {
+						"anyOf": [
+							{
+								"additionalProperties": true,
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Result"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"kind",
+					"status",
+					"title",
+					"preview",
+					"created_at",
+					"expires_at"
+				],
+				"title": "ActionProposalResponse"
+			},
+			"AddNote": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"body": {
+						"type": "string",
+						"maxLength": 4000,
+						"minLength": 1,
+						"title": "Body"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"lead_id",
+					"body"
+				],
+				"title": "AddNote"
+			},
 			"AnalyticsResponse": {
 				"properties": {
 					"timeframe_days": {
@@ -11442,6 +12204,28 @@
 				],
 				"title": "AreaProjectSnapshot"
 			},
+			"AssignLead": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"assignee_id": {
+						"type": "string",
+						"maxLength": 128,
+						"minLength": 1,
+						"title": "Assignee Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"lead_id",
+					"assignee_id"
+				],
+				"title": "AssignLead"
+			},
 			"AuthMeResponse": {
 				"properties": {
 					"id": {
@@ -11899,6 +12683,21 @@
 				"title": "BuildingUnitType",
 				"description": "Bedroom/type breakdown for a specific building"
 			},
+			"CancelViewing": {
+				"properties": {
+					"viewing_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Viewing Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"viewing_id"
+				],
+				"title": "CancelViewing"
+			},
 			"CheckoutSessionRequest": {
 				"properties": {
 					"organization_id": {
@@ -12320,6 +13119,141 @@
 				"title": "CreateConversationRequest",
 				"description": "Request model for creating a new conversation"
 			},
+			"CreateLead": {
+				"properties": {
+					"full_name": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Full Name"
+					},
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 80
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 320
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					},
+					"intent": {
+						"type": "string",
+						"enum": [
+							"unknown",
+							"buy",
+							"rent",
+							"sell",
+							"let"
+						],
+						"title": "Intent",
+						"default": "unknown"
+					},
+					"notes": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 4000
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Notes"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"full_name"
+				],
+				"title": "CreateLead"
+			},
+			"CreateListingDraft": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"description": {
+						"type": "string",
+						"maxLength": 8000,
+						"minLength": 1,
+						"title": "Description"
+					},
+					"price_aed": {
+						"type": "integer",
+						"maximum": 100000000000.0,
+						"exclusiveMinimum": 0.0,
+						"title": "Price Aed"
+					},
+					"location": {
+						"type": "string",
+						"maxLength": 500,
+						"minLength": 1,
+						"title": "Location"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"title",
+					"description",
+					"price_aed",
+					"location"
+				],
+				"title": "CreateListingDraft"
+			},
+			"CreateReminder": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"due_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Due At"
+					},
+					"lead_id": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"exclusiveMinimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"title",
+					"due_at"
+				],
+				"title": "CreateReminder"
+			},
 			"CreateUserRequest": {
 				"properties": {
 					"email": {
@@ -12579,6 +13513,310 @@
 					"potential_value_aed"
 				],
 				"title": "CrmBreakdownItem"
+			},
+			"CrmCompanyListingAgentInventory": {
+				"properties": {
+					"agent_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Id"
+					},
+					"agent_name": {
+						"type": "string",
+						"title": "Agent Name"
+					},
+					"listings": {
+						"type": "integer",
+						"title": "Listings"
+					},
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					}
+				},
+				"type": "object",
+				"required": [
+					"agent_name",
+					"listings"
+				],
+				"title": "CrmCompanyListingAgentInventory"
+			},
+			"CrmCompanyListingCompany": {
+				"properties": {
+					"broker_id": {
+						"type": "string",
+						"title": "Broker Id"
+					},
+					"broker_name": {
+						"type": "string",
+						"title": "Broker Name"
+					},
+					"listings": {
+						"type": "integer",
+						"title": "Listings"
+					},
+					"agents": {
+						"type": "integer",
+						"title": "Agents"
+					},
+					"last_scraped_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Scraped At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"broker_id",
+					"broker_name",
+					"listings",
+					"agents"
+				],
+				"title": "CrmCompanyListingCompany"
+			},
+			"CrmCompanyListingResponse": {
+				"properties": {
+					"reference": {
+						"type": "string",
+						"title": "Reference"
+					},
+					"agent_name": {
+						"type": "string",
+						"title": "Agent Name"
+					},
+					"agent_phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Phone"
+					},
+					"mode": {
+						"type": "string",
+						"title": "Mode"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"property_type": {
+						"type": "string",
+						"title": "Property Type"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"size_sqft": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Sqft"
+					},
+					"price_aed": {
+						"type": "integer",
+						"title": "Price Aed"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"building_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building Name"
+					},
+					"unit_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Unit Number"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"listed_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Listed At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"reference",
+					"agent_name",
+					"agent_phone",
+					"mode",
+					"title",
+					"property_type",
+					"bedrooms",
+					"size_sqft",
+					"price_aed",
+					"area_name",
+					"building_name",
+					"unit_number",
+					"status",
+					"listed_at"
+				],
+				"title": "CrmCompanyListingResponse",
+				"description": "A company listing as Assets \u203a Company listings shows it."
+			},
+			"CrmCompanyListingSourceResponse": {
+				"properties": {
+					"broker_id": {
+						"type": "string",
+						"title": "Broker Id"
+					},
+					"broker_name": {
+						"type": "string",
+						"title": "Broker Name"
+					}
+				},
+				"type": "object",
+				"required": [
+					"broker_id",
+					"broker_name"
+				],
+				"title": "CrmCompanyListingSourceResponse"
+			},
+			"CrmCompanyListingSourceUpdate": {
+				"properties": {
+					"broker_id": {
+						"type": "string",
+						"maxLength": 80,
+						"minLength": 1,
+						"title": "Broker Id"
+					}
+				},
+				"type": "object",
+				"required": [
+					"broker_id"
+				],
+				"title": "CrmCompanyListingSourceUpdate"
+			},
+			"CrmCompanyListingsResponse": {
+				"properties": {
+					"company": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmCompanyListingCompany"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"matching_company": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmCompanyListingCompany"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"companies": {
+						"items": {
+							"$ref": "#/components/schemas/CrmCompanyListingCompany"
+						},
+						"type": "array",
+						"title": "Companies"
+					},
+					"agents": {
+						"items": {
+							"$ref": "#/components/schemas/CrmCompanyListingAgentInventory"
+						},
+						"type": "array",
+						"title": "Agents"
+					},
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/CrmCompanyListingResponse"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total",
+						"default": 0
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": [
+					"company",
+					"limit",
+					"offset"
+				],
+				"title": "CrmCompanyListingsResponse"
 			},
 			"CrmContactClaimResponse": {
 				"properties": {
@@ -17615,6 +18853,21 @@
 				"title": "DDAPlotFeature",
 				"description": "DDA GIS plot polygon for map overlay."
 			},
+			"DeleteReminder": {
+				"properties": {
+					"reminder_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Reminder Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"reminder_id"
+				],
+				"title": "DeleteReminder"
+			},
 			"DeliveryGroupRow": {
 				"properties": {
 					"group": {
@@ -20719,6 +21972,7 @@
 					"target_type": {
 						"type": "string",
 						"enum": [
+							"company",
 							"owner",
 							"unit",
 							"listing",
@@ -21351,6 +22605,21 @@
 				],
 				"title": "LandSaleEvidence"
 			},
+			"LeadTarget": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"lead_id"
+				],
+				"title": "LeadTarget"
+			},
 			"ListingAnalyticsResponse": {
 				"properties": {
 					"total": {
@@ -21737,6 +23006,18 @@
 							}
 						],
 						"title": "Broker Logo Url"
+					},
+					"captured_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Captured At"
 					},
 					"listed_date": {
 						"anyOf": [
@@ -22180,6 +23461,18 @@
 						],
 						"title": "Broker Logo Url"
 					},
+					"captured_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Captured At"
+					},
 					"listed_date": {
 						"anyOf": [
 							{
@@ -22528,6 +23821,45 @@
 					"title"
 				],
 				"title": "ListingDetailResponse"
+			},
+			"ListingDraftResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"description": {
+						"type": "string",
+						"title": "Description"
+					},
+					"price_aed": {
+						"type": "integer",
+						"title": "Price Aed"
+					},
+					"location": {
+						"type": "string",
+						"title": "Location"
+					},
+					"publication": {
+						"type": "string",
+						"const": "draft_only",
+						"title": "Publication",
+						"default": "draft_only"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"title",
+					"description",
+					"price_aed",
+					"location"
+				],
+				"title": "ListingDraftResponse"
 			},
 			"ListingFiltersResponse": {
 				"properties": {
@@ -27563,6 +28895,21 @@
 				],
 				"title": "PropertyTypeBreakdown"
 			},
+			"PublishListing": {
+				"properties": {
+					"listing_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Listing Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"listing_id"
+				],
+				"title": "PublishListing"
+			},
 			"RadarBuildingPin": {
 				"properties": {
 					"location_id": {
@@ -27720,6 +29067,42 @@
 					"pct_of_total"
 				],
 				"title": "RegTypeBreakdown"
+			},
+			"ReminderResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"lead_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Id"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"due_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Due At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"lead_id",
+					"title",
+					"due_at"
+				],
+				"title": "ReminderResponse"
 			},
 			"RentalAnalyticsResponse": {
 				"properties": {
@@ -28366,10 +29749,85 @@
 				"title": "RoomAnalytics",
 				"description": "Combined sales + rental + yield metrics per bedroom count"
 			},
+			"ScheduleViewing": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"starts_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Starts At"
+					},
+					"ends_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Ends At"
+					},
+					"location": {
+						"type": "string",
+						"maxLength": 500,
+						"minLength": 1,
+						"title": "Location"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"lead_id",
+					"title",
+					"starts_at",
+					"ends_at",
+					"location"
+				],
+				"title": "ScheduleViewing"
+			},
+			"SendMessage": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"channel": {
+						"type": "string",
+						"enum": [
+							"email",
+							"sms",
+							"whatsapp"
+						],
+						"title": "Channel"
+					},
+					"body": {
+						"type": "string",
+						"maxLength": 4000,
+						"minLength": 1,
+						"title": "Body"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"lead_id",
+					"channel",
+					"body"
+				],
+				"title": "SendMessage"
+			},
 			"SendMessageRequest": {
 				"properties": {
 					"message": {
 						"type": "string",
+						"maxLength": 8000,
+						"minLength": 1,
 						"title": "Message"
 					}
 				},
@@ -30089,6 +31547,133 @@
 				"title": "UpdateConversationRequest",
 				"description": "Request model for updating a conversation"
 			},
+			"UpdateLead": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"status": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"new",
+									"needs_review",
+									"assigned",
+									"attempted",
+									"contacted",
+									"qualified",
+									"viewing",
+									"valuation",
+									"signed",
+									"active",
+									"won",
+									"nurture",
+									"closed_lost",
+									"disqualified"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Status"
+					},
+					"intent": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"unknown",
+									"buy",
+									"rent",
+									"sell",
+									"let"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Intent"
+					},
+					"next_follow_up": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Next Follow Up"
+					},
+					"lost_reason": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 500
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lost Reason"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"lead_id"
+				],
+				"title": "UpdateLead"
+			},
+			"UpdateListingDraft": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"description": {
+						"type": "string",
+						"maxLength": 8000,
+						"minLength": 1,
+						"title": "Description"
+					},
+					"price_aed": {
+						"type": "integer",
+						"maximum": 100000000000.0,
+						"exclusiveMinimum": 0.0,
+						"title": "Price Aed"
+					},
+					"location": {
+						"type": "string",
+						"maxLength": 500,
+						"minLength": 1,
+						"title": "Location"
+					},
+					"listing_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Listing Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"title",
+					"description",
+					"price_aed",
+					"location",
+					"listing_id"
+				],
+				"title": "UpdateListingDraft"
+			},
 			"UpdateOrgRequest": {
 				"properties": {
 					"max_users": {
@@ -30150,6 +31735,34 @@
 					"last_name"
 				],
 				"title": "UpdateProfileResponse"
+			},
+			"UpdateReminder": {
+				"properties": {
+					"reminder_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Reminder Id"
+					},
+					"title": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"due_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Due At"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"reminder_id",
+					"title",
+					"due_at"
+				],
+				"title": "UpdateReminder"
 			},
 			"UpdateSubscriptionRequest": {
 				"properties": {
@@ -30460,6 +32073,57 @@
 					"type"
 				],
 				"title": "ValidationError"
+			},
+			"ViewingResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"lead_id": {
+						"type": "integer",
+						"title": "Lead Id"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"location": {
+						"type": "string",
+						"title": "Location"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"starts_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Starts At"
+					},
+					"ends_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Ends At"
+					},
+					"delivery": {
+						"type": "string",
+						"const": "internal_only",
+						"title": "Delivery",
+						"default": "internal_only"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"lead_id",
+					"title",
+					"location",
+					"status",
+					"starts_at",
+					"ends_at"
+				],
+				"title": "ViewingResponse"
 			},
 			"WebhookStatusResponse": {
 				"properties": {

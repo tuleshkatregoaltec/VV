@@ -43,6 +43,34 @@ Because `just setup` starts Docker Compose, Docker Desktop must already be runni
 
 ## Running The App
 
+### Crew in Codex (WSL)
+
+Crew is installed for this repository in `.agents/skills/crew`, with GPT roles in
+`.codex/agents/crew_*.toml`. It reuses the planner and three role definitions from
+[maan-iitd2/crew](https://github.com/maan-iitd2/crew), adapted for Codex. The source
+revision and MIT license are retained with the skill.
+
+Open this checkout in a WSL Codex session and invoke:
+
+```text
+$crew investigate and fix <problem>; run the relevant just checks
+```
+
+If the skill is not visible, start a new Codex session from this checkout. No global
+installation or Claude configuration is needed. Scout uses `gpt-6-luna`; builder
+and verifier use `gpt-6.1-sol`, all at high reasoning effort. The planner retains
+your selected model. Unavailable model overrides fall back to the selected model
+and must be reported. Change the routing table in the skill and the corresponding
+role TOML together when changing models.
+
+Crew is explicit-only, preserving upstream invocation behavior. It reuses
+`AGENTS.md`, this guide, and the project references in `CLAUDE.md`. It proceeds on
+authorized work; include “show me the plan and wait for Go” when you want a planning
+checkpoint. Scout/verifier read-only instructions are not separate permission
+sandboxes. Remove the skill directory and the three `crew_*.toml` files to uninstall.
+
+### App processes
+
 For the usual split-terminal workflow:
 
 ```sh
@@ -126,6 +154,7 @@ Important details:
 
 - `just check-all` is not read-only. It runs format recipes before linting and tests, so inspect `git diff` afterward and stage any intentional formatting changes.
 - `just test-backend` runs fast tests without migrating the application database.
+- `just evaluate-owner-corpus --source /absolute/path/to/workbooks --output /absolute/path/to/private-results` evaluates a fixed 20-file sample through the shared owner matcher. It selects four files from each of five size bands before matching, retains every source row in its accounting, and reports property links separately from transaction and observed-owner evidence. It reads DXBI only and writes private local reports and an evaluation SQLite snapshot; it does not publish contacts into CRM. The selection is a reproducible diagnostic sample, not a statistical estimate for all files. Use `--help` for staging and replay options.
 - `just test-backend-postgres`, `just test-backend-clickhouse`, and `just test-backend-infrastructure` run real-service integration tests. PostgreSQL and ClickHouse fixtures create uniquely named disposable databases on local services; PostgreSQL applies the complete migration chain. Missing services are failures, not skips.
 - Use the host Node version required by the locked Vite/Svelte dependencies (Node 20.19 or newer); Node 18 cannot run the frontend baseline.
 - Backend tests expect the local service stack to be available when tests need Postgres, auth, ClickHouse, Redis, or object storage.

@@ -32,7 +32,7 @@ const fields = $derived(
 				{ label: 'Community', value: transaction.community },
 				{ label: 'Project', value: transaction.project },
 				{ label: 'Master Project', value: transaction.masterProject },
-				{ label: 'DLD Area', value: transaction.dldArea },
+				{ label: 'District', value: transaction.dldArea },
 				{ label: 'Property Type', value: transaction.propertyType },
 				{ label: 'Bedrooms', value: transaction.bedrooms },
 				{ label: 'Status', value: transaction.status },
