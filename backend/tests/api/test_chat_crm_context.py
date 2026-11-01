@@ -32,3 +32,32 @@ async def test_crm_chat_stream_requires_authentication(client_no_auth):
         "/api/v1/chat/conversations/7/messages/stream", json={"message": "Show CRM"}
     )
     assert response.status_code in {401, 403}
+
+
+async def test_http_stream_close_awaits_provider_cleanup_before_releasing_session(monkeypatch):
+    import asyncio
+
+    from conftest import make_mock_auth_context
+
+    from app.chat import router
+
+    closed = asyncio.Event()
+
+    async def stream(**kwargs):
+        try:
+            yield 'data: {"type": "thinking"}\n\n'
+            await asyncio.Event().wait()
+        finally:
+            closed.set()
+
+    monkeypatch.setattr(router, "stream_chat_response", stream)
+    response = await router.send_message(
+        7,
+        router.SendMessageRequest(message="Show my leads"),
+        context=make_mock_auth_context(),
+        db=None,
+        _=None,
+    )
+    assert await anext(response.body_iterator) == 'data: {"type": "thinking"}\n\n'
+    await response.body_iterator.aclose()
+    assert closed.is_set()

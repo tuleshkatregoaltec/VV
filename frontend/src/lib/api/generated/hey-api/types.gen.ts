@@ -41,6 +41,83 @@ export type AcceptInviteResponse = {
 };
 
 /**
+ * ActionKind
+ */
+export type ActionKind = 'create_lead' | 'update_lead' | 'assign_lead' | 'delete_lead' | 'add_note' | 'create_reminder' | 'update_reminder' | 'delete_reminder' | 'schedule_viewing' | 'cancel_viewing' | 'create_listing_draft' | 'update_listing_draft' | 'send_message' | 'publish_listing' | 'book_external_viewing';
+
+/**
+ * ActionProposalRequest
+ */
+export type ActionProposalRequest = {
+    kind: ActionKind;
+    /**
+     * Conversation Id
+     */
+    conversation_id: number;
+    /**
+     * Payload
+     */
+    payload: CreateLead | UpdateLead | AssignLead | LeadTarget | AddNote | CreateReminder | UpdateReminder | DeleteReminder | ScheduleViewing | CancelViewing | CreateListingDraft | UpdateListingDraft | SendMessage | PublishListing;
+    /**
+     * Idempotency Key
+     */
+    idempotency_key: string;
+};
+
+/**
+ * ActionProposalResponse
+ */
+export type ActionProposalResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    kind: ActionKind;
+    /**
+     * Status
+     */
+    status: 'awaiting_confirmation' | 'succeeded' | 'cancelled' | 'expired' | 'failed' | 'not_connected' | 'queued' | 'unknown';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Preview
+     */
+    preview: {
+        [key: string]: unknown;
+    };
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Result
+     */
+    result?: {
+        [key: string]: unknown;
+    } | null;
+};
+
+/**
+ * AddNote
+ */
+export type AddNote = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
  * AnalyticsResponse
  *
  * Complete analytics response for dashboard
@@ -428,6 +505,20 @@ export type AreaProjectSnapshot = {
 };
 
 /**
+ * AssignLead
+ */
+export type AssignLead = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Assignee Id
+     */
+    assignee_id: string;
+};
+
+/**
  * AuthMeResponse
  */
 export type AuthMeResponse = {
@@ -716,6 +807,16 @@ export type BuildingUnitType = {
 };
 
 /**
+ * CancelViewing
+ */
+export type CancelViewing = {
+    /**
+     * Viewing Id
+     */
+    viewing_id: number;
+};
+
+/**
  * CheckoutSessionRequest
  *
  * Request to create a Stripe checkout session (org must exist)
@@ -949,6 +1050,72 @@ export type CreateConversationRequest = {
      * Title
      */
     title?: string | null;
+};
+
+/**
+ * CreateLead
+ */
+export type CreateLead = {
+    /**
+     * Full Name
+     */
+    full_name: string;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Intent
+     */
+    intent?: 'unknown' | 'buy' | 'rent' | 'sell' | 'let';
+    /**
+     * Notes
+     */
+    notes?: string | null;
+};
+
+/**
+ * CreateListingDraft
+ */
+export type CreateListingDraft = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Location
+     */
+    location: string;
+};
+
+/**
+ * CreateReminder
+ */
+export type CreateReminder = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Due At
+     */
+    due_at: string;
+    /**
+     * Lead Id
+     */
+    lead_id?: number | null;
 };
 
 /**
@@ -3943,6 +4110,16 @@ export type DdaPlotFeature = {
 };
 
 /**
+ * DeleteReminder
+ */
+export type DeleteReminder = {
+    /**
+     * Reminder Id
+     */
+    reminder_id: number;
+};
+
+/**
  * DeliveryGroupRow
  */
 export type DeliveryGroupRow = {
@@ -6167,6 +6344,16 @@ export type LandSaleEvidence = {
 };
 
 /**
+ * LeadTarget
+ */
+export type LeadTarget = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+};
+
+/**
  * ListingAnalyticsResponse
  */
 export type ListingAnalyticsResponse = {
@@ -6344,6 +6531,10 @@ export type ListingCardResponse = {
      * Broker Logo Url
      */
     broker_logo_url?: string | null;
+    /**
+     * Captured At
+     */
+    captured_at?: string | null;
     /**
      * Listed Date
      */
@@ -6523,6 +6714,10 @@ export type ListingDetailResponse = {
      */
     broker_logo_url?: string | null;
     /**
+     * Captured At
+     */
+    captured_at?: string | null;
+    /**
      * Listed Date
      */
     listed_date?: string | null;
@@ -6651,6 +6846,36 @@ export type ListingDetailResponse = {
     source_metadata?: {
         [key: string]: unknown;
     };
+};
+
+/**
+ * ListingDraftResponse
+ */
+export type ListingDraftResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Publication
+     */
+    publication?: 'draft_only';
 };
 
 /**
@@ -9487,6 +9712,16 @@ export type PropertyTypeBreakdown = {
 };
 
 /**
+ * PublishListing
+ */
+export type PublishListing = {
+    /**
+     * Listing Id
+     */
+    listing_id: number;
+};
+
+/**
  * RadarBuildingPin
  *
  * Property Finder tower coordinate with linked DLD/Ejari activity.
@@ -9589,6 +9824,28 @@ export type RegTypeBreakdown = {
      * Pct Of Total
      */
     pct_of_total: number;
+};
+
+/**
+ * ReminderResponse
+ */
+export type ReminderResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Lead Id
+     */
+    lead_id: number | null;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Due At
+     */
+    due_at: string;
 };
 
 /**
@@ -9950,6 +10207,50 @@ export type RoomAnalytics = {
      * Gross Yield Pct
      */
     gross_yield_pct?: number | null;
+};
+
+/**
+ * ScheduleViewing
+ */
+export type ScheduleViewing = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Starts At
+     */
+    starts_at: string;
+    /**
+     * Ends At
+     */
+    ends_at: string;
+    /**
+     * Location
+     */
+    location: string;
+};
+
+/**
+ * SendMessage
+ */
+export type SendMessage = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Channel
+     */
+    channel: 'email' | 'sms' | 'whatsapp';
+    /**
+     * Body
+     */
+    body: string;
 };
 
 /**
@@ -10867,6 +11168,58 @@ export type UpdateConversationRequest = {
 };
 
 /**
+ * UpdateLead
+ */
+export type UpdateLead = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Status
+     */
+    status?: 'new' | 'needs_review' | 'assigned' | 'attempted' | 'contacted' | 'qualified' | 'viewing' | 'valuation' | 'signed' | 'active' | 'won' | 'nurture' | 'closed_lost' | 'disqualified' | null;
+    /**
+     * Intent
+     */
+    intent?: 'unknown' | 'buy' | 'rent' | 'sell' | 'let' | null;
+    /**
+     * Next Follow Up
+     */
+    next_follow_up?: string | null;
+    /**
+     * Lost Reason
+     */
+    lost_reason?: string | null;
+};
+
+/**
+ * UpdateListingDraft
+ */
+export type UpdateListingDraft = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Listing Id
+     */
+    listing_id: number;
+};
+
+/**
  * UpdateOrgRequest
  */
 export type UpdateOrgRequest = {
@@ -10906,6 +11259,24 @@ export type UpdateProfileResponse = {
      * Last Name
      */
     last_name: string;
+};
+
+/**
+ * UpdateReminder
+ */
+export type UpdateReminder = {
+    /**
+     * Reminder Id
+     */
+    reminder_id: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Due At
+     */
+    due_at: string;
 };
 
 /**
@@ -11114,6 +11485,44 @@ export type ValidationError = {
      * Error Type
      */
     type: string;
+};
+
+/**
+ * ViewingResponse
+ */
+export type ViewingResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Starts At
+     */
+    starts_at: string;
+    /**
+     * Ends At
+     */
+    ends_at: string;
+    /**
+     * Delivery
+     */
+    delivery?: 'internal_only';
 };
 
 /**
@@ -12034,6 +12443,10 @@ export type ChatGetConversationMessagesEndpointData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Before Id
+         */
+        before_id?: number | null;
     };
     url: '/api/v1/chat/conversations/{conversation_id}/messages';
 };
@@ -12085,6 +12498,207 @@ export type ChatSendMessageResponses = {
      */
     200: unknown;
 };
+
+export type AssistantActionsListActionsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: number;
+    };
+    url: '/api/v1/assistant/actions/proposals';
+};
+
+export type AssistantActionsListActionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantActionsListActionsError = AssistantActionsListActionsErrors[keyof AssistantActionsListActionsErrors];
+
+export type AssistantActionsListActionsResponses = {
+    /**
+     * Response Assistant Actions-List Actions
+     *
+     * Successful Response
+     */
+    200: Array<ActionProposalResponse>;
+};
+
+export type AssistantActionsListActionsResponse = AssistantActionsListActionsResponses[keyof AssistantActionsListActionsResponses];
+
+export type AssistantActionsProposeActionData = {
+    body: ActionProposalRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/assistant/actions/proposals';
+};
+
+export type AssistantActionsProposeActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantActionsProposeActionError = AssistantActionsProposeActionErrors[keyof AssistantActionsProposeActionErrors];
+
+export type AssistantActionsProposeActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ActionProposalResponse;
+};
+
+export type AssistantActionsProposeActionResponse = AssistantActionsProposeActionResponses[keyof AssistantActionsProposeActionResponses];
+
+export type AssistantActionsListRemindersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/assistant/actions/reminders';
+};
+
+export type AssistantActionsListRemindersResponses = {
+    /**
+     * Response Assistant Actions-List Reminders
+     *
+     * Successful Response
+     */
+    200: Array<ReminderResponse>;
+};
+
+export type AssistantActionsListRemindersResponse = AssistantActionsListRemindersResponses[keyof AssistantActionsListRemindersResponses];
+
+export type AssistantActionsListViewingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/assistant/actions/viewings';
+};
+
+export type AssistantActionsListViewingsResponses = {
+    /**
+     * Response Assistant Actions-List Viewings
+     *
+     * Successful Response
+     */
+    200: Array<ViewingResponse>;
+};
+
+export type AssistantActionsListViewingsResponse = AssistantActionsListViewingsResponses[keyof AssistantActionsListViewingsResponses];
+
+export type AssistantActionsListListingDraftsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/assistant/actions/listing-drafts';
+};
+
+export type AssistantActionsListListingDraftsResponses = {
+    /**
+     * Response Assistant Actions-List Listing Drafts
+     *
+     * Successful Response
+     */
+    200: Array<ListingDraftResponse>;
+};
+
+export type AssistantActionsListListingDraftsResponse = AssistantActionsListListingDraftsResponses[keyof AssistantActionsListListingDraftsResponses];
+
+export type AssistantActionsGetActionData = {
+    body?: never;
+    path: {
+        /**
+         * Action Id
+         */
+        action_id: string;
+    };
+    query?: never;
+    url: '/api/v1/assistant/actions/{action_id}';
+};
+
+export type AssistantActionsGetActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantActionsGetActionError = AssistantActionsGetActionErrors[keyof AssistantActionsGetActionErrors];
+
+export type AssistantActionsGetActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ActionProposalResponse;
+};
+
+export type AssistantActionsGetActionResponse = AssistantActionsGetActionResponses[keyof AssistantActionsGetActionResponses];
+
+export type AssistantActionsConfirmActionData = {
+    body?: never;
+    path: {
+        /**
+         * Action Id
+         */
+        action_id: string;
+    };
+    query?: never;
+    url: '/api/v1/assistant/actions/{action_id}/confirm';
+};
+
+export type AssistantActionsConfirmActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantActionsConfirmActionError = AssistantActionsConfirmActionErrors[keyof AssistantActionsConfirmActionErrors];
+
+export type AssistantActionsConfirmActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ActionProposalResponse;
+};
+
+export type AssistantActionsConfirmActionResponse = AssistantActionsConfirmActionResponses[keyof AssistantActionsConfirmActionResponses];
+
+export type AssistantActionsCancelActionData = {
+    body?: never;
+    path: {
+        /**
+         * Action Id
+         */
+        action_id: string;
+    };
+    query?: never;
+    url: '/api/v1/assistant/actions/{action_id}/cancel';
+};
+
+export type AssistantActionsCancelActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantActionsCancelActionError = AssistantActionsCancelActionErrors[keyof AssistantActionsCancelActionErrors];
+
+export type AssistantActionsCancelActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ActionProposalResponse;
+};
+
+export type AssistantActionsCancelActionResponse = AssistantActionsCancelActionResponses[keyof AssistantActionsCancelActionResponses];
 
 export type CrmCrmInboundEnquiriesData = {
     body?: never;

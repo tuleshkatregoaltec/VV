@@ -1,11 +1,13 @@
 import json
 import logging
+from contextlib import aclosing
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.chat.events import with_heartbeat
 from app.chat.models import (
     ConversationListResponse,
     ConversationResponse,
@@ -154,14 +156,19 @@ async def send_message(
 
     async def event_stream():
         try:
-            async for chunk in stream_chat_response(
-                db=db,
-                conversation_id=conversation_id,
-                user_message=request.message,
-                user_id=context.user.id,
-                organization_id=context.organization.id,
-            ):
-                yield chunk
+            async with aclosing(
+                with_heartbeat(
+                    stream_chat_response(
+                        db=db,
+                        conversation_id=conversation_id,
+                        user_message=request.message,
+                        user_id=context.user.id,
+                        organization_id=context.organization.id,
+                    )
+                )
+            ) as stream:
+                async for chunk in stream:
+                    yield chunk
         except Exception as e:
             logger.error("Chat endpoint failed (%s)", type(e).__name__)
             yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
