@@ -11,6 +11,7 @@ from app.crm.owner_match_status import (
     decide,
     looks_like_a_lender,
     owner_match_evidence,
+    review_reason,
     summarize_owner_matches,
 )
 from app.crm.owner_matcher import MATCHER_VERSION, MatchResult
@@ -342,3 +343,194 @@ def test_the_same_unit_number_in_two_buildings_is_two_units() -> None:
 
 def test_a_summary_of_no_matches_is_empty() -> None:
     assert summarize_owner_matches([]) is None
+
+
+# --------------------------------------------------------------------------- review reasons, sales
+
+
+def match(outcome: str, colour: str | None = None, **fields) -> dict:
+    return {
+        "outcome": outcome,
+        "colour": colour or decide_colour(outcome),
+        "reasons": [],
+        "warnings": [],
+        "sale": None,
+        "sale_key": "",
+        **fields,
+    }
+
+
+@pytest.mark.parametrize(
+    ("fields", "reason"),
+    [
+        (
+            {"reasons": ["Transactions: 0 sale(s) fit", "unit differs: Transactions says 12"]},
+            "unit_differs",
+        ),
+        ({"warnings": ["sheet_names_two_villas: matched the one"]}, "two_units_named"),
+        ({"warnings": ["sheet_names_two_units ['1', '2']: matched 1"]}, "two_units_named"),
+        (
+            {"reasons": ["sheet_names_two_units ['1', '2']: sale confirmed, unit is not"]},
+            "two_units_named",
+        ),
+        ({"warnings": ["share_qualifier_differs: DXBI sold 12"]}, "share_differs"),
+        ({"warnings": ["size_basis_differs"]}, "size_differs"),
+        (
+            {"reasons": ["elimination_unverified: the sheet names no known building"]},
+            "unit_unverified",
+        ),
+        ({"warnings": ["type_label_differs (Villa vs Flat)"]}, "type_differs"),
+        ({"warnings": ["repeat_price"]}, "other"),
+        ({}, "other"),
+        # the first cause in priority order is the row's one reason
+        (
+            {
+                "reasons": ["unit differs: x"],
+                "warnings": [
+                    "share_qualifier_differs: y",
+                    "size_basis_differs",
+                    "type_label_differs (a vs b)",
+                ],
+            },
+            "unit_differs",
+        ),
+        ({"warnings": ["size_basis_differs", "type_label_differs (a vs b)"]}, "size_differs"),
+    ],
+)
+def test_an_amber_row_has_one_primary_review_reason(fields, reason) -> None:
+    assert review_reason(match("matched_sale_review", **fields)) == reason
+
+
+def test_every_amber_row_is_counted_once_and_only_amber_rows() -> None:
+    items = [
+        match("matched_sale_review", reasons=["unit differs: x"]),
+        match("matched_sale_review", reasons=["unit differs: x"], warnings=["size_basis_differs"]),
+        match("matched_sale_review", warnings=["share_qualifier_differs: y", "size_basis_differs"]),
+        match("matched_sale_review"),
+        match("matched_sale", warnings=["size_basis_differs"]),  # green: a warning, not a review
+        match("rejected", reasons=["unit differs: x"]),
+    ]
+    summary = summarize_owner_matches(
+        [(item, {"unit_number": str(n)}) for n, item in enumerate(items)]
+    )
+    assert summary.review_reasons == {"unit_differs": 2, "share_differs": 1, "other": 1}
+    assert sum(summary.review_reasons.values()) == summary.rows["matched_sale_review"] == 4
+
+
+def sold(source: str, key: str, **fields) -> dict:
+    return match(
+        "matched_sale",
+        sale={
+            "source": source,
+            "unit": "1",
+            "building": "B",
+            "date": "2022-01-01",
+            "amount_aed": 1,
+        },
+        sale_key=key,
+        **fields,
+    )
+
+
+def test_matched_sales_are_distinct_sales_of_green_rows_split_by_source() -> None:
+    items = [
+        sold("DXBI", "e1"),
+        sold("DXBI", "e1"),  # the seller's row of the same sale
+        sold("DXBI", "e2"),
+        sold("Transactions Matched", "t1"),
+        sold("Transactions Matched", "t1"),
+        sold("Transactions Matched", ""),  # no key: told apart by unit, building, date, price
+        sold("Transactions Matched", ""),
+        {
+            **sold("DXBI", "e9"),
+            "outcome": "matched_sale_review",
+            "colour": "amber",
+        },  # not confirmed
+        {**sold("DXBI", "e8"), "outcome": "broker", "colour": "grey"},
+    ]
+    summary = summarize_owner_matches(
+        [(item, {"unit_number": str(n)}) for n, item in enumerate(items)]
+    )
+    assert summary.sales_matched.model_dump() == {"transactions": 2, "registry": 2, "total": 4}
+
+
+def test_a_summary_without_green_rows_has_no_sales() -> None:
+    summary = summarize_owner_matches([(match("no_evidence"), {"unit_number": "1"})])
+    assert summary.sales_matched.model_dump() == {"transactions": 0, "registry": 0, "total": 0}
+    assert summary.review_reasons == {}
+
+
+# --------------------------------------------------------------------------- the date rule
+
+
+def dated(procedure: str, sheet: date, outcome: str = "matched_sale") -> ParsedContact:
+    candidate = contact(transaction_date=sheet, procedure_type=procedure)
+    candidate.evidence["owner_match"] = owner_match_evidence(result(outcome), later_sale_date=None)
+    _apply_evidence(candidate, sales={}, rentals={})
+    return candidate
+
+
+def test_an_ordinary_sale_over_90_days_from_the_sheet_date_goes_to_review() -> None:
+    candidate = dated("Sell", date(2022, 9, 17))  # the sale is 2022-05-20: 120 days
+    match = candidate.evidence["owner_match"]
+    assert match["outcome"] == "matched_sale_review" and match["colour"] == "amber"
+    assert match["matcher_outcome"] == "matched_sale"
+    assert "date_differs: sheet 2022-09-17, sale 2022-05-20" in match["warnings"]
+    assert candidate.ownership_status == "probable_current_owner"
+    assert review_reason(match) == "date_differs"
+
+
+def test_applying_the_date_rule_twice_gives_one_warning() -> None:
+    candidate = dated("Sale", date(2022, 9, 17))
+    _apply_evidence(candidate, sales={}, rentals={})
+    warnings = candidate.evidence["owner_match"]["warnings"]
+    assert [w for w in warnings if w.startswith("date_differs")] == [
+        "date_differs: sheet 2022-09-17, sale 2022-05-20"
+    ]
+
+
+def test_an_off_plan_completion_two_years_after_the_sale_stays_confirmed() -> None:
+    for procedure in ("Complete Delayed Sell", "Delayed Sell", "Sell - Pre registration"):
+        candidate = dated(procedure, date(2024, 5, 20))
+        assert candidate.evidence["owner_match"]["colour"] == "green", procedure
+        assert candidate.ownership_status == "verified_current_owner"
+
+
+def test_a_sale_30_days_from_the_sheet_date_stays_confirmed() -> None:
+    candidate = dated("Sell", date(2022, 6, 19))
+    assert candidate.evidence["owner_match"]["colour"] == "green"
+    assert not any(
+        w.startswith("date_differs") for w in candidate.evidence["owner_match"]["warnings"]
+    )
+    assert dated("Sell", date(2022, 8, 18)).evidence["owner_match"]["colour"] == "green"  # 90 days
+
+
+@pytest.mark.parametrize("procedure", ["", "Mortgage Registration", "Grant", "Gift"])
+def test_blank_procedures_and_financing_rows_are_left_alone(procedure: str) -> None:
+    outcome = "matched_sale_via_mortgage" if procedure.startswith("Mortgage") else "matched_sale"
+    assert dated(procedure, date(2025, 1, 1), outcome).evidence["owner_match"]["colour"] == "green"
+
+
+def test_a_row_without_a_date_is_left_alone() -> None:
+    decision = decide(
+        "matched_sale",
+        party_role="Buyer",
+        contact_name="Zainab",
+        procedure_type="Sell",
+        later_sale_date=None,
+        legacy_status="unmatched",
+        legacy_property_found=False,
+        sheet_date=None,
+        sale_date="2022-05-20",
+    )
+    assert decision.colour == "green"
+
+
+def test_a_date_review_row_is_in_review_reasons_and_not_in_matched_sales() -> None:
+    items = [
+        dated("Sell", date(2022, 9, 17)).evidence["owner_match"],
+        dated("Sell", date(2022, 5, 20)).evidence["owner_match"],
+    ]
+    summary = summarize_owner_matches([(m, {"unit_number": str(n)}) for n, m in enumerate(items)])
+    assert summary.review_reasons == {"date_differs": 1}
+    assert summary.sales_matched.total == 1

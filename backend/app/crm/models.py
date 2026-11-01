@@ -415,6 +415,22 @@ class CrmAgentAreaPreference(SQLModel, table=True):
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class CrmLicensedBroker(SQLModel, table=True):
+    """One licensed real-estate broker from the regulator's public list (org-agnostic reference).
+
+    Phones are normalized like owner-sheet phones and emails are casefolded, so a sheet row can be
+    compared with them directly. The table is replaced as a whole by ``load_licensed_brokers``."""
+
+    __tablename__ = "crm_licensed_brokers"
+
+    broker_number: int = SQLField(primary_key=True)
+    name_key: str = SQLField(index=True)
+    phones: list[str] = SQLField(default_factory=list, sa_column=Column(JSON, nullable=False))
+    emails: list[str] = SQLField(default_factory=list, sa_column=Column(JSON, nullable=False))
+    card_expiry_date: date | None = SQLField(default=None)
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 class CrmAreaPreferencesUpdate(BaseModel):
     areas: list[str] = Field(max_length=50)
     forward_days: int = Field(

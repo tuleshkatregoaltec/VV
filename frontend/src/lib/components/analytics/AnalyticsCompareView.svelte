@@ -185,12 +185,12 @@ function getKpis(summary: ProjectAnalyticsResponse) {
 		{
 			label: 'Gross yield',
 			value: fmtPct(summary.overall_gross_yield_pct),
-			detail: 'median rent / secondary median sale'
+			detail: ''
 		},
 		{
 			label: 'Off-plan share',
 			value: fmtPct(getOffPlanShare(summary)),
-			detail: 'sales mix'
+			detail: ''
 		}
 	]
 }
@@ -541,8 +541,7 @@ onMount(() => {
 					<p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-4">
 						Shared price trend
 					</p>
-					<h2 class="mt-1 text-lg font-semibold text-fg-1">One market signal, two selections</h2>
-                    <p class="mt-1 text-xs text-fg-4">DXBI monthly observations · 365-day lookback</p>
+					<h2 class="mt-1 text-lg font-semibold text-fg-1">Price trend</h2>
 				</div>
 				<div class="ui-segmented self-start md:self-auto">
 					<button
@@ -701,19 +700,18 @@ onMount(() => {
 			</span>
 		</div>
 
-		<p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
-            DXBI transactions · Residential properties · All recorded dates
-            {#if isMasterSelection(selection) && developmentCount != null}
-                · {fmtNumber(developmentCount)} project/building scopes
-            {/if}
-        </p>
+		{#if isMasterSelection(selection) && developmentCount != null}
+			<p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
+				{fmtNumber(developmentCount)} developments
+			</p>
+		{/if}
 
 		<div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
 			{#each getKpis(summary) as item (item.label)}
 				<div class="rounded-md border border-border bg-panel p-3">
 					<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-4">{item.label}</p>
 					<p class="mt-1.5 break-words text-lg font-semibold text-fg-1">{item.value}</p>
-					<p class="mt-1 text-xs text-fg-4">{item.detail}</p>
+					{#if item.detail}<p class="mt-1 text-xs text-fg-4">{item.detail}</p>{/if}
 				</div>
 			{/each}
 		</div>
@@ -742,7 +740,7 @@ onMount(() => {
 					<div class="flex items-start justify-between gap-3">
 						<p class="min-w-0 font-semibold text-fg-1">{row.rooms}</p>
 						<p class="shrink-0 text-sm font-semibold text-fg-2">
-							{fmtNumber(row.sale_count)} sales · all dates
+							{fmtNumber(row.sale_count)} sales
 						</p>
 					</div>
 					<div class="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">

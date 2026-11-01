@@ -46,8 +46,8 @@ describe('matchLines', () => {
 		expect(m.Unit.result).toBe('match')
 		expect(m['Sale date']).toMatchObject({ result: 'match', note: 'Same date' })
 		expect(m.Price).toMatchObject({ result: 'match', note: 'Within 2%' })
-		expect(m.Role.note).toBe('Source says Buyer; see ownership assessment')
-		expect(m['Property type'].note).toBe('Compatible: Unit / Apartment')
+		expect(m.Role.note).toBe('Buyer')
+		expect(m['Property type'].note).toBe('Same property kind')
 	})
 
 	it('shows a later sale without independently declaring the person a former owner', () => {
@@ -65,14 +65,14 @@ describe('matchLines', () => {
 		)
 		expect(m.Unit.result).toBe('match')
 		expect(m['Sale date']).toMatchObject({ result: 'differs' })
-		expect(m['Sale date'].note).toContain('428 days after')
+		expect(m['Sale date'].note).toBe('Sale 428 days later')
 		expect(m['Sale date'].note).not.toContain('sold since')
 		expect(m.Price.result).toBe('differs')
 		expect(m['Property type']).toMatchObject({
 			result: 'info',
-			note: 'Different descriptions; see ownership assessment'
+			note: 'Different description'
 		})
-		expect(m.Role.note).toBe('Source says Seller; role retained for review')
+		expect(m.Role.note).toBe('Seller')
 	})
 
 	it('shows the matching amount despite the Park Heights source-date discrepancy', () => {
@@ -84,13 +84,13 @@ describe('matchLines', () => {
 		)
 		expect(m.Price.result).toBe('match')
 		expect(m['Sale date'].result).toBe('info')
-		expect(m['Sale date'].note).toContain('2,008 days after')
+		expect(m['Sale date'].note).toContain('2,008 days later')
 	})
 
 	it('a date inside the seven-day window supports comparison without proving the same sale', () => {
 		const m = byLabel(check({ dld: { date: '2024-03-05' } }))
 		expect(m['Sale date'].result).toBe('match')
-		expect(m['Sale date'].note).toBe('Dates within 7 days; see ownership assessment')
+		expect(m['Sale date'].note).toBe('Within 7 days')
 		expect(m['Sale date'].note).not.toContain('Same sale')
 	})
 
@@ -103,7 +103,7 @@ describe('matchLines', () => {
 		const m = byLabel(
 			check({ imported: { role: '' }, dld: { unit: '', date: null, aed: null, type: '' } })
 		)
-		expect(m.Unit.note).toBe('No DLD sale found for this unit')
+		expect(m.Unit.note).toBe('No sale found')
 		expect(m['Sale date'].result).toBe('none')
 		expect(m.Price.result).toBe('none')
 		expect(m.Role.note).toBe('No role in the file')

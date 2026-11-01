@@ -26,7 +26,7 @@ function formatDate(d: string | null): string | null {
 
 function statusLabel(status: string | null): string {
 	if (status === 'C') return 'Completed'
-	if (status === 'U') return 'Under Construction'
+	if (status === 'U') return 'Under construction'
 	if (status === 'P') return 'Planned'
 	return status || ''
 }
@@ -136,13 +136,13 @@ function getGeoPinKey(pin: GeoPin, index: number): string {
 		<div class="grid grid-cols-2 gap-3">
 			{#if analytics.avg_price}
 				<div class="bg-slate-50 rounded-xl p-3 border border-border">
-					<div class="text-xs text-fg-4 mb-1">Avg Sale Price</div>
+					<div class="text-xs text-fg-4 mb-1">Avg sale price</div>
 					<div class="font-display text-xl font-normal tracking-normal text-fg-1">{formatCurrency(analytics.avg_price)}</div>
 				</div>
 			{/if}
 			{#if analytics.gross_yield_pct != null}
 				<div class="bg-slate-50 rounded-xl p-3 border border-border">
-					<div class="text-xs text-fg-4 mb-1">Gross Yield</div>
+					<div class="text-xs text-fg-4 mb-1">Gross yield</div>
 					<div class="font-display text-xl font-normal tracking-normal text-fg-1">{analytics.gross_yield_pct.toFixed(1)}%</div>
 				</div>
 			{/if}
@@ -152,7 +152,7 @@ function getGeoPinKey(pin: GeoPin, index: number): string {
 	<!-- Unit Composition -->
 	{#if project.unit_composition.length > 0}
 		<div class="space-y-2.5">
-			<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Unit Mix</h3>
+			<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Unit mix</h3>
 			<div class="space-y-2">
 				{#each project.unit_composition as unit_type (unit_type.property_sub_type)}
 					<div>
@@ -261,7 +261,7 @@ function getGeoPinKey(pin: GeoPin, index: number): string {
 	<!-- Master Developer (only if different from main developer) -->
 	{#if project.master_developer_name && project.master_developer_name !== project.developer_name}
 		<div class="text-xs text-slate-500 border-t border-slate-100 pt-3">
-			Master Developer: <span class="font-medium text-slate-700"
+			Master developer: <span class="font-medium text-slate-700"
 				>{project.master_developer_name}</span
 			>
 		</div>

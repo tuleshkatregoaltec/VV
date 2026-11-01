@@ -1,5 +1,4 @@
 <script lang="ts" generics="T">
-import type { CreateQueryResult } from '@tanstack/svelte-query'
 import type { Snippet } from 'svelte'
 import { errorText } from '../../write'
 import ErrorLine from './ErrorLine.svelte'
@@ -13,7 +12,16 @@ let {
 	query,
 	rows = 4,
 	children
-}: { query: CreateQueryResult<T, Error>; rows?: number; children: Snippet<[T]> } = $props()
+}: {
+	query: {
+		data: T | undefined
+		isError: boolean
+		error: Error | null
+		refetch: () => Promise<unknown>
+	}
+	rows?: number
+	children: Snippet<[T]>
+} = $props()
 </script>
 
 {#if query.data !== undefined}

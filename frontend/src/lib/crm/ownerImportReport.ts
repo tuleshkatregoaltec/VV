@@ -5,7 +5,7 @@
  */
 import type { CrmContactImportSummary, CrmSheetMapping } from '$lib/api/generated/hey-api/types.gen'
 import type { ImportSheet, MatchColour, MatchedSale, OwnerMatchSummary, Tone } from './api/types'
-import { aed, fullDate } from './format'
+import { aed, fmt, fullDate } from './format'
 
 export type ClaimStatus =
 	| 'verified_current_owner'
@@ -27,93 +27,89 @@ export const FAILED_STATUSES: ClaimStatus[] = [
 
 export const STATUS_INFO: Record<ClaimStatus, { label: string; meaning: string; tone: Tone }> = {
 	verified_current_owner: {
-		label: 'Transaction-matched current buyer',
-		meaning:
-			'The imported buyer’s transaction matches the latest available sale; identity is not independently verified',
+		label: 'Current owner',
+		meaning: 'Matches the latest sale of the unit',
 		tone: 'green'
 	},
 	probable_current_owner: {
 		label: 'Possible current owner',
-		meaning: 'Ownership fits available sales evidence but still needs review',
+		meaning: 'Fits the latest sale, with a gap to check',
 		tone: 'amber'
 	},
 	unit_linked_unverified: {
-		label: 'Property found, owner unverified',
-		meaning: 'A unit or plot is identified; ownership still needs evidence',
+		label: 'Property found, owner unknown',
+		meaning: 'The unit is identified, no sale ties the person to it',
 		tone: 'amber'
 	},
 	former_owner: {
 		label: 'Former owner',
-		meaning: 'A matched sale supports a past ownership relationship',
+		meaning: 'A matched sale shows a past owner',
 		tone: 'neutral'
 	},
 	unverified_former_owner: {
-		label: 'Seller claim needs review',
-		meaning: 'The file names a seller, but available sale evidence does not corroborate the claim',
+		label: 'Seller to check',
+		meaning: 'The file names a seller that no sale supports',
 		tone: 'amber'
 	},
 	conflicting_claim: {
-		label: 'Conflicting evidence',
-		meaning: 'Registry evidence is contradictory or ambiguous for this ownership claim',
+		label: 'Conflicting records',
+		meaning: 'Sale records disagree with the file',
 		tone: 'red'
 	},
 	insufficient_property_data: {
-		label: 'Property needs resolution',
-		meaning: 'No unique property match; the row explains the remaining gap',
+		label: 'Property not identified',
+		meaning: 'No single property could be found for the row',
 		tone: 'red'
 	},
 	registry_not_observed: {
-		label: 'Not found in available sales',
-		meaning: 'The unit is absent from the sales data currently available to us',
+		label: 'No sale found',
+		meaning: 'The unit has no sale on record',
 		tone: 'red'
 	},
 	unmatched: {
-		label: 'Needs review',
-		meaning: 'Property identity or the event’s ownership effect is unverified',
+		label: 'Unmatched',
+		meaning: 'No property or ownership change could be confirmed',
 		tone: 'amber'
 	}
 }
 
-/**
- * How the backend decides each status (backend/app/crm/ownership.py) and what to do about it, for
- * the ⓘ on the import report's status tiles. Sales are DLD sales of the matched unit.
- */
+/** What each status means and what to do about it, for the ⓘ on the import report's status tiles. */
 export const STATUS_HELP: Record<ClaimStatus, { how: string; todo: string }> = {
 	verified_current_owner: {
-		how: 'The resolved property, source date and amount match an observed sale, with no subsequent sale in available history.',
-		todo: 'Strong sale-based evidence. The registry match does not independently verify the person’s identity or exclude unobserved transfers.'
+		how: 'The property, date and amount match a recorded sale, and no later sale is on record.',
+		todo: 'Strong match. A transfer that is not on record would not show here.'
 	},
 	probable_current_owner: {
-		how: 'The latest sale supports a possible current contact. Date discrepancies, missing size units or a source Seller role reduce the evidence score; original details remain visible.',
-		todo: 'Likely the owner; check before relying on it.'
+		how: 'The latest sale supports this person, but a date gap, a missing size unit or a seller role weakens the match.',
+		todo: 'Likely the owner. Check before relying on it.'
 	},
 	unit_linked_unverified: {
-		how: 'A unit, lease or DLD plot was linked. A mortgage, gift or owner snapshot alone does not establish a verified sale acquisition.',
+		how: 'A unit, lease or plot was linked. A mortgage, gift or owner list alone does not show a sale.',
 		todo: 'Check ownership another way.'
 	},
 	former_owner: {
-		how: 'A source sale matches registry transaction evidence and a later observed sale establishes a past ownership relationship.',
-		todo: 'Review this as a transaction-supported former relationship. It does not independently verify the person’s identity.'
+		how: 'A sale in the file matches a recorded sale, and a later sale shows the unit changed hands.',
+		todo: 'Treat as a past owner.'
 	},
 	unverified_former_owner: {
-		how: 'The source names this person as Seller, but the available property or sale evidence does not corroborate that transaction.',
-		todo: 'Check the original row and transaction documents. Do not treat a seller label alone as proven ownership history.'
+		how: 'The file names this person as seller, but no recorded sale supports it.',
+		todo: 'Check the original row and the sale documents.'
 	},
 	conflicting_claim: {
-		how: 'The source and registry disagree on property identity, property type, sale date or amount, or multiple sale registrations prevent one reliable acquisition match.',
-		todo: 'Read the row’s reason and source details; resolve the conflicting or ambiguous evidence before treating this as current ownership.'
+		how: 'The file and the records disagree on the property, its type, the sale date or the amount, or several sales fit.',
+		todo: 'Read the row’s reason and resolve the conflict before treating this as current ownership.'
 	},
 	insufficient_property_data: {
-		how: 'The source identifiers and location/date/amount search did not identify one property. The row distinguishes missing evidence, no matching sale and multiple candidates.',
-		todo: 'Review the retained land, building and property identifiers; do not replace them with a guessed unit.'
+		how: 'The identifiers and the location, date and amount did not point to one property.',
+		todo: 'Review the building, land and unit details in the file. Do not guess a unit.'
 	},
 	registry_not_observed: {
-		how: 'The row has a unit identifier, but it was not found in the sales dataset currently available to this CRM. This does not establish that DLD has no record.',
-		todo: 'Check the source identifier and dataset coverage.'
+		how: 'The row has a unit, but no sale of it is on record.',
+		todo: 'Check the unit number and building name.'
 	},
 	unmatched: {
-		how: 'Property evidence does not resolve one unit or establish an ownership-changing event. The row’s match reason identifies the remaining ambiguity.',
-		todo: 'Review source identifiers, location and event type, then correct or supplement the file.'
+		how: 'The property did not resolve to one unit, or the row is not an ownership change.',
+		todo: 'Review the identifiers, location and event type, then correct the file.'
 	}
 }
 
@@ -273,7 +269,7 @@ const FAILURE_FIX: Partial<Record<ClaimStatus, string>> = {
 	insufficient_property_data:
 		'Add a building (or project) and a unit column, or a sale date and price, then upload again.',
 	registry_not_observed:
-		'Check the unit number and building spelling; DLD may not list this unit yet.',
+		'Check the unit number and building spelling; the unit may have no sale on record yet.',
 	unmatched:
 		'Add or correct the building name so the unit can be told apart from same-numbered units elsewhere.'
 }
@@ -419,7 +415,7 @@ export function dropDetail(r: DroppedRowFacts): DropDetail {
 			return {
 				stage,
 				what: `The procedure is “${r.procedure}”, which is not a sale.`,
-				rule: 'A Buyer/Seller row is kept only when its procedure is empty or contains “sale”, “sell” or “delayed sell”. Mortgages, gifts and grants do not change who bought the property, and their amount is not a sale price, so they cannot be checked against DLD sales.',
+				rule: 'A Buyer/Seller row is kept only when its procedure is empty or contains “sale”, “sell” or “delayed sell”. Mortgages, gifts and grants are not sales.',
 				fix: 'Nothing to fix: the owner is usually kept from the row of the actual sale.'
 			}
 		case 'no_unit':
@@ -453,6 +449,14 @@ export interface MatchBucket {
 	meaning: string
 }
 
+export interface ReviewReason {
+	key: string
+	label: string
+	/** Rows whose main reason for review this is. */
+	count: number
+	meaning: string
+}
+
 export interface OwnerMatchView {
 	version: string
 	/** Distinct units in the file. */
@@ -460,10 +464,49 @@ export interface OwnerMatchView {
 	/** Confirmed units: the report's headline. */
 	headline: { units: number; total: number; percent: number }
 	buckets: MatchBucket[]
+	/** Rows (not units) that need a look, with one main reason each; largest first. */
+	review: { rows: number; reasons: ReviewReason[] }
+	/** Distinct sales tied to confirmed rows; null when the import predates the count. */
+	sales: { total: number; withUnit: number; withoutUnit: number } | null
 	/** Rows that carry no unit identifier at all. */
 	rowsWithoutUnit: number
 	/** Bank rows on mortgage sales, left out because they are not owners. */
 	lenderRows: number
+	/** Licensed real-estate brokers named in the file, left out because they are not owners. */
+	brokerRows: number
+}
+
+/** Why a row sits under review, in the words a person reads. */
+export const REVIEW_REASON_INFO: Record<string, { label: string; meaning: string }> = {
+	date_differs: {
+		label: 'Sale date differs',
+		meaning: 'Amount and unit match, but the sale is more than 90 days from the file’s date.'
+	},
+	unit_differs: {
+		label: 'Unit number differs',
+		meaning: 'A sale matches the amount and size under another unit number.'
+	},
+	two_units_named: {
+		label: 'Two units named',
+		meaning: 'The file names two units for the same sale.'
+	},
+	share_differs: {
+		label: 'Different share sold',
+		meaning: 'The sale was for a different share of the unit.'
+	},
+	size_differs: {
+		label: 'Size differs',
+		meaning: 'The file’s size is on a different basis from the sale’s.'
+	},
+	unit_unverified: {
+		label: 'Unit not confirmed',
+		meaning: 'The sale has no unit number, so it could not be tied to this unit.'
+	},
+	type_differs: {
+		label: 'Property type differs',
+		meaning: 'The file and the sale describe a different kind of property.'
+	},
+	other: { label: 'Other', meaning: 'A detail of the match needs a look.' }
 }
 
 const BUCKETS: Record<MatchBucketKey, Pick<MatchBucket, 'label' | 'tone' | 'meaning'>> = {
@@ -504,21 +547,45 @@ export function ownerMatchView(m: OwnerMatchSummary | null | undefined): OwnerMa
 		percent: percentOf(m.units[key], total)
 	})
 	const buckets = (['confirmed', 'review', 'property_only', 'not_matched'] as const).map(bucket)
+	const reasons = Object.entries(m.review_reasons ?? {})
+		.filter(([, count]) => count > 0)
+		.map(([key, count]) => ({
+			key,
+			label: (REVIEW_REASON_INFO[key] ?? { label: fieldLabel(key) }).label,
+			count,
+			meaning: REVIEW_REASON_INFO[key]?.meaning ?? ''
+		}))
+		.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+	const sold = m.sales_matched
 	return {
 		version: m.version,
 		total,
 		headline: { units: m.units.confirmed, total, percent: buckets[0].percent },
 		buckets,
+		review: {
+			rows: m.rows?.matched_sale_review ?? reasons.reduce((t, r) => t + r.count, 0),
+			reasons
+		},
+		// `registry` counts sales from unit-level records, `transactions` those found only in
+		// registry-wide data without a unit number.
+		sales: sold
+			? {
+					total: sold.total ?? (sold.registry ?? 0) + (sold.transactions ?? 0),
+					withUnit: sold.registry ?? 0,
+					withoutUnit: sold.transactions ?? 0
+				}
+			: null,
 		rowsWithoutUnit: m.rows_without_unit ?? 0,
-		lenderRows: m.rows?.lender ?? 0
+		lenderRows: m.rows?.lender ?? 0,
+		brokerRows: m.rows?.broker ?? 0
 	}
 }
 
-export type MatchFilterId = 'all' | MatchBucketKey | 'lender'
+export type MatchFilterId = 'all' | MatchBucketKey | 'lender' | 'broker'
 
 /**
- * The chips above the rows. Most filter by colour; "Not matched" and "Lender" filter by outcome
- * because both are grey (a lender is not an unmatched owner).
+ * The chips above the rows. Most filter by colour; "Not matched", "Lender" and "Broker" filter by
+ * outcome because all are grey (a lender or broker is not an unmatched owner).
  */
 export const MATCH_FILTERS: {
 	id: MatchFilterId
@@ -531,7 +598,8 @@ export const MATCH_FILTERS: {
 	{ id: 'review', label: 'Needs review', colours: ['amber'], outcomes: [] },
 	{ id: 'property_only', label: 'Property only', colours: ['blue'], outcomes: [] },
 	{ id: 'not_matched', label: 'Not matched', colours: [], outcomes: ['rejected', 'no_evidence'] },
-	{ id: 'lender', label: 'Lender', colours: [], outcomes: ['lender'] }
+	{ id: 'lender', label: 'Lender', colours: [], outcomes: ['lender'] },
+	{ id: 'broker', label: 'Broker', colours: [], outcomes: ['broker'] }
 ]
 
 const OUTCOME_LABEL: Record<string, string> = {
@@ -544,7 +612,8 @@ const OUTCOME_LABEL: Record<string, string> = {
 	property_confirmed_no_sale: 'Property found, no sale',
 	rejected: 'Contradicted',
 	no_evidence: 'Not matched',
-	lender: 'Lender'
+	lender: 'Lender',
+	broker: 'Broker'
 }
 
 const COLOUR_INFO: Record<MatchColour, { label: string; tone: Tone }> = {
@@ -587,9 +656,27 @@ const tail = (text: string) => {
 /** The bracketed list right after a code, "sheet_names_two_units ['a', 'b']: …". */
 const listIn = (text: string) => /\[([^\]]*)\]/.exec(text)?.[1] ?? ''
 
+/** Whole days between two ISO dates; null when either is not a date. */
+function daysBetween(a: string, b: string): number | null {
+	const x = Date.parse(a.slice(0, 10))
+	const y = Date.parse(b.slice(0, 10))
+	return Number.isNaN(x) || Number.isNaN(y) ? null : Math.round(Math.abs(x - y) / 86_400_000)
+}
+
 type Explainer = [RegExp, (text: string, m: RegExpExecArray) => string]
 
 const EXPLAINERS: Explainer[] = [
+	[
+		/^date_differs:\s*sheet (\S+),\s*sale (\S+)$/i,
+		(_t, m) => {
+			const days = daysBetween(m[1], m[2])
+			return days === null
+				? 'The sale date differs from the file.'
+				: `The sale date differs from the file by ${days === 1 ? '1 day' : `${fmt(days)} days`}.`
+		}
+	],
+	[/^date_differs/i, () => 'The sale date differs from the file.'],
+	[/^unit_unverified/, () => 'The sale has no unit number, so it could not be tied to this unit.'],
 	[
 		/^unit differs: Transactions says (.+?), sheet says (.+)$/i,
 		(_t, m) =>
@@ -699,7 +786,7 @@ const EXPLAINERS: Explainer[] = [
 			'.'
 	],
 	[/^dld_only (.+)$/, (_t, m) => `A land-registry sale with no unit number (${m[1]}).`],
-	[/^matched (.+)$/, (_t, m) => `A DXBI sale (${m[1]}).`]
+	[/^matched (.+)$/, (_t, m) => `A sale record (${m[1]}).`]
 ]
 
 // Labels for one kind of property: a difference between two of them says nothing.
@@ -730,16 +817,16 @@ export function explainMatch(code: string): string {
 	for (const [pattern, say] of EXPLAINERS) {
 		const m = pattern.exec(text)
 		if (m) {
-			const said = say(text, m)
+			const said = say(text, m).replace(/\bDXBI\b/g, 'Transactions')
 			return said ? sentence(said) : ''
 		}
 	}
-	return text
+	return text.replace(/\bDXBI\b/g, 'Transactions')
 }
 
-const SOURCE_LABEL: Record<string, string> = { dxbi: 'DXBI', dld: 'DLD' }
+const SOURCE_LABEL: Record<string, string> = { dxbi: '', dld: 'Land registry' }
 
-/** "1203 · Burj Crown · AED 2,150,000 · 21 Mar 2024 · DXBI": the sale a row was tied to. */
+/** "1203 · Burj Crown · AED 2,150,000 · 21 Mar 2024": the sale a row was tied to. */
 export function matchedSaleLine(sale: MatchedSale | null | undefined): string {
 	if (!sale) return ''
 	const place = sale.building || sale.project || sale.area
@@ -791,43 +878,104 @@ export const fieldLabel = (field: string) => {
 
 const NOT_IMPORTED = 'Columns not imported:'
 
+/** The fields a person expects a file to carry, in the order they read them. */
+const READ_FIELDS: { label: string; keys: string[]; sale?: boolean }[] = [
+	{ label: 'Owner name', keys: ['contact_name'] },
+	{ label: 'Phone', keys: ['phone_primary', 'phone_alternate'] },
+	{ label: 'Email', keys: ['email_primary'] },
+	{ label: 'Community', keys: ['area_name'] },
+	{ label: 'Master project', keys: ['master_project'] },
+	{ label: 'Project', keys: ['project_name'] },
+	{ label: 'Building', keys: ['building_name'] },
+	{ label: 'Unit number', keys: ['unit_number'] },
+	{ label: 'Property type', keys: ['property_type'] },
+	{ label: 'Size', keys: ['size_sqft', 'size_sqm', 'size_unknown'] },
+	{ label: 'Sale date', keys: ['transaction_date'], sale: true },
+	{ label: 'Sale price', keys: ['transaction_price_aed'], sale: true },
+	{ label: 'Buyer or seller', keys: ['party_role'], sale: true },
+	{ label: 'Procedure', keys: ['procedure_type'], sale: true }
+]
+
+/**
+ * Our fields with whether the file has a column for each, from the field keys the mapping found.
+ * Sale fields (date, price, buyer or seller, procedure) are listed only when `sale` is set or the
+ * file has one of them.
+ */
+export function fieldChecklist(
+	mapped: Iterable<string>,
+	sale: boolean
+): { field: string; found: boolean }[] {
+	const keys = new Set(mapped)
+	const known = new Set(READ_FIELDS.flatMap((f) => f.keys))
+	const core = READ_FIELDS.map((f) => ({
+		field: f.label,
+		found: f.keys.some((k) => keys.has(k)),
+		sale: f.sale
+	}))
+		.filter((f) => f.found || sale || !f.sale)
+		.map(({ field, found }) => ({ field, found }))
+	const extra = [...keys]
+		.filter((k) => !known.has(k))
+		.map((k) => ({ field: fieldLabel(k), found: true }))
+	return [...core, ...extra]
+}
+
 const AUTO_NOTE: Record<string, string> = {
-	llm: 'Columns were assigned by a model because the headers were not recognised.',
+	llm: 'Columns were assigned automatically because the headers were not recognised.',
 	reused: 'Columns were reused from an earlier import of a file with the same headers.',
 	override: 'Columns were set by hand for this file.'
 }
 
+/**
+ * A reading note without the file's own column names (the importer words some of them with a
+ * header); null drops it.
+ */
+function plainWarning(w: string): string | null {
+	if (/^Size has no stated unit/.test(w)) return w
+	if (/^Property name will be inferred/.test(w)) return w
+	if (/^Dates in .* read month first/.test(w)) return 'Dates were read month first (MM/DD/YYYY).'
+	if (/^Dates in .* mix day-first/.test(w))
+		return 'Some dates mix day-first and month-first; the unclear ones were left empty.'
+	if (/dates? in .* could not be read/.test(w)) return 'Some dates could not be read.'
+	return null
+}
+
 export interface ColumnsRead {
 	name: string
-	/** The mapping did not come from the built-in header names (model, earlier import or hand). */
+	/** The mapping did not come from the built-in header names (assigned, earlier import or hand). */
 	auto: boolean
 	sourceNote: string
-	/** Which file column feeds which field. */
-	fields: { field: string; column: string }[]
+	/** Our fields, and whether the file has a column for each. */
+	fields: { field: string; found: boolean }[]
 	/** Columns with data that no field uses. */
-	notImported: string[]
-	/** Other warnings from reading the sheet. */
+	unused: number
+	/** Other notes from reading the sheet. */
 	warnings: string[]
 	checks: SheetCheck[]
 }
 
-/** One sheet's "Columns read from the file" panel. */
+/** One sheet's "Columns read" panel: our field names only, never the file's own headers. */
 export function columnsRead(sheet: ImportSheet): ColumnsRead {
 	const unmapped = sheet.warnings.find((w) => w.startsWith(NOT_IMPORTED))
 	return {
 		name: sheet.name,
 		auto: sheet.source in AUTO_NOTE,
 		sourceNote: AUTO_NOTE[sheet.source] ?? '',
-		fields: sheet.fields.map((f) => ({ field: fieldLabel(f.field), column: f.column })),
-		notImported: unmapped
+		fields: fieldChecklist(
+			sheet.fields.map((f) => f.field),
+			sheet.family !== 'contact_list'
+		),
+		unused: unmapped
 			? unmapped
 					.slice(NOT_IMPORTED.length)
 					.replace(/\.\s*$/, '')
 					.split(',')
-					.map((c) => c.trim())
-					.filter(Boolean)
-			: [],
-		warnings: sheet.warnings.filter((w) => w !== unmapped),
+					.filter((c) => c.trim()).length
+			: 0,
+		warnings: sheet.warnings
+			.filter((w) => w !== unmapped)
+			.map(plainWarning)
+			.filter((w): w is string => w !== null),
 		checks: sheet.checks
 	}
 }

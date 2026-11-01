@@ -29,8 +29,14 @@ Thumbs.db
 
 # Data
 data/
-holocron/
+holocron/*
+!holocron/packages/
+holocron/packages/*
+!holocron/packages/crm-rental-sql/
 *.csv
 
 # Logs
 *.log
+
+**/.env*
+**/*.egg-info/

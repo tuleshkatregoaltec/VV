@@ -816,7 +816,7 @@ function bindRadarHandlers() {
 					`<div style="font-weight:700;color:var(--color-map-popup-fg);">${escapeHtml(props.project_name)}</div>` +
 					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${escapeHtml(props.area_name)} · ${escapeHtml(props.official_status)}</div>` +
 					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">Risk ${escapeHtml(props.risk)}</div>` +
-					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${escapeHtml(props.coordinate_source)} · ${Number(
+					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${Number(
 						props.building_point_count || 0
 					).toLocaleString()} buildings · ${Number(
 						props.land_point_count || 0

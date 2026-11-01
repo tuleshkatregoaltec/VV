@@ -83,8 +83,7 @@ async function handleSubmit() {
 					/>
 				</svg>
 			</div>
-			<h2 class="text-3xl font-bold text-slate-900 mb-2">Complete Your Profile</h2>
-			<p class="text-slate-600">We need your name to personalize your experience</p>
+			<h2 class="text-3xl font-bold text-slate-900 mb-2">Complete your profile</h2>
 		</div>
 
 		{#if error}
@@ -102,7 +101,7 @@ async function handleSubmit() {
 			class="space-y-4"
 		>
 			<TextInput
-				label="First Name"
+				label="First name"
 				bind:value={firstName}
 				placeholder="John"
 				error={fieldErrors.firstName}
@@ -111,7 +110,7 @@ async function handleSubmit() {
 			/>
 
 			<TextInput
-				label="Last Name"
+				label="Last name"
 				bind:value={lastName}
 				placeholder="Doe"
 				error={fieldErrors.lastName}

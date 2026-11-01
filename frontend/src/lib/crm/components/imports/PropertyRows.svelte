@@ -75,7 +75,7 @@ $effect(() => {
 							<th>Community · project</th>
 							<th>Type · completion</th>
 							<th>Current owner</th>
-							<th>Latest source event</th>
+							<th>Latest event</th>
 							<th class="r">Rows</th>
 						</tr>
 					</thead>
@@ -93,7 +93,7 @@ $effect(() => {
 										<ChevronDown size={14} class={open === p.key ? 'chev up' : 'chev'} />
 										<span>
 											<span class="nm">{usable(p.building) || usable(p.project) || '—'}{p.unit ? ` · ${p.unit}` : ''}</span>
-											{#if !p.unit}<span class="sub">Land {p.records[0]?.identifiers.land_number || 'unknown'} · {p.key.startsWith('dld-land:') ? 'Plot identified; ownership unverified' : 'Property needs resolution'}</span>{/if}
+											{#if !p.unit}<span class="sub">Land {p.records[0]?.identifiers.land_number || 'unknown'} · {p.key.startsWith('dld-land:') ? 'Plot identified' : 'Property not identified'}</span>{/if}
 											{#if (usable(p.building) && usable(p.project)) || usable(p.type)}
 												<span class="sub">{[usable(p.building) ? usable(p.project) : '', usable(p.type)].filter(Boolean).join(' · ')}</span>
 											{/if}
@@ -103,7 +103,7 @@ $effect(() => {
 								<td data-label="Community · project">
 									{(p.records[0]?.propertyDetails.registry_property_type ? usable(p.area) : p.records[0]?.propertyDetails.file_location || usable(p.area)) || '—'}
 									<div class="sub">{usable(p.project) || '—'}</div>
-									{#if p.records[0]?.propertyDetails.file_location}<div class="sub">Source location context: {p.records[0].propertyDetails.file_location}</div>{/if}
+									{#if p.records[0]?.propertyDetails.file_location}<div class="sub">Location in file: {p.records[0].propertyDetails.file_location}</div>{/if}
 								</td>
 								<td data-label="Type · completion">
 									{p.records[0]?.propertyDetails.registry_property_type || p.type || '—'}
@@ -111,7 +111,7 @@ $effect(() => {
 									{#if p.records[0]?.propertyDetails.registry_completion_status}<div class="sub">Latest sale: {p.records[0].propertyDetails.registry_completion_status}</div>{/if}
 								</td>
 								<td data-label="Current owner">{p.currentOwner ?? '—'}</td>
-								<td data-label="Latest source event" class="nowrap">
+								<td data-label="Latest event" class="nowrap">
 									{p.latestDate ? fullDate(p.latestDate) : '—'}
 									{#if p.latestPrice}<div class="sub">{aed(p.latestPrice)}</div>{/if}
 								</td>
@@ -129,7 +129,7 @@ $effect(() => {
 													<th>Name</th>
 													<th>Role · procedure</th>
 													<th>Date</th>
-													<th class="r">Source amount</th>
+													<th class="r">Amount</th>
 													<th>Status</th>
 													<th>Source</th>
 												</tr>
@@ -140,7 +140,7 @@ $effect(() => {
 														<td>{r.name || '—'}</td>
 														<td data-label="Role · procedure">{r.role || 'Unspecified'}<div class="sub">{r.procedure || 'Owner snapshot'}</div></td>
 														<td data-label="Date" class="nowrap">{r.date ? fullDate(r.date) : '—'}</td>
-														<td data-label="Source amount" class="r nowrap">{r.price ? aed(r.price) : '—'}</td>
+														<td data-label="Amount" class="r nowrap">{r.price ? aed(r.price) : '—'}</td>
 														<td data-label="Status">
 															<Chip tone={STATUS_INFO[r.status]?.tone ?? 'neutral'}>{STATUS_INFO[r.status]?.label ?? r.status}</Chip>
 															<div class="sub">{r.matchReason}</div>
@@ -151,7 +151,7 @@ $effect(() => {
 											</tbody>
 										</table>
 										{#if p.recordsTruncated}
-											<p class="sub more">Showing the newest {fmt(p.records.length)} source records. Older records are omitted from this preview; this is not the complete history.</p>
+											<p class="sub more">Showing the newest {fmt(p.records.length)} records.</p>
 										{/if}
 									</td>
 								</tr>

@@ -31,13 +31,13 @@ function editOwner(r: RenewalDetail) {
 async function saveOwner(e: SubmitEvent) {
 	e.preventDefault()
 	saving = true
-	const r = await write({ call: () => crm.renewals.saveOwner(id, owner), success: 'Owner saved' })
+	const r = await write({
+		domain: 'renewals',
+		call: () => crm.renewals.saveOwner(id, owner),
+		success: 'Owner saved'
+	})
 	saving = false
 	if (r) editing = false
-}
-
-function start(r: RenewalDetail) {
-	write({ call: () => crm.renewals.start(r.id), success: `Renewal started — ${r.unit}` })
 }
 </script>
 
@@ -96,7 +96,6 @@ function start(r: RenewalDetail) {
 		{#if r.owner_evidence.length}
 			<section class="sec">
 				<h3>Imported ownership evidence</h3>
-				<p class="small muted">Assessments from owner files. Only a reliable current-owner match fills the owner fields above.</p>
 				{#each r.owner_evidence as evidence (evidence.id)}
 					<div class="kv">
 						<Kv k="Contact in file" v={evidence.name} o={evidence.source} />
@@ -129,14 +128,13 @@ function start(r: RenewalDetail) {
 						</div>
 					{/each}
 				</div>
-				<p class="small muted">{r.match_explanation}</p>
 			{:else}
 				<p class="small muted">No other registered leases or sales for this unit.</p>
 			{/if}
 		</section>
 
 		{#snippet footer()}
-			<button type="button" class="btn" onclick={() => start(r)}>Start renewal</button>
+			<button type="button" class="btn" disabled title="Renewal workflows are coming soon">Start renewal · coming soon</button>
 		{/snippet}
 	</Panel>
 {:else}

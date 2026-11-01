@@ -23,12 +23,14 @@ test('a real owner workbook previews its columns, imports and reports units conf
     await page.getByRole('button', { name: 'Upload', exact: true }).first().click();
     await page.locator('input[type=file]').setInputFiles(file);
 
-    // As in the mock's import dialog: under each header, the field it feeds or "not used". The
-    // headers are the file's own column names, never a data row.
+    // The dialog lists our fields as found or not found and shows the sample under our labels;
+    // the file's own column headers are never printed.
+    const found = page.getByRole('list', { name: 'Fields in the file' });
+    await expect(found).toContainText('Building', { timeout: 180_000 });
+    for (const field of ['Owner name', 'Unit number', 'Sale price']) await expect(found).toContainText(field);
     const header = page.locator('.cols thead');
-    await expect(header).toContainText('→ Building', { timeout: 180_000 });
-    for (const field of ['→ Owner name', '→ Unit number', '→ Sale price (AED)']) await expect(header).toContainText(field);
     await expect(header.locator('th').first()).toContainText(/^\D/);
+    await expect(header).not.toContainText(/ProcedurePartyTypeNameEn|UnitNumber|NameEn/);
     await page.screenshot({ path: testInfo.outputPath('import-dialog.png'), animations: 'disabled' });
 
     const importButton = page.getByRole('button', { name: /^Import [\d,]+ rows$/ });
@@ -54,12 +56,16 @@ test('a real owner workbook previews its columns, imports and reports units conf
         expect(units.confirmed + units.review + units.property_only + units.not_matched).toBe(units.total);
         // The bar set for a "decent" file: at least 70% of its distinct units confirmed with a sale.
         expect(percent).toBeGreaterThanOrEqual(70);
-        await expect(page.locator('.done')).toContainText(`${units.confirmed.toLocaleString('en-US')} of ${units.total.toLocaleString('en-US')} distinct units confirmed`);
+        const result = page.locator('.kv.result');
+        await expect(result).toContainText(new RegExp(`Units identified\\s*${units.total.toLocaleString('en-US')}`));
+        await expect(result).toContainText(new RegExp(`Units mapped\\s*${units.confirmed.toLocaleString('en-US')}`));
+        await expect(result).toContainText(`${percent}% coverage`);
 
         await page.getByRole('button', { name: 'Open report', exact: true }).click();
         await expect(page).toHaveURL(`/crm/owners/imports/${imported.id}`);
-        await expect(page.locator('.headline .big')).toHaveText(units.confirmed.toLocaleString('en-US'), { timeout: 600_000 });
-        await expect(page.locator('.headline .pc')).toHaveText(`${percent}%`);
+        const mapped = page.locator('.stat').filter({ hasText: 'Units mapped' });
+        await expect(mapped.locator('.big')).toHaveText(units.confirmed.toLocaleString('en-US'), { timeout: 600_000 });
+        await expect(mapped).toContainText(`${percent}% coverage`);
 
         // Confirmed rows: each is tied to a sale at the sheet's price (within AED 2). A mortgage row's
         // amount is a loan, so "Confirmed via mortgage" is checked by its chip only.
@@ -96,7 +102,7 @@ test('a real owner workbook previews its columns, imports and reports units conf
         // The list shows the file the way the mock's import requests card does.
         await page.goto('/crm/owners/imports');
         const listed = page.locator('tbody tr').filter({ has: page.getByRole('button', { name: imported.name, exact: true }) });
-        await expect(listed.locator('[data-label="Units confirmed"]')).toContainText(`${percent}%`, { timeout: 120_000 });
+        await expect(listed.locator('[data-label="Units mapped"]')).toContainText(`${percent}%`, { timeout: 120_000 });
         await expect(listed.locator('[data-label="Status"]')).toContainText('Completed ·');
         await page.screenshot({ path: testInfo.outputPath('import-list.png'), animations: 'disabled' });
         await page.setViewportSize({ width: 375, height: 812 });

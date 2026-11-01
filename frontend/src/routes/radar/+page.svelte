@@ -4,7 +4,6 @@ import {
 	Activity,
 	ArrowLeft,
 	BadgeCheck,
-	BarChart3,
 	Layers3,
 	LocateFixed,
 	MapPinned,
@@ -96,7 +95,7 @@ let renderedDDAFeatures = $state<DdaMapFeature[]>([])
 let renderedDDAMode = $state<DdaLayerMode>('outlines')
 
 const heatmapLayerOptions: Array<{ value: ZoneHeatmapLayer; label: string; caption: string }> = [
-	{ value: 'transaction_activity', label: 'Activity', caption: 'DLD sales and Ejari leases' },
+	{ value: 'transaction_activity', label: 'Activity', caption: 'Sales and leases' },
 	{ value: 'avg_price_sqft', label: 'Price / sq ft', caption: 'Sales rate' },
 	{ value: 'rental_yield', label: 'Yield', caption: 'Gross rent yield' }
 ]
@@ -107,9 +106,9 @@ const activityPeriodOptions: Array<{ value: RadarPeriodDays; label: string }> = 
 	{ value: 30, label: '30d' }
 ]
 const projectPinModeOptions: Array<{ value: ProjectPinMode; label: string; caption: string }> = [
-	{ value: 'status', label: 'Status', caption: 'Official DLD status colours' },
-	{ value: 'risk', label: 'Risk', caption: 'Internal risk overlay' },
-	{ value: 'developer', label: 'Developer', caption: 'Portfolio geography' }
+	{ value: 'status', label: 'Status', caption: 'Colour by status' },
+	{ value: 'risk', label: 'Risk', caption: 'Colour by risk' },
+	{ value: 'developer', label: 'Developer', caption: 'Colour by developer' }
 ]
 const radarOverviewQuery = createQuery(() => projectQueries.radarOverview(activityPeriodDays))
 const projectListQuery = createQuery(() => ({
@@ -255,7 +254,7 @@ const activeSelectionLabel = $derived.by(() => {
 	if (panelView === 'project') {
 		return selectedRadarProject?.project_name ?? projectDetails?.project_name ?? 'Project details'
 	}
-	if (panelView === 'area') return selectedArea?.area_name ?? selectedAreaName ?? 'Area lens'
+	if (panelView === 'area') return selectedArea?.area_name ?? selectedAreaName ?? 'Area'
 	return 'Radar overview'
 })
 
@@ -272,25 +271,6 @@ const visibleMapProjects = $derived.by(() => {
 		ranked.push(selected)
 	}
 	return ranked
-})
-const projectPinHint = $derived.by(() => {
-	if (!showProjectPins) return 'Project pins off'
-	if (radarPinsQuery.isFetching && radarPinProjects.length === 0) return 'Loading project pins'
-	if (visibleMapProjects.length > 0) {
-		return `${visibleMapProjects.length.toLocaleString()} visible project pins`
-	}
-	return 'No project pins in this viewport'
-})
-const buildingPinHint = $derived.by(() => {
-	if (!showBuildingPins) return 'Tower pins off'
-	if (mapZoom < RADAR_BUILDING_MIN_ZOOM) return 'Zoom in for PF towers'
-	if (radarBuildingPinsQuery.isFetching && radarBuildingPins.length === 0) {
-		return 'Loading tower pins'
-	}
-	if (radarBuildingPins.length > 0) {
-		return `${radarBuildingPins.length.toLocaleString()} visible PF towers`
-	}
-	return 'No PF towers in this viewport'
 })
 
 const searchResults = $derived.by(() => {
@@ -720,13 +700,8 @@ $effect(() => {
 									Radar
 								</div>
 								<h1 class="truncate text-sm font-semibold text-slate-950">
-									DLD & Ejari market map
+									Market map
 								</h1>
-								{#if stats}
-									<p class="truncate text-[10px] text-slate-500">
-										{stats.activity_period_start ?? '~'} to {stats.activity_period_end ?? '~'} · {(stats.activity_coverage_pct ?? 0).toFixed(1)}% mapped
-									</p>
-								{/if}
 							</div>
 						</div>
 
@@ -797,7 +772,7 @@ $effect(() => {
 									class="radar-layer-button {showBuildingPins ? 'is-active' : ''}"
 									aria-pressed={showBuildingPins}
 									aria-label="PF towers"
-									title="Property Finder tower coordinates"
+									title="Towers"
 									onclick={() => (showBuildingPins = !showBuildingPins)}
 								>
 									<MapPinned size={16} />
@@ -892,7 +867,7 @@ $effect(() => {
 								class="pointer-events-auto rounded-lg border border-red-200 bg-red-50/95 px-3 py-2 text-xs font-semibold text-red-800 shadow-sm backdrop-blur"
 								role="alert"
 							>
-								{radarQueryError}. Refresh the view to retry.
+								{radarQueryError}
 							</div>
 						{/if}
 
@@ -919,14 +894,6 @@ $effect(() => {
 				<div class="flex items-center justify-between gap-3">
 					<div class="min-w-0">
 						<p class="text-xs font-semibold text-slate-950">{activeHeatmapOption.label} heatmap</p>
-						<p class="truncate text-[11px] text-slate-500">
-							{radarAreas.length} zones · {stats?.mapped_projects?.toLocaleString() ?? '0'} mapped projects
-							· {projectPinHint}
-							· {buildingPinHint}
-							{#if showDDAPlots}
-								· {planningLayerHint}
-							{/if}
-						</p>
 					</div>
 					<div class="h-2 w-32 rounded-full bg-[linear-gradient(90deg,rgba(42,90,120,0.12),rgba(58,143,173,0.58),rgba(211,161,95,0.78),rgba(163,36,36,0.84))]"></div>
 				</div>
@@ -1095,17 +1062,9 @@ $effect(() => {
 								<div class="border-t border-slate-200 pt-3">
 									<div class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
 										<BadgeCheck size={14} />
-										DLD project record
+										Project record
 									</div>
-									<div class="grid grid-cols-3 gap-2 text-xs">
-										<div>
-											<p class="text-slate-500">Licence no.</p>
-											<p class="mt-0.5 font-semibold text-slate-950">~</p>
-										</div>
-										<div>
-											<p class="text-slate-500">Sold / available</p>
-											<p class="mt-0.5 font-semibold text-slate-950">~</p>
-										</div>
+									<div class="grid grid-cols-1 gap-2 text-xs">
 										<div>
 											<p class="text-slate-500">Delivery date</p>
 											<p class="mt-0.5 font-semibold text-slate-950">
@@ -1252,14 +1211,6 @@ $effect(() => {
 									</div>
 								</div>
 
-								<div class="border-t border-border pt-4">
-									<div class="flex items-center gap-2 text-sm font-semibold text-fg-1">
-										<BarChart3 size={15} />
-										Rent by unit type
-									</div>
-									<p class="mt-2 text-sm font-semibold text-fg-1">Studio ~ · 1BR ~ · 2BR ~ · 3BR ~</p>
-								</div>
-
 								{#if selectedArea.top_developers.length > 0}
 									<div class="border-t border-border pt-4">
 										<p class="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
@@ -1283,7 +1234,7 @@ $effect(() => {
 									<p class="mb-2 text-sm font-semibold text-fg-1">Projects in zone</p>
 									<div class="divide-y divide-border">
 										{#if areaProjectsQuery.isFetching && areaProjects.length === 0}
-											<p class="py-3 text-sm text-fg-4">Loading zone projects...</p>
+											<p class="py-3 text-sm text-fg-4">Loading…</p>
 										{/if}
 										{#each areaProjects.slice(0, 5) as project (project.project_id)}
 											<button
@@ -1303,7 +1254,7 @@ $effect(() => {
 											</button>
 										{/each}
 										{#if !areaProjectsQuery.isFetching && areaProjects.length === 0}
-											<p class="py-3 text-sm text-fg-4">No mapped projects returned for this zone.</p>
+											<p class="py-3 text-sm text-fg-4">No mapped projects.</p>
 										{/if}
 									</div>
 								</div>

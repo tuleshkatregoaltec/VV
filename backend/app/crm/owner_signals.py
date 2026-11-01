@@ -6,7 +6,8 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from app.crm.identity import _identity_text, _normalize_phone
+from app.crm.brokers import BROKER_SIGNAL
+from app.crm.identity import _identity_text, usable_channels
 
 _ORGANIZATION_NAME = re.compile(
     r"\b(?:llc|l\.?l\.?c\.?|ltd|limited|pjsc|fze|fzco|company|corporation|"
@@ -81,10 +82,10 @@ def build_owner_signals(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
             key,
             {
                 "phones": set(),
-                "properties": set(),
                 "company": False,
                 "source_reviews": set(),
                 "names": set(),
+                "broker_channel": False,
             },
         )
         if identity_name:
@@ -94,14 +95,17 @@ def build_owner_signals(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
         )
         owner["source_reviews"].update(lifecycle.get("reasons") or [])
         owner["company"] |= bool(_ORGANIZATION_NAME.search(name))
-        identity = row.get("property_identity")
-        if identity:
-            owner["properties"].add(tuple(identity))
-        for field in ("phone_primary", "phone_alternate"):
-            if phone := _normalize_phone(row.get(field)):
-                owner["phones"].add(phone)
-                if identity_name:
-                    names_by_phone[phone].add(identity_name)
+        # a licensed broker's number is the broker's, not this owner's: not one of their phones
+        marked = row.get("broker_contact") or (row.get("evidence") or {}).get("broker_contact")
+        phones, _ = usable_channels(
+            row.get("phone_primary"), row.get("phone_alternate"), None, marked
+        )
+        for phone in phones:
+            owner["phones"].add(phone)
+            if identity_name:
+                names_by_phone[phone].add(identity_name)
+        if isinstance(marked, dict) and not marked.get("is_broker"):
+            owner["broker_channel"] |= bool(marked.get("phones") or marked.get("emails"))
 
     result = {}
     for key, owner in owners.items():
@@ -109,37 +113,24 @@ def build_owner_signals(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
         role = "unknown"
         shared_names = max((len(names_by_phone[p]) for p in owner["phones"]), default=0)
         if shared_names > 1:
-            signals.append(
-                f"A supplied phone is shared by {shared_names} distinct names. "
-                "Confirm whose number it is before outreach."
-            )
+            signals.append(f"Phone shared by {shared_names} names.")
             if shared_names >= 5:
                 role = "possible_intermediary"
         developer = next(
             (developer_sellers[n] for n in sorted(owner["names"]) if n in developer_sellers), None
         )
         if developer and owner["company"]:
-            signals.append(
-                f"Sold {developer[0]} units across {developer[1]} buildings: "
-                "the developer, not a former owner."
-            )
+            signals.append(f"Developer: sold {developer[0]} units across {developer[1]} buildings.")
         elif developer:
             role = "possible_intermediary"
             signals.append(
-                f"Sold {developer[0]} units across {developer[1]} buildings, mostly off-plan "
-                "(delayed sell, pre-registration): a developer-side seller, not a former owner."
+                f"Developer-side seller: sold {developer[0]} units across {developer[1]} "
+                "buildings, mostly off-plan."
             )
+        if owner["broker_channel"]:
+            signals.append(BROKER_SIGNAL)
         if owner["company"]:
             role = "organization"
-            signals.append(
-                "The supplied name appears to describe an organization. "
-                "Its developer, broker or ownership role has not been verified."
-            )
-        if len(owner["properties"]) >= 20:
-            signals.append(
-                f"Associated with {len(owner['properties'])} identifiable properties. "
-                "This count alone does not establish current holdings or a brokerage role."
-            )
         result[key] = {
             "relationship_role": role,
             "role_signals": signals,

@@ -5,6 +5,7 @@ description = "Backend for analytics platform"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "crm-rental-sql",
     "python-dotenv>=1.0.0",
     "fastapi>=0.120.1",
     "pandas>=2.3.3",
@@ -121,3 +122,6 @@ select = [
 ignore = [
     "E501",
 ]
+
+[tool.uv.sources]
+crm-rental-sql = { path = "../holocron/packages/crm-rental-sql" }

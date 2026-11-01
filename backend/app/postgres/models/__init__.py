@@ -5,9 +5,12 @@ This module explicitly registers domain SQLModel classes for Alembic migrations.
 
 from app.billing.models import Subscription
 from app.chat.models import Conversation, Message
+from app.crm.audit_models import CrmMutationAudit
+from app.crm.import_job_models import CrmImportJob
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactList,
+    CrmOwnerAssessmentRevision,
     CrmOwnerNote,
     CrmOwnerWorkspace,
     CrmPropertyContactClaim,
@@ -20,7 +23,13 @@ from app.crm.inbound_models import (
     CrmInboundMatch,
     CrmInboundNote,
 )
-from app.crm.models import CrmAgentAreaPreference, CrmLeadNote, CrmLeadWorkspace, CrmSavedLead
+from app.crm.models import (
+    CrmAgentAreaPreference,
+    CrmLeadNote,
+    CrmLeadWorkspace,
+    CrmLicensedBroker,
+    CrmSavedLead,
+)
 from app.feasibility.models import FeasibilitySavedStudy
 from app.news.models import NewsArticle
 from app.organization.models import Organization, OrganizationInvitation, OrganizationMembership
@@ -40,15 +49,19 @@ __all__ = [
     "Conversation",
     "Message",
     # CRM
+    "CrmMutationAudit",
     "CrmSavedLead",
     "CrmLeadWorkspace",
     "CrmLeadNote",
     "CrmAgentAreaPreference",
+    "CrmLicensedBroker",
+    "CrmImportJob",
     "CrmContactImport",
     "CrmContactList",
     "CrmPropertyContactClaim",
     "CrmOwnerWorkspace",
     "CrmOwnerNote",
+    "CrmOwnerAssessmentRevision",
     "CrmInboundImport",
     "CrmInboundContact",
     "CrmInboundEnquiry",

@@ -92,9 +92,6 @@ const SUGGESTIONS = [
 				<h1 class="text-2xl font-semibold tracking-normal text-fg-1">
 					{username ? `${username}'s workspace` : 'Market overview'}
 				</h1>
-				<p class="mt-1.5 text-sm text-fg-3">
-					DLD market data · ask anything below or browse the latest transactions.
-				</p>
 			</div>
 
 			<CustomizableKpiGrid />
@@ -129,7 +126,7 @@ const SUGGESTIONS = [
 								onclick={() => handleChatSubmit(s)}
 								class="w-full rounded-md border border-border bg-card px-3 py-2 text-left text-xs text-fg-2 transition-colors hover:border-strong hover:bg-elevated"
 							>
-								→ {s}
+								{s}
 							</button>
 						{/each}
 					</div>
@@ -156,7 +153,6 @@ const SUGGESTIONS = [
 								</div>
 								<div>
 									<p class="text-sm font-semibold text-fg-1">Market brief</p>
-									<p class="text-xs text-fg-4">AI-filtered signal</p>
 								</div>
 							</div>
 							{#if newsSummaryQuery.data}
@@ -206,7 +202,6 @@ const SUGGESTIONS = [
 										<h3 class="text-sm font-semibold leading-none text-fg-1">
 											{summary.macro.title}
 										</h3>
-										<p class="mt-1 text-[11px] text-fg-4">Rates, oil, policy, capital flows</p>
 									</div>
 								</div>
 								<ul class="space-y-2">
@@ -229,7 +224,6 @@ const SUGGESTIONS = [
 										<h3 class="text-sm font-semibold leading-none text-fg-1">
 											{summary.real_estate.title}
 										</h3>
-										<p class="mt-1 text-[11px] text-fg-4">Projects, sales, infrastructure</p>
 									</div>
 								</div>
 								<ul class="space-y-2">

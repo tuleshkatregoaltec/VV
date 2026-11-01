@@ -15,12 +15,12 @@ vi.mock('@tanstack/svelte-query', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@tanstack/svelte-query')>()),
 	createQuery: (options: () => { queryKey: readonly unknown[] }) => {
 		const key = options().queryKey
-		if (key[1] === 'owners') {
-			data.requestedTab = (key[2] as { tab: string }).tab
-			data.requestedOwnership = (key[2] as { ownership: string }).ownership
+		if (key[4] === 'owners') {
+			data.requestedTab = (key[5] as { tab: string }).tab
+			data.requestedOwnership = (key[5] as { ownership: string }).ownership
 		}
 		return {
-			data: key[1] === 'owners' ? data.owners : [],
+			data: key[4] === 'owners' ? data.owners : [],
 			isPlaceholderData: false,
 			isError: false
 		}
@@ -37,14 +37,9 @@ afterEach(() => {
 describe('Owners labels unverified people separately from audited reference review cases', () => {
 	const owners: OwnerListResponse = {
 		items: [],
-		counts: { all: 37, mine: 0, multi: 0, event: 0, sold: 0, review: 37, update: 0 },
-		total: 0,
-		unit_total: 0,
-		with_event_90: 0,
-		on_file: 37,
+		pageFiltered: false,
 		areas: [],
-		page: { offset: 0, limit: 10, total: 37, loaded: 0 },
-		pageOnlyTabs: []
+		page: { offset: 0, limit: 10, total: 37, loaded: 0 }
 	}
 
 	it('retains the candidate filter while explaining the separate audit review count', () => {
@@ -59,12 +54,9 @@ describe('Owners labels unverified people separately from audited reference revi
 			}
 		}
 		const html = render(OwnersPage).body
-		expect(html).toContain('Unverified candidates')
-		expect(html).toContain('separately identifies 2 references needing review')
-		expect(html).toContain('does not represent additional manual review cases')
-		expect(html).toContain('Transaction matching was not run')
+		expect(html).toContain('Candidates')
+		expect(html).not.toContain('Transaction matching was not run')
 		expect(html).not.toContain('Needs review')
-		expect(html).not.toContain('Review people with unresolved claims')
 		expect(data.requestedTab).toBe('review')
 	})
 
@@ -80,7 +72,7 @@ describe('Owners labels unverified people separately from audited reference revi
 		expect(html).toContain('value="former"')
 		expect(html).toContain('Former owners')
 		expect(html).not.toContain('most recent')
-		expect(html).not.toContain('Unverified candidates')
+		expect(html).not.toContain('Candidates')
 		expect(data.requestedOwnership).toBe('current')
 	})
 
@@ -89,8 +81,8 @@ describe('Owners labels unverified people separately from audited reference revi
 		data.owners = owners
 		const html = render(OwnersPage).body
 		expect(html).toContain('Needs review')
-		expect(html).toContain('Review people with unresolved claims')
-		expect(html).not.toContain('Unverified candidates')
+		expect(html).not.toContain('Review people with unresolved claims')
+		expect(html).not.toContain('Candidates')
 		expect(data.requestedTab).toBe('review')
 	})
 })

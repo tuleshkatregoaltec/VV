@@ -57,7 +57,7 @@ let {
 		{/if}
 		{#if building.total_units > 0}
 			<div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-				<div class="text-xs text-slate-500 mb-1">Registered Units</div>
+				<div class="text-xs text-slate-500 mb-1">Registered units</div>
 				<div class="font-display text-2xl font-normal tracking-normal text-fg-1">{building.total_units.toLocaleString()}</div>
 			</div>
 		{/if}
@@ -66,7 +66,7 @@ let {
 	<!-- Unit composition by bedroom -->
 	{#if building.unit_composition.length > 0}
 		<div class="space-y-2.5">
-			<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Unit Mix</h3>
+			<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Unit mix</h3>
 			<div class="space-y-2">
 				{#each building.unit_composition as unit (unit.rooms_en)}
 					<div>
@@ -92,10 +92,4 @@ let {
 	{:else}
 		<p class="text-sm text-slate-400 text-center py-4">No unit data available for this building.</p>
 	{/if}
-
-	<!-- Note about project-level analytics -->
-	<div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-xs text-slate-500">
-		Sale price and rental analytics are shown at the project level. Select the project to view full
-		analytics.
-	</div>
 </div>

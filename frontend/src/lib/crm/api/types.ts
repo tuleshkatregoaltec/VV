@@ -4,6 +4,7 @@
  * so no business rule lives in Svelte. Money is whole AED; dates are YYYY-MM-DD (Dubai).
  */
 import type {
+	CrmContactImportResponse,
 	CrmMatchedSale,
 	CrmOwnerHistoryResponse,
 	CrmOwnerHistorySummary,
@@ -76,6 +77,7 @@ export interface Me {
 }
 
 export interface NavCounts {
+	limited?: boolean
 	new_leads: number
 	/** Inbox items assigned to me and not yet a lead, or waiting with my request on them. */
 	inbox: number
@@ -244,6 +246,8 @@ export interface LeadListParams {
 }
 
 export interface LeadListResponse {
+	/** Filters and counts cover the loaded rows when the server has more. */
+	limited?: boolean
 	items: LeadRow[]
 	total: number
 	/** All and the type counts leave lost leads out; `lost` counts them. */
@@ -338,6 +342,7 @@ export interface MatchClient {
 }
 
 export interface MatchClients {
+	limited?: boolean
 	ready: MatchClient[]
 	offplan: MatchClient[]
 	sell: MatchClient[]
@@ -721,9 +726,11 @@ export interface RenewalListParams {
 	/** Picked after a project. */
 	building: string
 	limit: number
+	offset?: number
 }
 
 export interface RenewalListResponse {
+	offset: number
 	items: Renewal[]
 	total: number
 	/** Options for the filters, from the leases in the current filter (areas come from My areas' list). */
@@ -960,20 +967,13 @@ export interface OwnerRecordCreate {
 export interface OwnerListResponse {
 	source_audit?: SourceAuditSummary | null
 	items: OwnerRow[]
-	counts: Record<OwnerTab, number>
-	total: number
-	unit_total: number
-	with_event_90: number
-	/** Owners on the agency's own file. */
-	on_file: number
+	/** Additional filters apply to the loaded page, not the complete registry. */
+	pageFiltered: boolean
 	areas: string[]
 	/**
-	 * This page within the whole file (search included). The tab counts and the source, area,
-	 * bedrooms and type filters only see the owners on this page.
+	 * Server page and total before optional page-only filters (search included).
 	 */
 	page: { offset: number; limit: number; total: number; loaded: number }
-	/** Tabs whose counts cover only this page (the backend can't filter them yet). */
-	pageOnlyTabs: OwnerTab[]
 }
 
 export interface OwnerLeadCreate {
@@ -989,10 +989,13 @@ export interface OwnerReport {
 	next_event: string
 }
 
+export type ImportStatus = CrmContactImportResponse['status']
+
 export interface ImportRequest {
 	id: string
 	who: string
 	kind: 'Owners' | 'Leads'
+	jobStatus: ImportStatus
 	file: string
 	rows: number
 	areas: string
@@ -1034,7 +1037,7 @@ export interface OwnerImport {
 	id: number
 	name: string
 	file: string
-	status: 'processing' | 'completed' | 'failed'
+	status: ImportStatus
 	/** Owner–property claims kept after duplicates were merged. */
 	claims: number
 	rentalLeads: number
@@ -1060,7 +1063,7 @@ export interface OwnerImportDetail {
 	id: number
 	name: string
 	file: string
-	status: 'processing' | 'completed' | 'failed'
+	status: ImportStatus
 	at: string
 	createdAt: string
 	/** The saved list holding its owner rows; null when none was saved. */
@@ -1206,8 +1209,8 @@ export interface OwnerImportRows {
 export interface OwnerImportResult {
 	id: number
 	name: string
-	status: 'processing' | 'completed' | 'failed'
-	/** The same file was uploaded before; the backend returned that import. */
+	status: ImportStatus
+	/** The same file was uploaded before; this may be an active job or a completed import. */
 	alreadyImported: boolean
 	createdAt: string
 	/** Distinct units confirmed with a sale; null when the file was not matched unit by unit. */
@@ -1280,6 +1283,7 @@ export interface Gap {
 }
 
 export interface HomeResponse {
+	limited?: boolean
 	date: string
 	facts: { events_today: number; conveyancing: number; permits_under_14: number }
 	/** 1 Oct (proposal): Viewings this week · Expiring in 14 days · Market · {area} · Commission. */
@@ -1372,6 +1376,7 @@ export interface InboxItem {
 }
 
 export interface InboxResponse {
+	limited?: boolean
 	items: InboxItem[]
 	counts: Record<InboxFilter, number>
 	today: number

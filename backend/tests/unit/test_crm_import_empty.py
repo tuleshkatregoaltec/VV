@@ -74,7 +74,7 @@ def pipeline(monkeypatch):
 
 
 async def _upload(db, filename: str, data: bytes):
-    return await imports.process_contact_import(
+    return await imports._execute_contact_import(
         db,
         upload=UploadFile(file=io.BytesIO(data), filename=filename),
         name="",

@@ -138,7 +138,6 @@ const surroundingPolygons = $derived.by(() => {
 			)
 		})
 })
-const hasCoordinates = $derived(selectedCoordinates.length >= 3)
 
 function defaultPlacement(index: number, total: number, footprintSqm: number): Placement {
 	const cols = Math.max(1, Math.ceil(Math.sqrt(total)))
@@ -263,11 +262,7 @@ function resetPlacements() {
 	<div class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
 		<div class="flex items-start justify-between gap-3">
 			<div>
-				<p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Plot Sandbox</p>
-				<h3 class="mt-1 text-base font-semibold text-slate-900">GIS outline and massing annotation</h3>
-				<p class="mt-1 text-xs leading-5 text-slate-500">
-					Drag the building blocks to sketch a site-test-fit. This is an annotation layer only; it does not change model returns yet.
-				</p>
+				<h3 class="mt-1 text-base font-semibold text-slate-900">Site layout</h3>
 			</div>
 			<button
 				type="button"
@@ -358,24 +353,10 @@ function resetPlacements() {
 			</svg>
 		</div>
 
-		<div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-			{#if hasCoordinates}
-				Using {selectedCoordinates.length} GIS coordinate points from the plot file
-				{#if surroundingPolygons.length > 0}
-					with {surroundingPolygons.length} surrounding parcels for context.
-				{:else if ddaPlotsQuery.isFetching}
-					while surrounding parcels load.
-				{:else}
-					without nearby parcel context.
-				{/if}
-			{:else}
-				No plot polygon coordinates were available, so the canvas is using a scaled placeholder outline.
-			{/if}
-		</div>
 	</div>
 
 	<div class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-		<p class="text-sm font-semibold text-slate-900">Massing Schedule</p>
+		<p class="text-sm font-semibold text-slate-900">Massing schedule</p>
 		<div class="mt-3 space-y-2">
 			{#if buildings.length === 0}
 				<p class="text-sm text-slate-500">Generate or open a workbook to produce massing outputs.</p>

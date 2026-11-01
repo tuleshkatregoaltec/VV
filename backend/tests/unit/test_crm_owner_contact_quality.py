@@ -34,7 +34,7 @@ def test_many_properties_do_not_establish_a_brokerage_role():
     rows = [_row(unit=str(unit)) for unit in range(66)]
     signal = build_owner_signals(rows + rows)["a"]
     assert signal["relationship_role"] == "unknown"
-    assert "66 identifiable properties" in signal["role_signals"][0]
+    assert signal["role_signals"] == []
 
 
 def test_repeated_sources_do_not_inflate_shared_phone_evidence():
@@ -50,13 +50,13 @@ def test_shared_phone_is_a_review_signal_not_confirmed_profession():
     rows = [_row(key=str(i), name=f"Example Person {i}") for i in range(5)]
     signals = build_owner_signals(rows)
     assert all(s["relationship_role"] == "possible_intermediary" for s in signals.values())
-    assert all("5 distinct names" in s["role_signals"][0] for s in signals.values())
+    assert all(s["role_signals"] == ["Phone shared by 5 names."] for s in signals.values())
 
 
 def test_company_name_does_not_establish_developer_or_broker_role():
     signal = build_owner_signals([_row(name="Example Development LLC")])["a"]
     assert signal["relationship_role"] == "organization"
-    assert "has not been verified" in signal["role_signals"][0]
+    assert signal["role_signals"] == []  # a name is not a role; the organization role says it
 
 
 def _sale(key, name, unit, building, procedure="Complete Delayed Sell", role="Seller"):
@@ -76,7 +76,7 @@ def test_a_person_selling_off_plan_units_for_a_developer_is_not_a_former_owner()
     for key in {f"id-{n}" for n in range(5)}:
         assert signals[key]["developer_side_seller"] is True
         assert signals[key]["relationship_role"] == "possible_intermediary"
-        assert any("developer-side seller" in s for s in signals[key]["role_signals"])
+        assert any(s.startswith("Developer-side seller") for s in signals[key]["role_signals"])
 
 
 @pytest.mark.parametrize(
@@ -101,7 +101,7 @@ def test_a_developer_company_stays_an_organization_and_is_not_a_former_owner():
     signal = build_owner_signals(rows)["a"]
     assert signal["relationship_role"] == "organization"
     assert signal["developer_side_seller"] is True
-    assert any("the developer, not a former owner" in s for s in signal["role_signals"])
+    assert any(s.startswith("Developer: sold 60 units") for s in signal["role_signals"])
 
 
 def test_a_name_ending_in_properties_is_an_organization():

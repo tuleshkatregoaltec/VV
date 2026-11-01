@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -10,7 +9,9 @@ from typing import Any, Iterable
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.async_work import run_in_thread
 from app.crm import import_repository, owner_queries
+from app.crm.brokers import load_broker_index
 from app.crm.identity import (
     ParsedContact,
     _candidate_owner_key,
@@ -1759,7 +1760,7 @@ async def rematch_property_contact_claims(
         candidate.evidence["source_import_scope"] = str(claim.import_id)
         _recover_embedded_property_identity(candidate)
         candidates.append(candidate)
-    await asyncio.to_thread(annotate_source_lifecycle, candidates)
+    await run_in_thread(annotate_source_lifecycle, candidates)
     await prepare_file_context(candidates)
     resolution_counts = await _recover_property_identity_from_transaction(candidates)
     near_resolution_counts = await _recover_property_identity_from_near_transaction(candidates)
@@ -1768,8 +1769,9 @@ async def rematch_property_contact_claims(
     sales = await _sales_evidence(candidates)
     await _apply_registry_unit_fallbacks(candidates, sales)
     rentals = await _rental_evidence(candidates)
-    await asyncio.to_thread(annotate_source_lifecycle, candidates)
-    await run_owner_matching(candidates)  # claims made before it get their source rebuilt
+    await run_in_thread(annotate_source_lifecycle, candidates)
+    # claims made before it get their source rebuilt
+    await run_owner_matching(candidates, await load_broker_index(db))
     now = datetime.now(timezone.utc)
     status_counts: dict[str, int] = {}
     for claim, candidate in zip(claims, candidates, strict=True):

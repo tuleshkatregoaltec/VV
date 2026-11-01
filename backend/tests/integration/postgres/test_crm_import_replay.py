@@ -33,7 +33,7 @@ async def test_replay_is_atomic_idempotent_and_preserves_agent_work(pg_session, 
     )
 
     async def upload(replay=None, payload=data):
-        return await imports.process_contact_import(
+        return await imports._execute_contact_import(
             pg_session,
             upload=UploadFile(file=io.BytesIO(payload), filename="owners.csv"),
             name="Example",

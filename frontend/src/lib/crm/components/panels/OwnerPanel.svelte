@@ -3,7 +3,7 @@ import { createQuery } from '@tanstack/svelte-query'
 import { goto } from '$app/navigation'
 import { crm } from '../../api'
 import type { OwnerUnit } from '../../api/types'
-import { GATE_LINE, ORIGIN_TONE, stageOf } from '../../config'
+import { GATE_LINE, ORIGIN_LABEL, ORIGIN_TONE, stageOf } from '../../config'
 import { aed, fmt, fullDate, short } from '../../format'
 import { matchLines } from '../../ownerMatch'
 import { crmQueries } from '../../queries'
@@ -47,8 +47,9 @@ function saveReviewNote(e: SubmitEvent) {
 	const text = note.trim()
 	if (!text) return
 	write({
+		domain: 'owners',
 		call: () => crm.owners.addNote(id, text),
-		success: 'Review note saved',
+		success: 'Note saved',
 		after: () => {
 			note = ''
 		}
@@ -56,8 +57,14 @@ function saveReviewNote(e: SubmitEvent) {
 }
 
 function marketUpdate(name: string) {
-	write({ call: () => crm.owners.sendMarketUpdate(id), success: `Market update for ${name} sent` })
+	write({
+		domain: 'owners',
+		call: () => crm.owners.sendMarketUpdate(id),
+		success: `Market update for ${name} sent`
+	})
 }
+
+const matchText = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 const MARK = { match: '✓', differs: '✗', info: '•', none: '–' } as const
 
@@ -69,7 +76,7 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 {#if owner.data}
 	{@const o = owner.data}
 	{@const allOpen = o.unit_rows.length > 0 && o.unit_rows.every((u) => open[u.id])}
-	<Panel kicker="Owner" title={o.name} sub="{o.units.length} associated propert{o.units.length === 1 ? 'y' : 'ies'} · {o.units_current} current · {o.source_label}">
+	<Panel kicker="Owner" title={o.name} sub="{o.units.length} associated propert{o.units.length === 1 ? 'y' : 'ies'} · {o.units_current} current">
 		{#snippet tags()}
 			{#if o.prior_deal}
 				<Chip tone="green">Prior deal on file</Chip>
@@ -82,15 +89,15 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 		{/snippet}
 
 		<div class="kv">
-			<Kv k="Next event" v={o.next_event} o="{o.next_event_label} · from DLD / Ejari" wide />
+			<Kv k="Next event" v={o.next_event} o={o.next_event_label} wide />
 			<Kv k="Latest note" v={o.last_contact} />
 			<Kv k="Relationship" v={o.mine ? 'Mine' : 'Company'} />
 			{#if o.phone_numbers?.length}
-				<Kv k="Source phone numbers" o="as recorded in imported sources" wide>
+				<Kv k="Phone numbers" wide>
 					{#each o.phone_numbers as phone (phone)}<div>{phone}</div>{/each}
 				</Kv>
 			{/if}
-			<Kv k="Source" v={o.source_label} o={o.on_file ? "on your agency's file" : 'your own contact'} wide />
+			<Kv k="Source" v={o.source_label} wide />
 			<!-- Which uploaded file(s) this owner came from; each opens that import's report. -->
 			<Kv k="Imported from" wide>
 				{#if o.imported_from.length}
@@ -125,21 +132,15 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 		</div>
 
 		<section class="sec">
-			<h3>Ownership evidence and review</h3>
-			<p class="small muted">Names and roles originate in uploaded files. Transaction matches support the source claim; available sales do not independently verify the named person’s legal ownership.</p>
+			<h3>Ownership</h3>
 			{#if o.relationship_role === 'possible_intermediary'}
-				<p><Chip tone="amber">Possible intermediary · unverified</Chip></p>
+				<p><Chip tone="amber">Possible intermediary</Chip></p>
 			{:else if o.relationship_role === 'organization'}
-				<p><Chip>Organization in source · role unverified</Chip></p>
-			{:else}
-				<p class="small muted">Professional role has not been established.</p>
+				<p><Chip>Organization</Chip></p>
 			{/if}
 			{#if o.role_signals?.length}
 				<ul class="small muted">{#each o.role_signals as signal (signal)}<li>{signal}</li>{/each}</ul>
 			{/if}
-			<p class="small muted">Property counts alone do not establish whether someone is an investor, broker or employee.</p>
-			<a class="btn ghost sm" href={`https://www.google.com/search?q=${encodeURIComponent(`${o.name} professional profile`)}`} target="_blank" rel="noopener noreferrer">Verify public professional profile ↗</a>
-			<p class="small muted">Opens a name-only public search when selected. Results need a manual identity check and do not confirm a professional role.</p>
 			<button type="button" class="btn ghost sm" aria-expanded={showHistory} aria-controls="owner-source-history" onclick={() => (showHistory = !showHistory)}>{showHistory ? 'Hide ownership history' : 'Show ownership history'}</button>
 			{#if showHistory}<div id="owner-source-history"><OwnerHistory {id} /></div>{/if}
 		</section>
@@ -260,14 +261,14 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 										<Kv k="Type" v="{u.type}{u.size_sqft ? ` · ${fmt(u.size_sqft)} sqft` : ''}" />
 										{#if u.source_reference}
 											{@const ref = u.source_reference}
-											{#if ref.transaction_match_status}<Kv k="Transaction property match" v={ref.transaction_match_status} />{/if}
-											{#if ref.ownership_evidence_basis}<Kv k="Ownership evidence" v={ref.ownership_evidence_basis === 'workbook_only' ? 'Workbook only · unverified' : 'Workbook acquisition corroborated by a transaction'} />{/if}
+											{#if ref.transaction_match_status}<Kv k="Transaction match" v={matchText(ref.transaction_match_status)} />{/if}
+											{#if ref.ownership_evidence_basis}<Kv k="Ownership basis" v={ref.ownership_evidence_basis === 'workbook_only' ? 'File only' : 'Confirmed by a transaction'} />{/if}
 											{#if ref.land_number}<Kv k="Source land number" v={ref.land_number} />{/if}
 											{#if ref.building_number}<Kv k="Source building number" v={ref.building_number} />{/if}
 											{#if ref.dm_sub_number}<Kv k="Source DM sub-number" v={ref.dm_sub_number} />{/if}
 											{#if ref.size_sqm}<Kv k="Source area" v={`${ref.size_sqm} m²`} />{/if}
 										{/if}
-										<Kv k="Imported from" v={u.source || '—'} o="file · sheet and row" wide />
+										<Kv k="Imported from" v={u.source || '—'} wide />
 										<Kv k="Last sale" v={u.bought_aed ? `${aed(u.bought_aed)} · ${u.bought_year}` : '—'} o="DLD" />
 										<Kv
 											k="Rent now"
@@ -279,7 +280,6 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 											v={u.market
 												? `Sale ${short(u.market.sale[0])}–${short(u.market.sale[1])} · rent ${short(u.market.rent[0])}–${short(u.market.rent[1])}`
 												: '—'}
-											o="Vitevue estimate"
 										/>
 									</div>
 									{#if u.check}
@@ -321,7 +321,6 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 										</div>
 										<div class="result">
 											<Chip chip={c.result.chip} />
-											<span class="small muted">Evidence score {c.result.confidence}/100</span>
 											{#if c.lease}
 												<span class="small muted">
 													· Lease ends {fullDate(c.lease.end)}{c.lease.aed ? ` · ${aed(c.lease.aed)} a year` : ''}
@@ -329,7 +328,6 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 											{/if}
 										</div>
 										{#if c.result.reason}<div class="small">{c.result.reason}</div>{/if}
-										<p class="small muted">The score ranks supporting evidence; it is not a probability of ownership.</p>
 										<div>
 											<div class="lbl">Matching</div>
 											<div class="tblwrap boxed">
@@ -388,7 +386,7 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 					{/each}
 				</div>
 			{:else}
-				<Empty text="No units yet. Checking DLD and Ejari." />
+				<Empty text="No properties yet." />
 			{/if}
 		</section>
 
@@ -407,13 +405,13 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 
 		{#if o.notes.length}
 			<section class="sec">
-				<h3>Latest workspace note</h3>
+				<h3>Latest note</h3>
 				<div class="hist">
 					{#each o.notes as n (n.id)}
 						<div>
 							<span class="when">{n.at}</span>
 							<span>{n.text}</span>
-							<Chip tone={ORIGIN_TONE[n.origin]}>{n.origin}</Chip>
+							<Chip tone={ORIGIN_TONE[n.origin]}>{ORIGIN_LABEL[n.origin]}</Chip>
 						</div>
 					{/each}
 				</div>
@@ -422,11 +420,10 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 
 		<form class="form" onsubmit={saveReviewNote}>
 			<div class="fld">
-				<label for="owner-review-note">Record review note</label>
-				<input id="owner-review-note" placeholder="Evidence checked, uncertainty and next step" required bind:value={note} />
-				<p class="small muted">Saves the latest workspace note for this person. It does not verify ownership or change their assessment.</p>
+				<label for="owner-review-note">Add note</label>
+				<input id="owner-review-note" required bind:value={note} />
 			</div>
-			<div><button type="submit" class="btn ghost sm" disabled={!note.trim()}>Save review note</button></div>
+			<div><button type="submit" class="btn ghost sm" disabled={!note.trim()}>Save note</button></div>
 		</form>
 
 		{#snippet footer()}

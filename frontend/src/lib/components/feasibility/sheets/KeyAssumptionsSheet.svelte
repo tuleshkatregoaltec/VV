@@ -470,7 +470,7 @@ function round2(value: number): number {
 			{:else}
 			<tr class="border-b border-[#EBEBEB]">
 				<td colspan="7" class="px-3 py-4 text-center text-slate-400 italic">
-					No rental unit configs — will derive from BTS unit mix with estimated rents
+					No rental unit configurations
 				</td>
 			</tr>
 			{/if}

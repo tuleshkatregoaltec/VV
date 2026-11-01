@@ -37,16 +37,19 @@ describe('listOwners paging', () => {
 		expect(res.page).toEqual({ offset: 500, limit: 500, total: 73224, loaded: 2 })
 	})
 
-	it('counts All as the whole file when no page-only filter is set', async () => {
+	it('reports the complete server total when no page-only filter is set', async () => {
 		mockBackend(73224)
 		const res = await listOwners({ tab: 'all', offset: 0 })
-		expect(res.counts.all).toBe(73224)
+		expect(res.page.total).toBe(73224)
+		expect(res.pageFiltered).toBe(false)
 	})
 
-	it('counts All on this page when a page-only filter is set', async () => {
+	it('marks unsupported filters as limited to the page without replacing the server total', async () => {
 		mockBackend(73224)
 		const res = await listOwners({ tab: 'all', offset: 0, area: 'JVC' })
-		expect(res.counts.all).toBe(0)
+		expect(res.items).toHaveLength(0)
+		expect(res.page.total).toBe(73224)
+		expect(res.pageFiltered).toBe(true)
 	})
 
 	it('starts at the first page when no offset is given', async () => {
@@ -111,24 +114,28 @@ describe('listOwners tab counts across the whole file', () => {
 		expect(res.page.total).toBe(9086)
 	})
 
-	it('counts every backend tab over the whole file on any tab', async () => {
-		mockFile()
+	it('requests only the visible registry page while preserving each backend tab total', async () => {
+		const get = mockFile()
+		const totals = { all: 73224, sold: 900, multi: 1187, event: 9086 }
 		for (const tab of ['all', 'sold', 'multi', 'event'] as const) {
 			const res = await listOwners({ tab, offset: 0 })
-			expect(res.counts).toMatchObject({ all: 73224, sold: 900, multi: 1187, event: 9086 })
+			expect(res.page.total).toBe(totals[tab])
 		}
+		expect(registryUrls(get)).toHaveLength(4)
 	})
 
-	it('counts My contacts from the whole workspace list', async () => {
+	it('keeps My contacts explicitly limited to this page', async () => {
 		mockFile({ workspaces: 3 })
-		const res = await listOwners({ tab: 'all', offset: 0 })
-		expect(res.counts.mine).toBe(3)
+		const res = await listOwners({ tab: 'mine', offset: 0 })
+		expect(res.pageFiltered).toBe(true)
+		expect(res.items).toHaveLength(0)
 	})
 
-	it('no longer marks any tab as counted on this page only', async () => {
+	it('does not expose unused aggregates that would require extra registry reads', async () => {
 		mockFile()
 		const res = await listOwners({ tab: 'all', offset: 0 })
-		expect(res.pageOnlyTabs).toEqual([])
+		expect(res).not.toHaveProperty('counts')
+		expect(res).not.toHaveProperty('on_file')
 	})
 })
 
@@ -180,7 +187,7 @@ describe('unresolved evidence review queue', () => {
 		expect(main).toContain('scope=needs_review')
 		expect(main).toContain('list_id=12')
 		expect(res.page.total).toBe(37)
-		expect(res.counts.review).toBe(37)
+		expect(res.pageFiltered).toBe(false)
 		for (const url of registryUrls(get)) expect(url).toContain('list_id=12')
 	})
 })

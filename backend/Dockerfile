@@ -3,6 +3,7 @@ FROM python:3.13-slim
 COPY --from=ghcr.io/astral-sh/uv:0.9.24 /uv /uvx /bin/
 
 COPY backend /app/backend
+COPY holocron/packages/crm-rental-sql /app/holocron/packages/crm-rental-sql
 
 ENV UV_NO_DEV=1
 

@@ -156,7 +156,7 @@ for (const kind of ['sales', 'rentals'] as const) {
         });
         await expect(
             page.getByText(
-                /error loading filters|failed to load filters|Audit injected facet failure/i,
+                /filters could not be loaded|error loading filters|failed to load filters|Audit injected facet failure/i,
             ),
         ).toBeVisible({ timeout: 1000 });
         failing = false;
@@ -169,7 +169,7 @@ for (const kind of ['sales', 'rentals'] as const) {
             .getByRole('button', { name: 'Retry filters', exact: true })
             .click();
         await recovered;
-        await expect(page.getByText(/error loading filters/i)).toHaveCount(0);
+        await expect(page.getByText(/filters could not be loaded|error loading filters/i)).toHaveCount(0);
     });
 }
 

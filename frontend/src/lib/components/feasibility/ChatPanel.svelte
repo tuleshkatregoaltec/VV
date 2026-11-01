@@ -436,7 +436,6 @@ function dismissProposal() {
 					<Sparkles size={15} strokeWidth={1.8} class="text-primary-light" />
 					<p class="text-sm font-semibold text-fg-1">Feasibility AI</p>
 				</div>
-				<p class="mt-1 text-xs leading-5 text-fg-4">Ask for underwriting explanations or approve structured changes.</p>
 			</div>
 			<span class="mt-0.5 rounded-full bg-success-bg px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-success">
 				Live
@@ -448,7 +447,6 @@ function dismissProposal() {
 		{#if feasibilityWorkspace.chatMessages.length === 0}
 			<div class="rounded-lg border border-dashed border-slate-200 bg-white p-4">
 				<p class="text-sm font-medium text-fg-2">Start with a model question.</p>
-				<p class="mt-1 text-xs leading-5 text-fg-4">The assistant can explain the workbook and stage changes for review before anything is applied.</p>
 				<div class="mt-3 space-y-2">
 					{#each promptSuggestions as prompt}
 						<button

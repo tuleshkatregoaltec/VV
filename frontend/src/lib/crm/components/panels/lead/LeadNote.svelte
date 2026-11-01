@@ -14,6 +14,7 @@ async function submit(e: SubmitEvent) {
 	if (!text.trim()) return
 	saving = true
 	const r = await write({
+		domain: 'leads',
 		call: () => crm.leads.addNote(lead.id, text.trim()),
 		success: 'Note saved'
 	})

@@ -309,7 +309,7 @@ describe('CRM owners from /api/v1/crm/owner-registry', () => {
 			return { ...page, total } as never
 		})
 		const res = await backend.listOwners({ tab: 'all' })
-		expect(res.counts).toMatchObject({ all: 3, multi: 1, event: 1, mine: 0 })
+		expect(res.page).toMatchObject({ total: 3, loaded: 3 })
 		expect(res.items[0].units).toEqual([
 			'Bloom Towers #100',
 			'Bloom Towers #101',

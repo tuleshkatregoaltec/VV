@@ -1299,7 +1299,7 @@ export type CrmContactImportResponse = {
     /**
      * Status
      */
-    status: 'processing' | 'completed' | 'failed';
+    status: 'queued' | 'processing' | 'retry_wait' | 'completed' | 'failed';
     summary: CrmContactImportSummary;
     /**
      * Mappings
@@ -2424,6 +2424,26 @@ export type CrmOwnerHistorySummary = {
 };
 
 /**
+ * CrmOwnerMatchSales
+ *
+ * Distinct sales that confirmed rows are tied to, by where the sale came from.
+ */
+export type CrmOwnerMatchSales = {
+    /**
+     * Transactions
+     */
+    transactions?: number;
+    /**
+     * Registry
+     */
+    registry?: number;
+    /**
+     * Total
+     */
+    total?: number;
+};
+
+/**
  * CrmOwnerMatchSummary
  *
  * What the property-first matcher made of an import's rows.
@@ -2444,6 +2464,13 @@ export type CrmOwnerMatchSummary = {
      * Rows Without Unit
      */
     rows_without_unit: number;
+    /**
+     * Review Reasons
+     */
+    review_reasons?: {
+        [key: string]: number;
+    };
+    sales_matched?: CrmOwnerMatchSales;
 };
 
 /**
@@ -5669,7 +5696,7 @@ export type InboundImportResponse = {
     /**
      * Status
      */
-    status: 'processing' | 'completed' | 'failed';
+    status: 'queued' | 'processing' | 'retry_wait' | 'completed' | 'failed';
     summary: InboundImportSummary;
     /**
      * Mapping
@@ -12387,7 +12414,7 @@ export type CrmCrmInboundImportResponses = {
     /**
      * Successful Response
      */
-    201: InboundImportResponse;
+    202: InboundImportResponse;
 };
 
 export type CrmCrmInboundImportResponse = CrmCrmInboundImportResponses[keyof CrmCrmInboundImportResponses];
@@ -12485,7 +12512,7 @@ export type CrmCrmContactImportResponses = {
     /**
      * Successful Response
      */
-    201: CrmContactImportResponse;
+    202: CrmContactImportResponse;
 };
 
 export type CrmCrmContactImportResponse = CrmCrmContactImportResponses[keyof CrmCrmContactImportResponses];
@@ -12535,7 +12562,7 @@ export type CrmCrmSourceOnlyImportResponses = {
     /**
      * Successful Response
      */
-    201: CrmContactImportResponse;
+    202: CrmContactImportResponse;
 };
 
 export type CrmCrmSourceOnlyImportResponse = CrmCrmSourceOnlyImportResponses[keyof CrmCrmSourceOnlyImportResponses];
@@ -12730,7 +12757,7 @@ export type CrmCrmContactListData = {
         /**
          * Match Outcome
          *
-         * Keep rows with one of these match outcomes (for example `lender`).
+         * Keep rows with one of these match outcomes (for example `lender` or `broker`).
          */
         match_outcome?: Array<string> | null;
         /**

@@ -71,7 +71,6 @@ function toggleWatch(m: MarketListingDetail) {
 			{/if}
 		</section>
 
-		<div class="notice">Another agency's listing — sign Form I with them before you share it.</div>
 
 		{#snippet footer()}
 			<button type="button" class="btn" aria-pressed={m.watch} onclick={() => toggleWatch(m)}>

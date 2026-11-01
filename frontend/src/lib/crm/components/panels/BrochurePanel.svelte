@@ -25,14 +25,13 @@ async function send() {
 
 {#if listing.data}
 	{@const x = listing.data}
-	<Panel kicker="Brochure PDF" title={x.unit} sub="One page, A4">
+	<Panel kicker="Brochure PDF" title={x.unit}>
 		<div class="paper">
 			<h4><span>{x.unit}</span><span style="font-weight:400;color:#666">{x.area}</span></h4>
 			<div class="photo">Listing photos</div>
 			{#each [['Price', price(x.deal_type, x.price_aed)], ['Size', `${x.bedrooms ? `${x.bedrooms} bedrooms` : 'Studio'} · ${fmt(x.size_sqft)} sqft`], ['Area', x.area], ['Recent sales', x.comparables_note], ['Permit', x.permit ? `Trakheesi ${x.permit.number}` : '—'], ['Agent', x.agent]] as [k, v] (k)}
 				<div class="pf"><span>{k}</span><span>{v}</span></div>
 			{/each}
-			<div class="foot">The permit QR code prints here.</div>
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn" onclick={send}>Send PDF</button>

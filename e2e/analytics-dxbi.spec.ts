@@ -53,7 +53,7 @@ test('comparison numbers and plotted values match both DXBI API selections', asy
         const points = new Map(trends.get(name).data.map((p: any) => [p.date, p.avg_price_sqft]));
         expect(datasets[index].data).toEqual(dates.map((date) => points.get(date) ?? null));
     }
-    await page.locator('section').filter({ has: page.getByRole('heading', { name: 'One market signal, two selections', exact: true }) }).screenshot({ path: path.resolve('../docs/audits/analytics-dxbi-2026-10-11/screenshots/compare-chart.png') });
+    await page.locator('section').filter({ has: page.getByRole('heading', { name: 'Price trend', exact: true }) }).screenshot({ path: path.resolve('../docs/audits/analytics-dxbi-2026-10-11/screenshots/compare-chart.png') });
     await page.getByRole('heading', { name: 'Dubai market analytics', exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.resolve('../docs/audits/analytics-dxbi-2026-10-11/screenshots/compare-verified.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -81,7 +81,7 @@ test('District One keeps sparse bedrooms and uses all-history counts in every ta
     await page.getByRole('option', { name: `${master} Master`, exact: true }).click();
     const summary = await (await response).json();
     const panel = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Configuration Analysis', exact: true }) }).last();
-    await expect(panel.getByText(/Sales, prices and sizes cover all recorded dates/)).toBeVisible();
+    await expect(panel.getByRole('columnheader', { name: 'Sales', exact: true })).toBeVisible();
     for (const [label, segment] of [['All', 'all'], ['Off-Plan', 'off_plan'], ['Secondary', 'secondary']]) {
         await panel.getByRole('button', { name: label, exact: true }).click();
         const expected = summary.configuration_analysis.filter((r: any) => r.market_segment === segment);
@@ -122,5 +122,5 @@ test('an office tower shows its commercial records, with the usage and its count
     const switched = page.waitForResponse(r => r.ok() && r.url().includes('/analytics/project/summary?') && r.url().includes('usage=Commercial'));
     await usage.getByRole('button', { name: /^Commercial/ }).click();
     expect((await (await switched).json()).usage).toBe('Commercial');
-    await expect(page.getByTestId('analytics-usage-note')).toHaveText(/residential records are under Residential/);
+    await expect(page.getByTestId('analytics-usage-note')).toHaveCount(0);
 });
