@@ -82,8 +82,11 @@ controlled release sequence.
   and interrupted/heartbeat chat responses.
 - Holocron full check: lint/type checks passed; 591 tests passed, **34 optional integration
   tests skipped**, with one existing collection warning. Skips are not passes.
-- Additional type/lint/build, route-guard and alias integration results are recorded in the
-  final PR body. Browser runtime libraries were extracted under `/tmp`; no system install.
+- Full mocked route-guard browser suite: all 30 passed, including the 9 demo/chat checks
+  above, CRM/Market theme parity, grouped navigation, source disclosure and queued imports.
+- Backend/frontend lint, zero-error/zero-warning Svelte diagnostics, canonical client
+  regeneration and frontend production build passed. Browser runtime libraries were
+  extracted under `/tmp`; no system install.
 
 Passing source and sample tests is not provider qualification. Real OAuth consent, encrypted
 server grants, single-use callbacks, scoped durable intake, phone-possession linking,
