@@ -40,7 +40,7 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 				label: 'Leads',
 				icon: User,
 				count: counts?.new_leads ?? null,
-				countLabel: 'new'
+				countLabel: counts?.limited ? 'new in loaded leads' : 'new'
 			},
 			{
 				href: '/crm/inbox',
@@ -53,19 +53,19 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 			{ href: '/crm/owners', label: 'Owners', icon: Building2, count: null },
 			{
 				href: '/crm/deals',
-				label: 'Deals',
+				label: 'Deals · coming soon',
 				icon: FileText,
 				count: counts?.open_deals ?? null,
 				countLabel: 'open'
 			},
 			{
 				href: '/crm/calendar',
-				label: 'Calendar',
+				label: 'Calendar · coming soon',
 				icon: CalendarDays,
 				count: counts?.events_today ?? null,
 				countLabel: 'today'
 			},
-			{ href: '/crm/assistant', label: 'Assistant', icon: Send, count: null },
+			{ href: '/crm/assistant', label: 'Assistant · coming soon', icon: Send, count: null },
 			{ href: '/crm/assets', label: 'Assets', icon: LayoutGrid, count: null }
 		]
 	},
@@ -74,7 +74,7 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 		items: [
 			{
 				href: '/crm/settings',
-				label: 'Manager view',
+				label: 'Manager view · coming soon',
 				icon: ChartNoAxesColumn,
 				count: counts?.waiting ?? null,
 				countLabel: 'waiting to assign'
@@ -102,7 +102,7 @@ const path = $derived(page.url.pathname.replace(/\/$/, ''))
 					aria-current={path === it.href ? 'page' : undefined}
 					onclick={() => (chrome.sbOpen = false)}
 				>
-					<it.icon size={17} aria-hidden="true" />
+					<it.icon size={16} aria-hidden="true" />
 					<span class="lbltxt">{it.label}</span>
 					{#if it.count}<span class="ct" aria-label="{it.count} {it.countLabel}">{it.count}</span>{/if}
 				</a>

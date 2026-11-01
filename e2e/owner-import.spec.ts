@@ -1,0 +1,166 @@
+import { expect, test } from '@playwright/test';
+
+test.use({ screenshot: 'off', trace: 'off', video: 'off' });
+
+// The setup project creates a disposable organization. Only synthetic contacts are uploaded;
+// all browser and API responses remain real, and no evidence files are exported.
+test('unresolved owner imports report property evidence separately and reuse duplicate uploads', async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
+    page.setDefaultTimeout(15_000);
+    const suffix = Date.now();
+    const name = `Synthetic ownership regression ${suffix}`;
+    const property = `Synthetic No Such Building ${suffix}`;
+    const header = 'NameEn,Mobile,BuildingNameEn,UnitNumber,Master Project,ProcedureNameEn,Regis,ProcedureValue,ProcedurePartyTypeNameEn';
+    const buyer = `Synthetic Buyer,+971500000001,${property},SYNTH-${suffix},Synthetic Test Area,Sell,2021-01-05,1234567,Buyer`;
+    const seller = `Synthetic Seller,+971500000002,${property},SYNTH-${suffix},Synthetic Test Area,Sell,2021-01-05,1234567,Seller`;
+    const file = { name: `synthetic-owners-${suffix}.csv`, mimeType: 'text/csv', buffer: Buffer.from([header, buyer, seller].join('\n')) };
+
+    await page.goto('/crm/owners/imports');
+    await page.getByRole('button', { name: 'Upload', exact: true }).first().click();
+    await page.locator('input[type=file]').setInputFiles(file);
+    await page.getByLabel('List name', { exact: true }).fill(name);
+    const importResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/crm/contact-imports' && response.request().method() === 'POST', { timeout: 60_000 });
+    await page.getByRole('button', { name: 'Import 2 rows', exact: true }).click();
+    const response = await importResponse;
+    expect(response.ok()).toBeTruthy();
+    const imported = await response.json();
+    const headers = await response.request().allHeaders();
+    const authorization = { Authorization: headers.authorization };
+    const importUrl = response.url();
+    try {
+        console.log('Synthetic import counts:', JSON.stringify(imported.summary));
+        expect(imported.status).toBe('completed');
+        expect(imported.summary.total_rows).toBe(2);
+        expect(imported.summary.candidate_rows).toBe(2);
+        expect(imported.summary.duplicate_rows_collapsed).toBe(0);
+        expect(imported.summary.properties_linked_rows).toBe(0);
+        expect(imported.summary.verified_current_owners).toBe(0);
+        expect(imported.summary.contact_ready).toBe(0);
+        const processingDetails = page.locator('details').filter({ has: page.getByText('Processing details', { exact: true }) });
+        await expect(processingDetails).not.toHaveAttribute('open', '');
+        await page.getByRole('button', { name: 'Open report', exact: true }).click();
+        await expect(page).toHaveURL(`/crm/owners/imports/${imported.id}`);
+        const historical = page.locator('details.snapshot');
+        const currentSummary = page.getByRole('region', { name: 'Current ownership summary', exact: true });
+        await expect(historical).not.toHaveAttribute('open', '');
+        // The unit-by-unit match result leads the report: an unknown building confirms nothing.
+        const stat = (label: string) => page.locator('.stat').filter({ hasText: label });
+        await expect(stat('Units identified').locator('.big')).toHaveText('1');
+        await expect(stat('Units mapped').locator('.big')).toHaveText('0');
+        await expect(stat('Units mapped')).toContainText('0% coverage');
+        await expect(stat('Rows to review').locator('.big')).toHaveText('0');
+        await page.getByRole('tab', { name: 'Not matched', exact: true }).click();
+        await expect(page.locator('#source-rows .count')).toHaveText('Showing 1–2 of 2');
+        await page.getByRole('tab', { name: 'All', exact: true }).click();
+        await expect(page.locator('.row-accounting')).toHaveText('2 source rows · 2 kept · 0 merged · 0 dropped.');
+        await expect(page.getByRole('heading', { name: 'Source rows', exact: true })).toBeVisible();
+        await expect(page.locator('.kpi:visible')).toHaveCount(0);
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const reportScreenshot = testInfo.outputPath('owner-import-report-light.png');
+        await page.screenshot({ path: reportScreenshot, fullPage: true, animations: 'disabled' });
+        console.log('Owner import UI screenshot:', reportScreenshot);
+        // The same evidence remains available through a keyboard-operated disclosure.
+        await historical.getByText('Processing details', { exact: true }).click();
+        await expect(currentSummary.locator('details')).not.toHaveAttribute('open', '');
+        const evidenceDisclosure = currentSummary.getByText('Details', { exact: true });
+        await evidenceDisclosure.focus();
+        await page.keyboard.press('Enter');
+        await expect(currentSummary.getByText('Source events', { exact: true })).toBeVisible();
+        await evidenceDisclosure.click();
+        const linked = page.locator('.kpi').filter({ has: page.getByText('Rows linked to a property', { exact: true }) });
+        await expect(linked.locator('.v')).toHaveText('0');
+        await expect(linked).toContainText('0% of 2 kept rows · 0% of 2 source rows');
+        const verified = page.locator('.kpi').filter({ has: page.getByText('Current owners', { exact: true }) });
+        await expect(verified.locator('.v')).toHaveText('0');
+        await expect(currentSummary).toBeVisible();
+        await currentSummary.getByText('Details', { exact: true }).click();
+        await expect(currentSummary.locator('div').filter({ has: page.getByText('Source events', { exact: true }) }).locator('dd')).toHaveText('2');
+        await expect(currentSummary.locator('div').filter({ has: page.getByText('Current owners', { exact: true }) }).locator('dd')).toHaveText('0');
+        await page.getByRole('button', { name: 'Synthetic Buyer', exact: true }).click();
+        await page.getByRole('button', { name: 'Show ownership history', exact: true }).click();
+        const sourceHistory = page.getByRole('region', { name: 'Ownership history', exact: true });
+        await expect(sourceHistory).toContainText('Buyer');
+        await expect(sourceHistory).toContainText('Sell');
+        await expect(sourceHistory).toContainText('Row 2');
+        await sourceHistory.getByRole('button', { name: file.name, exact: true }).click();
+        await expect(page.getByRole('region', { name: 'Ownership history', exact: true })).not.toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Source rows', exact: true })).toBeVisible();
+        // No sale backs either row, so neither is presented as a former or current owner.
+        expect(imported.summary.unverified_former_owners).toBe(0);
+        expect(imported.summary.former_owners).toBe(0);
+        expect(imported.summary.unmatched).toBe(1);
+        await expect(page.locator('#source-rows tbody tr').filter({ hasText: 'Synthetic Seller' }).locator('[data-label="Result"]')).toHaveText('Not matched');
+        await page.getByRole('button', { name: 'Show properties', exact: true }).click();
+        const propertiesResponse = await page.request.get(`${importUrl}/${imported.id}/properties`, { headers: authorization });
+        expect(propertiesResponse.ok()).toBeTruthy();
+        const properties = await propertiesResponse.json();
+        expect(properties.rows.length).toBeGreaterThan(0);
+        expect(properties.rows.every((row: { current_owner: string | null }) => row.current_owner === null)).toBe(true);
+        await expect(page.locator('[data-label="Current owner"]').first()).toHaveText('—');
+        const reviewLink = page.getByRole('link', { name: 'Review unresolved owners', exact: true });
+        await expect(reviewLink).toHaveAttribute('href', /scope=needs_review&list_id=/);
+        await reviewLink.click();
+        await expect(page.getByRole('tab', { name: /Needs review/ })).toHaveAttribute('aria-selected', 'true');
+        await expect(page.locator('.owners-table')).toBeVisible();
+        const ownerScreenshot = testInfo.outputPath('owners-light.png');
+        await page.screenshot({ path: ownerScreenshot, fullPage: true, animations: 'disabled' });
+        console.log('Owners UI screenshot:', ownerScreenshot);
+        await page.getByRole('button', { name: 'Switch to dark', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Switch to light', exact: true })).toBeVisible();
+        await page.screenshot({ path: testInfo.outputPath('owners-dark.png'), fullPage: true, animations: 'disabled' });
+        await page.getByRole('button', { name: 'Switch to light', exact: true }).click();
+        await page.setViewportSize({ width: 375, height: 812 });
+        await expect(page.getByRole('tab', { name: /Needs review/ })).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.screenshot({ path: testInfo.outputPath('owners-mobile.png'), fullPage: true, animations: 'disabled' });
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.getByRole('button', { name: 'Synthetic Seller', exact: true }).click();
+        // Disclaimer copy is gone from the owner panel.
+        await expect(page.getByText('Professional role has not been established.', { exact: true })).toHaveCount(0);
+        await page.getByLabel('Add note', { exact: true }).fill('Synthetic review: source seller claim needs corroborating transaction evidence.');
+        const savedNote = page.waitForResponse(result => new URL(result.url()).pathname === '/api/v1/crm/owner-workspaces/bulk' && result.request().method() === 'PATCH');
+        await page.getByRole('button', { name: 'Save note', exact: true }).click();
+        expect((await savedNote).ok()).toBeTruthy();
+        await expect(page.getByText('Synthetic review: source seller claim needs corroborating transaction evidence.', { exact: true })).toBeVisible();
+        await expect(page.getByText('Needs review', { exact: true }).first()).toBeVisible();
+        await page.goto('/crm/owners/imports');
+        await page.getByRole('button', { name: 'Upload', exact: true }).first().click();
+        await page.locator('input[type=file]').setInputFiles(file);
+        const duplicateResponse = page.waitForResponse(result => new URL(result.url()).pathname === '/api/v1/crm/contact-imports' && result.request().method() === 'POST', { timeout: 60_000 });
+        await page.getByRole('button', { name: 'Import 2 rows', exact: true }).click();
+        const duplicate = await duplicateResponse;
+        expect(duplicate.ok()).toBeTruthy();
+        expect((await duplicate.json()).id).toBe(imported.id);
+        await expect(page.getByText(`This file was already imported as “${name}”. Nothing new was added.`, { exact: true })).toBeVisible();
+        const historyResponse = await page.request.get(importUrl, { headers: authorization });
+        expect(historyResponse.ok()).toBeTruthy();
+        const history = await historyResponse.json();
+        expect(history.filter((item: { id: number }) => item.id === imported.id)).toHaveLength(1);
+        console.log('Synthetic duplicate upload reused import:', imported.id);
+    } finally {
+        const removed = await page.request.delete(`${importUrl}/${imported.id}`, { headers: authorization, timeout: 60_000 });
+        expect(removed.ok()).toBeTruthy();
+    }
+});
+
+test('a real renewal remains visible with blank owner fields in a fresh organization', async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.goto('/crm/assets');
+    const renewalsResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/crm/renewals' && response.ok());
+    await page.getByRole('tab', { name: 'Renewals', exact: true }).click();
+    const renewals = await (await renewalsResponse).json();
+    expect(renewals.leads.length, 'Local lease dataset must contain a renewal for real browser coverage').toBeGreaterThan(0);
+    const detailResponse = page.waitForResponse(response => /^\/api\/v1\/crm\/leads\/[^/]+$/.test(new URL(response.url()).pathname) && response.ok());
+    await page.locator('tbody .rowlink').first().click();
+    const detail = await (await detailResponse).json();
+    expect(detail.owner).toBeNull();
+    await expect(page.getByRole('button', { name: 'Add owner', exact: true })).toBeVisible();
+    const owner = page.locator('section').filter({ has: page.getByRole('button', { name: 'Add owner', exact: true }) });
+    for (const field of ['Name', 'Phone', 'Email']) {
+        const value = owner.locator('.kvi').filter({ has: page.getByText(field, { exact: true }) }).locator('.v');
+        await expect(value).toBeEmpty();
+    }
+    await expect(owner).toContainText('Not identified yet');
+    await expect(page.getByRole('heading', { name: 'Property history', exact: true })).toBeVisible();
+    console.log('Renewal browser coverage:', JSON.stringify({ available: renewals.total, owner: detail.owner, history_events: detail.timeline.length }));
+});

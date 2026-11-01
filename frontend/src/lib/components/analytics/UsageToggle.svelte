@@ -27,6 +27,14 @@ let {
 	onchange: (usage: Usage) => void
 	children?: Snippet
 } = $props()
+
+// Only a usage that has no records, or one chosen for the project, needs saying; the rest is
+// visible in the counts on the buttons.
+const other = $derived<Usage>(resolved === 'Residential' ? 'Commercial' : 'Residential')
+const showNote = $derived(
+	usageTotal(counts, resolved) === 0 ||
+		(value === 'auto' && resolved === 'Commercial' && usageTotal(counts, other) === 0)
+)
 </script>
 
 <div class="mt-3 flex flex-col gap-1.5" data-testid="analytics-usage">
@@ -50,7 +58,9 @@ let {
 		</div>
 		{@render children?.()}
 	</div>
-	<p class="text-xs text-fg-4" data-testid="analytics-usage-note">
-		{usageNote(resolved, value, counts, scope)}
-	</p>
+	{#if showNote}
+		<p class="text-xs text-fg-4" data-testid="analytics-usage-note">
+			{usageNote(resolved, value, counts, scope)}
+		</p>
+	{/if}
 </div>

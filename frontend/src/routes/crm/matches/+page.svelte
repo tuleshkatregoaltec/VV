@@ -40,19 +40,18 @@ const tabs = $derived(
 	).map(([id, label]) => ({ id, label, count: clients.data?.[id].length }))
 )
 
-const EMPTY: Record<MatchTabId, [string, string]> = {
-	ready: ['No buyer or tenant leads.', 'Add a lead to search for matches.'],
-	offplan: ['No off-plan buyers.', 'Mark a buyer as off-plan to match Launch desk projects.'],
-	sell: ['No seller or landlord leads.', 'Add a lead to see who fits their unit.']
+const EMPTY: Record<MatchTabId, string> = {
+	ready: 'No buyer or tenant leads.',
+	offplan: 'No off-plan buyers.',
+	sell: 'No seller or landlord leads.'
 }
 </script>
 
-<svelte:head><title>Matches · CRM Beta</title></svelte:head>
+<svelte:head><title>Matches · CRM</title></svelte:head>
 
-<PageHeader
-	title="Matches"
-	facts="Pursue sets the next step. Booking a viewing moves the stage. Telegram can do both."
-/>
+{#if clients.data?.limited}<p class="small muted">Clients and tab counts cover the first 500 stored enquiries. Search in Leads to find other clients.</p>{/if}
+
+<PageHeader title="Matches" />
 
 <Tabs label="Clients" items={tabs} value={ui.matchTab} onselect={(t) => (ui.matchTab = t)} />
 
@@ -97,7 +96,7 @@ const EMPTY: Record<MatchTabId, [string, string]> = {
 								</div>
 							</div>
 							<span class="row-chips">
-								{#if m.status}<Chip chip={m.status} title="Planned: raised on the 6 Oct call, not built." />{/if}
+								{#if m.status}<Chip chip={m.status} />{/if}
 								{#if m.own_listing}
 									{@const own = m.own_listing}
 									<button type="button" class="btn ghost sm" onclick={() => openListing(own.id)}>Open listing</button>
@@ -112,8 +111,8 @@ const EMPTY: Record<MatchTabId, [string, string]> = {
 							{#if m.tab !== 'sell'}
 								<span class="row-chips">
 									<label class="check">
-										<input type="checkbox" bind:checked={ui.matchOver} />
-										Up to 10% over budget
+										<input type="checkbox" checked={false} disabled />
+										Up to 10% over budget · unavailable
 									</label>
 									{#if m.tab === 'ready'}<span class="small muted">Shortlist: {m.shortlist}</span>{/if}
 								</span>
@@ -134,7 +133,7 @@ const EMPTY: Record<MatchTabId, [string, string]> = {
 		</div>
 	{:else}
 		<div class="card">
-			<Empty text="{EMPTY[ui.matchTab][0]} {EMPTY[ui.matchTab][1]}">
+			<Empty text={EMPTY[ui.matchTab]}>
 				<button type="button" class="btn sm" onclick={() => panel.open({ kind: 'new-lead' })}>New lead</button>
 			</Empty>
 		</div>

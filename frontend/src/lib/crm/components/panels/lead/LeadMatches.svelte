@@ -35,8 +35,8 @@ function openInMatches() {
 <div class="filters">
 	{#if tab !== 'sell'}
 		<label class="check small">
-			<input type="checkbox" bind:checked={ui.matchOver} />
-			Up to 10% over budget
+			<input type="checkbox" checked={false} disabled />
+			Up to 10% over budget · unavailable
 		</label>
 	{/if}
 	<span class="count">

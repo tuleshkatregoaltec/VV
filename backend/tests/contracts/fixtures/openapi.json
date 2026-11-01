@@ -7,7 +7,10 @@
 	"paths": {
 		"/api/v1/auth/me": {
 			"get": {
-				"tags": ["auth", "auth"],
+				"tags": [
+					"auth",
+					"auth"
+				],
 				"summary": "Get User",
 				"description": "Get current authenticated user with organization and subscription context.\n\nReturns first_name/last_name from the authenticated user principal.\nReturns subscription_status from organization.subscription_status (single source of truth).",
 				"operationId": "auth-get_user",
@@ -27,7 +30,10 @@
 		},
 		"/api/v1/auth/update-profile": {
 			"post": {
-				"tags": ["auth", "auth"],
+				"tags": [
+					"auth",
+					"auth"
+				],
 				"summary": "Update Profile",
 				"description": "Update user profile (first name and last name).",
 				"operationId": "auth-update_profile",
@@ -67,7 +73,10 @@
 		},
 		"/api/v1/analytics/sales": {
 			"get": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Get Sales Analytics",
 				"description": "Get sales analytics with flexible filtering and custom date ranges.\n\nSupports:\n- Custom date ranges (use start_date/end_date or timeframe_days)\n- market_type for taxonomy-correct filtering (recommended)\n- Manual filtering via property_usage + property_type (legacy)\n\nExamples:\n- Last 30 days: ?timeframe_days=30\n- By market: ?market_type=residential_units&timeframe_days=90\n- Custom range: ?start_date=2024-01-01&end_date=2024-12-31",
 				"operationId": "analytics-get_sales_analytics",
@@ -300,7 +309,10 @@
 		},
 		"/api/v1/analytics/rentals": {
 			"get": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Get Rental Analytics",
 				"description": "Get rental analytics with flexible filtering and custom date ranges.\n\nSupports:\n- Custom date ranges (use start_date/end_date or timeframe_days)\n- Multi-dimensional filtering (combine property_type, location, rent ranges)\n- Bucketed filtering (rent ranges, area ranges)\n\nExamples:\n- Last 90 days: ?timeframe_days=90\n- Custom range: ?start_date=2024-06-01&end_date=2024-08-31\n- Filtered: ?property_usage=Commercial&rent_bucket=200K-500K",
 				"operationId": "analytics-get_rental_analytics",
@@ -472,7 +484,10 @@
 		},
 		"/api/v1/analytics/market-trend": {
 			"get": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Get Market Trend",
 				"description": "Get aggregated price trend data for the market trend chart.\n\nReturns trend points plus period-over-period change vs the equivalent prior period.",
 				"operationId": "analytics-get_market_trend",
@@ -553,7 +568,10 @@
 		},
 		"/api/v1/analytics/projects": {
 			"get": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Search Projects Endpoint",
 				"description": "Projects, masters and buildings for the selector (a building is its own scope).",
 				"operationId": "analytics-search_projects_endpoint",
@@ -612,7 +630,10 @@
 		},
 		"/api/v1/analytics/project/sub-projects": {
 			"get": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Get Sub Projects Endpoint",
 				"description": "List sub-projects within a master or virtual master, sorted by transaction count.",
 				"operationId": "analytics-get_sub_projects_endpoint",
@@ -633,7 +654,12 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master", "building"],
+							"enum": [
+								"project",
+								"master",
+								"virtual_master",
+								"building"
+							],
 							"type": "string",
 							"description": "Filter type: master or virtual_master",
 							"default": "master",
@@ -668,7 +694,10 @@
 		},
 		"/api/v1/analytics/project/summary": {
 			"get": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Get Project Summary Endpoint",
 				"description": "Full analytics for a master project, virtual master, or specific sub-project.\nPass master_project with filter_type=master/virtual_master to aggregate the whole development,\nor project with filter_type=project for a specific sub-project.",
 				"operationId": "analytics-get_project_summary_endpoint",
@@ -732,7 +761,12 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master", "building"],
+							"enum": [
+								"project",
+								"master",
+								"virtual_master",
+								"building"
+							],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -765,7 +799,11 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["auto", "Residential", "Commercial"],
+							"enum": [
+								"auto",
+								"Residential",
+								"Commercial"
+							],
 							"type": "string",
 							"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records",
 							"default": "auto",
@@ -800,7 +838,10 @@
 		},
 		"/api/v1/analytics/project/trends": {
 			"get": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Get Project Trends Endpoint",
 				"description": "Sales price trend time series for a project, master, or virtual master.",
 				"operationId": "analytics-get_project_trends_endpoint",
@@ -864,7 +905,12 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master", "building"],
+							"enum": [
+								"project",
+								"master",
+								"virtual_master",
+								"building"
+							],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -889,7 +935,11 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["auto", "Residential", "Commercial"],
+							"enum": [
+								"auto",
+								"Residential",
+								"Commercial"
+							],
 							"type": "string",
 							"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records",
 							"default": "auto",
@@ -924,7 +974,10 @@
 		},
 		"/api/v1/analytics/project/forecast": {
 			"get": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Get Project Forecast Endpoint",
 				"operationId": "analytics-get_project_forecast_endpoint",
 				"parameters": [
@@ -987,7 +1040,12 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master", "building"],
+							"enum": [
+								"project",
+								"master",
+								"virtual_master",
+								"building"
+							],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -1034,7 +1092,10 @@
 		},
 		"/api/v1/analytics/project/pipeline": {
 			"get": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Get Project Pipeline Endpoint",
 				"operationId": "analytics-get_project_pipeline_endpoint",
 				"parameters": [
@@ -1097,7 +1158,12 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master", "building"],
+							"enum": [
+								"project",
+								"master",
+								"virtual_master",
+								"building"
+							],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -1132,7 +1198,10 @@
 		},
 		"/api/v1/analytics/project/price-distribution": {
 			"get": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Get Project Price Distribution Endpoint",
 				"operationId": "analytics-get_project_price_distribution_endpoint",
 				"parameters": [
@@ -1195,7 +1264,12 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master", "building"],
+							"enum": [
+								"project",
+								"master",
+								"virtual_master",
+								"building"
+							],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -1226,7 +1300,11 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["auto", "Residential", "Commercial"],
+							"enum": [
+								"auto",
+								"Residential",
+								"Commercial"
+							],
 							"type": "string",
 							"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records",
 							"default": "auto",
@@ -1261,7 +1339,10 @@
 		},
 		"/api/v1/analytics/market-metrics": {
 			"post": {
-				"tags": ["analytics", "analytics"],
+				"tags": [
+					"analytics",
+					"analytics"
+				],
 				"summary": "Get Market Metrics Endpoint",
 				"description": "Sales or rental metrics with explicit period, coverage, definitions and evidence.\n\nThe same operation backs the chat tool, so API and chat answers agree.",
 				"operationId": "analytics-get_market_metrics_endpoint",
@@ -1301,7 +1382,10 @@
 		},
 		"/api/v1/areas": {
 			"get": {
-				"tags": ["areas", "areas"],
+				"tags": [
+					"areas",
+					"areas"
+				],
 				"summary": "Areas List",
 				"operationId": "areas-areas_list",
 				"parameters": [
@@ -1378,7 +1462,10 @@
 		},
 		"/api/v1/areas/{area_name}": {
 			"get": {
-				"tags": ["areas", "areas"],
+				"tags": [
+					"areas",
+					"areas"
+				],
 				"summary": "Area Detail",
 				"operationId": "areas-area_detail",
 				"parameters": [
@@ -1418,7 +1505,10 @@
 		},
 		"/api/v1/chat/conversations": {
 			"post": {
-				"tags": ["chat", "chat"],
+				"tags": [
+					"chat",
+					"chat"
+				],
 				"summary": "Create Conversation Endpoint",
 				"description": "Create a new conversation",
 				"operationId": "chat-create_conversation_endpoint",
@@ -1456,7 +1546,10 @@
 				}
 			},
 			"get": {
-				"tags": ["chat", "chat"],
+				"tags": [
+					"chat",
+					"chat"
+				],
 				"summary": "List Conversations",
 				"description": "Get all conversations for current user",
 				"operationId": "chat-list_conversations",
@@ -1511,7 +1604,10 @@
 		},
 		"/api/v1/chat/conversations/{conversation_id}": {
 			"patch": {
-				"tags": ["chat", "chat"],
+				"tags": [
+					"chat",
+					"chat"
+				],
 				"summary": "Update Conversation Endpoint",
 				"description": "Update a conversation's title",
 				"operationId": "chat-update_conversation_endpoint",
@@ -1560,7 +1656,10 @@
 				}
 			},
 			"delete": {
-				"tags": ["chat", "chat"],
+				"tags": [
+					"chat",
+					"chat"
+				],
 				"summary": "Delete Conversation Endpoint",
 				"description": "Delete a conversation",
 				"operationId": "chat-delete_conversation_endpoint",
@@ -1594,7 +1693,10 @@
 		},
 		"/api/v1/chat/conversations/{conversation_id}/messages": {
 			"get": {
-				"tags": ["chat", "chat"],
+				"tags": [
+					"chat",
+					"chat"
+				],
 				"summary": "Get Conversation Messages Endpoint",
 				"description": "Get messages for a conversation",
 				"operationId": "chat-get_conversation_messages_endpoint",
@@ -1651,7 +1753,10 @@
 		},
 		"/api/v1/chat/conversations/{conversation_id}/messages/stream": {
 			"post": {
-				"tags": ["chat", "chat"],
+				"tags": [
+					"chat",
+					"chat"
+				],
 				"summary": "Send Message",
 				"description": "Send a message and stream AI response via SSE",
 				"operationId": "chat-send_message",
@@ -1695,7 +1800,10 @@
 		},
 		"/api/v1/crm/inbound/enquiries": {
 			"post": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Create Inbound Enquiry",
 				"description": "Create a manually entered buyer, tenant, seller, or landlord enquiry.",
 				"operationId": "crm-crm_create_inbound_enquiry",
@@ -1733,7 +1841,10 @@
 				}
 			},
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Inbound Enquiries",
 				"description": "List organization-visible inbound enquiries and review exceptions.",
 				"operationId": "crm-crm_inbound_enquiries",
@@ -1856,7 +1967,10 @@
 		},
 		"/api/v1/crm/inbound/enquiries/{enquiry_id}": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Inbound Enquiry",
 				"operationId": "crm-crm_inbound_enquiry",
 				"parameters": [
@@ -1894,7 +2008,10 @@
 				}
 			},
 			"patch": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Update Inbound Enquiry",
 				"operationId": "crm-crm_update_inbound_enquiry",
 				"parameters": [
@@ -1944,7 +2061,10 @@
 		},
 		"/api/v1/crm/inbound/enquiries/{enquiry_id}/notes": {
 			"post": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Add Inbound Note",
 				"operationId": "crm-crm_add_inbound_note",
 				"parameters": [
@@ -1994,7 +2114,10 @@
 		},
 		"/api/v1/crm/inbound/enquiries/{enquiry_id}/activities": {
 			"post": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Add Inbound Activity",
 				"operationId": "crm-crm_add_inbound_activity",
 				"parameters": [
@@ -2044,7 +2167,10 @@
 		},
 		"/api/v1/crm/inbound/enquiries/{enquiry_id}/matches": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Inbound Matches",
 				"operationId": "crm-crm_inbound_matches",
 				"parameters": [
@@ -2084,7 +2210,10 @@
 		},
 		"/api/v1/crm/inbound/enquiries/{enquiry_id}/matches/refresh": {
 			"post": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Refresh Inbound Matches",
 				"operationId": "crm-crm_refresh_inbound_matches",
 				"parameters": [
@@ -2134,7 +2263,10 @@
 		},
 		"/api/v1/crm/inbound/matches/{match_id}": {
 			"patch": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Update Inbound Match",
 				"operationId": "crm-crm_update_inbound_match",
 				"parameters": [
@@ -2184,7 +2316,10 @@
 		},
 		"/api/v1/crm/inbound/imports": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Inbound Imports",
 				"operationId": "crm-crm_inbound_imports",
 				"responses": {
@@ -2205,7 +2340,10 @@
 				}
 			},
 			"post": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Inbound Import",
 				"description": "Normalize a campaign or CRM lead export into actionable enquiries.",
 				"operationId": "crm-crm_inbound_import",
@@ -2220,7 +2358,7 @@
 					"required": true
 				},
 				"responses": {
-					"201": {
+					"202": {
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
@@ -2245,7 +2383,10 @@
 		},
 		"/api/v1/crm/inbound/imports/preview": {
 			"post": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Preview Inbound Import",
 				"description": "Inspect headers and samples without storing contacts or creating enquiries.",
 				"operationId": "crm-crm_preview_inbound_import",
@@ -2285,7 +2426,10 @@
 		},
 		"/api/v1/crm/inbound/imports/{import_id}": {
 			"delete": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Delete Inbound Import",
 				"operationId": "crm-crm_delete_inbound_import",
 				"parameters": [
@@ -2318,7 +2462,10 @@
 		},
 		"/api/v1/crm/contact-imports": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Contact Imports",
 				"description": "List contact imports for the signed-in organization.",
 				"operationId": "crm-crm_contact_imports",
@@ -2340,7 +2487,10 @@
 				}
 			},
 			"post": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Contact Import",
 				"description": "Upload, normalize, verify, and publish an owner-contact workbook.",
 				"operationId": "crm-crm_contact_import",
@@ -2355,7 +2505,93 @@
 					"required": true
 				},
 				"responses": {
-					"201": {
+					"202": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmContactImportResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/contact-imports/preview": {
+			"post": {
+				"tags": [
+					"crm",
+					"crm"
+				],
+				"summary": "Crm Contact Import Preview",
+				"description": "Show which field each column of an owner file feeds, without importing it.",
+				"operationId": "crm-crm_contact_import_preview",
+				"requestBody": {
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"$ref": "#/components/schemas/Body_crm-crm_contact_import_preview"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmContactImportPreview"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/contact-imports/source-only": {
+			"post": {
+				"tags": [
+					"crm",
+					"crm"
+				],
+				"summary": "Crm Source Only Import",
+				"description": "Import reviewed source history without requesting registry evidence.",
+				"operationId": "crm-crm_source_only_import",
+				"requestBody": {
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"$ref": "#/components/schemas/Body_crm-crm_source_only_import"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"202": {
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
@@ -2380,7 +2616,10 @@
 		},
 		"/api/v1/crm/contact-imports/{import_id}": {
 			"patch": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Rename Contact Import",
 				"description": "Rename an import and its corresponding Saved folder.",
 				"operationId": "crm-crm_rename_contact_import",
@@ -2429,7 +2668,10 @@
 				}
 			},
 			"delete": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Delete Contact Import",
 				"description": "Delete one source import, its Saved folder, and its imported claims.",
 				"operationId": "crm-crm_delete_contact_import",
@@ -2463,7 +2705,10 @@
 		},
 		"/api/v1/crm/contact-imports/{import_id}/dropped-rows": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Contact Import Dropped Rows",
 				"description": "Rows of one import that were not kept, with the file's values and the reason.\n\nRead from the dropped-rows log saved at upload; `available` is false for imports made\nbefore the log existed.",
 				"operationId": "crm-crm_contact_import_dropped_rows",
@@ -2561,7 +2806,10 @@
 		},
 		"/api/v1/crm/contact-imports/{import_id}/properties": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Contact Import Properties",
 				"description": "Distinct properties (building + unit) of one import, each with its kept rows.",
 				"operationId": "crm-crm_contact_import_properties",
@@ -2642,7 +2890,10 @@
 		},
 		"/api/v1/crm/contact-lists": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Contact Lists",
 				"description": "List organization owner-contact folders.",
 				"operationId": "crm-crm_contact_lists",
@@ -2666,7 +2917,10 @@
 		},
 		"/api/v1/crm/contact-lists/{list_id}": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Contact List",
 				"description": "Return one curated owner-contact folder and its verification results.",
 				"operationId": "crm-crm_contact_list",
@@ -2688,7 +2942,7 @@
 							"anyOf": [
 								{
 									"type": "string",
-									"pattern": "^(verified_current_owner|probable_current_owner|unit_linked_unverified|former_owner|conflicting_claim|insufficient_property_data|registry_not_observed|unmatched)$"
+									"pattern": "^(verified_current_owner|probable_current_owner|unit_linked_unverified|former_owner|unverified_former_owner|conflicting_claim|insufficient_property_data|registry_not_observed|unmatched)$"
 								},
 								{
 									"type": "null"
@@ -2696,6 +2950,55 @@
 							],
 							"title": "Status"
 						}
+					},
+					{
+						"name": "match_colour",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "array",
+									"items": {
+										"enum": [
+											"green",
+											"amber",
+											"blue",
+											"red",
+											"grey"
+										],
+										"type": "string"
+									}
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Keep rows whose property-first match is one of these colours.",
+							"title": "Match Colour"
+						},
+						"description": "Keep rows whose property-first match is one of these colours."
+					},
+					{
+						"name": "match_outcome",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Keep rows with one of these match outcomes (for example `lender` or `broker`).",
+							"title": "Match Outcome"
+						},
+						"description": "Keep rows with one of these match outcomes (for example `lender` or `broker`)."
 					},
 					{
 						"name": "search",
@@ -2764,7 +3067,10 @@
 		},
 		"/api/v1/crm/owner-registry": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Owner Registry",
 				"description": "Return deduplicated owner profiles grouped into actionable CRM folders.\n\n`min_properties` keeps owners with at least that many units; `next_event_days` keeps owners\nwhose next lease ends between today and that many days from now.",
 				"operationId": "crm-crm_owner_registry",
@@ -2775,7 +3081,7 @@
 						"required": false,
 						"schema": {
 							"type": "string",
-							"pattern": "^(all|rental_ready|registry|prior_owners)$",
+							"pattern": "^(all|current_owners|rental_ready|registry|prior_owners|needs_review)$",
 							"default": "all",
 							"title": "Scope"
 						}
@@ -2805,13 +3111,30 @@
 							"anyOf": [
 								{
 									"type": "string",
-									"pattern": "^(verified_current_owner|probable_current_owner|unit_linked_unverified|former_owner|conflicting_claim|insufficient_property_data|registry_not_observed|unmatched)$"
+									"pattern": "^(verified_current_owner|probable_current_owner|unit_linked_unverified|former_owner|unverified_former_owner|conflicting_claim|insufficient_property_data|registry_not_observed|unmatched)$"
 								},
 								{
 									"type": "null"
 								}
 							],
 							"title": "Status"
+						}
+					},
+					{
+						"name": "transaction_match_status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"pattern": "^(matched|unmatched|ambiguous|excluded)$"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Transaction Match Status"
 						}
 					},
 					{
@@ -3016,7 +3339,10 @@
 		},
 		"/api/v1/crm/owner-workspaces": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Owner Workspaces",
 				"description": "List agent state and note summaries for owner profiles.",
 				"operationId": "crm-crm_owner_workspaces",
@@ -3040,7 +3366,10 @@
 		},
 		"/api/v1/crm/owner-workspaces/bulk": {
 			"patch": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Bulk Update Owner Workspaces",
 				"description": "Apply pipeline, highlight, or note updates to selected owner profiles.",
 				"operationId": "crm-crm_bulk_update_owner_workspaces",
@@ -3082,9 +3411,192 @@
 				}
 			}
 		},
+		"/api/v1/crm/owner-history/summary": {
+			"get": {
+				"tags": [
+					"crm",
+					"crm"
+				],
+				"summary": "Crm Owner History Summary",
+				"description": "Count source events and scoped owner/property evidence across imports.",
+				"operationId": "crm-crm_owner_history_summary",
+				"parameters": [
+					{
+						"name": "import_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Import Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmOwnerHistorySummary"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/contact-imports/{import_id}/owner-summary": {
+			"get": {
+				"tags": [
+					"crm",
+					"crm"
+				],
+				"summary": "Crm Contact Import Owner Summary",
+				"description": "Count this file's associations using current evidence from all tenant imports.",
+				"operationId": "crm-crm_contact_import_owner_summary",
+				"parameters": [
+					{
+						"name": "import_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Import Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmOwnerHistorySummary"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/owners/{owner_key}/history": {
+			"get": {
+				"tags": [
+					"crm",
+					"crm"
+				],
+				"summary": "Crm Owner History",
+				"description": "Page one owner's individual source events across organization imports.",
+				"operationId": "crm-crm_owner_history",
+				"parameters": [
+					{
+						"name": "owner_key",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Owner Key"
+						}
+					},
+					{
+						"name": "import_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Import Id"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 50,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmOwnerHistoryResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/owners/{owner_key}": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Owner Profile",
 				"description": "Return one owner and every property accumulated across organization imports.",
 				"operationId": "crm-crm_owner_profile",
@@ -3125,7 +3637,10 @@
 		},
 		"/api/v1/crm/dashboard": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Dashboard",
 				"description": "Return actionable lease-expiry leads and location summaries.",
 				"operationId": "crm-crm_dashboard",
@@ -3356,7 +3871,10 @@
 		},
 		"/api/v1/crm/area-preferences": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Area Preferences",
 				"description": "Return the current agent's renewal-lead areas and lease-expiry windows.",
 				"operationId": "crm-crm_area_preferences",
@@ -3374,7 +3892,10 @@
 				}
 			},
 			"put": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Update Area Preferences",
 				"description": "Replace the current agent's renewal-lead areas and lease-expiry windows.",
 				"operationId": "crm-crm_update_area_preferences",
@@ -3414,7 +3935,10 @@
 		},
 		"/api/v1/crm/renewals": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Renewals",
 				"description": "Assets \u203a Renewals: every lease in the dataset, narrowed by the tab's filters.",
 				"operationId": "crm-crm_renewals",
@@ -3571,7 +4095,10 @@
 		},
 		"/api/v1/crm/renewal-areas": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Renewal Areas",
 				"description": "List areas in the lease-expiry dataset with their leases ending in the next 90 days.",
 				"operationId": "crm-crm_renewal_areas",
@@ -3624,7 +4151,10 @@
 		},
 		"/api/v1/crm/renewal-leads": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Renewal Leads",
 				"description": "Return lease-expiry leads in the current agent's areas and windows.\n\nkind=vacant: units whose lease ended with no later lease registered (Leads \u203a Vacant units).\nkind=upcoming: leases still running (the Inbox).",
 				"operationId": "crm-crm_renewal_leads",
@@ -3713,7 +4243,10 @@
 		},
 		"/api/v1/crm/renewal-leads/{lease_id}/lead": {
 			"post": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Open Renewal Lead",
 				"description": "Open a Vitevue lease as the agency's shared lead for its unit (created on first open).",
 				"operationId": "crm-crm_open_renewal_lead",
@@ -3754,7 +4287,10 @@
 		},
 		"/api/v1/crm/leads/{lead_id}": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Lead Detail",
 				"description": "Return the evidence timeline and recommended action for one lead.",
 				"operationId": "crm-crm_lead_detail",
@@ -3812,7 +4348,10 @@
 		},
 		"/api/v1/crm/leads/{lead_id}/contacts": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Lead Contacts",
 				"description": "Return imported contacts linked to one exact lease-opportunity property.",
 				"operationId": "crm-crm_lead_contacts",
@@ -3857,7 +4396,10 @@
 		},
 		"/api/v1/crm/leads/{lead_id}/report": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Property Report",
 				"description": "Build a one-year property report with sales, rentals, and indicative analysis.",
 				"operationId": "crm-crm_property_report",
@@ -3915,7 +4457,10 @@
 		},
 		"/api/v1/crm/workspaces": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Workspaces",
 				"description": "List the current agent's persisted CRM state for queue decoration.",
 				"operationId": "crm-crm_workspaces",
@@ -3939,7 +4484,10 @@
 		},
 		"/api/v1/crm/workspaces/{lead_id}": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Lead Workspace",
 				"description": "Return status, contact enrichment, follow-up, tags, and notes for one lead.",
 				"operationId": "crm-crm_lead_workspace",
@@ -3978,7 +4526,10 @@
 				}
 			},
 			"patch": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Update Workspace",
 				"description": "Persist the current agent's working state for one lead.",
 				"operationId": "crm-crm_update_workspace",
@@ -4029,7 +4580,10 @@
 		},
 		"/api/v1/crm/workspaces/{lead_id}/notes": {
 			"post": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Add Note",
 				"description": "Add a timestamped agent note and return the refreshed workspace.",
 				"operationId": "crm-crm_add_note",
@@ -4080,7 +4634,10 @@
 		},
 		"/api/v1/crm/notes/{note_id}": {
 			"delete": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Delete Note",
 				"description": "Delete one note owned by the current user and organization.",
 				"operationId": "crm-crm_delete_note",
@@ -4114,7 +4671,10 @@
 		},
 		"/api/v1/crm/saved-leads": {
 			"get": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Saved Leads",
 				"description": "List saved CRM prospects for the current user and organization.",
 				"operationId": "crm-crm_saved_leads",
@@ -4138,7 +4698,10 @@
 		},
 		"/api/v1/crm/saved-leads/{lead_id}": {
 			"post": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Save Lead",
 				"description": "Save or refresh a CRM prospect for the current user.",
 				"operationId": "crm-crm_save_lead",
@@ -4179,7 +4742,10 @@
 		},
 		"/api/v1/crm/saved-leads/{saved_id}": {
 			"delete": {
-				"tags": ["crm", "crm"],
+				"tags": [
+					"crm",
+					"crm"
+				],
 				"summary": "Crm Delete Saved Lead",
 				"description": "Remove a prospect from the current user's saved list.",
 				"operationId": "crm-crm_delete_saved_lead",
@@ -4213,7 +4779,10 @@
 		},
 		"/api/v1/filters/sales": {
 			"get": {
-				"tags": ["filters", "filters"],
+				"tags": [
+					"filters",
+					"filters"
+				],
 				"summary": "Get Sales Filter Options",
 				"description": "Options for the DXBI sales filters, respecting the other filters already applied.",
 				"operationId": "filters-get_sales_filter_options",
@@ -4517,7 +5086,10 @@
 		},
 		"/api/v1/filters/rentals": {
 			"get": {
-				"tags": ["filters", "filters"],
+				"tags": [
+					"filters",
+					"filters"
+				],
 				"summary": "Get Rental Filter Options",
 				"description": "Options for the DXBI rental filters, respecting the other filters already applied.",
 				"operationId": "filters-get_rental_filter_options",
@@ -4785,7 +5357,10 @@
 		},
 		"/api/v1/listings": {
 			"get": {
-				"tags": ["listings", "listings"],
+				"tags": [
+					"listings",
+					"listings"
+				],
 				"summary": "List Listings",
 				"description": "List Property Finder listings from ph_box ClickHouse.",
 				"operationId": "listings-list_listings",
@@ -4795,7 +5370,10 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["sale", "rent"],
+							"enum": [
+								"sale",
+								"rent"
+							],
 							"type": "string",
 							"default": "rent",
 							"title": "Mode"
@@ -4808,7 +5386,10 @@
 						"schema": {
 							"anyOf": [
 								{
-									"enum": ["residential", "commercial"],
+									"enum": [
+										"residential",
+										"commercial"
+									],
 									"type": "string"
 								},
 								{
@@ -4970,7 +5551,10 @@
 		},
 		"/api/v1/listings/filters": {
 			"get": {
-				"tags": ["listings", "listings"],
+				"tags": [
+					"listings",
+					"listings"
+				],
 				"summary": "Listing Filters",
 				"description": "Return dropdown options independently from paginated inventory.",
 				"operationId": "listings-listing_filters",
@@ -4980,7 +5564,10 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["sale", "rent"],
+							"enum": [
+								"sale",
+								"rent"
+							],
 							"type": "string",
 							"default": "rent",
 							"title": "Mode"
@@ -4993,7 +5580,10 @@
 						"schema": {
 							"anyOf": [
 								{
-									"enum": ["residential", "commercial"],
+									"enum": [
+										"residential",
+										"commercial"
+									],
 									"type": "string"
 								},
 								{
@@ -5030,7 +5620,10 @@
 		},
 		"/api/v1/listings/analytics": {
 			"get": {
-				"tags": ["listings", "listings"],
+				"tags": [
+					"listings",
+					"listings"
+				],
 				"summary": "Listing Analytics",
 				"description": "Aggregate metrics for the current Property Finder listing filters.",
 				"operationId": "listings-listing_analytics",
@@ -5040,7 +5633,10 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["sale", "rent"],
+							"enum": [
+								"sale",
+								"rent"
+							],
 							"type": "string",
 							"default": "rent",
 							"title": "Mode"
@@ -5053,7 +5649,10 @@
 						"schema": {
 							"anyOf": [
 								{
-									"enum": ["residential", "commercial"],
+									"enum": [
+										"residential",
+										"commercial"
+									],
 									"type": "string"
 								},
 								{
@@ -5192,7 +5791,10 @@
 		},
 		"/api/v1/listings/{listing_id}": {
 			"get": {
-				"tags": ["listings", "listings"],
+				"tags": [
+					"listings",
+					"listings"
+				],
 				"summary": "Get Listing",
 				"description": "Get one Property Finder listing from ph_box ClickHouse.",
 				"operationId": "listings-get_listing",
@@ -5233,7 +5835,10 @@
 		},
 		"/api/v1/news/articles": {
 			"get": {
-				"tags": ["news", "news"],
+				"tags": [
+					"news",
+					"news"
+				],
 				"summary": "Get News",
 				"operationId": "news-get_news",
 				"parameters": [
@@ -5287,7 +5892,10 @@
 		},
 		"/api/v1/news/summary": {
 			"get": {
-				"tags": ["news", "news"],
+				"tags": [
+					"news",
+					"news"
+				],
 				"summary": "Get News Summary",
 				"operationId": "news-get_news_summary",
 				"responses": {
@@ -5306,7 +5914,10 @@
 		},
 		"/api/v1/news/articles/{article_id}/thumbnail": {
 			"get": {
-				"tags": ["news", "news"],
+				"tags": [
+					"news",
+					"news"
+				],
 				"summary": "Get News Thumbnail",
 				"operationId": "news-get_news_thumbnail",
 				"parameters": [
@@ -5344,7 +5955,10 @@
 		},
 		"/api/v1/organization/create": {
 			"post": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Create Owner Organization",
 				"description": "Create organization for owner during self-signup (before checkout).\n\nIdempotent: If user already owns an organization, updates and returns existing org_id.\nThis allows users to retry checkout after abandoning payment.",
 				"operationId": "organization-create_owner_organization",
@@ -5384,7 +5998,10 @@
 		},
 		"/api/v1/organization/members": {
 			"get": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Get Organization Members",
 				"description": "Get organization members (query from memberships table)",
 				"operationId": "organization-get_organization_members",
@@ -5408,7 +6025,10 @@
 		},
 		"/api/v1/organization/invitations": {
 			"get": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Get Organization Invitations",
 				"description": "Get pending invitations for the current organization.",
 				"operationId": "organization-get_organization_invitations",
@@ -5432,7 +6052,10 @@
 		},
 		"/api/v1/organization/invitations/{invitation_id}": {
 			"delete": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Delete Organization Invitation",
 				"description": "Cancel a pending invitation for the current organization.",
 				"operationId": "organization-delete_organization_invitation",
@@ -5473,7 +6096,10 @@
 		},
 		"/api/v1/organization/members/{user_id}": {
 			"delete": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Remove Member",
 				"description": "Remove user from organization (delete membership to free seat)",
 				"operationId": "organization-remove_member",
@@ -5514,7 +6140,10 @@
 		},
 		"/api/v1/organization/subscription": {
 			"get": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Get Organization Subscription",
 				"description": "Get organization subscription details (owner only).",
 				"operationId": "organization-get_organization_subscription",
@@ -5534,7 +6163,10 @@
 		},
 		"/api/v1/organization/customer-portal": {
 			"get": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Get Stripe Customer Portal",
 				"description": "Get Stripe Customer Portal URL (admin only).",
 				"operationId": "organization-get_stripe_customer_portal",
@@ -5554,7 +6186,10 @@
 		},
 		"/api/v1/organization/invite-user": {
 			"post": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Invite User To Organization",
 				"description": "Invite user to organization (admin only).",
 				"operationId": "organization-invite_user_to_organization",
@@ -5594,7 +6229,10 @@
 		},
 		"/api/v1/organization/validate-invite-token": {
 			"get": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Validate Invite Token",
 				"description": "Validate invitation token and return organization details.",
 				"operationId": "organization-validate_invite_token",
@@ -5635,7 +6273,10 @@
 		},
 		"/api/v1/organization/accept-invite": {
 			"post": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Accept Invite",
 				"description": "Accept organization invitation with conflict detection.",
 				"operationId": "organization-accept_invite",
@@ -5675,7 +6316,10 @@
 		},
 		"/api/v1/organization/organizations": {
 			"get": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "List Organization",
 				"description": "List all organizations with user counts (admin only).",
 				"operationId": "organization-list_organization",
@@ -5697,7 +6341,10 @@
 				}
 			},
 			"post": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Create Organization",
 				"description": "Create a new organization (admin only).",
 				"operationId": "organization-create_organization",
@@ -5737,7 +6384,10 @@
 		},
 		"/api/v1/organization/organizations/{org_id}": {
 			"get": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Get Organization",
 				"description": "Get organization details with user list (organization admin).",
 				"operationId": "organization-get_organization",
@@ -5776,7 +6426,10 @@
 				}
 			},
 			"put": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Update Organization",
 				"description": "Update organization settings (organization admin).",
 				"operationId": "organization-update_organization",
@@ -5825,7 +6478,10 @@
 				}
 			},
 			"delete": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Delete Organization",
 				"description": "Delete organization (admin only).",
 				"operationId": "organization-delete_organization",
@@ -5859,7 +6515,10 @@
 		},
 		"/api/v1/organization/users/{user_id}": {
 			"put": {
-				"tags": ["organization", "organization"],
+				"tags": [
+					"organization",
+					"organization"
+				],
 				"summary": "Update User",
 				"description": "Update user daily token limit (organization admin).",
 				"operationId": "organization-update_user",
@@ -5910,7 +6569,10 @@
 		},
 		"/api/v1/projects/delivery-summary": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "Project Delivery Summary",
 				"description": "DLD-registered projects by delivery status, developer, year or project.",
 				"operationId": "projects-project_delivery_summary",
@@ -5941,7 +6603,9 @@
 							"items": {
 								"type": "string"
 							},
-							"default": ["ACTIVE"],
+							"default": [
+								"ACTIVE"
+							],
 							"title": "Project Status"
 						}
 					},
@@ -5978,7 +6642,12 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["developer", "delivery_status", "delivery_year", "project"],
+							"enum": [
+								"developer",
+								"delivery_status",
+								"delivery_year",
+								"project"
+							],
 							"type": "string",
 							"default": "developer",
 							"title": "Group By"
@@ -6052,7 +6721,10 @@
 		},
 		"/api/v1/projects/list": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "List Projects",
 				"description": "Get all projects for client-side search",
 				"operationId": "projects-list_projects",
@@ -6076,7 +6748,10 @@
 		},
 		"/api/v1/projects/radar": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "Project Radar",
 				"description": "Get mapped project, area, and planning signals for the radar view.",
 				"operationId": "projects-project_radar",
@@ -6133,7 +6808,10 @@
 		},
 		"/api/v1/projects/radar/overview": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "Project Radar Overview",
 				"description": "Get lightweight radar stats and area heatmap data without project pins.",
 				"operationId": "projects-project_radar_overview",
@@ -6176,7 +6854,10 @@
 		},
 		"/api/v1/projects/radar/pins": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "Project Radar Pins",
 				"description": "Get bounded project pins for a viewport, selected area, or developer overlay.",
 				"operationId": "projects-project_radar_pins",
@@ -6353,7 +7034,10 @@
 		},
 		"/api/v1/projects/radar/building-pins": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "Radar Building Pins",
 				"description": "Get Property Finder tower pins and linked market evidence for a viewport.",
 				"operationId": "projects-radar_building_pins",
@@ -6466,7 +7150,10 @@
 		},
 		"/api/v1/projects/master": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "Master Project",
 				"description": "Get aggregated data for a master project and its sub-projects",
 				"operationId": "projects-master_project",
@@ -6509,7 +7196,10 @@
 		},
 		"/api/v1/projects/building/{property_id}": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "Building Details",
 				"description": "Get building details with unit composition by bedroom type",
 				"operationId": "projects-building_details",
@@ -6550,7 +7240,10 @@
 		},
 		"/api/v1/projects/dda-plots": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "Get Dda Plots",
 				"description": "Get DDA GIS plot polygons for a community or current map viewport.",
 				"operationId": "projects-get_dda_plots",
@@ -6710,7 +7403,10 @@
 		},
 		"/api/v1/projects/dda-outlines": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "Get Dda Outlines",
 				"description": "Get coarse DDA planning outlines for low-zoom map context.",
 				"operationId": "projects-get_dda_outlines",
@@ -6825,7 +7521,10 @@
 		},
 		"/api/v1/projects/{project_id}": {
 			"get": {
-				"tags": ["projects", "projects"],
+				"tags": [
+					"projects",
+					"projects"
+				],
 				"summary": "Project Details",
 				"description": "Get full project details with unit composition",
 				"operationId": "projects-project_details",
@@ -6866,7 +7565,10 @@
 		},
 		"/api/v1/supply/developer-rankings": {
 			"get": {
-				"tags": ["supply", "supply"],
+				"tags": [
+					"supply",
+					"supply"
+				],
 				"summary": "List Developer Rankings",
 				"description": "Rank developers using DLD project/transaction signals.",
 				"operationId": "supply-list_developer_rankings",
@@ -6932,7 +7634,10 @@
 		},
 		"/api/v1/supply/upcoming-projects": {
 			"get": {
-				"tags": ["supply", "supply"],
+				"tags": [
+					"supply",
+					"supply"
+				],
 				"summary": "List Upcoming Projects",
 				"description": "Get all upcoming/active projects for catalogue view.",
 				"operationId": "supply-list_upcoming_projects",
@@ -6952,7 +7657,10 @@
 		},
 		"/api/v1/supply/catalogue/projects": {
 			"get": {
-				"tags": ["supply", "supply"],
+				"tags": [
+					"supply",
+					"supply"
+				],
 				"summary": "List Catalogue Projects",
 				"description": "List the ph_box Reelly supply catalogue.",
 				"operationId": "supply-list_catalogue_projects",
@@ -7096,7 +7804,10 @@
 		},
 		"/api/v1/supply/catalogue/projects/{project_id}": {
 			"get": {
-				"tags": ["supply", "supply"],
+				"tags": [
+					"supply",
+					"supply"
+				],
 				"summary": "Get Catalogue Project",
 				"description": "Get one ph_box Reelly supply catalogue project.",
 				"operationId": "supply-get_catalogue_project",
@@ -7137,7 +7848,10 @@
 		},
 		"/api/v1/transactions/sales": {
 			"get": {
-				"tags": ["transactions", "transactions"],
+				"tags": [
+					"transactions",
+					"transactions"
+				],
 				"summary": "Get Sales Transactions",
 				"description": "DXBI sales, newest first (transaction date, then id).",
 				"operationId": "transactions-get_sales_transactions",
@@ -7468,7 +8182,10 @@
 		},
 		"/api/v1/transactions/rentals": {
 			"get": {
-				"tags": ["transactions", "transactions"],
+				"tags": [
+					"transactions",
+					"transactions"
+				],
 				"summary": "Get Rental Contracts",
 				"description": "DXBI leases, latest start first (lease start, then id).",
 				"operationId": "transactions-get_rental_contracts",
@@ -7763,7 +8480,10 @@
 		},
 		"/api/v1/transactions/sales/export": {
 			"get": {
-				"tags": ["transactions", "transactions"],
+				"tags": [
+					"transactions",
+					"transactions"
+				],
 				"summary": "Export Sales Transactions Endpoint",
 				"description": "DXBI sales as Excel or CSV: up to 50,000 filtered rows, or the selected ids.",
 				"operationId": "transactions-export_sales_transactions_endpoint",
@@ -7773,7 +8493,10 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["xlsx", "csv"],
+							"enum": [
+								"xlsx",
+								"csv"
+							],
 							"type": "string",
 							"description": "Export file format: xlsx or csv",
 							"default": "xlsx",
@@ -8091,7 +8814,10 @@
 		},
 		"/api/v1/transactions/rentals/export": {
 			"get": {
-				"tags": ["transactions", "transactions"],
+				"tags": [
+					"transactions",
+					"transactions"
+				],
 				"summary": "Export Rental Contracts Endpoint",
 				"description": "DXBI leases as Excel or CSV: up to 50,000 filtered rows, or the selected ids.",
 				"operationId": "transactions-export_rental_contracts_endpoint",
@@ -8101,7 +8827,10 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["xlsx", "csv"],
+							"enum": [
+								"xlsx",
+								"csv"
+							],
 							"type": "string",
 							"description": "Export file format: xlsx or csv",
 							"default": "xlsx",
@@ -8383,7 +9112,10 @@
 		},
 		"/api/v1/upload/chunked": {
 			"post": {
-				"tags": ["upload", "upload"],
+				"tags": [
+					"upload",
+					"upload"
+				],
 				"summary": "Upload Chunked",
 				"description": "Upload file chunks. Stores chunks to object storage for ETL node assembly.\n\nWhen all chunks are received, saves metadata.json with upload info.\nThe ETL node is responsible for downloading, assembling, and verifying.",
 				"operationId": "upload-upload_chunked",
@@ -8513,7 +9245,10 @@
 		},
 		"/api/v1/upload/news/article": {
 			"post": {
-				"tags": ["upload", "upload"],
+				"tags": [
+					"upload",
+					"upload"
+				],
 				"summary": "Upload News Article",
 				"operationId": "upload-upload_news_article",
 				"parameters": [
@@ -8563,7 +9298,10 @@
 		},
 		"/api/v1/upload/health": {
 			"get": {
-				"tags": ["upload", "upload"],
+				"tags": [
+					"upload",
+					"upload"
+				],
 				"summary": "Health",
 				"operationId": "upload-health",
 				"responses": {
@@ -8582,7 +9320,10 @@
 		},
 		"/api/v1/billing/create-checkout": {
 			"post": {
-				"tags": ["billing", "billing"],
+				"tags": [
+					"billing",
+					"billing"
+				],
 				"summary": "Create Checkout Session Endpoint",
 				"description": "Create Stripe checkout session for existing organization.\n\nOrganization must already exist (created via /organization/create).\nUser profile (first_name/last_name) must be set in auth metadata.",
 				"operationId": "billing-create_checkout_session_endpoint",
@@ -8622,7 +9363,10 @@
 		},
 		"/api/v1/billing/sync-after-checkout": {
 			"post": {
-				"tags": ["billing", "billing"],
+				"tags": [
+					"billing",
+					"billing"
+				],
 				"summary": "Sync After Checkout Endpoint",
 				"description": "Eager sync after checkout success.",
 				"operationId": "billing-sync_after_checkout_endpoint",
@@ -8662,7 +9406,10 @@
 		},
 		"/api/v1/webhooks/stripe": {
 			"post": {
-				"tags": ["webhooks", "webhooks"],
+				"tags": [
+					"webhooks",
+					"webhooks"
+				],
 				"summary": "Stripe Webhook",
 				"description": "Stripe webhook: treat Stripe as source of truth and sync Postgres from Stripe.",
 				"operationId": "webhooks-stripe_webhook",
@@ -8682,7 +9429,10 @@
 		},
 		"/api/v1/admin/organizations": {
 			"get": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "List All Organizations",
 				"description": "List all organizations with stats.",
 				"operationId": "admin-list_all_organizations",
@@ -8706,7 +9456,10 @@
 		},
 		"/api/v1/admin/organizations/{org_id}": {
 			"get": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "Get Organization",
 				"description": "Get organization details with members.",
 				"operationId": "admin-get_organization",
@@ -8745,7 +9498,10 @@
 				}
 			},
 			"put": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "Update Org",
 				"description": "Update organization settings.",
 				"operationId": "admin-update_org",
@@ -8794,7 +9550,10 @@
 				}
 			},
 			"delete": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "Delete Org",
 				"description": "Delete organization and all memberships.",
 				"operationId": "admin-delete_org",
@@ -8828,7 +9587,10 @@
 		},
 		"/api/v1/admin/organizations/{org_id}/subscription": {
 			"patch": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "Set Subscription Status",
 				"description": "Update organization subscription status.",
 				"operationId": "admin-set_subscription_status",
@@ -8879,7 +9641,10 @@
 		},
 		"/api/v1/admin/token-usage": {
 			"get": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "List Token Usage",
 				"description": "List today's token usage for all users.",
 				"operationId": "admin-list_token_usage",
@@ -8903,7 +9668,10 @@
 		},
 		"/api/v1/admin/users": {
 			"post": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "Create User",
 				"description": "Create a Supabase user and assign to an org (new or existing).",
 				"operationId": "admin-create_user",
@@ -8943,7 +9711,10 @@
 		},
 		"/api/v1/admin/users/{user_id}": {
 			"get": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "Get User Details",
 				"description": "Get user details.",
 				"operationId": "admin-get_user_details",
@@ -8982,7 +9753,10 @@
 				}
 			},
 			"patch": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "Update User",
 				"description": "Update user settings.",
 				"operationId": "admin-update_user",
@@ -9031,7 +9805,10 @@
 				}
 			},
 			"delete": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "Delete User",
 				"description": "Delete user from Supabase and remove org membership.",
 				"operationId": "admin-delete_user",
@@ -9065,7 +9842,10 @@
 		},
 		"/api/v1/admin/organizations/{organization_id}/members": {
 			"get": {
-				"tags": ["admin", "admin"],
+				"tags": [
+					"admin",
+					"admin"
+				],
 				"summary": "List Organization Members",
 				"description": "List all members in an organization.",
 				"operationId": "admin-list_organization_members",
@@ -9110,7 +9890,10 @@
 		},
 		"/api/v1/feasibility/areas": {
 			"get": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Areas Endpoint",
 				"description": "Get all distinct transaction areas with sales activity.",
 				"operationId": "feasibility-areas_endpoint",
@@ -9134,7 +9917,10 @@
 		},
 		"/api/v1/feasibility/communities": {
 			"get": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Communities Endpoint",
 				"description": "Get GIS plot communities ordered by activity.",
 				"operationId": "feasibility-communities_endpoint",
@@ -9158,7 +9944,10 @@
 		},
 		"/api/v1/feasibility/studies": {
 			"get": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Studies Endpoint",
 				"description": "List saved feasibility studies for the authenticated user and organization.",
 				"operationId": "feasibility-studies_endpoint",
@@ -9180,7 +9969,10 @@
 				}
 			},
 			"post": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Create Study Endpoint",
 				"description": "Create a saved feasibility study from the selected plot and generated snapshots.",
 				"operationId": "feasibility-create_study_endpoint",
@@ -9220,7 +10012,10 @@
 		},
 		"/api/v1/feasibility/studies/{study_id}": {
 			"get": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Get Study Endpoint",
 				"description": "Get a saved feasibility study owned by the current user and organization.",
 				"operationId": "feasibility-get_study_endpoint",
@@ -9259,7 +10054,10 @@
 				}
 			},
 			"patch": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Update Study Endpoint",
 				"description": "Patch saved feasibility study inputs and metadata.",
 				"operationId": "feasibility-update_study_endpoint",
@@ -9308,7 +10106,10 @@
 				}
 			},
 			"delete": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Delete Study Endpoint",
 				"description": "Delete a saved feasibility study owned by the current user and organization.",
 				"operationId": "feasibility-delete_study_endpoint",
@@ -9342,7 +10143,10 @@
 		},
 		"/api/v1/feasibility/plots": {
 			"get": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Plots Endpoint",
 				"description": "Search GIS plots by plot number, project, community, and plot area.",
 				"operationId": "feasibility-plots_endpoint",
@@ -9455,7 +10259,10 @@
 		},
 		"/api/v1/feasibility/plots/{plot_number}": {
 			"get": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Plot Details Endpoint",
 				"description": "Get full GIS-backed plot data for feasibility and HBU analysis.",
 				"operationId": "feasibility-plot_details_endpoint",
@@ -9496,7 +10303,10 @@
 		},
 		"/api/v1/feasibility/hbu/{plot_number}": {
 			"post": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Generate Hbu Endpoint",
 				"description": "Generate an agent-authored initial HBU study for the selected GIS plot.",
 				"operationId": "feasibility-generate_hbu_endpoint",
@@ -9517,7 +10327,12 @@
 						"schema": {
 							"anyOf": [
 								{
-									"enum": ["residential", "commercial", "mixed_use", "unknown"],
+									"enum": [
+										"residential",
+										"commercial",
+										"mixed_use",
+										"unknown"
+									],
 									"type": "string"
 								},
 								{
@@ -9554,7 +10369,10 @@
 		},
 		"/api/v1/feasibility/plots/{plot_number}/land-sales": {
 			"get": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Plot Land Sales Endpoint",
 				"description": "Get recent land sale evidence for the selected GIS plot area.",
 				"operationId": "feasibility-plot_land_sales_endpoint",
@@ -9623,7 +10441,10 @@
 		},
 		"/api/v1/feasibility/land": {
 			"get": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Land Endpoint",
 				"description": "Find land plots near a given size in the specified area.",
 				"operationId": "feasibility-land_endpoint",
@@ -9689,7 +10510,10 @@
 		},
 		"/api/v1/feasibility/land/search": {
 			"get": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Land Search Endpoint",
 				"description": "Legacy plot search alias backed by GIS plot data.",
 				"operationId": "feasibility-land_search_endpoint",
@@ -9744,7 +10568,10 @@
 		},
 		"/api/v1/feasibility/comparable": {
 			"get": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Comparable Endpoint",
 				"description": "Get aggregated comparable data for a set of projects.",
 				"operationId": "feasibility-comparable_endpoint",
@@ -9787,7 +10614,10 @@
 		},
 		"/api/v1/feasibility/generate-study": {
 			"post": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Generate Study Endpoint",
 				"description": "Generate an initial feasibility study for the selected GIS plot.",
 				"operationId": "feasibility-generate_study_endpoint",
@@ -9827,7 +10657,10 @@
 		},
 		"/api/v1/feasibility/chat/stream": {
 			"post": {
-				"tags": ["feasibility", "feasibility"],
+				"tags": [
+					"feasibility",
+					"feasibility"
+				],
 				"summary": "Chat Stream Endpoint",
 				"description": "Stream LLM feasibility assistant response via SSE.",
 				"operationId": "feasibility-chat_stream_endpoint",
@@ -9887,7 +10720,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["token"],
+				"required": [
+					"token"
+				],
 				"title": "AcceptInviteRequest",
 				"description": "Request to accept invitation"
 			},
@@ -9911,7 +10746,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["success", "organization_id", "organization_name", "role"],
+				"required": [
+					"success",
+					"organization_id",
+					"organization_name",
+					"role"
+				],
 				"title": "AcceptInviteResponse",
 				"description": "Response for accepting invitation"
 			},
@@ -10061,7 +10901,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["rooms", "count", "pct_of_total"],
+				"required": [
+					"rooms",
+					"count",
+					"pct_of_total"
+				],
 				"title": "AnalyticsUnitComposition"
 			},
 			"AreaDetailResponse": {
@@ -10474,7 +11318,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["areas", "total", "limit", "offset", "sort_by"],
+				"required": [
+					"areas",
+					"total",
+					"limit",
+					"offset",
+					"sort_by"
+				],
 				"title": "AreaListResponse"
 			},
 			"AreaProjectSnapshot": {
@@ -10689,11 +11539,33 @@
 						"maxLength": 200,
 						"title": "Name",
 						"default": ""
+					},
+					"mapping_json": {
+						"type": "string",
+						"maxLength": 50000,
+						"title": "Mapping Json",
+						"default": ""
 					}
 				},
 				"type": "object",
-				"required": ["file"],
+				"required": [
+					"file"
+				],
 				"title": "Body_crm-crm_contact_import"
+			},
+			"Body_crm-crm_contact_import_preview": {
+				"properties": {
+					"file": {
+						"type": "string",
+						"format": "binary",
+						"title": "File"
+					}
+				},
+				"type": "object",
+				"required": [
+					"file"
+				],
+				"title": "Body_crm-crm_contact_import_preview"
 			},
 			"Body_crm-crm_inbound_import": {
 				"properties": {
@@ -10722,7 +11594,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["file"],
+				"required": [
+					"file"
+				],
 				"title": "Body_crm-crm_inbound_import"
 			},
 			"Body_crm-crm_preview_inbound_import": {
@@ -10740,8 +11614,30 @@
 					}
 				},
 				"type": "object",
-				"required": ["file"],
+				"required": [
+					"file"
+				],
 				"title": "Body_crm-crm_preview_inbound_import"
+			},
+			"Body_crm-crm_source_only_import": {
+				"properties": {
+					"file": {
+						"type": "string",
+						"format": "binary",
+						"title": "File"
+					},
+					"name": {
+						"type": "string",
+						"maxLength": 200,
+						"title": "Name",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"required": [
+					"file"
+				],
+				"title": "Body_crm-crm_source_only_import"
 			},
 			"Body_upload-upload_chunked": {
 				"properties": {
@@ -10752,7 +11648,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["chunk"],
+				"required": [
+					"chunk"
+				],
 				"title": "Body_upload-upload_chunked"
 			},
 			"BtrUnitConfig": {
@@ -10787,7 +11685,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "label"],
+				"required": [
+					"id",
+					"label"
+				],
 				"title": "BtrUnitConfig"
 			},
 			"BuildingDetailResponse": {
@@ -10897,7 +11798,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["property_id", "building_number", "building_name", "floors"],
+				"required": [
+					"property_id",
+					"building_number",
+					"building_name",
+					"floors"
+				],
 				"title": "BuildingInfo",
 				"description": "Building with property_id for drilldown"
 			},
@@ -10950,7 +11856,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["building_id", "name"],
+				"required": [
+					"building_id",
+					"name"
+				],
 				"title": "BuildingStock",
 				"description": "One building of a project, with its registered units."
 			},
@@ -10981,7 +11890,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["rooms_en", "count", "percentage", "avg_area_sqft"],
+				"required": [
+					"rooms_en",
+					"count",
+					"percentage",
+					"avg_area_sqft"
+				],
 				"title": "BuildingUnitType",
 				"description": "Bedroom/type breakdown for a specific building"
 			},
@@ -11002,7 +11916,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["organization_id", "seats", "price_tier"],
+				"required": [
+					"organization_id",
+					"seats",
+					"price_tier"
+				],
 				"title": "CheckoutSessionRequest",
 				"description": "Request to create a Stripe checkout session (org must exist)"
 			},
@@ -11022,7 +11940,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["checkout_url", "session_id", "organization_id"],
+				"required": [
+					"checkout_url",
+					"session_id",
+					"organization_id"
+				],
 				"title": "CheckoutSessionResponse",
 				"description": "Response containing Stripe checkout URL"
 			},
@@ -11133,7 +12055,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["status"],
+				"required": [
+					"status"
+				],
 				"title": "ChunkedUploadResponse"
 			},
 			"ComparableData": {
@@ -11219,7 +12143,10 @@
 					},
 					"comparison_type": {
 						"type": "string",
-						"enum": ["pricing", "pipeline"],
+						"enum": [
+							"pricing",
+							"pipeline"
+						],
 						"title": "Comparison Type"
 					},
 					"score": {
@@ -11301,7 +12228,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["project_id", "project_name", "area_name", "comparison_type", "score"],
+				"required": [
+					"project_id",
+					"project_name",
+					"area_name",
+					"comparison_type",
+					"score"
+				],
 				"title": "ComparableProject"
 			},
 			"ConversationListResponse": {
@@ -11319,7 +12252,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["conversations", "total"],
+				"required": [
+					"conversations",
+					"total"
+				],
 				"title": "ConversationListResponse",
 				"description": "Response model for list of conversations"
 			},
@@ -11356,7 +12292,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "user_id", "title", "created_at", "updated_at"],
+				"required": [
+					"id",
+					"user_id",
+					"title",
+					"created_at",
+					"updated_at"
+				],
 				"title": "ConversationResponse",
 				"description": "Response model for conversation data"
 			},
@@ -11399,7 +12341,10 @@
 					},
 					"org_mode": {
 						"type": "string",
-						"enum": ["new", "existing"],
+						"enum": [
+							"new",
+							"existing"
+						],
 						"title": "Org Mode"
 					},
 					"org_name": {
@@ -11431,7 +12376,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["email", "password", "first_name", "last_name", "org_mode"],
+				"required": [
+					"email",
+					"password",
+					"first_name",
+					"last_name",
+					"org_mode"
+				],
 				"title": "CreateUserRequest"
 			},
 			"CreateUserResponse": {
@@ -11454,7 +12405,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["user_id", "email", "organization_id", "organization_name"],
+				"required": [
+					"user_id",
+					"email",
+					"organization_id",
+					"organization_name"
+				],
 				"title": "CreateUserResponse"
 			},
 			"CrmAreaPreferencesResponse": {
@@ -11495,7 +12451,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["areas"],
+				"required": [
+					"areas"
+				],
 				"title": "CrmAreaPreferencesResponse"
 			},
 			"CrmAreaPreferencesUpdate": {
@@ -11524,14 +12482,20 @@
 					}
 				},
 				"type": "object",
-				"required": ["areas"],
+				"required": [
+					"areas"
+				],
 				"title": "CrmAreaPreferencesUpdate"
 			},
 			"CrmAssetBreakdownItem": {
 				"properties": {
 					"asset_class": {
 						"type": "string",
-						"enum": ["residential", "commercial", "other"],
+						"enum": [
+							"residential",
+							"commercial",
+							"other"
+						],
 						"title": "Asset Class"
 					},
 					"total": {
@@ -11724,6 +12688,7 @@
 							"probable_current_owner",
 							"unit_linked_unverified",
 							"former_owner",
+							"unverified_former_owner",
 							"conflicting_claim",
 							"insufficient_property_data",
 							"registry_not_observed",
@@ -11834,6 +12799,59 @@
 						},
 						"type": "array",
 						"title": "Source Rows"
+					},
+					"match_outcome": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Match Outcome"
+					},
+					"match_colour": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"green",
+									"amber",
+									"blue",
+									"red",
+									"grey"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Match Colour"
+					},
+					"match_reasons": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Match Reasons"
+					},
+					"match_warnings": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Match Warnings"
+					},
+					"matched_sale": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmMatchedSale"
+							},
+							{
+								"type": "null"
+							}
+						]
 					}
 				},
 				"type": "object",
@@ -11854,6 +12872,19 @@
 				],
 				"title": "CrmContactClaimResponse"
 			},
+			"CrmContactImportPreview": {
+				"properties": {
+					"sheets": {
+						"items": {
+							"$ref": "#/components/schemas/CrmSheetPreview"
+						},
+						"type": "array",
+						"title": "Sheets"
+					}
+				},
+				"type": "object",
+				"title": "CrmContactImportPreview"
+			},
 			"CrmContactImportRename": {
 				"properties": {
 					"name": {
@@ -11864,7 +12895,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["name"],
+				"required": [
+					"name"
+				],
 				"title": "CrmContactImportRename"
 			},
 			"CrmContactImportResponse": {
@@ -11894,7 +12927,13 @@
 					},
 					"status": {
 						"type": "string",
-						"enum": ["processing", "completed", "failed"],
+						"enum": [
+							"queued",
+							"processing",
+							"retry_wait",
+							"completed",
+							"failed"
+						],
 						"title": "Status"
 					},
 					"summary": {
@@ -11937,11 +12976,38 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "name", "original_filename", "status", "summary", "created_at"],
+				"required": [
+					"id",
+					"name",
+					"original_filename",
+					"status",
+					"summary",
+					"created_at"
+				],
 				"title": "CrmContactImportResponse"
 			},
 			"CrmContactImportSummary": {
 				"properties": {
+					"owner_match": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmOwnerMatchSummary"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"source_audit": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmSourceAuditSummary"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
 					"total_rows": {
 						"type": "integer",
 						"title": "Total Rows",
@@ -11983,6 +13049,17 @@
 							}
 						],
 						"title": "Rows With Sales History"
+					},
+					"properties_linked_rows": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Properties Linked Rows"
 					},
 					"plot_only_rows": {
 						"anyOf": [
@@ -12028,6 +13105,11 @@
 					"former_owners": {
 						"type": "integer",
 						"title": "Former Owners",
+						"default": 0
+					},
+					"unverified_former_owners": {
+						"type": "integer",
+						"title": "Unverified Former Owners",
 						"default": 0
 					},
 					"conflicting_claims": {
@@ -12102,7 +13184,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["list", "contacts", "total", "limit", "offset"],
+				"required": [
+					"list",
+					"contacts",
+					"total",
+					"limit",
+					"offset"
+				],
 				"title": "CrmContactListDetail"
 			},
 			"CrmContactListSummary": {
@@ -12169,7 +13257,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "name", "created_at", "updated_at"],
+				"required": [
+					"id",
+					"name",
+					"created_at",
+					"updated_at"
+				],
 				"title": "CrmContactListSummary"
 			},
 			"CrmCoverage": {
@@ -12239,7 +13332,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["rental_source", "matching_method", "caveat"],
+				"required": [
+					"rental_source",
+					"matching_method",
+					"caveat"
+				],
 				"title": "CrmCoverage"
 			},
 			"CrmDashboardResponse": {
@@ -12323,7 +13420,12 @@
 					},
 					"reason": {
 						"type": "string",
-						"enum": ["no_name", "not_buyer_seller", "not_a_sale", "no_unit"],
+						"enum": [
+							"no_name",
+							"not_buyer_seller",
+							"not_a_sale",
+							"no_unit"
+						],
 						"title": "Reason"
 					},
 					"name": {
@@ -12363,7 +13465,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["sheet", "row", "reason"],
+				"required": [
+					"sheet",
+					"row",
+					"reason"
+				],
 				"title": "CrmDroppedRow",
 				"description": "A row the import did not keep, with the file's own values and why it was dropped."
 			},
@@ -12401,7 +13507,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["available", "total", "offset", "limit", "by_reason", "rows"],
+				"required": [
+					"available",
+					"total",
+					"offset",
+					"limit",
+					"by_reason",
+					"rows"
+				],
 				"title": "CrmDroppedRowsResponse"
 			},
 			"CrmFilters": {
@@ -12461,7 +13574,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["total", "offset", "limit", "rows"],
+				"required": [
+					"total",
+					"offset",
+					"limit",
+					"rows"
+				],
 				"title": "CrmImportPropertiesResponse"
 			},
 			"CrmImportProperty": {
@@ -12542,6 +13660,11 @@
 						},
 						"type": "array",
 						"title": "Records"
+					},
+					"records_truncated": {
+						"type": "boolean",
+						"title": "Records Truncated",
+						"default": false
 					}
 				},
 				"type": "object",
@@ -12636,7 +13759,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["name", "role", "status", "sheet", "row"],
+				"required": [
+					"name",
+					"role",
+					"status",
+					"sheet",
+					"row"
+				],
 				"title": "CrmImportPropertyRecord",
 				"description": "One retained source event; sale_date is the legacy API name for its date."
 			},
@@ -12722,7 +13851,11 @@
 					},
 					"asset_class": {
 						"type": "string",
-						"enum": ["residential", "commercial", "other"],
+						"enum": [
+							"residential",
+							"commercial",
+							"other"
+						],
 						"title": "Asset Class",
 						"default": "other"
 					},
@@ -12957,12 +14090,21 @@
 					},
 					"status": {
 						"type": "string",
-						"enum": ["expired", "expiring_30", "expiring_60", "expiring_90"],
+						"enum": [
+							"expired",
+							"expiring_30",
+							"expiring_60",
+							"expiring_90"
+						],
 						"title": "Status"
 					},
 					"priority": {
 						"type": "string",
-						"enum": ["urgent", "high", "medium"],
+						"enum": [
+							"urgent",
+							"high",
+							"medium"
+						],
 						"title": "Priority"
 					},
 					"score": {
@@ -12977,7 +14119,11 @@
 					},
 					"match_confidence": {
 						"type": "string",
-						"enum": ["high", "medium", "low"],
+						"enum": [
+							"high",
+							"medium",
+							"low"
+						],
 						"title": "Match Confidence"
 					},
 					"property_identity_key": {
@@ -13054,6 +14200,16 @@
 					"lead": {
 						"$ref": "#/components/schemas/CrmLead"
 					},
+					"owner": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmRenewalOwner"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
 					"timeline": {
 						"items": {
 							"$ref": "#/components/schemas/CrmTimelineEvent"
@@ -13086,7 +14242,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["lead", "timeline", "next_best_actions", "match_explanation", "generated_at"],
+				"required": [
+					"lead",
+					"timeline",
+					"next_best_actions",
+					"match_explanation",
+					"generated_at"
+				],
 				"title": "CrmLeadDetailResponse"
 			},
 			"CrmLeadImportedContact": {
@@ -13147,6 +14309,7 @@
 							"probable_current_owner",
 							"unit_linked_unverified",
 							"former_owner",
+							"unverified_former_owner",
 							"conflicting_claim",
 							"insufficient_property_data",
 							"registry_not_observed",
@@ -13230,8 +14393,72 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "body", "created_at", "updated_at"],
+				"required": [
+					"id",
+					"body",
+					"created_at",
+					"updated_at"
+				],
 				"title": "CrmLeadNoteResponse"
+			},
+			"CrmMatchedSale": {
+				"properties": {
+					"unit": {
+						"type": "string",
+						"title": "Unit",
+						"default": ""
+					},
+					"building": {
+						"type": "string",
+						"title": "Building",
+						"default": ""
+					},
+					"project": {
+						"type": "string",
+						"title": "Project",
+						"default": ""
+					},
+					"area": {
+						"type": "string",
+						"title": "Area",
+						"default": ""
+					},
+					"amount_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Amount Aed"
+					},
+					"date": {
+						"type": "string",
+						"title": "Date",
+						"default": ""
+					},
+					"sqft": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sqft"
+					},
+					"source": {
+						"type": "string",
+						"title": "Source",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"title": "CrmMatchedSale",
+				"description": "The sale a row was matched to: a DXBI event or a Transactions (DLD) row."
 			},
 			"CrmNoteCreate": {
 				"properties": {
@@ -13243,7 +14470,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["body"],
+				"required": [
+					"body"
+				],
 				"title": "CrmNoteCreate"
 			},
 			"CrmOwnerBulkUpdate": {
@@ -13282,7 +14511,14 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["none", "amber", "green", "blue", "red", "purple"]
+								"enum": [
+									"none",
+									"amber",
+									"green",
+									"blue",
+									"red",
+									"purple"
+								]
 							},
 							{
 								"type": "null"
@@ -13304,11 +14540,421 @@
 					}
 				},
 				"type": "object",
-				"required": ["owner_keys"],
+				"required": [
+					"owner_keys"
+				],
 				"title": "CrmOwnerBulkUpdate"
+			},
+			"CrmOwnerHistoryEvent": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"import_id": {
+						"type": "integer",
+						"title": "Import Id"
+					},
+					"source_filename": {
+						"type": "string",
+						"title": "Source Filename"
+					},
+					"source_sheet": {
+						"type": "string",
+						"title": "Source Sheet"
+					},
+					"source_row_number": {
+						"type": "integer",
+						"title": "Source Row Number"
+					},
+					"contact_name": {
+						"type": "string",
+						"title": "Contact Name"
+					},
+					"property_key": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Property Key"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"building_name": {
+						"type": "string",
+						"title": "Building Name"
+					},
+					"unit_number": {
+						"type": "string",
+						"title": "Unit Number"
+					},
+					"property_type": {
+						"type": "string",
+						"title": "Property Type"
+					},
+					"party_role": {
+						"type": "string",
+						"title": "Party Role"
+					},
+					"procedure_type": {
+						"type": "string",
+						"title": "Procedure Type"
+					},
+					"event_family": {
+						"type": "string",
+						"title": "Event Family"
+					},
+					"transaction_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Transaction Date"
+					},
+					"transaction_price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Transaction Price Aed"
+					},
+					"observed_ownership_status": {
+						"type": "string",
+						"enum": [
+							"verified_current_owner",
+							"probable_current_owner",
+							"unit_linked_unverified",
+							"former_owner",
+							"unverified_former_owner",
+							"conflicting_claim",
+							"insufficient_property_data",
+							"registry_not_observed",
+							"unmatched"
+						],
+						"title": "Observed Ownership Status"
+					},
+					"current_ownership_status": {
+						"type": "string",
+						"enum": [
+							"verified_current_owner",
+							"probable_current_owner",
+							"unit_linked_unverified",
+							"former_owner",
+							"unverified_former_owner",
+							"conflicting_claim",
+							"insufficient_property_data",
+							"registry_not_observed",
+							"unmatched"
+						],
+						"title": "Current Ownership Status"
+					},
+					"confidence_score": {
+						"type": "integer",
+						"title": "Confidence Score"
+					},
+					"evidence_reason": {
+						"type": "string",
+						"title": "Evidence Reason"
+					},
+					"current_evidence_reason": {
+						"type": "string",
+						"title": "Current Evidence Reason"
+					},
+					"resolver_version": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Resolver Version"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"import_id",
+					"source_filename",
+					"source_sheet",
+					"source_row_number",
+					"contact_name",
+					"area_name",
+					"project_name",
+					"building_name",
+					"unit_number",
+					"property_type",
+					"party_role",
+					"procedure_type",
+					"event_family",
+					"observed_ownership_status",
+					"current_ownership_status",
+					"confidence_score",
+					"evidence_reason",
+					"current_evidence_reason"
+				],
+				"title": "CrmOwnerHistoryEvent"
+			},
+			"CrmOwnerHistoryResponse": {
+				"properties": {
+					"owner_key": {
+						"type": "string",
+						"title": "Owner Key"
+					},
+					"summary": {
+						"$ref": "#/components/schemas/CrmOwnerHistorySummary"
+					},
+					"events": {
+						"items": {
+							"$ref": "#/components/schemas/CrmOwnerHistoryEvent"
+						},
+						"type": "array",
+						"title": "Events"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": [
+					"owner_key",
+					"summary",
+					"events",
+					"total",
+					"limit",
+					"offset"
+				],
+				"title": "CrmOwnerHistoryResponse"
+			},
+			"CrmOwnerHistorySummary": {
+				"properties": {
+					"source_event_count": {
+						"type": "integer",
+						"title": "Source Event Count"
+					},
+					"identifiable_property_count": {
+						"type": "integer",
+						"title": "Identifiable Property Count"
+					},
+					"owner_property_count": {
+						"type": "integer",
+						"title": "Owner Property Count"
+					},
+					"verified_current_count": {
+						"type": "integer",
+						"title": "Verified Current Count"
+					},
+					"probable_current_count": {
+						"type": "integer",
+						"title": "Probable Current Count"
+					},
+					"former_count": {
+						"type": "integer",
+						"title": "Former Count"
+					},
+					"unresolved_count": {
+						"type": "integer",
+						"title": "Unresolved Count"
+					},
+					"invalid_identity_source_count": {
+						"type": "integer",
+						"title": "Invalid Identity Source Count"
+					},
+					"legacy_source_event_count": {
+						"type": "integer",
+						"title": "Legacy Source Event Count"
+					},
+					"resolver_versions": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Resolver Versions"
+					},
+					"unverified_former_count": {
+						"type": "integer",
+						"title": "Unverified Former Count",
+						"default": 0
+					},
+					"checked_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Checked At"
+					},
+					"warehouse_status": {
+						"type": "string",
+						"enum": [
+							"available",
+							"unavailable",
+							"not_requested"
+						],
+						"title": "Warehouse Status",
+						"default": "unavailable"
+					},
+					"assessment_version": {
+						"type": "string",
+						"title": "Assessment Version",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"required": [
+					"source_event_count",
+					"identifiable_property_count",
+					"owner_property_count",
+					"verified_current_count",
+					"probable_current_count",
+					"former_count",
+					"unresolved_count",
+					"invalid_identity_source_count",
+					"legacy_source_event_count",
+					"resolver_versions"
+				],
+				"title": "CrmOwnerHistorySummary",
+				"description": "Source rows and evidence associations, not a legal ownership guarantee."
+			},
+			"CrmOwnerMatchSales": {
+				"properties": {
+					"transactions": {
+						"type": "integer",
+						"title": "Transactions",
+						"default": 0
+					},
+					"registry": {
+						"type": "integer",
+						"title": "Registry",
+						"default": 0
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"title": "CrmOwnerMatchSales",
+				"description": "Distinct sales that confirmed rows are tied to, by where the sale came from."
+			},
+			"CrmOwnerMatchSummary": {
+				"properties": {
+					"version": {
+						"type": "string",
+						"title": "Version"
+					},
+					"rows": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Rows"
+					},
+					"units": {
+						"$ref": "#/components/schemas/CrmOwnerMatchUnits"
+					},
+					"rows_without_unit": {
+						"type": "integer",
+						"title": "Rows Without Unit"
+					},
+					"review_reasons": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Review Reasons"
+					},
+					"sales_matched": {
+						"$ref": "#/components/schemas/CrmOwnerMatchSales"
+					}
+				},
+				"type": "object",
+				"required": [
+					"version",
+					"rows",
+					"units",
+					"rows_without_unit"
+				],
+				"title": "CrmOwnerMatchSummary",
+				"description": "What the property-first matcher made of an import's rows."
+			},
+			"CrmOwnerMatchUnits": {
+				"properties": {
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"confirmed": {
+						"type": "integer",
+						"title": "Confirmed"
+					},
+					"review": {
+						"type": "integer",
+						"title": "Review"
+					},
+					"property_only": {
+						"type": "integer",
+						"title": "Property Only"
+					},
+					"not_matched": {
+						"type": "integer",
+						"title": "Not Matched"
+					}
+				},
+				"type": "object",
+				"required": [
+					"total",
+					"confirmed",
+					"review",
+					"property_only",
+					"not_matched"
+				],
+				"title": "CrmOwnerMatchUnits",
+				"description": "Distinct units (building or project label + identifier keys) by their best row's tier."
 			},
 			"CrmOwnerProfile": {
 				"properties": {
+					"phone_numbers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Phone Numbers"
+					},
 					"owner_key": {
 						"type": "string",
 						"title": "Owner Key"
@@ -13357,6 +15003,7 @@
 							"probable_current_owner",
 							"unit_linked_unverified",
 							"former_owner",
+							"unverified_former_owner",
 							"conflicting_claim",
 							"insufficient_property_data",
 							"registry_not_observed",
@@ -13402,6 +15049,54 @@
 						},
 						"type": "array",
 						"title": "Properties"
+					},
+					"history_summary": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmOwnerHistorySummary"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"relationship_role": {
+						"type": "string",
+						"enum": [
+							"unknown",
+							"possible_intermediary",
+							"organization"
+						],
+						"title": "Relationship Role",
+						"default": "unknown"
+					},
+					"role_signals": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Role Signals"
+					},
+					"developer_side_seller": {
+						"type": "boolean",
+						"title": "Developer Side Seller",
+						"default": false
+					},
+					"current_property_count": {
+						"type": "integer",
+						"title": "Current Property Count",
+						"default": 0
+					},
+					"total_property_count": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Total Property Count"
 					}
 				},
 				"type": "object",
@@ -13419,6 +15114,16 @@
 			},
 			"CrmOwnerProperty": {
 				"properties": {
+					"source_reference": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmOwnerSourceReference"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
 					"property_key": {
 						"type": "string",
 						"title": "Property Key"
@@ -13450,6 +15155,7 @@
 							"probable_current_owner",
 							"unit_linked_unverified",
 							"former_owner",
+							"unverified_former_owner",
 							"conflicting_claim",
 							"insufficient_property_data",
 							"registry_not_observed",
@@ -13736,9 +15442,26 @@
 			},
 			"CrmOwnerRegistryResponse": {
 				"properties": {
+					"source_audit": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmSourceAuditSummary"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
 					"scope": {
 						"type": "string",
-						"enum": ["all", "rental_ready", "registry", "prior_owners"],
+						"enum": [
+							"all",
+							"current_owners",
+							"rental_ready",
+							"registry",
+							"prior_owners",
+							"needs_review"
+						],
 						"title": "Scope"
 					},
 					"owners": {
@@ -13765,7 +15488,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["scope", "owners", "total", "limit", "offset", "summary"],
+				"required": [
+					"scope",
+					"owners",
+					"total",
+					"limit",
+					"offset",
+					"summary"
+				],
 				"title": "CrmOwnerRegistryResponse"
 			},
 			"CrmOwnerRegistrySummary": {
@@ -13799,6 +15529,95 @@
 				"type": "object",
 				"title": "CrmOwnerRegistrySummary"
 			},
+			"CrmOwnerSourceReference": {
+				"properties": {
+					"transaction_match_status": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"matched",
+									"unmatched",
+									"ambiguous",
+									"excluded"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Transaction Match Status"
+					},
+					"ownership_evidence_basis": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"transaction_supported",
+									"workbook_only"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Ownership Evidence Basis"
+					},
+					"reference_id": {
+						"type": "string",
+						"title": "Reference Id"
+					},
+					"kind": {
+						"type": "string",
+						"title": "Kind"
+					},
+					"source_key": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Source Key"
+					},
+					"building_number": {
+						"type": "string",
+						"title": "Building Number",
+						"default": ""
+					},
+					"land_number": {
+						"type": "string",
+						"title": "Land Number",
+						"default": ""
+					},
+					"dm_sub_number": {
+						"type": "string",
+						"title": "Dm Sub Number",
+						"default": ""
+					},
+					"size_sqm": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Sqm"
+					},
+					"disposition": {
+						"type": "string",
+						"title": "Disposition"
+					}
+				},
+				"type": "object",
+				"required": [
+					"reference_id",
+					"kind",
+					"source_key",
+					"disposition"
+				],
+				"title": "CrmOwnerSourceReference"
+			},
 			"CrmOwnerWorkspaceSummary": {
 				"properties": {
 					"owner_key": {
@@ -13821,7 +15640,14 @@
 					},
 					"highlight_color": {
 						"type": "string",
-						"enum": ["none", "amber", "green", "blue", "red", "purple"],
+						"enum": [
+							"none",
+							"amber",
+							"green",
+							"blue",
+							"red",
+							"purple"
+						],
 						"title": "Highlight Color"
 					},
 					"next_follow_up": {
@@ -13866,8 +15692,37 @@
 					}
 				},
 				"type": "object",
-				"required": ["owner_key", "pipeline_status", "highlight_color", "updated_at"],
+				"required": [
+					"owner_key",
+					"pipeline_status",
+					"highlight_color",
+					"updated_at"
+				],
 				"title": "CrmOwnerWorkspaceSummary"
+			},
+			"CrmPreviewColumn": {
+				"properties": {
+					"header": {
+						"type": "string",
+						"title": "Header"
+					},
+					"field": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Field"
+					}
+				},
+				"type": "object",
+				"required": [
+					"header"
+				],
+				"title": "CrmPreviewColumn"
 			},
 			"CrmPriceIndex": {
 				"properties": {
@@ -14063,7 +15918,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["quarter", "label", "dubai_index"],
+				"required": [
+					"quarter",
+					"label",
+					"dubai_index"
+				],
 				"title": "CrmPriceIndexPoint"
 			},
 			"CrmPropertyReportResponse": {
@@ -14146,7 +16005,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["area", "upcoming_90_days"],
+				"required": [
+					"area",
+					"upcoming_90_days"
+				],
 				"title": "CrmRenewalArea"
 			},
 			"CrmRenewalLead": {
@@ -14177,7 +16039,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["lead"],
+				"required": [
+					"lead"
+				],
 				"title": "CrmRenewalLead"
 			},
 			"CrmRenewalLeadsResponse": {
@@ -14215,7 +16079,15 @@
 					}
 				},
 				"type": "object",
-				"required": ["items", "total", "limit", "offset", "entered_today", "preferences", "as_of"],
+				"required": [
+					"items",
+					"total",
+					"limit",
+					"offset",
+					"entered_today",
+					"preferences",
+					"as_of"
+				],
 				"title": "CrmRenewalLeadsResponse"
 			},
 			"CrmRenewalOwner": {
@@ -14255,14 +16127,19 @@
 					},
 					"source": {
 						"type": "string",
-						"enum": ["workspace", "owner_import"],
+						"enum": [
+							"workspace",
+							"owner_import"
+						],
 						"title": "Source"
 					}
 				},
 				"type": "object",
-				"required": ["source"],
+				"required": [
+					"source"
+				],
 				"title": "CrmRenewalOwner",
-				"description": "Owner contact for a renewal lead, only when entered by the agent or import-matched."
+				"description": "A manual owner or one unambiguous, verified imported owner."
 			},
 			"CrmRenewalsResponse": {
 				"properties": {
@@ -14313,7 +16190,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["leads", "total", "limit", "offset", "as_of"],
+				"required": [
+					"leads",
+					"total",
+					"limit",
+					"offset",
+					"as_of"
+				],
 				"title": "CrmRenewalsResponse",
 				"description": "Assets \u203a Renewals: one page of the lease-expiry dataset and the options for its filters."
 			},
@@ -14542,12 +16425,20 @@
 					},
 					"confidence": {
 						"type": "string",
-						"enum": ["high", "medium", "low"],
+						"enum": [
+							"high",
+							"medium",
+							"low"
+						],
 						"title": "Confidence"
 					}
 				},
 				"type": "object",
-				"required": ["sales_selection_basis", "rental_selection_basis", "confidence"],
+				"required": [
+					"sales_selection_basis",
+					"rental_selection_basis",
+					"confidence"
+				],
 				"title": "CrmReportAnalysis"
 			},
 			"CrmSaleComparable": {
@@ -14642,7 +16533,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "lead", "created_at", "updated_at"],
+				"required": [
+					"id",
+					"lead",
+					"created_at",
+					"updated_at"
+				],
 				"title": "CrmSavedLeadResponse"
 			},
 			"CrmSheetMapping": {
@@ -14665,7 +16561,13 @@
 					},
 					"mapping_source": {
 						"type": "string",
-						"enum": ["heuristic", "llm", "heuristic_fallback"],
+						"enum": [
+							"heuristic",
+							"llm",
+							"reused",
+							"override",
+							"heuristic_fallback"
+						],
 						"title": "Mapping Source"
 					},
 					"confidence": {
@@ -14699,6 +16601,133 @@
 					"confidence"
 				],
 				"title": "CrmSheetMapping"
+			},
+			"CrmSheetPreview": {
+				"properties": {
+					"sheet_name": {
+						"type": "string",
+						"title": "Sheet Name"
+					},
+					"rows": {
+						"type": "integer",
+						"title": "Rows"
+					},
+					"columns": {
+						"items": {
+							"$ref": "#/components/schemas/CrmPreviewColumn"
+						},
+						"type": "array",
+						"title": "Columns"
+					},
+					"mapped_at_import": {
+						"type": "boolean",
+						"title": "Mapped At Import",
+						"default": false
+					}
+				},
+				"type": "object",
+				"required": [
+					"sheet_name",
+					"rows"
+				],
+				"title": "CrmSheetPreview"
+			},
+			"CrmSourceAuditSummary": {
+				"properties": {
+					"mode": {
+						"type": "string",
+						"enum": [
+							"source_only",
+							"source_transaction_matched"
+						],
+						"title": "Mode",
+						"default": "source_only"
+					},
+					"matched_reference_count": {
+						"type": "integer",
+						"title": "Matched Reference Count",
+						"default": 0
+					},
+					"matched_registry_property_count": {
+						"type": "integer",
+						"title": "Matched Registry Property Count",
+						"default": 0
+					},
+					"unmatched_reference_count": {
+						"type": "integer",
+						"title": "Unmatched Reference Count",
+						"default": 0
+					},
+					"ambiguous_reference_count": {
+						"type": "integer",
+						"title": "Ambiguous Reference Count",
+						"default": 0
+					},
+					"excluded_match_reference_count": {
+						"type": "integer",
+						"title": "Excluded Match Reference Count",
+						"default": 0
+					},
+					"current_owner_association_count": {
+						"type": "integer",
+						"title": "Current Owner Association Count",
+						"default": 0
+					},
+					"former_owner_association_count": {
+						"type": "integer",
+						"title": "Former Owner Association Count",
+						"default": 0
+					},
+					"import_count": {
+						"type": "integer",
+						"title": "Import Count",
+						"default": 0
+					},
+					"reference_count": {
+						"type": "integer",
+						"title": "Reference Count",
+						"default": 0
+					},
+					"owner_candidate_reference_count": {
+						"type": "integer",
+						"title": "Owner Candidate Reference Count",
+						"default": 0
+					},
+					"bank_reference_count": {
+						"type": "integer",
+						"title": "Bank Reference Count",
+						"default": 0
+					},
+					"excluded_nonownership_reference_count": {
+						"type": "integer",
+						"title": "Excluded Nonownership Reference Count",
+						"default": 0
+					},
+					"review_reference_count": {
+						"type": "integer",
+						"title": "Review Reference Count",
+						"default": 0
+					},
+					"excluded_scope_reference_count": {
+						"type": "integer",
+						"title": "Excluded Scope Reference Count",
+						"default": 0
+					},
+					"source_row_count": {
+						"type": "integer",
+						"title": "Source Row Count",
+						"default": 0
+					},
+					"disposition_counts": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Disposition Counts"
+					}
+				},
+				"type": "object",
+				"title": "CrmSourceAuditSummary"
 			},
 			"CrmSourcePropertyCounts": {
 				"properties": {
@@ -14823,7 +16852,10 @@
 					},
 					"event_type": {
 						"type": "string",
-						"enum": ["lease", "sale"],
+						"enum": [
+							"lease",
+							"sale"
+						],
 						"title": "Event Type"
 					},
 					"event_date": {
@@ -14868,7 +16900,11 @@
 					},
 					"confidence": {
 						"type": "string",
-						"enum": ["high", "medium", "low"],
+						"enum": [
+							"high",
+							"medium",
+							"low"
+						],
 						"title": "Confidence"
 					},
 					"ltv_pct": {
@@ -14943,7 +16979,14 @@
 					},
 					"highlight_color": {
 						"type": "string",
-						"enum": ["none", "amber", "green", "blue", "red", "purple"],
+						"enum": [
+							"none",
+							"amber",
+							"green",
+							"blue",
+							"red",
+							"purple"
+						],
 						"title": "Highlight Color"
 					},
 					"owner_name": {
@@ -15063,7 +17106,14 @@
 					},
 					"highlight_color": {
 						"type": "string",
-						"enum": ["none", "amber", "green", "blue", "red", "purple"],
+						"enum": [
+							"none",
+							"amber",
+							"green",
+							"blue",
+							"red",
+							"purple"
+						],
 						"title": "Highlight Color"
 					},
 					"owner_name": {
@@ -15166,7 +17216,14 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["none", "amber", "green", "blue", "red", "purple"]
+								"enum": [
+									"none",
+									"amber",
+									"green",
+									"blue",
+									"red",
+									"purple"
+								]
 							},
 							{
 								"type": "null"
@@ -15249,7 +17306,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["url"],
+				"required": [
+					"url"
+				],
 				"title": "CustomerPortalResponse",
 				"description": "Response containing Stripe Customer Portal URL"
 			},
@@ -15587,7 +17646,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["group", "project_count", "units", "projects_without_units"],
+				"required": [
+					"group",
+					"project_count",
+					"units",
+					"projects_without_units"
+				],
 				"title": "DeliveryGroupRow"
 			},
 			"DeliverySummaryResponse": {
@@ -15744,7 +17808,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["key", "label", "weight_pct", "available"],
+				"required": [
+					"key",
+					"label",
+					"weight_pct",
+					"available"
+				],
 				"title": "DeveloperRankingCriterionResponse"
 			},
 			"DeveloperRankingResponse": {
@@ -15988,7 +18057,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["rankings", "summary"],
+				"required": [
+					"rankings",
+					"summary"
+				],
 				"title": "DeveloperRankingsResponse"
 			},
 			"DimensionBreakdown": {
@@ -16022,7 +18094,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["dimension_value", "transaction_count", "total_volume", "avg_price_sqft"],
+				"required": [
+					"dimension_value",
+					"transaction_count",
+					"total_volume",
+					"avg_price_sqft"
+				],
 				"title": "DimensionBreakdown",
 				"description": "Breakdown by a specific dimension (property_type, rooms, etc.)"
 			},
@@ -16030,7 +18107,12 @@
 				"properties": {
 					"usage": {
 						"type": "string",
-						"enum": ["residential", "commercial", "mixed_use", "unknown"],
+						"enum": [
+							"residential",
+							"commercial",
+							"mixed_use",
+							"unknown"
+						],
 						"title": "Usage",
 						"default": "unknown"
 					},
@@ -16257,7 +18339,10 @@
 					},
 					"debtRepaymentMode": {
 						"type": "string",
-						"enum": ["bullet_at_handover", "sales_sweep"],
+						"enum": [
+							"bullet_at_handover",
+							"sales_sweep"
+						],
 						"title": "Debtrepaymentmode"
 					},
 					"unitConfigs": {
@@ -16445,7 +18530,11 @@
 					},
 					"selectedScenario": {
 						"type": "string",
-						"enum": ["base", "conservative", "optimistic"],
+						"enum": [
+							"base",
+							"conservative",
+							"optimistic"
+						],
 						"title": "Selectedscenario",
 						"default": "base"
 					},
@@ -16740,7 +18829,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["messages", "plot_data", "assumptions"],
+				"required": [
+					"messages",
+					"plot_data",
+					"assumptions"
+				],
 				"title": "FeasibilityChatRequest"
 			},
 			"FeasibilityChatState": {
@@ -16771,7 +18864,11 @@
 				"properties": {
 					"role": {
 						"type": "string",
-						"enum": ["user", "assistant", "system"],
+						"enum": [
+							"user",
+							"assistant",
+							"system"
+						],
 						"title": "Role"
 					},
 					"content": {
@@ -16791,7 +18888,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["role", "content"],
+				"required": [
+					"role",
+					"content"
+				],
 				"title": "FeasibilityChatStateMessage"
 			},
 			"FeasibilityPaymentPlan": {
@@ -16997,7 +19097,12 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["residential", "commercial", "mixed_use", "unknown"]
+								"enum": [
+									"residential",
+									"commercial",
+									"mixed_use",
+									"unknown"
+								]
 							},
 							{
 								"type": "null"
@@ -17017,7 +19122,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["name", "plot_number"],
+				"required": [
+					"name",
+					"plot_number"
+				],
 				"title": "FeasibilityStudyCreateRequest"
 			},
 			"FeasibilityStudyUpdateRequest": {
@@ -17141,7 +19249,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "label", "units", "avgSizeSqm", "sellingRatePsqm"],
+				"required": [
+					"id",
+					"label",
+					"units",
+					"avgSizeSqm",
+					"sellingRatePsqm"
+				],
 				"title": "FeasibilityUnitConfig"
 			},
 			"FeasibilityVatApplicability": {
@@ -17260,7 +19374,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["type", "use"],
+				"required": [
+					"type",
+					"use"
+				],
 				"title": "GISLandUse"
 			},
 			"GenerateStudyRequest": {
@@ -17273,7 +19390,12 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["residential", "commercial", "mixed_use", "unknown"]
+								"enum": [
+									"residential",
+									"commercial",
+									"mixed_use",
+									"unknown"
+								]
 							},
 							{
 								"type": "null"
@@ -17299,7 +19421,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["plot_number"],
+				"required": [
+					"plot_number"
+				],
 				"title": "GenerateStudyRequest"
 			},
 			"GenerateStudyResponse": {
@@ -17328,7 +19452,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["plot_data", "assumptions", "research", "study_context"],
+				"required": [
+					"plot_data",
+					"assumptions",
+					"research",
+					"study_context"
+				],
 				"title": "GenerateStudyResponse"
 			},
 			"GeoPin": {
@@ -17395,7 +19524,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["building_name", "project_name", "latitude", "longitude"],
+				"required": [
+					"building_name",
+					"project_name",
+					"latitude",
+					"longitude"
+				],
 				"title": "GeoPin",
 				"description": "Geocoded pin for map display"
 			},
@@ -17413,7 +19547,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["coordinates"],
+				"required": [
+					"coordinates"
+				],
 				"title": "GeoPolygon",
 				"description": "Geographic polygon (area boundaries)"
 			},
@@ -17438,14 +19574,22 @@
 					}
 				},
 				"type": "object",
-				"required": ["status"],
+				"required": [
+					"status"
+				],
 				"title": "HealthResponse"
 			},
 			"InboundActivityCreate": {
 				"properties": {
 					"activity_type": {
 						"type": "string",
-						"enum": ["contact_attempt", "call", "email", "whatsapp", "meeting"],
+						"enum": [
+							"contact_attempt",
+							"call",
+							"email",
+							"whatsapp",
+							"meeting"
+						],
 						"title": "Activity Type"
 					},
 					"body": {
@@ -17462,7 +19606,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["activity_type"],
+				"required": [
+					"activity_type"
+				],
 				"title": "InboundActivityCreate"
 			},
 			"InboundActivityResponse": {
@@ -17502,7 +19648,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "activity_type", "user_id", "created_at"],
+				"required": [
+					"id",
+					"activity_type",
+					"user_id",
+					"created_at"
+				],
 				"title": "InboundActivityResponse"
 			},
 			"InboundContactResponse": {
@@ -17587,20 +19738,34 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "full_name", "consent_status", "do_not_contact"],
+				"required": [
+					"id",
+					"full_name",
+					"consent_status",
+					"do_not_contact"
+				],
 				"title": "InboundContactResponse"
 			},
 			"InboundEnquiryCreate": {
 				"properties": {
 					"intent": {
 						"type": "string",
-						"enum": ["unknown", "buy", "rent", "sell", "let"],
+						"enum": [
+							"unknown",
+							"buy",
+							"rent",
+							"sell",
+							"let"
+						],
 						"title": "Intent",
 						"default": "unknown"
 					},
 					"record_kind": {
 						"type": "string",
-						"enum": ["unqualified_contact", "opportunity"],
+						"enum": [
+							"unqualified_contact",
+							"opportunity"
+						],
 						"title": "Record Kind",
 						"default": "unqualified_contact"
 					},
@@ -17707,7 +19872,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["full_name"],
+				"required": [
+					"full_name"
+				],
 				"title": "InboundEnquiryCreate"
 			},
 			"InboundEnquiryListResponse": {
@@ -17732,7 +19899,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["enquiries", "total", "summary"],
+				"required": [
+					"enquiries",
+					"total",
+					"summary"
+				],
 				"title": "InboundEnquiryListResponse"
 			},
 			"InboundEnquiryResponse": {
@@ -17746,12 +19917,21 @@
 					},
 					"record_kind": {
 						"type": "string",
-						"enum": ["unqualified_contact", "opportunity"],
+						"enum": [
+							"unqualified_contact",
+							"opportunity"
+						],
 						"title": "Record Kind"
 					},
 					"intent": {
 						"type": "string",
-						"enum": ["unknown", "buy", "rent", "sell", "let"],
+						"enum": [
+							"unknown",
+							"buy",
+							"rent",
+							"sell",
+							"let"
+						],
 						"title": "Intent"
 					},
 					"status": {
@@ -17936,7 +20116,12 @@
 					},
 					"sla_state": {
 						"type": "string",
-						"enum": ["on_time", "due_soon", "overdue", "responded"],
+						"enum": [
+							"on_time",
+							"due_soon",
+							"overdue",
+							"responded"
+						],
 						"title": "Sla State"
 					},
 					"qualification_complete": {
@@ -18022,7 +20207,13 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["unknown", "buy", "rent", "sell", "let"]
+								"enum": [
+									"unknown",
+									"buy",
+									"rent",
+									"sell",
+									"let"
+								]
 							},
 							{
 								"type": "null"
@@ -18061,7 +20252,10 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["unqualified_contact", "opportunity"]
+								"enum": [
+									"unqualified_contact",
+									"opportunity"
+								]
 							},
 							{
 								"type": "null"
@@ -18186,7 +20380,11 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["unknown", "provided", "withdrawn"]
+								"enum": [
+									"unknown",
+									"provided",
+									"withdrawn"
+								]
 							},
 							{
 								"type": "null"
@@ -18287,7 +20485,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["original_filename", "size_bytes", "total_rows", "sheets"],
+				"required": [
+					"original_filename",
+					"size_bytes",
+					"total_rows",
+					"sheets"
+				],
 				"title": "InboundImportPreviewResponse"
 			},
 			"InboundImportPreviewSheet": {
@@ -18331,13 +20534,21 @@
 					},
 					"mapping_source": {
 						"type": "string",
-						"enum": ["deterministic", "ai_assisted"],
+						"enum": [
+							"deterministic",
+							"ai_assisted"
+						],
 						"title": "Mapping Source",
 						"default": "deterministic"
 					}
 				},
 				"type": "object",
-				"required": ["sheet", "header_row", "headers", "field_map"],
+				"required": [
+					"sheet",
+					"header_row",
+					"headers",
+					"field_map"
+				],
 				"title": "InboundImportPreviewSheet"
 			},
 			"InboundImportResponse": {
@@ -18356,7 +20567,13 @@
 					},
 					"status": {
 						"type": "string",
-						"enum": ["processing", "completed", "failed"],
+						"enum": [
+							"queued",
+							"processing",
+							"retry_wait",
+							"completed",
+							"failed"
+						],
 						"title": "Status"
 					},
 					"summary": {
@@ -18397,7 +20614,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "name", "original_filename", "status", "summary", "created_at"],
+				"required": [
+					"id",
+					"name",
+					"original_filename",
+					"status",
+					"summary",
+					"created_at"
+				],
 				"title": "InboundImportResponse"
 			},
 			"InboundImportSummary": {
@@ -18494,7 +20718,13 @@
 					},
 					"target_type": {
 						"type": "string",
-						"enum": ["owner", "unit", "listing", "project", "demand"],
+						"enum": [
+							"owner",
+							"unit",
+							"listing",
+							"project",
+							"demand"
+						],
 						"title": "Target Type"
 					},
 					"target_key": {
@@ -18503,12 +20733,23 @@
 					},
 					"state": {
 						"type": "string",
-						"enum": ["suggested", "saved", "dismissed", "contacted", "stale"],
+						"enum": [
+							"suggested",
+							"saved",
+							"dismissed",
+							"contacted",
+							"stale"
+						],
 						"title": "State"
 					},
 					"fit": {
 						"type": "string",
-						"enum": ["exact", "near", "review", "outside"],
+						"enum": [
+							"exact",
+							"near",
+							"review",
+							"outside"
+						],
 						"title": "Fit"
 					},
 					"title": {
@@ -18564,12 +20805,20 @@
 				"properties": {
 					"state": {
 						"type": "string",
-						"enum": ["suggested", "saved", "dismissed", "contacted", "stale"],
+						"enum": [
+							"suggested",
+							"saved",
+							"dismissed",
+							"contacted",
+							"stale"
+						],
 						"title": "State"
 					}
 				},
 				"type": "object",
-				"required": ["state"],
+				"required": [
+					"state"
+				],
 				"title": "InboundMatchUpdate"
 			},
 			"InboundMatchesResponse": {
@@ -18623,7 +20872,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["enquiry_id", "listing_fresh", "lanes"],
+				"required": [
+					"enquiry_id",
+					"listing_fresh",
+					"lanes"
+				],
 				"title": "InboundMatchesResponse"
 			},
 			"InboundNoteCreate": {
@@ -18636,7 +20889,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["body"],
+				"required": [
+					"body"
+				],
 				"title": "InboundNoteCreate"
 			},
 			"InboundNoteResponse": {
@@ -18660,7 +20915,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "body", "user_id", "created_at"],
+				"required": [
+					"id",
+					"body",
+					"user_id",
+					"created_at"
+				],
 				"title": "InboundNoteResponse"
 			},
 			"InboundOwnershipEnrichmentResponse": {
@@ -18672,13 +20932,22 @@
 					},
 					"match_basis": {
 						"type": "string",
-						"enum": ["phone", "email", "name", "none"],
+						"enum": [
+							"phone",
+							"email",
+							"name",
+							"none"
+						],
 						"title": "Match Basis",
 						"default": "none"
 					},
 					"verification": {
 						"type": "string",
-						"enum": ["contact_exact", "name_only", "none"],
+						"enum": [
+							"contact_exact",
+							"name_only",
+							"none"
+						],
 						"title": "Verification",
 						"default": "none"
 					},
@@ -18742,7 +21011,11 @@
 				"properties": {
 					"band": {
 						"type": "string",
-						"enum": ["high", "medium", "standard"],
+						"enum": [
+							"high",
+							"medium",
+							"standard"
+						],
 						"title": "Band",
 						"default": "standard"
 					},
@@ -18785,7 +21058,11 @@
 					},
 					"identity_strength": {
 						"type": "string",
-						"enum": ["exact", "possible", "weak"],
+						"enum": [
+							"exact",
+							"possible",
+							"weak"
+						],
 						"title": "Identity Strength"
 					},
 					"identity_reason": {
@@ -18974,7 +21251,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["email"],
+				"required": [
+					"email"
+				],
 				"title": "InviteUserRequest",
 				"description": "Request to invite a user to an organization"
 			},
@@ -18990,7 +21269,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["success", "invitation_token"],
+				"required": [
+					"success",
+					"invitation_token"
+				],
 				"title": "InviteUserResponse",
 				"description": "Response after creating an organization invitation"
 			},
@@ -19197,12 +21479,18 @@
 					},
 					"listing_mode": {
 						"type": "string",
-						"enum": ["sale", "rent"],
+						"enum": [
+							"sale",
+							"rent"
+						],
 						"title": "Listing Mode"
 					},
 					"asset_class": {
 						"type": "string",
-						"enum": ["residential", "commercial"],
+						"enum": [
+							"residential",
+							"commercial"
+						],
 						"title": "Asset Class"
 					},
 					"title": {
@@ -19519,7 +21807,12 @@
 					},
 					"market_position": {
 						"type": "string",
-						"enum": ["below_market", "near_market", "above_market", "insufficient_data"],
+						"enum": [
+							"below_market",
+							"near_market",
+							"above_market",
+							"insufficient_data"
+						],
 						"title": "Market Position",
 						"default": "insufficient_data"
 					},
@@ -19530,13 +21823,21 @@
 					},
 					"benchmark_level": {
 						"type": "string",
-						"enum": ["building_layout", "project_layout", "insufficient_data"],
+						"enum": [
+							"building_layout",
+							"project_layout",
+							"insufficient_data"
+						],
 						"title": "Benchmark Level",
 						"default": "insufficient_data"
 					},
 					"urgency_signal": {
 						"type": "string",
-						"enum": ["explicit_urgency", "value_language", "none"],
+						"enum": [
+							"explicit_urgency",
+							"value_language",
+							"none"
+						],
 						"title": "Urgency Signal",
 						"default": "none"
 					},
@@ -19604,7 +21905,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["listing_id", "listing_mode", "asset_class", "title"],
+				"required": [
+					"listing_id",
+					"listing_mode",
+					"asset_class",
+					"title"
+				],
 				"title": "ListingCardResponse"
 			},
 			"ListingDetailResponse": {
@@ -19615,12 +21921,18 @@
 					},
 					"listing_mode": {
 						"type": "string",
-						"enum": ["sale", "rent"],
+						"enum": [
+							"sale",
+							"rent"
+						],
 						"title": "Listing Mode"
 					},
 					"asset_class": {
 						"type": "string",
-						"enum": ["residential", "commercial"],
+						"enum": [
+							"residential",
+							"commercial"
+						],
 						"title": "Asset Class"
 					},
 					"title": {
@@ -19937,7 +22249,12 @@
 					},
 					"market_position": {
 						"type": "string",
-						"enum": ["below_market", "near_market", "above_market", "insufficient_data"],
+						"enum": [
+							"below_market",
+							"near_market",
+							"above_market",
+							"insufficient_data"
+						],
 						"title": "Market Position",
 						"default": "insufficient_data"
 					},
@@ -19948,13 +22265,21 @@
 					},
 					"benchmark_level": {
 						"type": "string",
-						"enum": ["building_layout", "project_layout", "insufficient_data"],
+						"enum": [
+							"building_layout",
+							"project_layout",
+							"insufficient_data"
+						],
 						"title": "Benchmark Level",
 						"default": "insufficient_data"
 					},
 					"urgency_signal": {
 						"type": "string",
-						"enum": ["explicit_urgency", "value_language", "none"],
+						"enum": [
+							"explicit_urgency",
+							"value_language",
+							"none"
+						],
 						"title": "Urgency Signal",
 						"default": "none"
 					},
@@ -20196,7 +22521,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["listing_id", "listing_mode", "asset_class", "title"],
+				"required": [
+					"listing_id",
+					"listing_mode",
+					"asset_class",
+					"title"
+				],
 				"title": "ListingDetailResponse"
 			},
 			"ListingFiltersResponse": {
@@ -20204,7 +22534,10 @@
 					"modes": {
 						"items": {
 							"type": "string",
-							"enum": ["sale", "rent"]
+							"enum": [
+								"sale",
+								"rent"
+							]
 						},
 						"type": "array",
 						"title": "Modes"
@@ -20212,7 +22545,10 @@
 					"asset_classes": {
 						"items": {
 							"type": "string",
-							"enum": ["residential", "commercial"]
+							"enum": [
+								"residential",
+								"commercial"
+							]
 						},
 						"type": "array",
 						"title": "Asset Classes"
@@ -20423,7 +22759,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["listings", "total", "limit", "offset"],
+				"required": [
+					"listings",
+					"total",
+					"limit",
+					"offset"
+				],
 				"title": "ListingListResponse"
 			},
 			"ListingPartyResponse": {
@@ -20611,14 +22952,21 @@
 					}
 				},
 				"type": "object",
-				"required": ["period"],
+				"required": [
+					"period"
+				],
 				"title": "ListingTrendPoint"
 			},
 			"MarketCoverage": {
 				"properties": {
 					"status": {
 						"type": "string",
-						"enum": ["complete", "partial", "unverified", "unavailable"],
+						"enum": [
+							"complete",
+							"partial",
+							"unverified",
+							"unavailable"
+						],
 						"title": "Status"
 					},
 					"data_from": {
@@ -20708,7 +23056,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["status", "note"],
+				"required": [
+					"status",
+					"note"
+				],
 				"title": "MarketCoverage",
 				"description": "Load evidence for the period's days, from the served release's coverage record.\n\nverified: the source window holding the day was read to the end of its result set (or\nthe archive it came from is attested), so a day without records is a true zero.\npartial: the load covering the day stopped inside its window. unverified: no load\nevidence; records may exist but absence proves nothing. complete = every day verified;\nunavailable = no evidence and no records."
 			},
@@ -20726,12 +23077,20 @@
 					},
 					"status": {
 						"type": "string",
-						"enum": ["verified", "partial", "unverified"],
+						"enum": [
+							"verified",
+							"partial",
+							"unverified"
+						],
 						"title": "Status"
 					}
 				},
 				"type": "object",
-				"required": ["start", "end", "status"],
+				"required": [
+					"start",
+					"end",
+					"status"
+				],
 				"title": "MarketCoverageRange"
 			},
 			"MarketLocationMatch": {
@@ -20765,7 +23124,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["area", "master_project", "records"],
+				"required": [
+					"area",
+					"master_project",
+					"records"
+				],
 				"title": "MarketLocationMatch",
 				"description": "Raw source names of matched rows and the canonical place the crosswalk gave them."
 			},
@@ -20785,7 +23148,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["name", "unit", "definition"],
+				"required": [
+					"name",
+					"unit",
+					"definition"
+				],
 				"title": "MarketMetricDefinition"
 			},
 			"MarketMetricRow": {
@@ -20841,7 +23208,11 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["verified", "partial", "unverified"]
+								"enum": [
+									"verified",
+									"partial",
+									"unverified"
+								]
 							},
 							{
 								"type": "null"
@@ -20857,7 +23228,10 @@
 				"properties": {
 					"dataset": {
 						"type": "string",
-						"enum": ["sales", "rentals"],
+						"enum": [
+							"sales",
+							"rentals"
+						],
 						"title": "Dataset"
 					},
 					"metrics": {
@@ -20947,7 +23321,10 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["residential", "commercial"]
+								"enum": [
+									"residential",
+									"commercial"
+								]
 							},
 							{
 								"type": "null"
@@ -20960,7 +23337,16 @@
 							{
 								"items": {
 									"type": "string",
-									"enum": ["studio", "1", "2", "3", "4", "5", "6", "7"]
+									"enum": [
+										"studio",
+										"1",
+										"2",
+										"3",
+										"4",
+										"5",
+										"6",
+										"7"
+									]
 								},
 								"type": "array",
 								"maxItems": 8
@@ -20975,7 +23361,10 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["off_plan", "ready"]
+								"enum": [
+									"off_plan",
+									"ready"
+								]
 							},
 							{
 								"type": "null"
@@ -20988,7 +23377,10 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["new", "renewed"]
+								"enum": [
+									"new",
+									"renewed"
+								]
 							},
 							{
 								"type": "null"
@@ -21142,7 +23534,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["dataset", "period"],
+				"required": [
+					"dataset",
+					"period"
+				],
 				"title": "MarketMetricsRequest",
 				"description": "Sales or rental metrics over served canonical records (DLD + reconciled DXBI)."
 			},
@@ -21150,7 +23545,10 @@
 				"properties": {
 					"dataset": {
 						"type": "string",
-						"enum": ["sales", "rentals"],
+						"enum": [
+							"sales",
+							"rentals"
+						],
 						"title": "Dataset"
 					},
 					"period": {
@@ -21376,7 +23774,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["type"],
+				"required": [
+					"type"
+				],
 				"title": "MarketPeriodRequest",
 				"description": "A calendar period, resolved in the Asia/Dubai business timezone.\n\nprevious_month: the calendar month before the reference date's month (\"last month\").\nprevious_quarter: the calendar quarter before (\"last quarter\").\nprevious_months: `months` complete calendar months ending with the previous month.\nmonth / quarter: explicit \"YYYY-MM\" / \"YYYY-Qn\".\nrolling_days: `days` calendar days ending on the reference date (\"last 90 days\").\nrange: explicit inclusive start/end."
 			},
@@ -21407,7 +23807,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["unit_type", "transaction_count", "median_price_sqm"],
+				"required": [
+					"unit_type",
+					"transaction_count",
+					"median_price_sqm"
+				],
 				"title": "MarketPricingRow"
 			},
 			"MarketResolvedPeriod": {
@@ -21441,7 +23845,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["start", "end", "label", "type", "reference_date", "timezone"],
+				"required": [
+					"start",
+					"end",
+					"label",
+					"type",
+					"reference_date",
+					"timezone"
+				],
 				"title": "MarketResolvedPeriod"
 			},
 			"MarketTrendPoint": {
@@ -21472,7 +23883,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["date", "transaction_count", "avg_price"],
+				"required": [
+					"date",
+					"transaction_count",
+					"avg_price"
+				],
 				"title": "MarketTrendPoint",
 				"description": "Single data point for the market trend chart"
 			},
@@ -21513,7 +23928,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["data", "total_transactions"],
+				"required": [
+					"data",
+					"total_transactions"
+				],
 				"title": "MarketTrendResponse",
 				"description": "Response for the market trend chart endpoint"
 			},
@@ -21691,7 +24109,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "conversation_id", "role", "content", "created_at"],
+				"required": [
+					"id",
+					"conversation_id",
+					"role",
+					"content",
+					"created_at"
+				],
 				"title": "MessageResponse",
 				"description": "Response model for message data"
 			},
@@ -21741,7 +24165,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["url", "headline"],
+				"required": [
+					"url",
+					"headline"
+				],
 				"title": "NewsArticleCreate"
 			},
 			"NewsArticleResponse": {
@@ -21787,7 +24214,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "url", "headline", "thumbnail_url", "thumbnail_base64", "publish_date"],
+				"required": [
+					"id",
+					"url",
+					"headline",
+					"thumbnail_url",
+					"thumbnail_base64",
+					"publish_date"
+				],
 				"title": "NewsArticleResponse"
 			},
 			"NewsArticleUploadRequest": {
@@ -21797,7 +24231,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["article"],
+				"required": [
+					"article"
+				],
 				"title": "NewsArticleUploadRequest"
 			},
 			"NewsArticleUploadResponse": {
@@ -21822,7 +24258,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["created", "message"],
+				"required": [
+					"created",
+					"message"
+				],
 				"title": "NewsArticleUploadResponse"
 			},
 			"NewsListResponse": {
@@ -21848,7 +24287,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["articles", "total", "limit", "offset"],
+				"required": [
+					"articles",
+					"total",
+					"limit",
+					"offset"
+				],
 				"title": "NewsListResponse"
 			},
 			"NewsSummaryResponse": {
@@ -21870,7 +24314,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["macro", "real_estate", "generated_at", "article_count"],
+				"required": [
+					"macro",
+					"real_estate",
+					"generated_at",
+					"article_count"
+				],
 				"title": "NewsSummaryResponse"
 			},
 			"NewsSummarySection": {
@@ -21888,7 +24337,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["title"],
+				"required": [
+					"title"
+				],
 				"title": "NewsSummarySection"
 			},
 			"OffPlanPricingConfidence": {
@@ -21907,7 +24358,11 @@
 					},
 					"confidence_label": {
 						"type": "string",
-						"enum": ["high", "medium", "low"],
+						"enum": [
+							"high",
+							"medium",
+							"low"
+						],
 						"title": "Confidence Label"
 					},
 					"sample_score": {
@@ -22028,7 +24483,11 @@
 					},
 					"confidence_label": {
 						"type": "string",
-						"enum": ["high", "medium", "low"],
+						"enum": [
+							"high",
+							"medium",
+							"low"
+						],
 						"title": "Confidence Label"
 					},
 					"sample_score": {
@@ -22083,7 +24542,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["success"],
+				"required": [
+					"success"
+				],
 				"title": "OperationSuccessResponse"
 			},
 			"OrgDetailResponse": {
@@ -22216,7 +24677,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["name", "owner_id"],
+				"required": [
+					"name",
+					"owner_id"
+				],
 				"title": "OrganizationCreateRequest"
 			},
 			"OrganizationDetailResponse": {
@@ -22233,7 +24697,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["organization", "users"],
+				"required": [
+					"organization",
+					"users"
+				],
 				"title": "OrganizationDetailResponse"
 			},
 			"OrganizationInvitationResponse": {
@@ -22266,7 +24733,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "email", "role", "status", "expires_at", "created_at"],
+				"required": [
+					"id",
+					"email",
+					"role",
+					"status",
+					"expires_at",
+					"created_at"
+				],
 				"title": "OrganizationInvitationResponse",
 				"description": "Pending invitation response for organization settings."
 			},
@@ -22371,7 +24845,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "name", "max_users"],
+				"required": [
+					"id",
+					"name",
+					"max_users"
+				],
 				"title": "OrganizationResponse"
 			},
 			"OrganizationUpdateRequest": {
@@ -22382,7 +24860,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["max_users"],
+				"required": [
+					"max_users"
+				],
 				"title": "OrganizationUpdateRequest"
 			},
 			"OrganizationUserDetailResponse": {
@@ -22470,7 +24950,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["name", "max_users"],
+				"required": [
+					"name",
+					"max_users"
+				],
 				"title": "OwnerOrganizationCreateRequest",
 				"description": "Request for owner to create organization during self-signup"
 			},
@@ -22494,7 +24977,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["organization_id", "name", "max_users", "is_new"],
+				"required": [
+					"organization_id",
+					"name",
+					"max_users",
+					"is_new"
+				],
 				"title": "OwnerOrganizationCreateResponse",
 				"description": "Response after creating organization"
 			},
@@ -22514,7 +25002,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["status", "organization_id", "seats"],
+				"required": [
+					"status",
+					"organization_id",
+					"seats"
+				],
 				"title": "PaymentSyncResponse",
 				"description": "Payment sync response"
 			},
@@ -22640,7 +25132,12 @@
 					},
 					"inferred_usage": {
 						"type": "string",
-						"enum": ["residential", "commercial", "mixed_use", "unknown"],
+						"enum": [
+							"residential",
+							"commercial",
+							"mixed_use",
+							"unknown"
+						],
 						"title": "Inferred Usage"
 					},
 					"site_plan_issue_date": {
@@ -22743,7 +25240,12 @@
 					},
 					"usage": {
 						"type": "string",
-						"enum": ["residential", "commercial", "mixed_use", "unknown"],
+						"enum": [
+							"residential",
+							"commercial",
+							"mixed_use",
+							"unknown"
+						],
 						"title": "Usage"
 					},
 					"market_area": {
@@ -22889,7 +25391,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["plot_number", "usage", "market_area", "headline", "assumptions"],
+				"required": [
+					"plot_number",
+					"usage",
+					"market_area",
+					"headline",
+					"assumptions"
+				],
 				"title": "PlotResearch"
 			},
 			"PlotResearch-Output": {
@@ -22900,7 +25408,12 @@
 					},
 					"usage": {
 						"type": "string",
-						"enum": ["residential", "commercial", "mixed_use", "unknown"],
+						"enum": [
+							"residential",
+							"commercial",
+							"mixed_use",
+							"unknown"
+						],
 						"title": "Usage"
 					},
 					"market_area": {
@@ -23046,7 +25559,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["plot_number", "usage", "market_area", "headline", "assumptions"],
+				"required": [
+					"plot_number",
+					"usage",
+					"market_area",
+					"headline",
+					"assumptions"
+				],
 				"title": "PlotResearch"
 			},
 			"PriceDistributionBucket": {
@@ -23250,7 +25769,11 @@
 				"properties": {
 					"market_segment": {
 						"type": "string",
-						"enum": ["all", "off_plan", "secondary"],
+						"enum": [
+							"all",
+							"off_plan",
+							"secondary"
+						],
 						"title": "Market Segment"
 					},
 					"rooms": {
@@ -23644,12 +26167,20 @@
 					},
 					"series": {
 						"type": "string",
-						"enum": ["historical", "forecast"],
+						"enum": [
+							"historical",
+							"forecast"
+						],
 						"title": "Series"
 					}
 				},
 				"type": "object",
-				"required": ["date", "avg_price", "avg_price_sqft", "series"],
+				"required": [
+					"date",
+					"avg_price",
+					"avg_price_sqft",
+					"series"
+				],
 				"title": "ProjectForecastPoint"
 			},
 			"ProjectForecastResponse": {
@@ -23684,7 +26215,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["data", "methodology"],
+				"required": [
+					"data",
+					"methodology"
+				],
 				"title": "ProjectForecastResponse"
 			},
 			"ProjectMeta": {
@@ -23697,7 +26231,12 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["project", "building", "master", "market"]
+								"enum": [
+									"project",
+									"building",
+									"master",
+									"market"
+								]
 							},
 							{
 								"type": "null"
@@ -23887,7 +26426,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["project_name"],
+				"required": [
+					"project_name"
+				],
 				"title": "ProjectMeta",
 				"description": "A scope's metadata. ``field_sources`` names each filled field's source: \"dxbi_buildings\"\n(DXBInteract's building list), \"dld_units\" (DLD's unit register), \"buildings\" (its\nbuildings' counts added up), \"dld_projects\" (DLD's project register), \"dld_land_plots\"\n(DLD's land register, villa plots),\n\"unit_numbers\" (our own count: the distinct unit numbers in the records and DLD's register),\n\"units_traded\" (no register count: the distinct units traded, ``units_at_least``) or\n\"projects_rollup\" (a master: its projects' counts added up)."
 			},
@@ -23912,7 +26453,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["period", "existing_stock_units", "carried_stock_units", "new_pipeline_units"],
+				"required": [
+					"period",
+					"existing_stock_units",
+					"carried_stock_units",
+					"new_pipeline_units"
+				],
 				"title": "ProjectPipelinePoint"
 			},
 			"ProjectPipelineResponse": {
@@ -23972,7 +26518,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["data"],
+				"required": [
+					"data"
+				],
 				"title": "ProjectPipelineResponse"
 			},
 			"ProjectPriceDistributionResponse": {
@@ -23996,7 +26544,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["by_rooms"],
+				"required": [
+					"by_rooms"
+				],
 				"title": "ProjectPriceDistributionResponse",
 				"description": "Price distribution by bedroom type, including an all-rooms aggregate."
 			},
@@ -24260,7 +26810,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["stats", "areas", "source_notes"],
+				"required": [
+					"stats",
+					"areas",
+					"source_notes"
+				],
 				"title": "ProjectRadarOverviewResponse",
 				"description": "Initial radar payload with zone heatmap data only."
 			},
@@ -24580,7 +27134,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["stats", "projects", "areas", "source_notes"],
+				"required": [
+					"stats",
+					"projects",
+					"areas",
+					"source_notes"
+				],
 				"title": "ProjectRadarResponse",
 				"description": "Complete payload for the projects radar map."
 			},
@@ -24815,7 +27374,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["name", "filter_type"],
+				"required": [
+					"name",
+					"filter_type"
+				],
 				"title": "ProjectSearchItem"
 			},
 			"ProjectSearchResponse": {
@@ -24829,7 +27391,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["projects"],
+				"required": [
+					"projects"
+				],
 				"title": "ProjectSearchResponse"
 			},
 			"ProjectSearchResult": {
@@ -24911,7 +27475,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["date", "transaction_count", "avg_price", "avg_price_sqft"],
+				"required": [
+					"date",
+					"transaction_count",
+					"avg_price",
+					"avg_price_sqft"
+				],
 				"title": "ProjectTrendPoint"
 			},
 			"ProjectTrendsResponse": {
@@ -24925,7 +27494,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["data"],
+				"required": [
+					"data"
+				],
 				"title": "ProjectTrendsResponse"
 			},
 			"ProjectUnitComposition": {
@@ -24955,7 +27526,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["property_sub_type", "count", "percentage", "avg_area_sqft"],
+				"required": [
+					"property_sub_type",
+					"count",
+					"percentage",
+					"avg_area_sqft"
+				],
 				"title": "ProjectUnitComposition",
 				"description": "Unit type breakdown"
 			},
@@ -24979,7 +27555,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["property_type", "count", "avg_price", "pct_of_total"],
+				"required": [
+					"property_type",
+					"count",
+					"avg_price",
+					"pct_of_total"
+				],
 				"title": "PropertyTypeBreakdown"
 			},
 			"RadarBuildingPin": {
@@ -25103,7 +27684,12 @@
 			},
 			"RadarPeriodDays": {
 				"type": "integer",
-				"enum": [30, 90, 180, 365],
+				"enum": [
+					30,
+					90,
+					180,
+					365
+				],
 				"title": "RadarPeriodDays",
 				"description": "Supported Radar windows, parsed from their query-string representation."
 			},
@@ -25127,7 +27713,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["reg_type", "count", "avg_price", "pct_of_total"],
+				"required": [
+					"reg_type",
+					"count",
+					"avg_price",
+					"pct_of_total"
+				],
 				"title": "RegTypeBreakdown"
 			},
 			"RentalAnalyticsResponse": {
@@ -25275,7 +27866,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["project_id", "project_name", "area_name", "score"],
+				"required": [
+					"project_id",
+					"project_name",
+					"area_name",
+					"score"
+				],
 				"title": "RentalComparableProject"
 			},
 			"RentalContractListResponse": {
@@ -25301,7 +27897,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["contracts", "total", "limit", "offset"],
+				"required": [
+					"contracts",
+					"total",
+					"limit",
+					"offset"
+				],
 				"title": "RentalContractListResponse"
 			},
 			"RentalContractResponse": {
@@ -25505,7 +28106,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["contract_id"],
+				"required": [
+					"contract_id"
+				],
 				"title": "RentalContractResponse",
 				"description": "One DXBI lease of one unit (dxbi_rental_events): sizes in sq ft, amounts in AED."
 			},
@@ -25540,7 +28143,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["dimension_value", "contract_count", "total_annual_value", "avg_rent_sqft"],
+				"required": [
+					"dimension_value",
+					"contract_count",
+					"total_annual_value",
+					"avg_rent_sqft"
+				],
 				"title": "RentalDimensionBreakdown",
 				"description": "Breakdown by a specific dimension for rentals"
 			},
@@ -25603,7 +28211,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["area_name", "rental_contract_count_12m"],
+				"required": [
+					"area_name",
+					"rental_contract_count_12m"
+				],
 				"title": "RentalMarketSummary"
 			},
 			"RentalRateBySizeBand": {
@@ -25763,7 +28374,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["message"],
+				"required": [
+					"message"
+				],
 				"title": "SendMessageRequest",
 				"description": "Request model for sending a message in a conversation"
 			},
@@ -25837,7 +28450,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["name", "transaction_count"],
+				"required": [
+					"name",
+					"transaction_count"
+				],
 				"title": "SubProjectItem"
 			},
 			"SubProjectsResponse": {
@@ -25851,7 +28467,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["sub_projects"],
+				"required": [
+					"sub_projects"
+				],
 				"title": "SubProjectsResponse"
 			},
 			"SubscriptionResponse": {
@@ -25974,7 +28592,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "asset_type", "url"],
+				"required": [
+					"id",
+					"asset_type",
+					"url"
+				],
 				"title": "SupplyCatalogueAssetResponse"
 			},
 			"SupplyCatalogueBuildingResponse": {
@@ -25996,7 +28618,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["name"],
+				"required": [
+					"name"
+				],
 				"title": "SupplyCatalogueBuildingResponse"
 			},
 			"SupplyCatalogueFinancialMetricResponse": {
@@ -26037,7 +28661,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["key", "label", "status"],
+				"required": [
+					"key",
+					"label",
+					"status"
+				],
 				"title": "SupplyCatalogueFinancialMetricResponse"
 			},
 			"SupplyCatalogueNearbyPointResponse": {
@@ -26070,7 +28698,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["name"],
+				"required": [
+					"name"
+				],
 				"title": "SupplyCatalogueNearbyPointResponse"
 			},
 			"SupplyCataloguePaymentStepResponse": {
@@ -26103,7 +28733,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["label"],
+				"required": [
+					"label"
+				],
 				"title": "SupplyCataloguePaymentStepResponse"
 			},
 			"SupplyCatalogueProjectCardResponse": {
@@ -26403,7 +29035,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["project_id", "project_name", "developer_name"],
+				"required": [
+					"project_id",
+					"project_name",
+					"developer_name"
+				],
 				"title": "SupplyCatalogueProjectCardResponse"
 			},
 			"SupplyCatalogueProjectDetailResponse": {
@@ -26814,7 +29450,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["project_id", "project_name", "developer_name"],
+				"required": [
+					"project_id",
+					"project_name",
+					"developer_name"
+				],
 				"title": "SupplyCatalogueProjectDetailResponse"
 			},
 			"SupplyCatalogueProjectsResponse": {
@@ -26861,7 +29501,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["projects", "total", "limit", "offset"],
+				"required": [
+					"projects",
+					"total",
+					"limit",
+					"offset"
+				],
 				"title": "SupplyCatalogueProjectsResponse"
 			},
 			"SupplyCatalogueRiskIndicatorResponse": {
@@ -26918,7 +29563,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["key", "label", "status"],
+				"required": [
+					"key",
+					"label",
+					"status"
+				],
 				"title": "SupplyCatalogueRiskIndicatorResponse"
 			},
 			"SupplyCatalogueUnitResponse": {
@@ -27006,7 +29655,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["label"],
+				"required": [
+					"label"
+				],
 				"title": "SupplyCatalogueUnitResponse"
 			},
 			"SyncAfterCheckoutRequest": {
@@ -27017,7 +29668,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["session_id"],
+				"required": [
+					"session_id"
+				],
 				"title": "SyncAfterCheckoutRequest",
 				"description": "Request to sync after checkout"
 			},
@@ -27044,7 +29697,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["transactions", "total", "limit", "offset"],
+				"required": [
+					"transactions",
+					"total",
+					"limit",
+					"offset"
+				],
 				"title": "TransactionListResponse"
 			},
 			"TransactionResponse": {
@@ -27225,7 +29883,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["transaction_id"],
+				"required": [
+					"transaction_id"
+				],
 				"title": "TransactionResponse",
 				"description": "One DXBI sale (dxbi_sales_unit_events): sizes in sq ft, prices in AED."
 			},
@@ -27254,7 +29914,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["date", "count", "total_value", "avg_value", "avg_sqft"],
+				"required": [
+					"date",
+					"count",
+					"total_value",
+					"avg_value",
+					"avg_sqft"
+				],
 				"title": "TrendPoint",
 				"description": "Single data point for trend charts"
 			},
@@ -27289,7 +29955,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["type", "count", "percentage", "avg_size_sqm", "avg_price_sqm"],
+				"required": [
+					"type",
+					"count",
+					"percentage",
+					"avg_size_sqm",
+					"avg_price_sqm"
+				],
 				"title": "UnitTypeData"
 			},
 			"UpcomingProjectResponse": {
@@ -27374,7 +30046,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["project_id", "project_name", "developer_name", "area_name"],
+				"required": [
+					"project_id",
+					"project_name",
+					"developer_name",
+					"area_name"
+				],
 				"title": "UpcomingProjectResponse"
 			},
 			"UpcomingProjectsResponse": {
@@ -27392,7 +30069,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["projects", "total"],
+				"required": [
+					"projects",
+					"total"
+				],
 				"title": "UpcomingProjectsResponse"
 			},
 			"UpdateConversationRequest": {
@@ -27403,7 +30083,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["title"],
+				"required": [
+					"title"
+				],
 				"title": "UpdateConversationRequest",
 				"description": "Request model for updating a conversation"
 			},
@@ -27440,7 +30122,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["first_name", "last_name"],
+				"required": [
+					"first_name",
+					"last_name"
+				],
 				"title": "UpdateProfileRequest"
 			},
 			"UpdateProfileResponse": {
@@ -27459,7 +30144,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["success", "first_name", "last_name"],
+				"required": [
+					"success",
+					"first_name",
+					"last_name"
+				],
 				"title": "UpdateProfileResponse"
 			},
 			"UpdateSubscriptionRequest": {
@@ -27470,7 +30159,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["status"],
+				"required": [
+					"status"
+				],
 				"title": "UpdateSubscriptionRequest"
 			},
 			"UpdateUserRequest": {
@@ -27524,7 +30215,10 @@
 					}
 				},
 				"type": "object",
-				"required": ["status", "s3"],
+				"required": [
+					"status",
+					"s3"
+				],
 				"title": "UploadHealthResponse"
 			},
 			"UsageCount": {
@@ -27634,7 +30328,12 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "email", "daily_token_limit", "updated_at"],
+				"required": [
+					"id",
+					"email",
+					"daily_token_limit",
+					"updated_at"
+				],
 				"title": "UserTokenLimitUpdateResponse"
 			},
 			"UserTokenStatsResponse": {
@@ -27755,7 +30454,11 @@
 					}
 				},
 				"type": "object",
-				"required": ["loc", "msg", "type"],
+				"required": [
+					"loc",
+					"msg",
+					"type"
+				],
 				"title": "ValidationError"
 			},
 			"WebhookStatusResponse": {
@@ -27766,7 +30469,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["status"],
+				"required": [
+					"status"
+				],
 				"title": "WebhookStatusResponse",
 				"description": "Simple webhook acknowledgement response."
 			},
@@ -27799,7 +30504,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "email", "first_name", "last_name", "role", "joined_at"],
+				"required": [
+					"id",
+					"email",
+					"first_name",
+					"last_name",
+					"role",
+					"joined_at"
+				],
 				"title": "OrganizationMemberResponse"
 			},
 			"app__organization__router__OrganizationMemberResponse": {
@@ -27826,7 +30538,13 @@
 					}
 				},
 				"type": "object",
-				"required": ["id", "email", "first_name", "last_name", "role"],
+				"required": [
+					"id",
+					"email",
+					"first_name",
+					"last_name",
+					"role"
+				],
 				"title": "OrganizationMemberResponse",
 				"description": "Organization member response."
 			}

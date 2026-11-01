@@ -57,7 +57,7 @@ async function submit(e: SubmitEvent) {
 
 {#if owner.data}
 	{@const o = owner.data}
-	<Panel kicker="Owner → lead" title={o.name} sub="{o.next_event} · {o.next_event_label}">
+	<Panel kicker="New lead" title={o.name} sub="{o.next_event} · {o.next_event_label}">
 		{#if o.create_lead}
 			<form class="form" onsubmit={submit}>
 				<div class="fld">
@@ -69,7 +69,7 @@ async function submit(e: SubmitEvent) {
 				<div class="fld">
 					<label for="ol-unit">Unit</label>
 					<select id="ol-unit" bind:value={unitKey}>
-						{#each o.unit_rows as u (u.key)}
+						{#each o.unit_rows as u (u.id)}
 							<option value={u.key}>{u.building} #{u.number} · {u.status_chip.label}</option>
 						{/each}
 					</select>

@@ -48,12 +48,12 @@ const agendaDays = $derived([...new Set(inMonth.map((e) => e.date))].sort())
 const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 </script>
 
-<svelte:head><title>Calendar · CRM Beta</title></svelte:head>
+<svelte:head><title>Calendar · CRM</title></svelte:head>
 
 <PageHeader
 	title={month ? monthTitle(month) : 'Calendar'}
 	facts={events.data
-		? `${inMonth.length} event${inMonth.length === 1 ? '' : 's'} this month · click an event for details, a day to add a task`
+		? `${inMonth.length} event${inMonth.length === 1 ? '' : 's'} this month`
 		: ''}
 >
 	{#snippet right()}

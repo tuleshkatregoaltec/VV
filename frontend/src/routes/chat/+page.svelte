@@ -71,9 +71,6 @@ $effect(() => {
 							<img src="/icon.svg" alt="" class="h-3.5 w-3.5" />
 							<h1 class="text-sm font-semibold text-fg-1">Vitevue AI</h1>
 						</div>
-						<p class="mt-1 text-xs text-fg-4">
-							Ask about transactions, yields, pricing, projects, and feasibility context.
-						</p>
 					</div>
 					<button
 						type="button"

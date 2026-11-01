@@ -6,7 +6,6 @@ import {
 	BarChart3,
 	Building2,
 	Check,
-	Clock3,
 	Columns3,
 	GripVertical,
 	Home,
@@ -77,7 +76,7 @@ const CARD_CATALOG: CardDefinition[] = [
 	{
 		id: 'mtd-transactions',
 		title: 'Latest month transactions',
-		description: 'Count and AED value for the latest month available in DLD data.',
+		description: 'Count and AED value for the latest month available.',
 		isDefault: true
 	},
 	{
@@ -276,7 +275,7 @@ let selectedCardIds = $state<CardId[]>(loadCardIds())
 const marketTrendQuery = createQuery(() => analyticsQueries.marketTrend(365))
 const latestSalesTransactionQuery = createQuery(() => ({
 	queryKey: ['dashboard', 'latest-sales-transaction', 'Residential'] as const,
-	// The last 90 days: an unbounded request de-duplicates all DXBI history for one date.
+	// The last 90 days: an unbounded request de-duplicates the full history for one date.
 	queryFn: () =>
 		transactions.sales({ property_usage: 'Residential', limit: 1, timeframe_days: 90 }),
 	staleTime: 30 * 60 * 1000
@@ -399,7 +398,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatWhole(pipelineCompletedUnitsYtd()),
-			subtitle: 'Market delivery curve · YTD',
+			subtitle: 'Year to date',
 			loading: latestSalesTransactionQuery.isPending || pipelineQuery.isPending
 		}
 	}
@@ -408,7 +407,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatWhole(activeProjectsQuery.data?.total),
-			subtitle: 'Active and upcoming projects',
+			subtitle: '',
 			loading: activeProjectsQuery.isPending
 		}
 	}
@@ -417,7 +416,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatPct(grossYieldPct()) ?? '—',
-			subtitle: 'Latest 12m rent/sale evidence',
+			subtitle: 'Trailing 12 months',
 			loading:
 				latestSalesTransactionQuery.isPending ||
 				(Boolean(rentalTrailingYearRange) && annualRentQuery.isPending) ||
@@ -429,7 +428,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatCurrencyCompact(monthlySalesQuery.data?.summary.avg_price),
-			subtitle: 'Residential average sale ticket',
+			subtitle: '',
 			trend: trendFromPct(marketTrendQuery.data?.avg_price_change_pct),
 			loading:
 				latestSalesTransactionQuery.isPending ||
@@ -452,7 +451,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatWhole(pipelineForwardUnits()),
-			subtitle: 'Forward delivery pipeline',
+			subtitle: '',
 			loading: activeProjectsQuery.isPending
 		}
 	}
@@ -460,7 +459,7 @@ function buildCard(id: CardId): KpiCard {
 	return {
 		...base,
 		value: formatCurrencyCompact(annualRentQuery.data?.summary.avg_annual_rent),
-		subtitle: 'Registered residential contracts · trailing 12 months',
+		subtitle: 'Trailing 12 months',
 		loading:
 			latestSalesTransactionQuery.isPending ||
 			(Boolean(rentalTrailingYearRange) && annualRentQuery.isPending)
@@ -623,8 +622,7 @@ function resetCards() {
 <section class="mb-3">
 	<div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
-			<p class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Market KPIs</p>
-			<h2 class="mt-1 text-base font-semibold text-fg-1">Default DLD dashboard</h2>
+			<h2 class="mt-1 text-base font-semibold text-fg-1">Key metrics</h2>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<button
@@ -644,7 +642,7 @@ function resetCards() {
 					onclick={resetCards}
 				>
 					<RotateCcw size={15} strokeWidth={1.8} />
-					Reset DLD defaults
+					Reset defaults
 				</button>
 			{/if}
 		</div>
@@ -666,7 +664,7 @@ function resetCards() {
 							Card library
 						</p>
 						<h3 class="mt-1 text-sm font-semibold text-fg-1">
-							{paletteDropActive ? 'Release to remove' : 'Drag cards into the dashboard'}
+							{paletteDropActive ? 'Release to remove' : 'Drag cards to add'}
 						</h3>
 					</div>
 					<span class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
@@ -750,13 +748,6 @@ function resetCards() {
 							<span class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">
 								{card.title}
 							</span>
-							{#if card.isDefault}
-								<span
-									class="mt-1 block w-fit rounded-sm border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-fg-4"
-								>
-									DLD default
-								</span>
-							{/if}
 						</div>
 						<div class="flex items-center gap-2 text-fg-4">
 							{#if editMode}
@@ -818,8 +809,4 @@ function resetCards() {
 		</div>
 	</div>
 
-	<div class="mt-2 flex items-center gap-1.5 text-xs text-fg-4">
-		<Clock3 size={13} strokeWidth={1.8} />
-		<span>Card selection is saved on this device.</span>
-	</div>
 </section>

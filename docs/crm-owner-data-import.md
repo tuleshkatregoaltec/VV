@@ -879,3 +879,10 @@ lease/rent fields, and import summaries; it does not redo sales-based ownership
 verification or modify contact data and agent workspaces. Original source files
 do not need to be uploaded again. The August 26 figures above are a historical
 audit, not current rental-match totals.
+
+## Offline five-group recovery handoff
+
+The 29 October 2026 experiment, its unresolved-row export, reproducibility commands,
+rule definitions and integration limits are documented in
+[the owner-recovery handoff](crm-owner-recovery-handoff.md). Its conditional proposals
+are separate from the live importer's accepted owner assignments.

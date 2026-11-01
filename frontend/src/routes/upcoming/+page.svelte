@@ -1,6 +1,6 @@
 <script lang="ts">
 import { createInfiniteQuery } from '@tanstack/svelte-query'
-import { ImageIcon, MapPin, Search, ShieldCheck, X } from 'lucide-svelte'
+import { ImageIcon, MapPin, Search, X } from 'lucide-svelte'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import type { SupplyCatalogueProjectCardResponse, SupplyCatalogueSort } from '$lib/api/supply'
@@ -63,9 +63,6 @@ const averageAbsorption = $derived.by(() => {
 	return absorptionRates.reduce((sum, rate) => sum + rate, 0) / absorptionRates.length
 })
 const launchedProjectCount = $derived(projects.filter((project) => project.launch_date).length)
-const reviewedProjectCount = $derived(
-	projects.filter((project) => typeof project.project_score === 'number').length
-)
 
 $effect(() => {
 	if (selectedDeveloper && !developerStatusInitialized) {
@@ -178,22 +175,13 @@ function inventoryLabel(project: SupplyCatalogueProjectCardResponse): string {
 				<div class="flex flex-col justify-between gap-8 p-5 sm:p-7">
 					<div>
 						<p class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">
-							Upcoming / Supply catalogue
+							Upcoming supply
 						</p>
 						<div class="mt-3 flex flex-wrap items-end gap-3">
 							<h1 class="text-3xl font-semibold tracking-normal text-fg-1 sm:text-4xl">
 								New launch desk
 							</h1>
 						</div>
-						<p class="mt-3 max-w-2xl text-sm leading-6 text-fg-3">
-							{#if selectedDeveloper}
-								Review {selectedDeveloper} upcoming projects with project risk overlays,
-								delivery timing, sales inventory, and internal monitoring signals.
-							{:else}
-								Browse active and upcoming supply with developer visuals, brochures, floorplans,
-								payment plans, launch timing, and unit ranges.
-							{/if}
-						</p>
 					</div>
 
 					<div class="grid gap-2 sm:grid-cols-3">
@@ -257,12 +245,12 @@ function inventoryLabel(project: SupplyCatalogueProjectCardResponse): string {
 		</section>
 
 		{#if selectedDeveloper}
-			<section class="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+			<section class="grid gap-3">
 				<div class="rounded-lg border border-border bg-card p-5 shadow-sm">
 					<div class="flex flex-wrap items-start justify-between gap-4">
 						<div class="min-w-0">
 							<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
-								Developer / Project risk
+								Developer
 							</p>
 							<div class="mt-3 flex min-w-0 items-center gap-3">
 								{#if heroProject?.developer_logo_url}
@@ -277,7 +265,7 @@ function inventoryLabel(project: SupplyCatalogueProjectCardResponse): string {
 								<div class="min-w-0">
 									<h2 class="truncate text-xl font-semibold text-fg-1">{selectedDeveloper}</h2>
 									<p class="mt-1 text-sm text-fg-4">
-										{catalogueSummary?.total?.toLocaleString() ?? '...'} linked projects · {reviewedProjectCount.toLocaleString()} scored
+										{catalogueSummary?.total?.toLocaleString() ?? '...'} projects
 									</p>
 								</div>
 							</div>
@@ -288,7 +276,7 @@ function inventoryLabel(project: SupplyCatalogueProjectCardResponse): string {
 						</a>
 					</div>
 
-					<div class="mt-5 grid gap-2 sm:grid-cols-4">
+					<div class="mt-5 grid gap-2 sm:grid-cols-3">
 						<div class="rounded-md border border-border bg-panel px-3 py-3">
 							<p class="text-xs text-fg-4">Developer score</p>
 							<p class="mt-1 text-2xl font-semibold tabular-nums text-fg-1">
@@ -306,37 +294,10 @@ function inventoryLabel(project: SupplyCatalogueProjectCardResponse): string {
 							<p class="mt-1 text-2xl font-semibold tabular-nums text-fg-1">
 								{formatPct(averageAbsorption)}
 							</p>
-							<p class="mt-1 text-[11px] text-fg-4">
-								{absorptionRates.length.toLocaleString()} / {projects.length.toLocaleString()} projects
-							</p>
-						</div>
-						<div class="rounded-md border border-border bg-panel px-3 py-3">
-							<p class="text-xs text-fg-4">Pending feed fields</p>
-							<p class="mt-1 text-2xl font-semibold tabular-nums text-fg-1">~</p>
 						</div>
 					</div>
 				</div>
 
-				<div class="rounded-lg border border-border bg-card p-5 shadow-sm">
-					<div class="flex items-center gap-2 text-sm font-semibold text-fg-1">
-						<ShieldCheck size={17} strokeWidth={2} />
-						Internal risk
-					</div>
-					<div class="mt-4 space-y-2 text-sm">
-						<div class="flex items-center justify-between rounded-md bg-panel px-3 py-2">
-							<span class="text-fg-4">Escrow balance</span>
-							<span class="font-semibold text-fg-1">~</span>
-						</div>
-						<div class="flex items-center justify-between rounded-md bg-panel px-3 py-2">
-							<span class="text-fg-4">Adequacy ratio</span>
-							<span class="font-semibold text-fg-1">~</span>
-						</div>
-						<div class="flex items-center justify-between rounded-md bg-panel px-3 py-2">
-							<span class="text-fg-4">Estimated project IRR</span>
-							<span class="font-semibold text-fg-1">~</span>
-						</div>
-					</div>
-				</div>
 			</section>
 		{/if}
 
@@ -434,7 +395,6 @@ function inventoryLabel(project: SupplyCatalogueProjectCardResponse): string {
 			{:else if projects.length === 0}
 				<div class="rounded-lg border border-border bg-card p-8 text-center">
 					<p class="text-sm font-semibold text-fg-1">No matching projects</p>
-					<p class="mt-1 text-sm text-fg-3">Try a broader area, status, or search term.</p>
 				</div>
 			{:else}
 					<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -542,7 +502,7 @@ function inventoryLabel(project: SupplyCatalogueProjectCardResponse): string {
 						</div>
 						<div bind:this={sentinel} class="h-px"></div>
 						{#if catalogueQuery.isFetchingNextPage}
-							<div class="py-5 text-center text-sm text-fg-4">Loading more projects...</div>
+							<div class="py-5 text-center text-sm text-fg-4">Loading…</div>
 						{/if}
 					{/if}
 		</section>

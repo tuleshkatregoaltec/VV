@@ -42,6 +42,7 @@ async function save() {
 		return
 	}
 	const r = await write({
+		domain: 'preferences',
 		call: () =>
 			crm.feed.setPreferences({
 				areas: list,

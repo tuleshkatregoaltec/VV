@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import opportunities, workspace_repository
-from app.crm.identity import ParsedContact
+from app.crm.identity import ParsedContact, has_usable_contact
 from app.crm.import_models import (
     CrmOwnerBulkUpdate,
     CrmOwnerNote,
@@ -26,6 +26,8 @@ from app.crm.models import (
     CrmWorkspaceUpdate,
 )
 from app.crm.opportunities import get_lead_detail, resolve_candidate_key
+from app.crm.owner_assessment import get_owner_assessment
+from app.crm.owners import _owner_read_keys, _source_contact_ready
 
 
 async def _enrich_workspaces(
@@ -42,7 +44,7 @@ async def _enrich_workspaces(
         if candidate.unit_candidate_key
         and candidate.lead_id
         and candidate.has_valid_contact
-        and candidate.ownership_status in {"verified_current_owner", "probable_current_owner"}
+        and candidate.ownership_status == "verified_current_owner"
     ]
     if not ready:
         return
@@ -70,6 +72,7 @@ async def _enrich_workspaces(
                 owner_name=candidate.contact_name,
                 owner_email=candidate.email_primary,
                 owner_phone=candidate.phone_primary or candidate.phone_alternate,
+                owner_source="owner_import",
                 tags=["Imported owner", list_name[:80]],
                 created_at=now,
                 updated_at=now,
@@ -80,11 +83,20 @@ async def _enrich_workspaces(
         workspace.pipeline_status = (
             "contact_ready" if workspace.pipeline_status == "new" else workspace.pipeline_status
         )
-        workspace.owner_name = workspace.owner_name or candidate.contact_name
-        workspace.owner_email = workspace.owner_email or candidate.email_primary
-        workspace.owner_phone = (
-            workspace.owner_phone or candidate.phone_primary or candidate.phone_alternate
-        )
+        if (
+            workspace.owner_source is None
+            and "Imported owner" not in (workspace.tags or [])
+            and (workspace.owner_name or workspace.owner_phone or workspace.owner_email)
+        ):
+            # Record legacy manual provenance before adding an import tag, which
+            # otherwise makes subsequent reads treat agent-entered fields as derived.
+            workspace.owner_source = "manual"
+        # Derived owner fields are resolved from live claims on reads. Never fill
+        # gaps in a manually entered identity with another person's import data.
+        if workspace.owner_source == "owner_import":
+            workspace.owner_name = candidate.contact_name
+            workspace.owner_email = candidate.email_primary
+            workspace.owner_phone = candidate.phone_primary or candidate.phone_alternate
         tags = list(workspace.tags or [])
         for tag in ("Imported owner", list_name[:80]):
             if tag not in tags and len(tags) < 12:
@@ -137,7 +149,48 @@ async def list_owner_workspaces(
     note_result = await workspace_repository.list_owner_notes(
         db, organization_id, user_id, workspace_ids
     )
-    return _owner_workspace_summaries(workspaces, list(note_result))
+    summaries = _owner_workspace_summaries(workspaces, list(note_result))
+    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    read_keys = _owner_read_keys(snapshot.rows)
+    aliases: dict[str, set[str]] = {}
+    ready_keys: set[str] = set()
+    for row in snapshot.rows:
+        canonical = row["canonical_owner_key"]
+        aliases.setdefault(row["owner_key"], set()).add(canonical)
+        if (
+            row["property_identity"] is not None
+            and row.get("lead_id")
+            and row.get("unit_candidate_key")
+            and _source_contact_ready(row["assessed_status"], row.get("party_role"))
+            and _source_contact_ready(
+                row.get("event_assessed_status", row["assessed_status"]), row.get("party_role")
+            )
+            and has_usable_contact(
+                row.get("phone_primary"),
+                row.get("phone_alternate"),
+                row.get("email_primary"),
+                row.get("broker_contact"),
+            )
+        ):
+            ready_keys.add(read_keys[canonical])
+    merged: dict[str, CrmOwnerWorkspaceSummary] = {}
+    for summary in summaries:
+        canonical = aliases.get(summary.owner_key, set())
+        key = read_keys[next(iter(canonical))] if len(canonical) == 1 else summary.owner_key
+        summary = summary.model_copy(update={"owner_key": key})
+        if summary.pipeline_status == "contact_ready" and key not in ready_keys:
+            summary.pipeline_status = "researching"
+            if summary.highlight_color == "green":
+                summary.highlight_color = "none"
+        previous = merged.get(key)
+        if previous is None:
+            merged[key] = summary
+        else:
+            previous.note_count += summary.note_count
+            if previous.last_note is None:
+                previous.last_note = summary.last_note
+            previous.tags = list(dict.fromkeys(previous.tags + summary.tags))[:12]
+    return list(merged.values())
 
 
 async def bulk_update_owner_workspaces(
@@ -153,18 +206,35 @@ async def bulk_update_owner_workspaces(
     if not any((payload.pipeline_status, payload.highlight_color, payload.note)):
         raise HTTPException(status_code=422, detail="Choose a CRM update to apply")
 
-    claim_result = await workspace_repository.list_existing_owner_keys(
-        db, organization_id, owner_keys
-    )
-    valid_keys = set(claim_result)
-    owner_keys = [key for key in owner_keys if key in valid_keys]
+    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    read_keys = _owner_read_keys(snapshot.rows)
+    aliases: dict[str, set[str]] = {}
+    for row in snapshot.rows:
+        aliases.setdefault(row["owner_key"], set()).add(row["canonical_owner_key"])
+        aliases.setdefault(row["canonical_owner_key"], set()).add(row["canonical_owner_key"])
+    if any(len(aliases.get(key, set())) > 1 for key in owner_keys):
+        raise HTTPException(
+            status_code=409, detail="Choose a distinct owner identity in the registry"
+        )
+    selected = {next(iter(aliases[key])) for key in owner_keys if aliases.get(key)}
+    owner_keys = sorted({read_keys[key] for key in selected})
     if not owner_keys:
         raise HTTPException(status_code=404, detail="Selected owners were not found")
-
+    persisted_keys = {
+        row["owner_key"]
+        for row in snapshot.rows
+        if row["canonical_owner_key"] in selected and len(aliases[row["owner_key"]]) == 1
+    } | set(owner_keys)
     workspace_result = await workspace_repository.list_owner_workspaces_for_keys(
-        db, organization_id, owner_keys, user_id
+        db, organization_id, sorted(persisted_keys), user_id
     )
-    existing = {workspace.owner_key: workspace for workspace in workspace_result}
+    existing = {}
+    for workspace in workspace_result:
+        canonical = aliases.get(workspace.owner_key, set())
+        key = read_keys[next(iter(canonical))] if len(canonical) == 1 else workspace.owner_key
+        previous = existing.get(key)
+        if previous is None or workspace.updated_at > previous.updated_at:
+            existing[key] = workspace
     now = datetime.now(timezone.utc)
     touched: list[CrmOwnerWorkspace] = []
     note_body = (payload.note or "").strip()
@@ -310,22 +380,52 @@ def _workspace_summary(
     workspace: CrmLeadWorkspace,
     *,
     note_count: int = 0,
+    imported_owner=None,
 ) -> CrmWorkspaceSummary:
     if workspace.id is None:
         raise HTTPException(status_code=500, detail="CRM workspace is missing an id")
+    derived = workspace.owner_source == "owner_import" or (
+        workspace.owner_source is None and "Imported owner" in (workspace.tags or [])
+    )
+    stale_owner = derived and imported_owner is None
+    stale_ready = stale_owner and workspace.pipeline_status == "contact_ready"
     return CrmWorkspaceSummary(
         id=workspace.id,
         lead_id=workspace.lead_id,
         unit_candidate_key=workspace.unit_candidate_key,
-        pipeline_status=workspace.pipeline_status,
-        highlight_color=workspace.highlight_color,
-        owner_name=workspace.owner_name,
-        owner_email=workspace.owner_email,
-        owner_phone=workspace.owner_phone,
+        pipeline_status="new" if stale_ready else workspace.pipeline_status,
+        highlight_color="none"
+        if stale_owner and workspace.highlight_color == "green"
+        else workspace.highlight_color,
+        owner_name=(imported_owner.name if imported_owner else None)
+        if derived
+        else workspace.owner_name,
+        owner_email=(imported_owner.email if imported_owner else None)
+        if derived
+        else workspace.owner_email,
+        owner_phone=(imported_owner.phone if imported_owner else None)
+        if derived
+        else workspace.owner_phone,
         next_follow_up=workspace.next_follow_up,
         tags=list(workspace.tags or []),
         note_count=note_count,
         updated_at=workspace.updated_at,
+    )
+
+
+async def _assessed_workspace_summary(
+    db: AsyncSession, workspace: CrmLeadWorkspace, *, note_count: int = 0
+) -> CrmWorkspaceSummary:
+    from app.crm.renewal_leads import _owners_by_candidate
+
+    owners = await _owners_by_candidate(
+        db,
+        candidate_keys=[workspace.unit_candidate_key],
+        user_id=workspace.user_id,
+        organization_id=workspace.organization_id,
+    )
+    return _workspace_summary(
+        workspace, note_count=note_count, imported_owner=owners.get(workspace.unit_candidate_key)
     )
 
 
@@ -383,10 +483,19 @@ async def list_lead_workspaces(
     note_counts: dict[int, int] = {}
     for note in notes_result:
         note_counts[note.workspace_id] = note_counts.get(note.workspace_id, 0) + 1
+    from app.crm.renewal_leads import _owners_by_candidate
+
+    owners = await _owners_by_candidate(
+        db,
+        candidate_keys=[workspace.unit_candidate_key for workspace in workspaces],
+        user_id=user_id,
+        organization_id=organization_id,
+    )
     return [
         _workspace_summary(
             workspace,
             note_count=note_counts.get(workspace.id or 0, 0),
+            imported_owner=owners.get(workspace.unit_candidate_key),
         )
         for workspace in workspaces
     ]
@@ -422,7 +531,7 @@ async def get_lead_workspace(
         user_id=user_id,
         organization_id=organization_id,
     )
-    summary = _workspace_summary(workspace, note_count=len(notes))
+    summary = await _assessed_workspace_summary(db, workspace, note_count=len(notes))
     return CrmWorkspaceResponse(
         **summary.model_dump(),
         notes=[_note_response(note) for note in notes],
@@ -465,6 +574,8 @@ async def update_lead_workspace(
     for field in ("owner_name", "owner_email", "owner_phone"):
         if field in changes:
             setattr(workspace, field, _clean_workspace_value(changes[field]))
+    if any(field in changes for field in ("owner_name", "owner_email", "owner_phone")):
+        workspace.owner_source = "manual"
     if "tags" in changes:
         normalized_tags: list[str] = []
         for tag in changes["tags"] or []:
@@ -485,7 +596,7 @@ async def update_lead_workspace(
         user_id=user_id,
         organization_id=organization_id,
     )
-    summary = _workspace_summary(workspace, note_count=len(notes))
+    summary = await _assessed_workspace_summary(db, workspace, note_count=len(notes))
     return CrmWorkspaceResponse(
         **summary.model_dump(),
         notes=[_note_response(note) for note in notes],

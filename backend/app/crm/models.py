@@ -158,8 +158,18 @@ class CrmTimelineEvent(BaseModel):
     capital_gain_pct: float | None = None
 
 
+class CrmRenewalOwner(BaseModel):
+    """A manual owner or one unambiguous, verified imported owner."""
+
+    name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    source: Literal["workspace", "owner_import"]
+
+
 class CrmLeadDetailResponse(BaseModel):
     lead: CrmLead
+    owner: CrmRenewalOwner | None = None
     timeline: list[CrmTimelineEvent]
     next_best_actions: list[str]
     agent_signals: list[str] = Field(default_factory=list)
@@ -216,6 +226,7 @@ class CrmLeadWorkspace(SQLModel, table=True):
     owner_name: str | None = None
     owner_email: str | None = None
     owner_phone: str | None = None
+    owner_source: str | None = None
     next_follow_up: date | None = None
     tags: list[str] = SQLField(
         default_factory=list,
@@ -404,6 +415,22 @@ class CrmAgentAreaPreference(SQLModel, table=True):
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class CrmLicensedBroker(SQLModel, table=True):
+    """One licensed real-estate broker from the regulator's public list (org-agnostic reference).
+
+    Phones are normalized like owner-sheet phones and emails are casefolded, so a sheet row can be
+    compared with them directly. The table is replaced as a whole by ``load_licensed_brokers``."""
+
+    __tablename__ = "crm_licensed_brokers"
+
+    broker_number: int = SQLField(primary_key=True)
+    name_key: str = SQLField(index=True)
+    phones: list[str] = SQLField(default_factory=list, sa_column=Column(JSON, nullable=False))
+    emails: list[str] = SQLField(default_factory=list, sa_column=Column(JSON, nullable=False))
+    card_expiry_date: date | None = SQLField(default=None)
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 class CrmAreaPreferencesUpdate(BaseModel):
     areas: list[str] = Field(max_length=50)
     forward_days: int = Field(
@@ -421,17 +448,6 @@ class CrmAreaPreferencesResponse(CrmAreaPreferencesUpdate):
 class CrmRenewalArea(BaseModel):
     area: str
     upcoming_90_days: int
-
-
-class CrmRenewalOwner(BaseModel):
-    """Owner contact for a renewal lead, only when entered by the agent or import-matched."""
-
-    name: str | None = None
-    phone: str | None = None
-    email: str | None = None
-    # workspace: saved on the agent's lead workspace (typed in, or copied there by an owner import).
-    # owner_import: a verified or probable current-owner claim on this unit from an owner import.
-    source: Literal["workspace", "owner_import"]
 
 
 class CrmRenewalLead(BaseModel):

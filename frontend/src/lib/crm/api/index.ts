@@ -64,6 +64,9 @@ import type {
 	OwnerDroppedRows,
 	OwnerDroppedRowsParams,
 	OwnerFilePreview,
+	OwnerHistory,
+	OwnerHistoryParams,
+	OwnerHistorySummary,
 	OwnerImport,
 	OwnerImportDetail,
 	OwnerImportResult,
@@ -116,6 +119,7 @@ async function home(day: string): Promise<HomeResponse> {
 	const leads = await backend.listLeads({ stage: 'new' })
 	const fresh = [...leads.items].sort((a, b) => b.score - a.score)
 	return {
+		limited: leads.limited,
 		date,
 		facts: { events_today: 0, conveyancing: 0, permits_under_14: 0 },
 		counters: {
@@ -139,6 +143,7 @@ async function home(day: string): Promise<HomeResponse> {
 async function counts(): Promise<NavCounts> {
 	const leads = await backend.listLeads({})
 	return {
+		limited: leads.limited,
 		new_leads: leads.new_count,
 		inbox: 0,
 		open_deals: 0,
@@ -177,6 +182,7 @@ export const crm = {
 		) => notOnBackend<Written<CalendarEvent>>('Booking a viewing'),
 		/** The backend has no over-budget or after-move options; both are ignored. */
 		matches: (id: number, _o: MatchOptions = {}): Promise<LeadMatches> => backend.leadMatches(id),
+		refreshMatches: (id: number) => backend.refreshLeadMatches(id),
 		/** Pursue a match (again to stop): "Match pursued" on both records + the next action. */
 		pursue: (_id: number, _key: string) => notOnBackend<Written<PursueResult>>('Pursue'),
 		shortlist: (id: number, key: string) => backend.shortlistMatch(id, key),
@@ -319,6 +325,10 @@ export const crm = {
 	owners: {
 		list: (p: OwnerListParams): Promise<OwnerListResponse> => backend.listOwners(p),
 		get: (id: string): Promise<OwnerDetail> => backend.getOwner(id),
+		history: (id: string, p: OwnerHistoryParams = {}): Promise<OwnerHistory> =>
+			backend.getOwnerHistory(id, p),
+		historySummary: (importId?: number): Promise<OwnerHistorySummary> =>
+			backend.getOwnerHistorySummary(importId),
 		createLead: (_id: string, _body: OwnerLeadCreate) =>
 			notOnBackend<Written<LeadDetail>>('A lead from an owner'),
 		create: (_body: { name: string; units: string[] }) =>
@@ -339,7 +349,7 @@ export const crm = {
 		preview: (file: File): Promise<ImportPreview> => backend.previewImport(file),
 		/** The import endpoints take no areas, so `areas` is not sent. */
 		create: (file: File, _areas: string) => backend.createImport(file),
-		/** An owners file is read in the browser first; nothing is sent until it is imported. */
+		/** An owners file is read in the browser; the backend only says which field each column feeds. */
 		previewOwners: (file: File): Promise<OwnerFilePreview> => backend.previewOwnerFile(file),
 		/** Upload, match against DLD and save an owners file (/contact-imports). */
 		importOwners: (file: File, name: string): Promise<Written<OwnerImportResult>> =>

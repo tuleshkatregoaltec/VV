@@ -257,7 +257,7 @@ function formatNumber(num: number): string {
 <!-- Footer -->
 <div class="mt-4 border-t border-border pt-3">
 	<p class="font-mono text-[10px] uppercase tracking-[0.06em] text-fg-4">
-		Based on {formatNumber(trendQuery.data?.total_transactions ?? 0)} transactions
+		{formatNumber(trendQuery.data?.total_transactions ?? 0)} transactions
 	</p>
 </div>
 

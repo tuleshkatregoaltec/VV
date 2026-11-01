@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dagster import Definitions
 
+from holocron.assets.crm_rentals import crm_rental_ranked_base_asset
+
 from holocron.orchestration.factory import (
     build_assets_for_source,
     build_dld_pulse_historic_assets,
@@ -30,6 +32,7 @@ _assets.extend(build_silver_assets())
 _assets.extend(build_geography_assets())
 _assets.extend(build_dxbi_evidence_assets())
 _assets.extend(build_market_assets())
+_assets.append(crm_rental_ranked_base_asset)
 _sources_by_name = {_source.name: _source for _source in registry.list_sources()}
 _jobs = build_operational_jobs(_sources_by_name)
 _schedules = build_operational_schedules({_job.name: _job for _job in _jobs})

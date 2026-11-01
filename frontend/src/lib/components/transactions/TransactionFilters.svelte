@@ -115,7 +115,7 @@ const searchSuggestions = $derived(searchFilterOptions(suggestions, draft).slice
 		{#if dynamic}
 			<SearchableDropdown {id} ariaLabel={filter.label} options={filter.options ?? []} value={valueFor(filter.id)} onchange={(value) => change(filter.id, value)} approximate />
 			{#if !loading && !unavailable && (filter.options?.length ?? 0) <= 1}
-				<p class="text-xs text-fg-3">No options for these filters. Clear a selection or widen the period.</p>
+				<p class="text-xs text-fg-3">No options for these filters.</p>
 			{/if}
 		{:else}
 			<StandardDropdown {id} ariaLabel={filter.label} options={filter.options ?? []} value={valueFor(filter.id)} onchange={(value) => change(filter.id, value)} />

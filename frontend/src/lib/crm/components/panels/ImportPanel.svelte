@@ -1,31 +1,32 @@
 <script lang="ts">
-import { createQuery } from '@tanstack/svelte-query'
-import Pencil from 'lucide-svelte/icons/pencil'
-import Trash from 'lucide-svelte/icons/trash-2'
 import { goto } from '$app/navigation'
-import { page } from '$app/state'
 import { crm } from '../../api'
 import type { ImportPreview, OwnerFilePreview, OwnerImportResult } from '../../api/types'
 import { fmt } from '../../format'
-import { crmQueries } from '../../queries'
+import {
+	importIsActive,
+	importProgressNotice,
+	importUploadMessage,
+	ownerImportNotice
+} from '../../importStatus'
+import { fieldChecklist, fieldLabel } from '../../ownerImportReport'
+import { watchQueuedImport } from '../../stores/imports.svelte'
 import { panel } from '../../stores/panel.svelte'
 import { errorText, write } from '../../write'
-import Chip from '../ui/Chip.svelte'
 import Kv from '../ui/Kv.svelte'
 import Panel from '../ui/Panel.svelte'
-import QueryView from '../ui/QueryView.svelte'
 import Seg from '../ui/Seg.svelte'
 
 /**
  * Import a file: Owners or Leads, CSV or XLSX → preview → import. A manager imports directly
- * (owners are checked against DLD; leads land in the Inbox); an agent is told to send the file
+ * (owners are matched to sales; leads land in the Inbox); an agent is told to send the file
  * to their manager (approval requests are open question 9). The backend reads the file and
  * picks the columns; this screen only shows what it found. From the Owners page it imports owners only.
  *
- * An owners file is read in the browser first (header row, row count, five rows); the backend
- * then matches it against DLD before it answers, and the panel shows its counts. Below sits the
- * import history: rename a file (its saved list follows) or delete it, which removes its saved
- * list and claims (no undo), not owner notes.
+ * An owners file is read in the browser first, then queued for background processing.
+ * Upload acceptance and completed row results are shown separately. The preview speaks in our
+ * fields (found or not found) and never prints the file's own column headers. Renaming and
+ * deleting a file are on its report.
  */
 let { ownersOnly = false }: { ownersOnly?: boolean } = $props()
 let kind = $state<'Owners' | 'Leads'>('Owners')
@@ -43,55 +44,33 @@ let drag = $state(false)
 let input: HTMLInputElement | undefined = $state()
 
 const owners = $derived(ownersOnly || kind === 'Owners')
-const history = createQuery(() => crmQueries.ownerImports())
-let confirming = $state<number | null>(null)
-let deleting = $state<number | null>(null)
-let editing = $state<number | null>(null)
-let draft = $state('')
-let renaming = $state(false)
 
 async function openReport(id: number) {
 	panel.closeAll()
 	await goto(`/crm/owners/imports/${id}`)
 }
 
-function startRename(id: number, name: string) {
-	confirming = null
-	editing = id
-	draft = name
+/** "Project", "Project 2": two columns can feed one field (the second is read when the first is blank). */
+function numbered(labels: string[]) {
+	const seen = new Map<string, number>()
+	return labels.map((label) => {
+		const n = (seen.get(label) ?? 0) + 1
+		seen.set(label, n)
+		return n === 1 ? label : `${label} ${n}`
+	})
 }
 
-async function rename(id: number, before: string) {
-	const name = draft.trim()
-	if (!name || name === before) {
-		editing = null
-		return
+/** Our field names for the columns the backend reads, with the sample values under them. */
+function readColumns(p: OwnerFilePreview) {
+	const index = (p.fields ?? []).flatMap((f, i) => (f ? [i] : []))
+	return {
+		headers: numbered(index.map((i) => fieldLabel(p.fields?.[i] ?? ''))),
+		rows: p.sample.slice(0, 3).map((row) => index.map((i) => row[i] ?? '')),
+		checklist: fieldChecklist(
+			(p.fields ?? []).filter((f): f is string => Boolean(f)),
+			false
+		)
 	}
-	renaming = true
-	const r = await write({
-		call: () => crm.imports.renameOwners(id, name),
-		success: `Renamed · ${name}`,
-		event: 'import_renamed'
-	})
-	renaming = false
-	if (r) editing = null
-}
-
-const STATUS = {
-	completed: { label: 'Completed', tone: 'green' },
-	processing: { label: 'Processing', tone: 'amber' },
-	failed: { label: 'Failed', tone: 'red' }
-} as const
-
-async function remove(id: number, name: string) {
-	deleting = id
-	await write({
-		call: () => crm.imports.removeOwners(id),
-		success: `Deleted · ${name}`,
-		event: 'import_deleted'
-	})
-	deleting = null
-	confirming = null
 }
 const rows = $derived(owners ? (ownerPreview?.rows ?? 0) : (preview?.rows ?? 0))
 const ready = $derived(owners ? ownerPreview && !ownerPreview.problem : preview && !preview.problem)
@@ -134,76 +113,84 @@ async function read(f: File | undefined) {
 async function send() {
 	if (!file || !ready || sending) return
 	const f = file
+	sending = true
 	if (!owners) {
 		const r = await write({
+			domain: 'imports',
 			call: () => crm.imports.create(f, areas.trim()),
-			success: `Imported · ${fmt(rows)} rows`,
+			success: ({ data }) => importUploadMessage(data.jobStatus, data.rows),
 			event: 'import_requested'
 		})
+		sending = false
 		if (r) {
+			if (importIsActive(r.data.jobStatus)) watchQueuedImport(r.data.id)
 			panel.closeAll()
 			await goto('/crm/inbox')
 		}
 		return
 	}
-	sending = true
 	const r = await write({
+		domain: 'imports',
 		call: () => crm.imports.importOwners(f, listName),
 		success: ({ data }) =>
-			data.alreadyImported
-				? null
-				: data.status === 'completed'
-					? `Imported · ${fmt(data.summary.candidateRows)} owners`
-					: null,
+			importUploadMessage(data.status, data.summary.candidateRows, data.alreadyImported),
 		event: 'import_requested'
 	})
 	sending = false
 	if (r) {
 		result = r.data
-		if (page.url.pathname !== '/crm/owners') await goto('/crm/owners')
+		if (importIsActive(r.data.status)) watchQueuedImport(`O${r.data.id}`)
 	}
 }
 </script>
 
 <Panel
 	kicker="New"
-	title="Import a file"
-	sub={ownersOnly
-		? 'Managers import · owners are checked against DLD'
-		: 'Managers import · owners are checked against DLD, leads go to the Inbox'}
+	title={owners ? 'Import an owner file' : 'Import a file'}
 	footer={result ? done : undefined}
 >
 	<div class="form">
 		{#if result}
 			{@const s = result.summary}
-			{#if result.alreadyImported}
-				<div class="notice" role="status">
-					This file was already imported as “{result.name}”. Nothing new was added.
-				</div>
-			{/if}
+			{@const replayNotice = ownerImportNotice(result)}
+			{#if replayNotice}<div class="notice" role="status">{replayNotice}</div>{/if}
 			{#if result.status === 'failed'}
 				<div class="notice" role="alert">
 					The import of this file failed (import #{result.id}). Fix the file and upload it again.
 				</div>
-			{:else if result.status === 'processing'}
-				<div class="notice" role="status">This file is still being imported. Check back in a few minutes.</div>
+			{:else if importIsActive(result.status)}
+				<div class="notice" role="status">{importProgressNotice(result.status)}</div>
 			{:else}
 				<section class="sec">
 					<h3>{result.name}</h3>
-					<div class="kv">
-						<Kv k="Rows in the file" v={fmt(s.totalRows)} />
-						<Kv k="Owners kept" v={fmt(s.candidateRows)} o={s.duplicatesCollapsed ? `${fmt(s.duplicatesCollapsed)} duplicates merged` : ''} />
-						{#if s.distinctProperties !== null}<Kv k="Properties" v={fmt(s.distinctProperties)} o="Distinct units, villas or plots" />{/if}
-						<Kv k="With a phone or email" v={fmt(s.validContacts)} />
-						<Kv k="Ready to contact" v={fmt(s.contactReady)} />
-						<Kv k="Verified owners" v={fmt(s.verified)} o="Matches a DLD sale" />
-						<Kv k="Probable owners" v={fmt(s.probable)} />
-						<Kv k="Unit found, owner not verified" v={fmt(s.unitLinked)} />
-						<Kv k="Former owners" v={fmt(s.former)} o="Sold since" />
-						<Kv k="Conflicts with DLD" v={fmt(s.conflicting)} />
-						<Kv k="Not matched" v={fmt(s.notMatched)} />
-						<Kv k="Rental opportunities" v={fmt(s.rentalOpportunities)} />
-					</div>
+					{#if result.match}
+						{@const m = result.match}
+						<div class="kv result">
+							<Kv k="Units identified" v={fmt(m.total)} />
+							<Kv k="Units mapped" v={fmt(m.headline.units)} o={`${m.headline.percent}% coverage`} />
+							<Kv k="Rows to review" v={fmt(m.review.rows)} />
+							{#if m.sales}<Kv k="Sales matched" v={fmt(m.sales.total)} />{/if}
+						</div>
+					{:else}
+						<p class="small muted">{fmt(s.candidateRows)} rows kept from {fmt(s.totalRows)}.</p>
+					{/if}
+					<details>
+						<summary>Processing details</summary>
+						<div class="kv">
+							<Kv k="Rows in the file" v={fmt(s.totalRows)} />
+							<Kv k="Rows kept" v={fmt(s.candidateRows)} o={s.duplicatesCollapsed ? `${fmt(s.duplicatesCollapsed)} duplicates merged` : ''} />
+							{#if s.distinctProperties !== null}<Kv k="Properties" v={fmt(s.distinctProperties)} />{/if}
+							<Kv k="With a phone or email" v={fmt(s.validContacts)} />
+							<Kv k="Contactable candidates" v={fmt(s.contactReady)} />
+							<Kv k="Current owners" v={fmt(s.verified)} />
+							<Kv k="Possible owners" v={fmt(s.probable)} />
+							<Kv k="Property found, owner unknown" v={fmt(s.unitLinked)} />
+							<Kv k="Former owners" v={fmt(s.former)} />
+							<Kv k="Conflicting records" v={fmt(s.conflicting)} />
+							<Kv k="Not matched" v={fmt(s.notMatched)} />
+							<Kv k="Rental opportunities" v={fmt(s.rentalOpportunities)} />
+						</div>
+					</details>
 				</section>
 			{/if}
 		{:else}
@@ -256,7 +243,6 @@ async function send() {
 				}}
 			>
 				<b>{file ? file.name : 'Drop a CSV or XLSX file here'}</b>
-				<span>{owners ? 'name, mobile, community, building, unit number' : 'name, phone or mobile, area, budget'}</span>
 				<span class="btn ghost sm">{file ? 'Choose another file' : 'Choose a file'}</span>
 			</button>
 
@@ -266,7 +252,7 @@ async function send() {
 					<input
 						id="imp-list"
 						maxlength="200"
-						placeholder={file ? file.name.replace(/\.[^.]+$/, '') : 'e.g. Downtown owners · July'}
+						placeholder={file ? file.name.replace(/\.[^.]+$/, '') : 'Downtown owners, July'}
 						bind:value={listName}
 						disabled={sending}
 					/>
@@ -276,34 +262,48 @@ async function send() {
 			{#if problem}<div class="notice" role="alert">{problem}</div>{/if}
 
 			{#if owners && ownerPreview && !ownerPreview.problem}
+				{@const p = ownerPreview}
+				{@const cols = readColumns(p)}
+				{@const used = p.fields?.filter(Boolean).length ?? 0}
 				<section class="sec">
 					<h3>
-						{fmt(ownerPreview.rows)} rows · {ownerPreview.file} · {size(ownerPreview.size)}{ownerPreview.sheets > 1
-							? ` · ${ownerPreview.sheets} sheets`
-							: ''}
+						{fmt(p.rows)} rows · {p.file} · {size(p.size)}{p.sheets > 1 ? ` · ${p.sheets} sheets` : ''}
 					</h3>
-					<div class="small muted">
-						Columns found: {ownerPreview.headers.join(', ')}. Vitevue maps them when you import.
-					</div>
-					<div class="tblwrap boxed">
-						<table class="tbl">
-							<thead>
-								<tr>
-									{#each ownerPreview.headers.slice(0, 6) as h, i (i)}<th>{h}</th>{/each}
-								</tr>
-							</thead>
-							<tbody>
-								{#each ownerPreview.sample as row, i (i)}
-									<tr>
-										{#each row.slice(0, 6) as cell, j (j)}
-											<td data-label={ownerPreview.headers[j]}>{cell || '—'}</td>
+					{#if p.fields}
+						<p class="small muted">
+							{used} of {p.headers.length} columns read{p.headers.length - used
+								? ` · ${p.headers.length - used} ${p.readAtImport ? 'assigned at import' : 'unused'}`
+								: ''}{p.sheets > 1 ? ' · first sheet shown' : ''}
+						</p>
+						<ul class="found" aria-label="Fields in the file">
+							{#each cols.checklist as f (f.field)}
+								<li class={['fd', f.found && 'on']}>{f.field}<span>{f.found ? 'found' : 'not found'}</span></li>
+							{/each}
+						</ul>
+						{#if cols.headers.length}
+							<div class="tblwrap boxed cols">
+								<table class="tbl">
+									<thead>
+										<tr>
+											{#each cols.headers as h, i (i)}<th>{h}</th>{/each}
+										</tr>
+									</thead>
+									<tbody>
+										{#each cols.rows as row, i (i)}
+											<tr>
+												{#each row as cell, j (j)}
+													<td data-label={cols.headers[j]}>{cell || '—'}</td>
+												{/each}
+											</tr>
 										{/each}
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-					{#if ownerPreview.rows > 5}<div class="small muted">and {fmt(ownerPreview.rows - 5)} more</div>{/if}
+									</tbody>
+								</table>
+							</div>
+						{/if}
+					{:else}
+						<p class="small muted">{p.headers.length} columns found</p>
+					{/if}
+					{#if p.rows > 3}<div class="small muted">and {fmt(p.rows - 3)} more rows</div>{/if}
 				</section>
 			{:else if !owners && preview}
 				<section class="sec">
@@ -312,8 +312,8 @@ async function send() {
 						<table class="tbl">
 							<thead>
 								<tr>
-									<th>Name{preview.columns.name ? ` (${preview.columns.name})` : ''}</th>
-									<th>Phone{preview.columns.phone ? ` (${preview.columns.phone})` : ''}</th>
+									<th>Name</th>
+									<th>Phone</th>
 									<th>Budget</th>
 									<th>Area</th>
 								</tr>
@@ -335,103 +335,19 @@ async function send() {
 			{/if}
 
 			{#if ready}
-				<div>
+				<div class="acts">
+					<button type="button" class="btn ghost" disabled={sending} onclick={() => panel.closeAll()}>Cancel</button>
 					<button type="button" class="btn" disabled={sending} onclick={send}>
-						{sending ? 'Importing…' : `Import ${fmt(rows)} rows`}
+						{sending ? 'Uploading…' : `Import ${fmt(rows)} rows`}
 					</button>
 				</div>
 				{#if sending && owners}
-					<div class="small muted">Checking each owner against DLD. A large file can take a few minutes; keep this panel open.</div>
+					<div class="small muted">Uploading the file. Once accepted, processing continues in the background.</div>
 				{/if}
 			{/if}
 		{/if}
 	</div>
 
-	{#if owners}
-		<section class="sec">
-			<h3>Import history</h3>
-			<QueryView query={history} rows={3}>
-				{#snippet children(list)}
-					{#if !list.length}
-						<div class="small muted">No owner files imported yet.</div>
-					{:else}
-						<ul class="hist">
-							{#each list as imp (imp.id)}
-								<li>
-									{#if editing === imp.id}
-										<form
-											class="hi edit"
-											onsubmit={(e) => {
-												e.preventDefault()
-												rename(imp.id, imp.name)
-											}}
-										>
-											<!-- svelte-ignore a11y_autofocus -->
-											<input
-												aria-label="Import name"
-												maxlength="200"
-												bind:value={draft}
-												disabled={renaming}
-												autofocus
-												onkeydown={(e) => e.key === 'Escape' && (editing = null)}
-											/>
-											<button type="submit" class="btn sm" disabled={renaming || !draft.trim()}>
-												{renaming ? 'Saving…' : 'Save'}
-											</button>
-											<button type="button" class="btn ghost sm" onclick={() => (editing = null)}>Cancel</button>
-										</form>
-									{:else}
-										<div class="hi">
-											<b title={imp.file}>{imp.name}</b>
-											<button type="button" class="link small" onclick={() => openReport(imp.id)}>View report</button>
-											<span class="small muted">
-												{fmt(imp.claims)} unique claims · {fmt(imp.rentalLeads)} rental leads · {imp.at}
-											</span>
-										</div>
-										<Chip tone={STATUS[imp.status].tone}>{STATUS[imp.status].label}</Chip>
-									{/if}
-									{#if editing === imp.id}{:else if confirming === imp.id}
-										<span class="small">Delete its list and claims?</span>
-										<button
-											type="button"
-											class="btn danger sm"
-											disabled={deleting === imp.id}
-											onclick={() => remove(imp.id, imp.name)}
-										>
-											{deleting === imp.id ? 'Deleting…' : 'Delete'}
-										</button>
-										<button type="button" class="btn ghost sm" onclick={() => (confirming = null)}>Cancel</button>
-									{:else}
-										<button
-											type="button"
-											class="btn ghost sm"
-											aria-label="Rename {imp.name}"
-											title="Rename"
-											onclick={() => startRename(imp.id, imp.name)}
-										>
-											<Pencil size={15} />
-										</button>
-										<button
-											type="button"
-											class="btn ghost sm"
-											aria-label="Delete {imp.name}"
-											title="Delete"
-											onclick={() => {
-												editing = null
-												confirming = imp.id
-											}}
-										>
-											<Trash size={15} />
-										</button>
-									{/if}
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				{/snippet}
-			</QueryView>
-		</section>
-	{/if}
 </Panel>
 
 {#snippet done()}
@@ -453,47 +369,43 @@ async function send() {
 {/snippet}
 
 <style>
-	.hist {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		gap: 0.4rem;
-	}
-	.hist li {
+	summary { cursor: pointer; color: var(--text2); font-size: 12.5px; }
+	.acts {
 		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
+		justify-content: flex-end;
 		gap: 0.5rem;
-		padding: 0.5rem 0.6rem;
-		border: 1px solid var(--line);
-		border-radius: 8px;
 	}
-	.hi {
-		flex: 1;
-		min-width: 0;
-		display: grid;
+	.cols {
+		overflow-x: auto;
 	}
-	.hi.edit {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-	}
-	.hi.edit input {
-		flex: 1;
-		min-width: 0;
-	}
-	.link {
-		justify-self: start;
-		padding: 0;
-		border: 0;
-		background: none;
-		color: var(--accent);
-		cursor: pointer;
-	}
-	.hi b {
-		overflow: hidden;
-		text-overflow: ellipsis;
+	.cols th,
+	.cols td {
 		white-space: nowrap;
+	}
+	.cols th {
+		vertical-align: top;
+	}
+	.found {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		list-style: none;
+		margin: 0.5rem 0;
+		padding: 0;
+	}
+	.fd {
+		display: inline-flex;
+		gap: 0.4rem;
+		padding: 0.15rem 0.5rem;
+		border: 1px solid var(--sep);
+		border-radius: 999px;
+		font-size: 12.5px;
+		color: var(--text2);
+	}
+	.fd.on {
+		color: var(--text);
+	}
+	.fd.on span {
+		color: var(--green);
 	}
 </style>

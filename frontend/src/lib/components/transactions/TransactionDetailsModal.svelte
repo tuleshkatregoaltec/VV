@@ -73,11 +73,6 @@ const fields = $derived(
 					</a>
 				{/if}
 			</div>
-			<p class="mt-3 text-xs text-fg-4">
-				Source: DXBInteract (DXBI) sold-transaction record. Size and price/sq ft are DXBI's own
-				figures. Master project, DLD area and any value DXBI left empty come from the matching
-				Dubai Land Department record.
-			</p>
 		</div>
 	{/if}
 </Modal>

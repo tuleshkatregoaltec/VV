@@ -41,7 +41,7 @@ async function submit(e: SubmitEvent) {
 				listing_id: listingId || null,
 				note: note.trim()
 			}),
-		success: `Viewing booked ${dayLabel(date)} ${time} · in the calendar`,
+		success: `Viewing booked ${dayLabel(date)} ${time}`,
 		event: 'viewing_booked'
 	})
 	saving = false

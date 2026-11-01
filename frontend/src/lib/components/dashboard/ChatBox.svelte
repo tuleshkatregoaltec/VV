@@ -443,9 +443,6 @@ function stopStreaming() {
 					<img src="/icon.svg" alt="" class="h-3.5 w-3.5" />
 					<h1 class="text-sm font-semibold text-fg-1">Vitevue AI</h1>
 				</div>
-				<p class="mt-1 text-xs text-fg-4">
-					Ask about transactions, yields, pricing, projects, and feasibility context.
-				</p>
 			</div>
 			<div
 				class="mt-0.5 inline-flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-success"
@@ -466,7 +463,7 @@ function stopStreaming() {
 					<div
 						class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-border border-t-fg-1"
 					></div>
-					<p class="text-sm font-medium text-fg-3">Loading messages...</p>
+					<p class="text-sm font-medium text-fg-3">Loading…</p>
 				</div>
 			</div>
 		{:else if displayError && messages.length === 0}
@@ -522,14 +519,8 @@ function stopStreaming() {
 						>
 							Ask Vitevue AI.
 						</h3>
-						<p
-							class="mx-auto mb-6 max-w-md text-sm leading-6 text-fg-3"
-							in:fly={{ y: 20, duration: 500, delay: 300, easing: cubicOut }}
-						>
-							Start with a market question, comp basket, pricing trend, or feasibility assumption.
-						</p>
 						<div
-							class="mx-auto grid max-w-xl grid-cols-1 gap-2 text-[13px] sm:grid-cols-3"
+							class="mx-auto mt-6 grid max-w-xl grid-cols-1 gap-2 text-[13px] sm:grid-cols-3"
 							in:fly={{ y: 20, duration: 500, delay: 400, easing: cubicOut }}
 						>
 							<button
@@ -539,7 +530,6 @@ function stopStreaming() {
 									)}
 								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
-								<span class="mr-1 text-fg-5">→</span>
 								Dubai Marina 2BR yields
 							</button>
 							<button
@@ -547,7 +537,6 @@ function stopStreaming() {
 									startConversationWithPrompt('Compare Dubai Marina pricing against JBR.')}
 								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
-								<span class="mr-1 text-fg-5">→</span>
 								Compare to JBR
 							</button>
 							<button
@@ -555,7 +544,6 @@ function stopStreaming() {
 									startConversationWithPrompt('Build a comp basket for Business Bay offices.')}
 								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
-								<span class="mr-1 text-fg-5">→</span>
 								Build a comp basket
 							</button>
 						</div>

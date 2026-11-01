@@ -1,6 +1,5 @@
 <script lang="ts">
-import { createQuery } from '@tanstack/svelte-query'
-import { crm } from '$lib/crm/api'
+import { createInfiniteQuery, createQuery } from '@tanstack/svelte-query'
 import type { ListingStatus, RenewalWindow } from '$lib/crm/api/types'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
@@ -13,28 +12,32 @@ import { fmt, price, priceShort, short } from '$lib/crm/format'
 import { crmQueries } from '$lib/crm/queries'
 import { openListing, panel } from '$lib/crm/stores/panel.svelte'
 import { type AssetTab, ui } from '$lib/crm/stores/ui.svelte'
-import { write } from '$lib/crm/write'
 
 const me = createQuery(() => crmQueries.me())
 const mineAll = createQuery(() => crmQueries.listings('mine'))
-/** Renewals: every lease in the dataset, 50 at a time up to the 200 the endpoint serves. */
-let renewalLimit = $state(50)
+/** Renewals use fixed-size offset pages; earlier pages stay loaded. */
 /** Area options: every area in the lease data (the list My areas uses), fetched once. */
 const renewalAreas = createQuery(() => ({
 	...crmQueries.feedAreas(),
 	enabled: ui.assetTab === 'renewals'
 }))
-const renewals = createQuery(() => ({
-	...crmQueries.renewals({
+const renewalPages = createInfiniteQuery(() => ({
+	...crmQueries.renewalsInfinite({
 		area: ui.renewalArea,
 		window: ui.renewalWindow,
 		property_type: ui.renewalPtype,
 		project: ui.renewalProject,
 		building: ui.renewalBuilding,
-		limit: renewalLimit
+		limit: 50
 	}),
 	enabled: ui.assetTab === 'renewals'
 }))
+const renewals = $derived({
+	...renewalPages,
+	data: renewalPages.data
+		? { ...renewalPages.data.pages[0], items: renewalPages.data.pages.flatMap((p) => p.items) }
+		: undefined
+})
 const scope = $derived(ui.assetTab === 'company' ? 'company' : 'mine')
 const listings = createQuery(() => ({
 	...crmQueries.listings(scope, ui.assetStatus),
@@ -55,9 +58,9 @@ const facts = $derived.by(() => {
 })
 
 const TABS: { id: AssetTab; label: string }[] = [
-	{ id: 'mine', label: 'My listings' },
-	{ id: 'company', label: 'Company listings' },
-	{ id: 'portfolio', label: 'Portfolio' },
+	{ id: 'mine', label: 'My listings · coming soon' },
+	{ id: 'company', label: 'Company listings · coming soon' },
+	{ id: 'portfolio', label: 'Portfolio · coming soon' },
 	{ id: 'renewals', label: 'Renewals' },
 	{ id: 'market', label: 'Market' }
 ]
@@ -88,7 +91,6 @@ const WINDOWS: { id: Exclude<RenewalWindow, ''>; label: string }[] = [
 
 function filterRenewals(change: () => void) {
 	change()
-	renewalLimit = 50
 }
 
 /** Projects are listed for the picked area, buildings for the picked project. */
@@ -109,17 +111,10 @@ function pickRenewalProject(project: string) {
 
 const options = (list: string[] | undefined) => (list ?? []).map((x) => ({ id: x, label: x }))
 
-function startRenewal(id: string, unit: string) {
-	write({
-		call: () => crm.renewals.start(id),
-		success: `Renewal started — ${unit} · rent deal opened`
-	})
-}
-
 const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 </script>
 
-<svelte:head><title>Assets · CRM Beta</title></svelte:head>
+<svelte:head><title>Assets · CRM</title></svelte:head>
 
 <PageHeader title="Assets" {facts} />
 
@@ -216,7 +211,7 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 									</tr>
 								{/each}
 							{:else}
-								<tr><td colspan="7"><Empty text="No closed deals yet. They land here once transferred." /></td></tr>
+								<tr><td colspan="7"><Empty text="No closed deals yet." /></td></tr>
 							{/each}
 						</tbody>
 					</table>
@@ -295,8 +290,8 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 									<td class="r num" data-label="Rent a year">{r.rent_aed ? fmt(r.rent_aed) : ''}</td>
 									<td data-label="Ends"><Chip chip={r.end_chip} /></td>
 									<td class="r" data-label="">
-										<button type="button" class="btn ghost sm" onclick={() => startRenewal(r.id, r.unit)}>
-											Start renewal
+										<button type="button" class="btn ghost sm" disabled title="Renewal workflows are coming soon">
+											Start renewal · coming soon
 										</button>
 									</td>
 								</tr>
@@ -306,16 +301,13 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 						</tbody>
 					</table>
 				</div>
-				{#if res.items.length < res.total && renewalLimit < 200}
+				{#if renewalPages.hasNextPage}
 					<div class="cb">
-						<button type="button" class="btn ghost sm" onclick={() => (renewalLimit += 50)}>
+						<button type="button" class="btn ghost sm" disabled={renewalPages.isFetchingNextPage} onclick={() => renewalPages.fetchNextPage()}>
 							Show more · {fmt(res.items.length)} of {fmt(res.total)}
 						</button>
 					</div>
-				{:else if res.items.length < res.total}
-					<div class="cb small muted">
-						Showing the first {fmt(res.items.length)} of {fmt(res.total)}. Pick an area or a lease end to see the rest.
-					</div>
+
 				{/if}
 			{/snippet}
 		</QueryView>

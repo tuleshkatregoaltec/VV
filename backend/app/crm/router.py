@@ -1,5 +1,7 @@
 import json
 from datetime import date
+from typing import Literal
+from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -15,7 +17,9 @@ from fastapi import (
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription
+from app.crm.execution import expensive_crm
 from app.crm.import_models import (
+    CrmContactImportPreview,
     CrmContactImportRename,
     CrmContactImportResponse,
     CrmContactListDetail,
@@ -24,6 +28,8 @@ from app.crm.import_models import (
     CrmImportPropertiesResponse,
     CrmLeadImportedContact,
     CrmOwnerBulkUpdate,
+    CrmOwnerHistoryResponse,
+    CrmOwnerHistorySummary,
     CrmOwnerProfile,
     CrmOwnerRegistryResponse,
     CrmOwnerWorkspaceSummary,
@@ -33,6 +39,7 @@ from app.crm.imports import (
     list_contact_imports,
     list_dropped_rows,
     list_import_properties,
+    preview_contact_import,
     process_contact_import,
     rename_contact_import,
 )
@@ -83,7 +90,8 @@ from app.crm.models import (
     CrmWorkspaceSummary,
     CrmWorkspaceUpdate,
 )
-from app.crm.opportunities import get_dashboard, get_lead_detail
+from app.crm.opportunities import get_dashboard
+from app.crm.owner_history import get_owner_history, get_owner_history_summary
 from app.crm.owners import (
     get_contact_list,
     get_owner_profile,
@@ -93,6 +101,7 @@ from app.crm.owners import (
 )
 from app.crm.renewal_leads import (
     get_area_preferences,
+    get_renewal_detail,
     list_renewal_areas,
     list_renewal_leads,
     list_renewals,
@@ -114,8 +123,34 @@ from app.crm.workspaces import (
     update_lead_workspace,
 )
 from app.postgres import get_db_session
+from app.postgres.actor_context import apply_actor_context, transaction_actor
 
-router = APIRouter(prefix="/api/v1/crm", tags=["crm"])
+
+async def _crm_actor(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    with transaction_actor(
+        actor_id=str(context.user.id),
+        organization_id=str(context.organization.id),
+        request_id=uuid4().hex,
+    ):
+        # Authorization can already have opened this same session's transaction.
+        await apply_actor_context(db)
+        yield
+
+
+async def _expensive_crm(context: AuthContext = Depends(require_active_subscription)):
+    async with expensive_crm(str(context.organization.id)):
+        yield
+
+
+# Every CRM entry can compose assessments or warehouse operations, including aliases.
+router = APIRouter(
+    prefix="/api/v1/crm",
+    tags=["crm"],
+    dependencies=[Depends(_crm_actor), Depends(_expensive_crm)],
+)
 
 
 def _auth_ids(auth: AuthContext) -> tuple[str, str]:
@@ -264,7 +299,11 @@ async def crm_update_inbound_match(
     )
 
 
-@router.post("/inbound/imports", response_model=InboundImportResponse, status_code=201)
+@router.post(
+    "/inbound/imports",
+    response_model=InboundImportResponse,
+    status_code=202,
+)
 async def crm_inbound_import(
     file: UploadFile = File(...),
     name: str = Form(default="", max_length=200),
@@ -290,7 +329,10 @@ async def crm_inbound_import(
     )
 
 
-@router.post("/inbound/imports/preview", response_model=InboundImportPreviewResponse)
+@router.post(
+    "/inbound/imports/preview",
+    response_model=InboundImportPreviewResponse,
+)
 async def crm_preview_inbound_import(
     file: UploadFile = File(...),
     campaign_context: str = Form(default="", max_length=4_000),
@@ -323,22 +365,64 @@ async def crm_delete_inbound_import(
 @router.post(
     "/contact-imports",
     response_model=CrmContactImportResponse,
-    status_code=201,
+    status_code=202,
 )
 async def crm_contact_import(
     file: UploadFile = File(...),
     name: str = Form(default="", max_length=200),
+    mapping_json: str = Form(default="", max_length=50_000),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Upload, normalize, verify, and publish an owner-contact workbook."""
     user_id, organization_id = _auth_ids(context)
+    try:
+        mapping_override = json.loads(mapping_json) if mapping_json else None
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail="Invalid import mapping") from exc
+    if mapping_override is not None and not isinstance(mapping_override, dict):
+        raise HTTPException(status_code=422, detail="Invalid import mapping")
     return await process_contact_import(
         db,
         upload=file,
         name=name,
         user_id=user_id,
         organization_id=organization_id,
+        mapping_override=mapping_override,
+    )
+
+
+@router.post(
+    "/contact-imports/preview",
+    response_model=CrmContactImportPreview,
+)
+async def crm_contact_import_preview(
+    file: UploadFile = File(...),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Show which field each column of an owner file feeds, without importing it."""
+    _, organization_id = _auth_ids(context)
+    return await preview_contact_import(db, upload=file, organization_id=organization_id)
+
+
+@router.post(
+    "/contact-imports/source-only",
+    response_model=CrmContactImportResponse,
+    status_code=202,
+)
+async def crm_source_only_import(
+    file: UploadFile = File(...),
+    name: str = Form(default="", max_length=200),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Import reviewed source history without requesting registry evidence."""
+    from app.crm.source_audit import process_source_audit_import
+
+    user_id, organization_id = _auth_ids(context)
+    return await process_source_audit_import(
+        db, upload=file, name=name, user_id=user_id, organization_id=organization_id
     )
 
 
@@ -471,9 +555,17 @@ async def crm_contact_list(
         default=None,
         pattern=(
             "^(verified_current_owner|probable_current_owner|unit_linked_unverified|"
-            "former_owner|conflicting_claim|insufficient_property_data|"
+            "former_owner|unverified_former_owner|conflicting_claim|insufficient_property_data|"
             "registry_not_observed|unmatched)$"
         ),
+    ),
+    match_colour: list[Literal["green", "amber", "blue", "red", "grey"]] | None = Query(
+        default=None,
+        description="Keep rows whose property-first match is one of these colours.",
+    ),
+    match_outcome: list[str] | None = Query(
+        default=None,
+        description="Keep rows with one of these match outcomes (for example `lender` or `broker`).",
     ),
     search: str | None = Query(default=None, max_length=160),
     limit: int = Query(default=100, ge=1, le=500),
@@ -488,6 +580,8 @@ async def crm_contact_list(
         list_id=list_id,
         organization_id=organization_id,
         status=status,
+        match_colour=match_colour,
+        match_outcome=match_outcome,
         search=search,
         limit=limit,
         offset=offset,
@@ -501,16 +595,19 @@ async def crm_contact_list(
 async def crm_owner_registry(
     scope: str = Query(
         default="all",
-        pattern="^(all|rental_ready|registry|prior_owners)$",
+        pattern="^(all|current_owners|rental_ready|registry|prior_owners|needs_review)$",
     ),
     list_id: int | None = Query(default=None, ge=1),
     status: str | None = Query(
         default=None,
         pattern=(
             "^(verified_current_owner|probable_current_owner|unit_linked_unverified|"
-            "former_owner|conflicting_claim|insufficient_property_data|"
+            "former_owner|unverified_former_owner|conflicting_claim|insufficient_property_data|"
             "registry_not_observed|unmatched)$"
         ),
+    ),
+    transaction_match_status: str | None = Query(
+        default=None, pattern="^(matched|unmatched|ambiguous|excluded)$"
     ),
     search: str | None = Query(default=None, max_length=160),
     lease_window: str | None = Query(
@@ -552,6 +649,7 @@ async def crm_owner_registry(
         offset=offset,
         min_properties=min_properties,
         next_event_days=next_event_days,
+        transaction_match_status=transaction_match_status,
     )
 
 
@@ -592,9 +690,58 @@ async def crm_bulk_update_owner_workspaces(
 
 
 @router.get(
-    "/owners/{owner_key}",
-    response_model=CrmOwnerProfile,
+    "/owner-history/summary",
+    response_model=CrmOwnerHistorySummary,
 )
+async def crm_owner_history_summary(
+    import_id: int | None = Query(default=None, ge=1),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Count source events and scoped owner/property evidence across imports."""
+    _, organization_id = _auth_ids(context)
+    return await get_owner_history_summary(db, organization_id=organization_id, import_id=import_id)
+
+
+@router.get(
+    "/contact-imports/{import_id}/owner-summary",
+    response_model=CrmOwnerHistorySummary,
+)
+async def crm_contact_import_owner_summary(
+    import_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Count this file's associations using current evidence from all tenant imports."""
+    _, organization_id = _auth_ids(context)
+    return await get_owner_history_summary(db, organization_id=organization_id, import_id=import_id)
+
+
+@router.get(
+    "/owners/{owner_key}/history",
+    response_model=CrmOwnerHistoryResponse,
+)
+async def crm_owner_history(
+    owner_key: str,
+    import_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Page one owner's individual source events across organization imports."""
+    _, organization_id = _auth_ids(context)
+    return await get_owner_history(
+        db,
+        organization_id=organization_id,
+        owner_key=owner_key,
+        import_id=import_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/owners/{owner_key}", response_model=CrmOwnerProfile)
 async def crm_owner_profile(
     owner_key: str,
     context: AuthContext = Depends(require_active_subscription),
@@ -611,6 +758,7 @@ async def crm_owner_profile(
 
 @router.get("/dashboard", response_model=CrmDashboardResponse)
 async def crm_dashboard(
+    request: Request,
     status: str | None = Query(
         default=None, pattern="^(expired|expiring_30|expiring_60|expiring_90)$"
     ),
@@ -629,20 +777,23 @@ async def crm_dashboard(
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Return actionable lease-expiry leads and location summaries."""
-    return await get_dashboard(
-        status=status,
-        priority=priority,
-        asset_class=asset_class,
-        property_type=property_type,
-        area=area,
-        project=project,
-        building=building,
-        search=search,
-        breakdown=breakdown,
-        expired_days=expired_days,
-        limit=limit,
-        offset=offset,
-        as_of=as_of,
+    return await _until_disconnect(
+        request,
+        get_dashboard(
+            status=status,
+            priority=priority,
+            asset_class=asset_class,
+            property_type=property_type,
+            area=area,
+            project=project,
+            building=building,
+            search=search,
+            breakdown=breakdown,
+            expired_days=expired_days,
+            limit=limit,
+            offset=offset,
+            as_of=as_of,
+        ),
     )
 
 
@@ -765,12 +916,20 @@ async def crm_open_renewal_lead(
 
 @router.get("/leads/{lead_id}", response_model=CrmLeadDetailResponse)
 async def crm_lead_detail(
+    request: Request,
     lead_id: str,
     as_of: date | None = Query(default=None),
     context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Return the evidence timeline and recommended action for one lead."""
-    return await get_lead_detail(lead_id, as_of=as_of)
+    user_id, organization_id = _auth_ids(context)
+    return await _until_disconnect(
+        request,
+        get_renewal_detail(
+            db, lead_id=lead_id, as_of=as_of, user_id=user_id, organization_id=organization_id
+        ),
+    )
 
 
 @router.get(
@@ -791,14 +950,18 @@ async def crm_lead_contacts(
     )
 
 
-@router.get("/leads/{lead_id}/report", response_model=CrmPropertyReportResponse)
+@router.get(
+    "/leads/{lead_id}/report",
+    response_model=CrmPropertyReportResponse,
+)
 async def crm_property_report(
+    request: Request,
     lead_id: str,
     as_of: date | None = Query(default=None),
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Build a one-year property report with sales, rentals, and indicative analysis."""
-    return await get_property_report(lead_id, as_of=as_of)
+    return await _until_disconnect(request, get_property_report(lead_id, as_of=as_of))
 
 
 @router.get("/workspaces", response_model=list[CrmWorkspaceSummary])
@@ -815,7 +978,10 @@ async def crm_workspaces(
     )
 
 
-@router.get("/workspaces/{lead_id}", response_model=CrmWorkspaceResponse)
+@router.get(
+    "/workspaces/{lead_id}",
+    response_model=CrmWorkspaceResponse,
+)
 async def crm_lead_workspace(
     lead_id: str,
     context: AuthContext = Depends(require_active_subscription),
@@ -884,7 +1050,10 @@ async def crm_delete_note(
     return Response(status_code=204)
 
 
-@router.get("/saved-leads", response_model=list[CrmSavedLeadResponse])
+@router.get(
+    "/saved-leads",
+    response_model=list[CrmSavedLeadResponse],
+)
 async def crm_saved_leads(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),

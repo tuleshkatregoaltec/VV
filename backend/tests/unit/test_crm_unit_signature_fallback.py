@@ -136,9 +136,8 @@ async def test_unit_shared_by_two_sales_on_the_signature_stays_undecided(monkeyp
     assert "property_identity_resolution" not in contact.evidence
 
 
-async def test_prefixed_building_name_and_excel_errors_fit_the_registry_building(monkeypatch):
-    """Greens "Old" sheet: building "GR PANORAMA", project and area "#REF!" (broken formulas).
-    DLD has "Panorama" in The Views; the words are contained and #REF! is not a location."""
+async def test_broken_geography_requires_review_before_qualified_recovery(monkeypatch):
+    """A contained building name cannot supply the missing qualified geography."""
     _registry(
         monkeypatch,
         [
@@ -152,10 +151,8 @@ async def test_prefixed_building_name_and_excel_errors_fit_the_registry_building
 
     result = await _recover_property_identity_from_transaction([contact])
 
-    assert result["unit"] == 1
-    assert contact.evidence["property_identity_resolution"]["resolved"]["sale_key"] == (
-        "Panorama-T2-201"
-    )
+    assert result["resolved"] == 0
+    assert "property_identity_resolution" not in contact.evidence
 
 
 async def test_word_containment_does_not_cross_into_another_panorama(monkeypatch):

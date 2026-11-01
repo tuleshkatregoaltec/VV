@@ -14,7 +14,7 @@
     ]
   },
   "crm_contact_imports": {
-    "ddl": "\nCREATE TABLE crm_contact_imports (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\toriginal_filename VARCHAR NOT NULL, \n\tsha256 VARCHAR NOT NULL, \n\tsize_bytes INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tmapping JSON NOT NULL, \n\tsummary JSON NOT NULL, \n\terror_message TEXT, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcompleted_at TIMESTAMP WITH TIME ZONE, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_contact_import_organization_hash UNIQUE (organization_id, sha256)\n)\n\n",
+    "ddl": "\nCREATE TABLE crm_contact_imports (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\toriginal_filename VARCHAR NOT NULL, \n\tsha256 VARCHAR NOT NULL, \n\tsize_bytes INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tmapping JSON NOT NULL, \n\towner_source_metadata JSONB DEFAULT '{}' NOT NULL, \n\tsummary JSON NOT NULL, \n\terror_message TEXT, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcompleted_at TIMESTAMP WITH TIME ZONE, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_contact_import_organization_hash UNIQUE (organization_id, sha256)\n)\n\n",
     "indexes": [
       "CREATE INDEX ix_crm_contact_imports_created_by_user_id ON crm_contact_imports (created_by_user_id)",
       "CREATE INDEX ix_crm_contact_imports_organization_id ON crm_contact_imports (organization_id)",
@@ -28,6 +28,13 @@
       "CREATE INDEX ix_crm_contact_lists_created_by_user_id ON crm_contact_lists (created_by_user_id)",
       "CREATE INDEX ix_crm_contact_lists_organization_id ON crm_contact_lists (organization_id)",
       "CREATE INDEX ix_crm_contact_lists_source_import_id ON crm_contact_lists (source_import_id)"
+    ]
+  },
+  "crm_import_jobs": {
+    "ddl": "\nCREATE TABLE crm_import_jobs (\n\tid VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\towner_import_id INTEGER, \n\tinbound_import_id INTEGER, \n\tinput_object_key VARCHAR NOT NULL, \n\tinput_sha256 VARCHAR(64) NOT NULL, \n\tinput_size_bytes INTEGER NOT NULL, \n\tidempotency_key VARCHAR(64) NOT NULL, \n\tparameters JSONB NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tattempt_count INTEGER NOT NULL, \n\tmax_attempts INTEGER NOT NULL, \n\tlease_token VARCHAR, \n\tlease_expires_at TIMESTAMP WITH TIME ZONE, \n\tavailable_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcompleted_at TIMESTAMP WITH TIME ZONE, \n\tlast_error VARCHAR(200), \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_crm_import_job_target CHECK ((owner_import_id IS NOT NULL) <> (inbound_import_id IS NOT NULL)), \n\tCONSTRAINT ck_crm_import_job_status CHECK (status IN ('queued', 'processing', 'retry_wait', 'completed', 'failed')), \n\tCONSTRAINT ck_crm_import_job_attempts CHECK (attempt_count >= 0 AND max_attempts BETWEEN 1 AND 10), \n\tUNIQUE (owner_import_id), \n\tFOREIGN KEY(owner_import_id) REFERENCES crm_contact_imports (id) ON DELETE CASCADE, \n\tUNIQUE (inbound_import_id), \n\tFOREIGN KEY(inbound_import_id) REFERENCES crm_inbound_imports (id) ON DELETE CASCADE, \n\tUNIQUE (input_object_key)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_import_jobs_claim ON crm_import_jobs (status, available_at, lease_expires_at)",
+      "CREATE INDEX ix_crm_import_jobs_organization ON crm_import_jobs (organization_id)"
     ]
   },
   "crm_inbound_activities": {
@@ -104,7 +111,7 @@
     ]
   },
   "crm_lead_workspaces": {
-    "ddl": "\nCREATE TABLE crm_lead_workspaces (\n\tid SERIAL NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tlead_id VARCHAR NOT NULL, \n\tunit_candidate_key VARCHAR NOT NULL, \n\tpipeline_status VARCHAR NOT NULL, \n\thighlight_color VARCHAR NOT NULL, \n\towner_name VARCHAR, \n\towner_email VARCHAR, \n\towner_phone VARCHAR, \n\tnext_follow_up DATE, \n\ttags JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_workspace_owner_candidate UNIQUE (user_id, organization_id, unit_candidate_key)\n)\n\n",
+    "ddl": "\nCREATE TABLE crm_lead_workspaces (\n\tid SERIAL NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tlead_id VARCHAR NOT NULL, \n\tunit_candidate_key VARCHAR NOT NULL, \n\tpipeline_status VARCHAR NOT NULL, \n\thighlight_color VARCHAR NOT NULL, \n\towner_name VARCHAR, \n\towner_email VARCHAR, \n\towner_phone VARCHAR, \n\towner_source VARCHAR, \n\tnext_follow_up DATE, \n\ttags JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_workspace_owner_candidate UNIQUE (user_id, organization_id, unit_candidate_key)\n)\n\n",
     "indexes": [
       "CREATE INDEX ix_crm_lead_workspaces_lead_id ON crm_lead_workspaces (lead_id)",
       "CREATE INDEX ix_crm_lead_workspaces_organization_id ON crm_lead_workspaces (organization_id)",
@@ -112,6 +119,22 @@
       "CREATE INDEX ix_crm_lead_workspaces_unit_candidate_key ON crm_lead_workspaces (unit_candidate_key)",
       "CREATE INDEX ix_crm_lead_workspaces_user_id ON crm_lead_workspaces (user_id)"
     ]
+  },
+  "crm_licensed_brokers": {
+    "ddl": "\nCREATE TABLE crm_licensed_brokers (\n\tbroker_number SERIAL NOT NULL, \n\tname_key VARCHAR NOT NULL, \n\tphones JSON NOT NULL, \n\temails JSON NOT NULL, \n\tcard_expiry_date DATE, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (broker_number)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_licensed_brokers_name_key ON crm_licensed_brokers (name_key)"
+    ]
+  },
+  "crm_mutation_audit": {
+    "ddl": "\nCREATE TABLE crm_mutation_audit (\n\tid BIGSERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tactor_id VARCHAR NOT NULL, \n\tactor_kind VARCHAR NOT NULL, \n\tdatabase_actor VARCHAR NOT NULL, \n\trequest_id VARCHAR, \n\taction VARCHAR NOT NULL, \n\tresource VARCHAR NOT NULL, \n\toutcome VARCHAR DEFAULT 'success' NOT NULL, \n\trow_count BIGINT NOT NULL, \n\toccurred_at TIMESTAMP WITH TIME ZONE DEFAULT clock_timestamp() NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_crm_mutation_audit_rows CHECK (row_count > 0), \n\tCONSTRAINT ck_crm_mutation_audit_action CHECK (action IN ('INSERT', 'UPDATE', 'DELETE')), \n\tCONSTRAINT ck_crm_mutation_audit_actor CHECK (actor_kind IN ('user', 'database')), \n\tCONSTRAINT ck_crm_mutation_audit_outcome CHECK (outcome = 'success')\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_mutation_audit_org_time ON crm_mutation_audit (organization_id, occurred_at)"
+    ]
+  },
+  "crm_owner_assessment_revisions": {
+    "ddl": "\nCREATE TABLE crm_owner_assessment_revisions (\n\torganization_id VARCHAR NOT NULL, \n\trevision BIGINT NOT NULL, \n\tPRIMARY KEY (organization_id)\n)\n\n",
+    "indexes": []
   },
   "crm_owner_notes": {
     "ddl": "\nCREATE TABLE crm_owner_notes (\n\tid SERIAL NOT NULL, \n\tworkspace_id INTEGER NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tbody TEXT NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(workspace_id) REFERENCES crm_owner_workspaces (id) ON DELETE CASCADE\n)\n\n",
@@ -131,11 +154,12 @@
     ]
   },
   "crm_property_contact_claims": {
-    "ddl": "\nCREATE TABLE crm_property_contact_claims (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\timport_id INTEGER NOT NULL, \n\tlist_id INTEGER NOT NULL, \n\tsource_sheet VARCHAR NOT NULL, \n\tsource_row_number INTEGER NOT NULL, \n\trow_fingerprint VARCHAR NOT NULL, \n\towner_key VARCHAR NOT NULL, \n\tproperty_key VARCHAR NOT NULL, \n\tcontact_name VARCHAR NOT NULL, \n\tphone_primary VARCHAR, \n\tphone_alternate VARCHAR, \n\temail_primary VARCHAR, \n\tarea_name VARCHAR NOT NULL, \n\tproject_name VARCHAR NOT NULL, \n\tbuilding_name VARCHAR NOT NULL, \n\tunit_number VARCHAR NOT NULL, \n\tproperty_type VARCHAR NOT NULL, \n\ttransaction_date DATE, \n\ttransaction_price_aed BIGINT, \n\tparty_role VARCHAR NOT NULL, \n\tprocedure_type VARCHAR NOT NULL, \n\townership_status VARCHAR NOT NULL, \n\tconfidence_score INTEGER NOT NULL, \n\tmatch_reason TEXT NOT NULL, \n\tlead_id VARCHAR, \n\tunit_candidate_key VARCHAR, \n\tlatest_sale_date DATE, \n\tlatest_sale_price_aed BIGINT, \n\tlater_sale_date DATE, \n\tlease_end DATE, \n\tannual_rent_aed BIGINT, \n\tevidence JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_property_contact_claim_source_row UNIQUE (import_id, source_sheet, source_row_number), \n\tFOREIGN KEY(import_id) REFERENCES crm_contact_imports (id) ON DELETE CASCADE, \n\tFOREIGN KEY(list_id) REFERENCES crm_contact_lists (id) ON DELETE CASCADE\n)\n\n",
+    "ddl": "\nCREATE TABLE crm_property_contact_claims (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\timport_id INTEGER NOT NULL, \n\tlist_id INTEGER NOT NULL, \n\tsource_sheet VARCHAR NOT NULL, \n\tsource_row_number INTEGER NOT NULL, \n\trow_fingerprint VARCHAR NOT NULL, \n\towner_key VARCHAR NOT NULL, \n\tproperty_key VARCHAR NOT NULL, \n\tcontact_name VARCHAR NOT NULL, \n\tphone_primary VARCHAR, \n\tphone_alternate VARCHAR, \n\temail_primary VARCHAR, \n\tarea_name VARCHAR NOT NULL, \n\tproject_name VARCHAR NOT NULL, \n\tbuilding_name VARCHAR NOT NULL, \n\tunit_number VARCHAR NOT NULL, \n\tproperty_type VARCHAR NOT NULL, \n\ttransaction_date DATE, \n\ttransaction_price_aed BIGINT, \n\tparty_role VARCHAR NOT NULL, \n\tprocedure_type VARCHAR NOT NULL, \n\townership_status VARCHAR NOT NULL, \n\tconfidence_score INTEGER NOT NULL, \n\tmatch_reason TEXT NOT NULL, \n\tlead_id VARCHAR, \n\tunit_candidate_key VARCHAR, \n\tlatest_sale_date DATE, \n\tlatest_sale_price_aed BIGINT, \n\tlater_sale_date DATE, \n\tlease_end DATE, \n\tannual_rent_aed BIGINT, \n\tevidence JSON NOT NULL, \n\towner_history_evidence JSONB DEFAULT '{}' NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_property_contact_claim_source_row UNIQUE (import_id, source_sheet, source_row_number), \n\tFOREIGN KEY(import_id) REFERENCES crm_contact_imports (id) ON DELETE CASCADE, \n\tFOREIGN KEY(list_id) REFERENCES crm_contact_lists (id) ON DELETE CASCADE\n)\n\n",
     "indexes": [
       "CREATE INDEX ix_crm_claim_list_owner_property_preference ON crm_property_contact_claims (organization_id, list_id, owner_key, property_key, (CASE ownership_status WHEN 'former_owner' THEN 6 WHEN 'verified_current_owner' THEN 5 WHEN 'probable_current_owner' THEN 4 WHEN 'unit_linked_unverified' THEN 3 WHEN 'conflicting_claim' THEN 2 ELSE 1 END) DESC, confidence_score DESC, transaction_date DESC NULLS LAST)",
       "CREATE INDEX ix_crm_claim_org_owner ON crm_property_contact_claims (organization_id, owner_key)",
       "CREATE INDEX ix_crm_claim_org_owner_property ON crm_property_contact_claims (organization_id, owner_key, property_key)",
+      "CREATE INDEX ix_crm_claim_org_property ON crm_property_contact_claims (organization_id, property_key)",
       "CREATE INDEX ix_crm_claim_owner_property_preference ON crm_property_contact_claims (organization_id, owner_key, property_key, (CASE ownership_status WHEN 'former_owner' THEN 6 WHEN 'verified_current_owner' THEN 5 WHEN 'probable_current_owner' THEN 4 WHEN 'unit_linked_unverified' THEN 3 WHEN 'conflicting_claim' THEN 2 ELSE 1 END) DESC, confidence_score DESC, transaction_date DESC NULLS LAST)",
       "CREATE INDEX ix_crm_property_contact_claims_import_id ON crm_property_contact_claims (import_id)",
       "CREATE INDEX ix_crm_property_contact_claims_lead_id ON crm_property_contact_claims (lead_id)",

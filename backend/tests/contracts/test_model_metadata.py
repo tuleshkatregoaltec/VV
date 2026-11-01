@@ -8,7 +8,10 @@ from sqlmodel import SQLModel
 
 
 def table_contract():
-    get_app()  # Register the exact current runtime models, including incidental imports.
+    # Database-only audit models are canonical even when no HTTP route imports them.
+    import app.postgres.models  # noqa: F401
+
+    get_app()
     dialect = postgresql.dialect()
     return {
         table.name: {

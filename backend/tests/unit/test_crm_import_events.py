@@ -64,6 +64,10 @@ def test_procedures_retained_without_incidental_sale_inference(procedure, family
     assert row.ownership_status == (
         "former_owner" if family == "sale" else "unit_linked_unverified"
     )
+    if family == "sale":
+        # A corroborated Seller describes disposal; non-sale procedures never infer ownership.
+        assert row.confidence_score == 95
+        assert row.party_role == "Seller"
 
 
 def test_dated_owner_snapshot_and_multiple_phones_survive_without_buyer_role():

@@ -3,7 +3,22 @@
  * anything computed (chips, summaries, commission amounts, counts) is produced by the backend
  * so no business rule lives in Svelte. Money is whole AED; dates are YYYY-MM-DD (Dubai).
  */
-import type { ClaimStatus, DropReason, ImportCounts, SheetCheck } from '../ownerImportReport'
+import type {
+	CrmContactImportResponse,
+	CrmMatchedSale,
+	CrmOwnerHistoryResponse,
+	CrmOwnerHistorySummary,
+	CrmOwnerMatchSummary,
+	CrmOwnerProperty,
+	CrmSourceAuditSummary
+} from '$lib/api/generated/hey-api/types.gen'
+import type {
+	ClaimStatus,
+	DropReason,
+	ImportCounts,
+	OwnerMatchView,
+	SheetCheck
+} from '../ownerImportReport'
 
 /** `owner`: a Vitevue lease lead not yet classified as seller or landlord. */
 export type LeadType = 'buyer' | 'seller' | 'tenant' | 'landlord' | 'owner'
@@ -62,6 +77,7 @@ export interface Me {
 }
 
 export interface NavCounts {
+	limited?: boolean
 	new_leads: number
 	/** Inbox items assigned to me and not yet a lead, or waiting with my request on them. */
 	inbox: number
@@ -230,6 +246,8 @@ export interface LeadListParams {
 }
 
 export interface LeadListResponse {
+	/** Filters and counts cover the loaded rows when the server has more. */
+	limited?: boolean
 	items: LeadRow[]
 	total: number
 	/** All and the type counts leave lost leads out; `lost` counts them. */
@@ -324,6 +342,7 @@ export interface MatchClient {
 }
 
 export interface MatchClients {
+	limited?: boolean
 	ready: MatchClient[]
 	offplan: MatchClient[]
 	sell: MatchClient[]
@@ -707,9 +726,11 @@ export interface RenewalListParams {
 	/** Picked after a project. */
 	building: string
 	limit: number
+	offset?: number
 }
 
 export interface RenewalListResponse {
+	offset: number
 	items: Renewal[]
 	total: number
 	/** Options for the filters, from the leases in the current filter (areas come from My areas' list). */
@@ -731,6 +752,14 @@ export interface RenewalHistoryEvent {
 }
 
 export interface RenewalDetail extends Renewal {
+	/** Imported assessments for review, separate from the resolved owner fields. */
+	owner_evidence: {
+		id: number
+		name: string
+		status: ClaimStatus
+		reason: string
+		source: string
+	}[]
 	reason: string
 	action: string
 	last_purchase: { date: string; price_aed: number | null } | null
@@ -761,10 +790,24 @@ export interface MarketListingDetail extends MarketListing {
 
 /* ── owners ── */
 
-export type OwnerTab = 'mine' | 'all' | 'multi' | 'event' | 'sold' | 'update'
+export type OwnerHistorySummary = CrmOwnerHistorySummary
+export type OwnerHistory = CrmOwnerHistoryResponse
+export type SourceAuditSummary = CrmSourceAuditSummary
+
+export interface OwnerHistoryParams {
+	import_id?: number
+	limit?: number
+	offset?: number
+}
+
+export type OwnerTab = 'mine' | 'all' | 'multi' | 'event' | 'sold' | 'update' | 'review'
 
 export interface OwnerListParams {
 	tab: OwnerTab
+	ownership?: 'current' | 'former'
+	transaction_match_status?: 'matched' | 'unmatched' | 'ambiguous' | 'excluded' | ''
+	/** Limit the view to people recorded in this saved import list. */
+	list_id?: number
 	/** Owner name, unit number or building ("Oxford Residence"). */
 	q?: string
 	source?: OwnerSource | ''
@@ -780,12 +823,21 @@ export interface OwnerListParams {
 }
 
 export interface OwnerRow {
+	/** Observational role only; never a confirmed profession. */
+	relationship_role?: 'unknown' | 'possible_intermediary' | 'organization'
+	role_signals?: string[]
 	id: string
 	name: string
 	sources: OwnerSource[]
 	source_label: string
 	/** Unit numbers, not sentences: "Marina Gate 2 #2304". */
 	units: string[]
+	/** Every associated property; `units` may hold only those in the list's view. */
+	units_total: number
+	/** Properties held now (verified or probable current owner). */
+	units_current: number
+	/** A developer, or a person selling for one; kept out of former owners. */
+	developer_side_seller: boolean
 	next_event: string
 	next_event_date: string
 	/** "in 41 days · 9 Nov" */
@@ -809,9 +861,13 @@ export interface OwnerNote {
 	origin: Origin
 }
 
-/** Every unit an owner holds, the same fields for every owner. */
+/** Properties associated with an imported person; status carries the ownership assessment. */
 export interface OwnerUnit {
+	source_reference?: CrmOwnerProperty['source_reference']
+	/** The property; the same one can appear on two source rows of one owner. */
 	key: string
+	/** Unique within the owner's rows: the key, then `key#2`, `key#3` for repeats. */
+	id: string
 	number: string
 	building: string
 	area: string
@@ -882,6 +938,8 @@ export interface OwnerImportSource {
 }
 
 export interface OwnerDetail extends OwnerRow {
+	/** All source phone numbers, retained independently of ownership or contact permission. */
+	phone_numbers?: string[]
 	unit_rows: OwnerUnit[]
 	/** The uploaded files this owner came from, oldest first. */
 	imported_from: OwnerImportSource[]
@@ -907,21 +965,15 @@ export interface OwnerRecordCreate {
 }
 
 export interface OwnerListResponse {
+	source_audit?: SourceAuditSummary | null
 	items: OwnerRow[]
-	counts: Record<OwnerTab, number>
-	total: number
-	unit_total: number
-	with_event_90: number
-	/** Owners on the agency's own file. */
-	on_file: number
+	/** Additional filters apply to the loaded page, not the complete registry. */
+	pageFiltered: boolean
 	areas: string[]
 	/**
-	 * This page within the whole file (search included). The tab counts and the source, area,
-	 * bedrooms and type filters only see the owners on this page.
+	 * Server page and total before optional page-only filters (search included).
 	 */
 	page: { offset: number; limit: number; total: number; loaded: number }
-	/** Tabs whose counts cover only this page (the backend can't filter them yet). */
-	pageOnlyTabs: OwnerTab[]
 }
 
 export interface OwnerLeadCreate {
@@ -937,10 +989,13 @@ export interface OwnerReport {
 	next_event: string
 }
 
+export type ImportStatus = CrmContactImportResponse['status']
+
 export interface ImportRequest {
 	id: string
 	who: string
 	kind: 'Owners' | 'Leads'
+	jobStatus: ImportStatus
 	file: string
 	rows: number
 	areas: string
@@ -970,6 +1025,10 @@ export interface OwnerFilePreview {
 	rows: number
 	headers: string[]
 	sample: string[][]
+	/** The field each header feeds (null: not read); null when the backend could not say. */
+	fields: (string | null)[] | null
+	/** Some columns get their field from the model when the file is imported. */
+	readAtImport: boolean
 	problem: string | null
 }
 
@@ -978,7 +1037,7 @@ export interface OwnerImport {
 	id: number
 	name: string
 	file: string
-	status: 'processing' | 'completed' | 'failed'
+	status: ImportStatus
 	/** Owner–property claims kept after duplicates were merged. */
 	claims: number
 	rentalLeads: number
@@ -991,7 +1050,7 @@ export interface ImportSheet {
 	rows: number
 	/** 'transaction_party' (a DLD export with dates) or 'contact_list'. */
 	family: string
-	source: 'heuristic' | 'llm' | 'heuristic_fallback'
+	source: 'heuristic' | 'llm' | 'heuristic_fallback' | 'reused' | 'override'
 	confidence: number
 	fields: { field: string; column: string }[]
 	warnings: string[]
@@ -1000,10 +1059,11 @@ export interface ImportSheet {
 
 /** An owner file with its counts and sheets, for the import dashboard and report. */
 export interface OwnerImportDetail {
+	source_audit?: SourceAuditSummary | null
 	id: number
 	name: string
 	file: string
-	status: 'processing' | 'completed' | 'failed'
+	status: ImportStatus
 	at: string
 	createdAt: string
 	/** The saved list holding its owner rows; null when none was saved. */
@@ -1013,8 +1073,21 @@ export interface OwnerImportDetail {
 	flagged: boolean
 }
 
+/** Colour of a match outcome, as the backend names it. */
+export type MatchColour = 'green' | 'amber' | 'blue' | 'red' | 'grey'
+
+/** The property-first matcher's totals for one import (summary.owner_match); absent on older imports. */
+export type OwnerMatchSummary = CrmOwnerMatchSummary
+
+/** The sale the matcher tied a row to; every field may be missing. */
+export type MatchedSale = CrmMatchedSale
+
 export interface OwnerImportRowsParams {
 	status: ClaimStatus | null
+	/** Only rows of these match colours; empty or missing means all. */
+	matchColour?: MatchColour[]
+	/** Only rows with one of these match outcomes (for example 'lender'). */
+	matchOutcome?: string[]
 	search: string
 	offset: number
 }
@@ -1041,6 +1114,12 @@ export interface OwnerImportRow {
 	reason: string
 	sheet: string
 	rowNumber: number
+	/** The property-first matcher's verdict; absent until the import is re-matched. */
+	matchOutcome?: string | null
+	matchColour?: MatchColour | null
+	matchReasons?: string[]
+	matchWarnings?: string[]
+	matchedSale?: MatchedSale | null
 }
 
 export interface OwnerPropertyParams {
@@ -1074,11 +1153,12 @@ export interface OwnerProperty {
 	rows: number
 	buyers: number
 	sellers: number
-	/** Name on the strongest verified/probable owner row; null when there is none. */
+	/** Unambiguous verified owner; null when the assessment is provisional or conflicting. */
 	currentOwner: string | null
 	latestDate: string | null
 	latestPrice: number | null
 	records: OwnerPropertyRecord[]
+	recordsTruncated: boolean
 }
 
 export interface OwnerProperties {
@@ -1129,10 +1209,12 @@ export interface OwnerImportRows {
 export interface OwnerImportResult {
 	id: number
 	name: string
-	status: 'processing' | 'completed' | 'failed'
-	/** The same file was uploaded before; the backend returned that import. */
+	status: ImportStatus
+	/** The same file was uploaded before; this may be an active job or a completed import. */
 	alreadyImported: boolean
 	createdAt: string
+	/** Distinct units confirmed with a sale; null when the file was not matched unit by unit. */
+	match: OwnerMatchView | null
 	summary: {
 		totalRows: number
 		candidateRows: number
@@ -1201,6 +1283,7 @@ export interface Gap {
 }
 
 export interface HomeResponse {
+	limited?: boolean
 	date: string
 	facts: { events_today: number; conveyancing: number; permits_under_14: number }
 	/** 1 Oct (proposal): Viewings this week · Expiring in 14 days · Market · {area} · Commission. */
@@ -1293,6 +1376,7 @@ export interface InboxItem {
 }
 
 export interface InboxResponse {
+	limited?: boolean
 	items: InboxItem[]
 	counts: Record<InboxFilter, number>
 	today: number

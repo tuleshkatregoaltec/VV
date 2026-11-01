@@ -2,6 +2,7 @@
  * Per-screen view state (tabs, filters, switches). Kept for the session so coming back to a
  * screen shows it as it was left, like the reference mockup.
  */
+
 import type {
 	BudgetBand,
 	DealTab,
@@ -16,13 +17,14 @@ import type {
 	RenewalWindow,
 	Source
 } from '../api/types'
+import { onCrmIdentityChange } from '../identity.svelte'
 
 export type LeadTab = 'all' | LeadType | 'lost'
 export type AssetTab = 'mine' | 'company' | 'portfolio' | 'renewals' | 'market'
 export type HomeTodo = 'gaps' | 'file'
 export type MatchTabId = 'ready' | 'offplan' | 'sell'
 
-export const ui = $state({
+const defaults = {
 	leadTab: 'all' as LeadTab,
 	leadView: 'list' as 'list' | 'board',
 	/** Leads › Board: which group's columns show (6 Oct). */
@@ -51,6 +53,8 @@ export const ui = $state({
 	renewalProject: '',
 	renewalBuilding: '',
 	ownerTab: 'all' as OwnerTab,
+	ownerOwnership: 'current' as 'current' | 'former',
+	ownerTransactionMatch: '' as '' | 'matched' | 'unmatched' | 'ambiguous' | 'excluded',
 	/** Owners search: owner, unit, building (v2). */
 	ownerQ: '',
 	ownerSource: '' as OwnerSource | '',
@@ -60,8 +64,8 @@ export const ui = $state({
 	ownerBeds: '',
 	ownerPtype: '' as OwnerPropertyKind | '',
 	ownerUnits: '',
-	/** Owners per page on the Owners table: 50, 100, 200 or 500. */
-	ownerPageSize: 50,
+	/** Owners per page on the Owners table: 10, 50, 100, 200 or 500. */
+	ownerPageSize: 10,
 	/** YYYY-MM-DD; empty = today */
 	weekDay: '',
 	/** YYYY-MM; empty = this month */
@@ -75,7 +79,10 @@ export const ui = $state({
 	/** Inbox: filter and the selected enquiry. */
 	inboxFilter: 'all' as 'all' | 'mine' | 'waiting' | 'dismissed',
 	inboxSel: ''
-})
+}
+
+export const ui = $state({ ...defaults, matchSel: { ...defaults.matchSel } })
+onCrmIdentityChange(() => Object.assign(ui, defaults, { matchSel: { ...defaults.matchSel } }))
 
 export function clearLeadFilters() {
 	ui.q = ''
@@ -88,6 +95,7 @@ export function clearLeadFilters() {
 }
 
 export function clearOwnerFilters() {
+	ui.ownerTransactionMatch = ''
 	ui.ownerQ = ''
 	ui.ownerSource = ''
 	ui.ownerArea = ''

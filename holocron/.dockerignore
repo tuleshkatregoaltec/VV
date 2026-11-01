@@ -27,3 +27,9 @@ var/
 build/
 dist/
 htmlcov/
+
+# Local shared-package builds are never runtime inputs.
+**/__pycache__/
+**/*.egg-info/
+**/build/
+**/.env*

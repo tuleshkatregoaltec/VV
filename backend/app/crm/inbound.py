@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import inbound_repository, owner_queries
-from app.crm.identity import _normalize_email, _normalize_phone
+from app.crm.identity import _identity_text, _location_key, _normalize_email, _normalize_phone
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import (
     VITEVUE_LEASE_SOURCE,
@@ -40,6 +40,8 @@ from app.crm.inbound_policy import (
     _token,
     _utcnow,
 )
+from app.crm.owner_assessment import get_owner_assessment
+from app.crm.owners import _projected_claims
 
 
 async def _find_or_create_contact(
@@ -109,7 +111,7 @@ def _ownership_enrichment(
         return InboundOwnershipEnrichmentResponse()
     basis_order = {"phone": 3, "email": 2, "name": 1}
     match_basis = max((basis for _, basis in matches), key=basis_order.__getitem__)
-    best_by_property: dict[str, CrmPropertyContactClaim] = {}
+    best_by_property: dict[tuple[str, str], CrmPropertyContactClaim] = {}
     status_order = {
         "verified_current_owner": 5,
         "probable_current_owner": 4,
@@ -121,7 +123,7 @@ def _ownership_enrichment(
         "unmatched": 0,
     }
     for claim, _ in matches:
-        property_identity = _claim_property_identity(claim)
+        property_identity = (_location_key(claim.area_name), _claim_property_identity(claim))
         current = best_by_property.get(property_identity)
         if current is None or (
             status_order.get(claim.ownership_status, 0),
@@ -173,6 +175,18 @@ def _ownership_enrichment(
     )
 
 
+async def _assessed_inbound_claims(
+    db: AsyncSession,
+    organization_id: str,
+    claims: list[CrmPropertyContactClaim],
+) -> list[CrmPropertyContactClaim]:
+    if not claims:
+        return []
+    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    valid_ids = {row["id"] for row in snapshot.rows if row["property_identity"] is not None}
+    return _projected_claims([claim for claim in claims if claim.id in valid_ids], snapshot.rows)
+
+
 async def _bulk_ownership_enrichments(
     db: AsyncSession,
     *,
@@ -184,18 +198,21 @@ async def _bulk_ownership_enrichments(
     name_to_ids: dict[str, set[int]] = {}
     phone_to_ids: dict[str, set[int]] = {}
     email_to_ids: dict[str, set[int]] = {}
+    names_by_id: dict[int, str] = {}
     for contact in contacts:
         contact_id = contact.id or 0
+        names_by_id[contact_id] = _identity_text(contact.full_name)
         name = contact.full_name.strip().casefold()
         if name:
             name_to_ids.setdefault(name, set()).add(contact_id)
-        if contact.phone:
-            phone_to_ids.setdefault(contact.phone, set()).add(contact_id)
-        if contact.email:
-            email_to_ids.setdefault(contact.email.casefold(), set()).add(contact_id)
+        if phone := _normalize_phone(contact.phone):
+            phone_to_ids.setdefault(phone, set()).add(contact_id)
+        if email := _normalize_email(contact.email):
+            email_to_ids.setdefault(email, set()).add(contact_id)
     result = await inbound_repository.find_identity_claims(
         db, email_to_ids, name_to_ids, organization_id, phone_to_ids
     )
+    result = await _assessed_inbound_claims(db, organization_id, list(result))
     matches: dict[int, list[tuple[CrmPropertyContactClaim, str]]] = {}
     for claim in result:
         claim_phone_values = {claim.phone_primary, claim.phone_alternate} - {None, ""}
@@ -207,6 +224,10 @@ async def _bulk_ownership_enrichments(
         email_ids = email_to_ids.get((claim.email_primary or "").casefold(), set())
         name_ids = name_to_ids.get(claim.contact_name.strip().casefold(), set())
         for contact_id in phone_ids | email_ids | name_ids:
+            # A shared agency/representative number does not transfer the other
+            # person's holdings to this inbound contact.
+            if names_by_id[contact_id] != _identity_text(claim.contact_name):
+                continue
             basis = (
                 "phone"
                 if contact_id in phone_ids
@@ -338,18 +359,53 @@ async def open_vitevue_lease_enquiry(
     owner_email: str | None,
     criteria: dict[str, Any],
     lease: dict[str, Any],
+    owner_source: Literal["workspace", "owner_import"] | None = None,
 ) -> InboundEnquiryResponse:
     """The agency's one shared lead for a unit Vitevue supplied, created on first open.
 
     It starts undecided (seller or landlord), assigned to nobody, with no reply deadline: it was
-    not an enquiry. The owner is blank unless an owner import already identified them.
+    not an enquiry. The owner is blank unless entered manually or reliably identified by import.
     """
     existing = await inbound_repository.list_vitevue_lease_enquiries(
         db, organization_id, [unit_key]
     )
+    owner_snapshot = {
+        "name": owner_name,
+        "phone": _normalize_phone(owner_phone),
+        "email": _normalize_email(owner_email),
+    }
+    snapshot_source = owner_source or "owner_import"
     if existing:
+        enquiry = existing[0]
+        contact = await inbound_repository.get_crm_inbound_contact(db, enquiry.contact_id)
+        if contact is not None and contact.organization_id == organization_id:
+            previous = (enquiry.observed_data or {}).get("vitevue_owner")
+            previous_source = (enquiry.observed_data or {}).get("vitevue_owner_source")
+            current = {"name": contact.full_name, "phone": contact.phone, "email": contact.email}
+            # An untouched derived snapshot follows new import evidence, including
+            # withdrawal. An agent's edit must never be overwritten by a refresh.
+            untouched = current == previous or not any(current.values())
+            if (
+                untouched
+                and previous_source != "manual"
+                and (previous_source != "workspace" or owner_source == "workspace")
+            ):
+                contact.full_name = owner_snapshot["name"]
+                contact.phone = owner_snapshot["phone"]
+                contact.email = owner_snapshot["email"]
+                contact.updated_at = _utcnow()
+                inbound_repository.save(db, contact)
+                enquiry.observed_data = {
+                    **(enquiry.observed_data or {}),
+                    "vitevue_owner": owner_snapshot,
+                    "vitevue_owner_source": snapshot_source,
+                }
+            enquiry.observed_data = {**(enquiry.observed_data or {}), "vitevue_lease": lease}
+            enquiry.updated_at = _utcnow()
+            inbound_repository.save(db, enquiry)
+            await db.commit()
         return await _enquiry_response(
-            db, existing[0], include_registry_profiles=True, include_history=True
+            db, enquiry, include_registry_profiles=True, include_history=True
         )
     now = _utcnow()
     contact = CrmInboundContact(
@@ -375,7 +431,11 @@ async def open_vitevue_lease_enquiry(
         enquiry_date=now,
         criteria=criteria,
         strict_fields=[],
-        observed_data={"vitevue_lease": lease},
+        observed_data={
+            "vitevue_lease": lease,
+            "vitevue_owner": owner_snapshot,
+            "vitevue_owner_source": snapshot_source,
+        },
         confirmed_data={},
         qualification={},
         extraction_confidence=1,
@@ -420,19 +480,26 @@ async def _registry_profiles(
     criteria: dict[str, Any],
 ) -> list[InboundRegistryProfileResponse]:
     claims = await inbound_repository.find_contact_claims(db, contact)
+    claims = await _assessed_inbound_claims(db, contact.organization_id, list(claims))
+    claims = [
+        claim
+        for claim in claims
+        if _identity_text(claim.contact_name) == _identity_text(contact.full_name)
+    ]
     sale_evidence, lease_evidence = await _registry_transaction_evidence(claims)
     building = _token(criteria.get("building"))
     unit_number = _token(criteria.get("unit_number"))
     location_tokens = [_token(item) for item in _locations(criteria)]
     profiles: list[InboundRegistryProfileResponse] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
     for claim in claims:
-        property_identity = (claim.owner_key, claim.property_key)
+        property_identity = (claim.owner_key, _location_key(claim.area_name), claim.property_key)
         if property_identity in seen:
             continue
         seen.add(property_identity)
         phone_match = bool(
-            contact.phone and contact.phone in {claim.phone_primary, claim.phone_alternate}
+            _normalize_phone(contact.phone)
+            and _normalize_phone(contact.phone) in {claim.phone_primary, claim.phone_alternate}
         )
         email_match = bool(
             contact.email
@@ -849,6 +916,11 @@ async def update_inbound_enquiry(
         }
     if enquiry.intent == "unknown":
         enquiry.record_kind = "unqualified_contact"
+    if details_changed and enquiry.source == VITEVUE_LEASE_SOURCE:
+        enquiry.observed_data = {
+            **(enquiry.observed_data or {}),
+            "vitevue_owner_source": "manual",
+        }
     enquiry.updated_at = _utcnow()
     inbound_repository.save(db, enquiry)
     if contact_changes:

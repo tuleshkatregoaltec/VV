@@ -158,3 +158,7 @@ ai-export *args:
 # Read-only proposals from retained DXBI report evidence; no warehouse writes.
 audit-dxbi-name-repairs *args:
 	set -a && source .env.dev && set +a && PYTHONPATH=holocron uv run --project holocron python holocron/scripts/audit_dxbi_name_repairs.py {{args}}
+
+# Run one resource-bounded import at a time, separate from the HTTP process.
+crm-import-worker *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m app.crm.import_worker {{args}}

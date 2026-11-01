@@ -63,6 +63,7 @@ async function save(e: SubmitEvent) {
 	const nameChanged = name.trim() !== initial.name
 	const emailChanged = email.trim() !== lead.email
 	const r = await write({
+		domain: 'leads',
 		call: () =>
 			crm.leads.patch(lead.id, {
 				lead_type: type,

@@ -3,7 +3,15 @@ import { createQuery } from '@tanstack/svelte-query'
 import ChartBar from 'lucide-svelte/icons/chart-no-axes-column'
 import Search from 'lucide-svelte/icons/search'
 import Upload from 'lucide-svelte/icons/upload'
-import type { OwnerListParams, OwnerSource, OwnerTab, PropertyKind } from '$lib/crm/api/types'
+import { page } from '$app/state'
+import type {
+	OwnerListParams,
+	OwnerRow,
+	OwnerSource,
+	OwnerTab,
+	PropertyKind
+} from '$lib/crm/api/types'
+import SourceAuditSummary from '$lib/crm/components/owners/SourceAuditSummary.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
@@ -14,10 +22,19 @@ import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
 import Tabs from '$lib/crm/components/ui/Tabs.svelte'
 import { OWNER_PTYPE_OPTIONS, OWNER_SOURCES, stageOf } from '$lib/crm/config'
 import { fmt } from '$lib/crm/format'
+import { importIsActive } from '$lib/crm/importStatus'
 import { crmQueries } from '$lib/crm/queries'
 import { openOwner, panel } from '$lib/crm/stores/panel.svelte'
 import { clearOwnerFilters, ui } from '$lib/crm/stores/ui.svelte'
 import { errorText } from '$lib/crm/write'
+
+const listId = $derived(Number(page.url.searchParams.get('list_id')) || undefined)
+$effect(() => {
+	if (page.url.searchParams.get('scope') === 'needs_review') {
+		ui.ownerTab = 'review'
+		clearOwnerFilters()
+	}
+})
 
 // Search updates the rows as you type; the input keeps focus.
 let q = $state(ui.ownerQ)
@@ -27,17 +44,30 @@ $effect(() => {
 	return () => clearTimeout(t)
 })
 
-// The whole owner file, 50–500 owners a page. A new tab, search, filter or page size goes back to
+// The whole owner file, 10–500 owners a page. A new tab, search, filter or page size goes back to
 // the first page.
-const PAGE_SIZES = [50, 100, 200, 500]
+const PAGE_SIZES = [10, 50, 100, 200, 500]
 let offset = $state(0)
 $effect.pre(() => {
-	void [ui.ownerTab, q, ui.ownerSource, ui.ownerArea, ui.ownerPtype, ui.ownerPageSize]
+	void [
+		ui.ownerTab,
+		ui.ownerOwnership,
+		ui.ownerTransactionMatch,
+		q,
+		ui.ownerSource,
+		ui.ownerArea,
+		ui.ownerPtype,
+		ui.ownerPageSize,
+		listId
+	]
 	offset = 0
 })
 
 const params = $derived<OwnerListParams>({
 	tab: ui.ownerTab,
+	ownership: ui.ownerOwnership,
+	transaction_match_status: ui.ownerTransactionMatch,
+	list_id: listId,
 	q,
 	source: ui.ownerSource,
 	area: ui.ownerArea,
@@ -53,7 +83,9 @@ const loading = $derived(owners.isPlaceholderData)
 const pageText = $derived(
 	o
 		? o.page.total
-			? `Showing ${fmt(o.page.offset + 1)}–${fmt(o.page.offset + o.page.loaded)} of ${fmt(o.page.total)} owners`
+			? o.pageFiltered
+				? `${fmt(o.items.length)} matching owners on this page · ${fmt(o.page.total)} before page filters`
+				: `Showing ${fmt(o.page.offset + 1)}–${fmt(o.page.offset + o.page.loaded)} of ${fmt(o.page.total)} owners`
 			: 'No owners'
 		: ''
 )
@@ -62,32 +94,37 @@ function goPage(next: number) {
 	offset = next
 	document.querySelector('.owners-table')?.scrollIntoView({ block: 'start' })
 }
-const filtered = $derived(Boolean(ui.ownerQ || ui.ownerSource || ui.ownerArea || ui.ownerPtype))
-const waiting = $derived(imports.data?.filter((r) => r.status === 'Waiting').length ?? 0)
+const filtered = $derived(
+	Boolean(ui.ownerQ || ui.ownerSource || ui.ownerArea || ui.ownerPtype || ui.ownerTransactionMatch)
+)
+const waiting = $derived(imports.data?.filter((r) => importIsActive(r.jobStatus)).length ?? 0)
 
-/** v2 tabs (6 Oct, 11:20): All · 3+ units · Next event ≤ 90 days · Just sold · Update due (My contacts removed). */
 const tabs = $derived(
 	(
 		[
 			['all', 'All'],
-			['multi', '3+ units'],
+			['multi', '3+ associated properties'],
 			['event', 'Next event ≤ 90 days'],
-			// "Former owners" (was "Just sold"): every owner the file or DLD shows as a seller, of any date.
-			// "Update due" is hidden until market updates exist.
-			['sold', 'Former owners']
+			...(o?.source_audit?.mode === 'source_transaction_matched'
+				? []
+				: [['review', o?.source_audit ? 'Candidates' : 'Needs review']])
 		] as [OwnerTab, string][]
-	).map(([id, label]) => ({
-		id,
-		label,
-		count: o?.counts[id],
-		hint: o && o.page.total > o.page.limit && o.pageOnlyTabs.includes(id) ? 'this page' : undefined
-	}))
+	).map(([id, label]) => ({ id, label }))
 )
 
-const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
+/** "29 current · 40 in total": the list counts only the properties in its view. */
+function unitCount(x: OwnerRow) {
+	const view = [ui.ownerOwnership, ui.ownerTransactionMatch].filter(Boolean).join(', ')
+	const shown = `${x.units.length} ${view}`
+	return x.units_total > x.units.length ? `${shown} · ${x.units_total} in total` : shown
+}
+
+const facts = $derived(
+	o ? `${listId ? 'Selected import · ' : ''}${fmt(o.page.total)} owners in this view` : ''
+)
 </script>
 
-<svelte:head><title>Owners · CRM Beta</title></svelte:head>
+<svelte:head><title>Owners · CRM</title></svelte:head>
 
 <PageHeader title="Owners" {facts}>
 	{#snippet right()}
@@ -98,14 +135,38 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 	{/snippet}
 </PageHeader>
 
+{#if o?.source_audit}
+	<SourceAuditSummary summary={o.source_audit} />
+{/if}
+
 <Tabs label="Owners" items={tabs} value={ui.ownerTab} onselect={(t) => (ui.ownerTab = t)} />
 
+{#if listId}<p class="small muted"><a href="/crm/owners?scope=needs_review">{o?.source_audit ? 'All candidates' : 'All imports'}</a></p>{/if}
+
+<p class="small muted">Source, type and area filters apply to this page only.</p>
 <div class="filters">
 	<label class="search">
 		<Search size={15} />
 		<span class="sr-only">Search owners</span>
 		<input placeholder="Owner, unit, building" autocomplete="off" bind:value={ui.ownerQ} />
 	</label>
+	<label class="psize">
+		<span class="sr-only">Ownership</span>
+		<select aria-label="Ownership" bind:value={ui.ownerOwnership} onchange={() => (ui.ownerTab = 'all')}>
+			<option value="current">Current owners</option>
+			<option value="former">Former owners</option>
+		</select>
+	</label>
+	<label class="psize">
+		<span class="sr-only">Transaction match</span>
+		<select aria-label="Transaction match" bind:value={ui.ownerTransactionMatch}>
+			<option value="">All matches</option>
+			<option value="matched">Matched property</option>
+			<option value="unmatched">Unmatched property</option>
+			<option value="ambiguous">Ambiguous property</option>
+		</select>
+	</label>
+
 	<!-- Every owner comes from an imported file today; "Own contact" and "DLD/Ejari event" have no data yet. -->
 	<FilterMenu
 		label="Source"
@@ -149,7 +210,7 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 		<div class="tblwrap">
 			<table class="tbl">
 				<thead>
-					<tr><th>Owner</th><th>Units</th><th>Next event</th><th>Last contact</th><th>Record</th><th>Source</th></tr>
+					<tr><th>Person or organization</th><th>Associated properties</th><th>Next event</th><th>Latest note</th><th>Record</th><th>Source</th></tr>
 				</thead>
 				<tbody>
 					{#each o.items as x (x.id)}
@@ -157,15 +218,16 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 							<td>
 								<button type="button" class="rowlink" onclick={() => openOwner(x.id)}>{x.name}</button>
 								{#if x.tag}<Chip>{x.tag}</Chip>{/if}
+								{#if x.developer_side_seller}<div class="sub">{x.relationship_role === 'organization' ? 'Developer' : 'Developer-side seller'}</div>{:else if x.relationship_role === 'possible_intermediary'}<div class="sub">Possible intermediary</div>{:else if x.relationship_role === 'organization'}<div class="sub">Organization</div>{/if}
 								{#if x.lead}
 									<div class="sub">
 										Lead · {stageOf(x.lead.stage).label}{x.lead.id === null ? ` · ${x.lead.agent}` : ''}
 									</div>
 								{/if}
 							</td>
-							<td data-label="Units">
+							<td data-label="Associated properties">
 								<div>
-									<div>{x.units.length}</div>
+									<div>{unitCount(x)}</div>
 									<div class="sub">
 										{x.units.slice(0, 3).join(' · ')}{x.units.length > 3 ? ` · +${x.units.length - 3}` : ''}
 									</div>
@@ -174,7 +236,7 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 							<td data-label="Next event">
 								<div><div>{x.next_event}</div><div class="sub">{x.next_event_label}</div></div>
 							</td>
-							<td data-label="Last contact">
+							<td data-label="Latest note">
 								<span class="nowrap">
 									{x.last_contact}
 									{#if x.market_update_due && x.prior_deal}<Chip tone="amber">Update due</Chip>{/if}
@@ -215,9 +277,7 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 		</div>
 		{#if o.page.total > o.page.limit}
 			<div class="pager">
-				<span class="small muted">
-					{pageText} · the source, type and area filters cover this page
-				</span>
+				<span class="small muted">{pageText}</span>
 				<button
 					type="button"
 					class="btn ghost sm"
@@ -243,11 +303,13 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 	{/if}
 </div>
 
+<details class="import-requests">
+	<summary>Owner file and import requests · {waiting} waiting</summary>
 <section class="card" aria-labelledby="imports-h">
 	<div class="ch">
 		<h2 id="imports-h">
 			Owner file and import requests
-			<span class="facts">Vitevue does not provide or sell owner data · {waiting} waiting for the admin</span>
+			<span class="facts">{waiting} waiting</span>
 		</h2>
 		<button type="button" class="btn ghost sm" onclick={() => panel.open({ kind: 'new-import', ownersOnly: true })}>
 			Import a file
@@ -263,7 +325,7 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 							{#each list as r (r.id)}
 								<tr>
 									<td class="nm mono">{r.file}</td>
-									<td data-label="What">{r.kind} · {fmt(r.rows)} rows</td>
+									<td data-label="What">{r.kind}{r.jobStatus === 'completed' ? ` · ${fmt(r.rows)} rows` : ''}</td>
 									<td class="sub" data-label="Areas">{r.areas}</td>
 									<td class="sub" data-label="Sent">{r.who} · {r.at}</td>
 									<td data-label="Status"><Chip tone={r.tone}>{r.status}</Chip></td>
@@ -273,13 +335,16 @@ const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 					</table>
 				</div>
 			{:else}
-				<Empty text="No import requests. Send a CSV of owners or leads for the admin to approve." />
+				<Empty text="No import requests." />
 			{/if}
 		{/snippet}
 	</QueryView>
 </section>
+</details>
 
 <style>
+	.import-requests { margin-top: 1rem; }
+	.import-requests > summary { cursor: pointer; color: var(--text2); font-size: 12.5px; padding: 0.5rem 0; }
 	.owners-table {
 		scroll-margin-top: 5rem;
 	}

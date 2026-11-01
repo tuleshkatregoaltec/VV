@@ -66,7 +66,6 @@ const modelOptions: Array<{
 	id: DevelopmentModel
 	label: string
 	descriptor: string
-	description: string
 	icon: typeof Home
 	available: boolean
 }> = [
@@ -74,7 +73,6 @@ const modelOptions: Array<{
 		id: 'build_to_sell_residential',
 		label: 'Build to sell',
 		descriptor: 'Residential exit',
-		description: 'For-sale underwriting with unit mix, collections, debt draw, and return outputs.',
 		icon: Home,
 		available: true
 	},
@@ -82,8 +80,6 @@ const modelOptions: Array<{
 		id: 'build_to_rent_residential',
 		label: 'Build to rent',
 		descriptor: 'Held asset',
-		description:
-			'Rental operating model with lease-up, stabilized NOI, exit cap, and permanent debt.',
 		icon: Building2,
 		available: true
 	},
@@ -91,7 +87,6 @@ const modelOptions: Array<{
 		id: 'build_to_lease_commercial',
 		label: 'Build to lease',
 		descriptor: 'Commercial',
-		description: 'Commercial lease-up path reserved for a later underwriting pass.',
 		icon: Landmark,
 		available: false
 	}
@@ -220,15 +215,9 @@ async function createStudy() {
 		<div class="ui-surface overflow-hidden">
 			<div class="grid gap-5 border-b border-border bg-navy px-5 py-5 text-bone lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
 				<div>
-					<p class="text-xs font-semibold uppercase tracking-[0.18em] text-on-navy-muted">
-						Agent workspace
-					</p>
 					<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
-						Creating your feasibility study
+						Creating study
 					</h1>
-					<p class="mt-2 max-w-3xl text-sm leading-6 text-on-navy-muted">
-						The agent is turning your plot selection into a saved workbook with seeded assumptions, model tabs, and an editable first pass.
-					</p>
 				</div>
 				<div class="inline-flex items-center gap-2 rounded-md border border-bone/20 bg-bone/10 px-3 py-2 text-sm font-semibold text-bone">
 					<LoaderCircle size={16} class="animate-spin" />
@@ -243,10 +232,7 @@ async function createStudy() {
 							<Bot size={22} strokeWidth={1.8} />
 						</div>
 						<div class="min-w-0">
-							<p class="text-base font-semibold text-fg-1">The feasibility agent is working</p>
-							<p class="mt-1 text-sm leading-6 text-fg-3">
-								This usually takes a moment while the backend creates the study record and prepares the workbook state.
-							</p>
+							<p class="text-base font-semibold text-fg-1">Generating study</p>
 						</div>
 					</div>
 
@@ -310,11 +296,8 @@ async function createStudy() {
 			<div>
 				<p class="text-xs font-semibold uppercase tracking-[0.18em] text-on-navy-muted">New study</p>
 				<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
-					Set up the underwriting workspace
+					Set up study
 				</h1>
-				<p class="mt-2 max-w-3xl text-sm leading-6 text-on-navy-muted">
-					Define the saved study shell, choose the development model, and attach the GIS plot before generation runs.
-				</p>
 			</div>
 			<button type="button" class="h-10 rounded-md border border-bone/20 px-4 text-sm font-medium text-bone transition hover:border-bone/40 hover:bg-bone/10" onclick={onCancel}>
 				Back to studies
@@ -331,7 +314,6 @@ async function createStudy() {
 				<div class="grid gap-3">
 					<div>
 						<p class="text-sm font-semibold text-fg-1">Development model</p>
-						<p class="mt-1 text-xs text-fg-4">Select the workbook path that should seed the first saved version.</p>
 					</div>
 					<div class="grid gap-3 md:grid-cols-3">
 						{#each modelOptions as option}
@@ -355,13 +337,10 @@ async function createStudy() {
 										<span class="grid h-6 w-6 place-items-center rounded-full bg-bone text-navy">
 											<Check size={14} strokeWidth={2.2} />
 										</span>
-									{:else if !option.available}
-										<span class="rounded-md bg-card px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-4">Next</span>
 									{/if}
 								</span>
 								<span class="mt-4 block text-sm font-semibold {developmentModel === option.id ? 'text-bone' : 'text-fg-1'}">{option.label}</span>
 								<span class="mt-1 block text-xs font-medium uppercase tracking-[0.12em] {developmentModel === option.id ? 'text-on-navy-muted' : 'text-fg-4'}">{option.descriptor}</span>
-								<span class="mt-3 block text-xs leading-5 {developmentModel === option.id ? 'text-on-navy-muted' : 'text-fg-3'}">{option.description}</span>
 							</button>
 						{/each}
 					</div>
@@ -371,7 +350,6 @@ async function createStudy() {
 					<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div>
 							<p class="text-sm font-semibold text-fg-1">Plot selection</p>
-							<p class="mt-1 text-xs text-fg-4">Search GIS inventory and attach one verified plot snapshot.</p>
 						</div>
 						<button type="button" data-variant="primary" class="ui-button h-10 w-full px-4 text-sm sm:w-auto" onclick={() => (pickerOpen = true)}>
 							<Search size={16} />
@@ -426,7 +404,7 @@ async function createStudy() {
 						disabled={!name.trim() || !selectedPlot || creating}
 						onclick={() => void createStudy()}
 					>
-						{creating ? 'Creating...' : 'Create study'}
+						{creating ? 'Creating…' : 'Create study'}
 					</button>
 					{#if error}
 						<p class="mt-3 text-sm text-rose-600">{error}</p>
@@ -444,7 +422,6 @@ async function createStudy() {
 			<div class="flex items-start justify-between gap-3 border-b border-border bg-navy px-4 py-3 text-bone sm:px-5 sm:py-4">
 				<div>
 					<p class="text-sm font-semibold">Select plot</p>
-					<p class="mt-1 text-xs text-on-navy-muted">Search by plot number, project, or community.</p>
 				</div>
 				<button type="button" class="grid h-8 w-8 place-items-center rounded-md border border-bone/20 text-on-navy-muted transition hover:border-bone/40 hover:bg-bone/10 hover:text-bone" onclick={() => (pickerOpen = false)} aria-label="Close plot picker">
 					<X size={16} />
@@ -455,7 +432,7 @@ async function createStudy() {
 					<input bind:value={plotSearch} placeholder="Plot, project, community" class="ui-field h-10 px-3 text-sm" onkeydown={(event) => event.key === 'Enter' && void searchPlots()} />
 					<input bind:value={community} placeholder="Community" class="ui-field h-10 px-3 text-sm" />
 					<input bind:value={minPlotArea} type="number" min="0" placeholder="Min area (sq ft)" class="ui-field h-10 px-3 text-sm" />
-					<button type="button" data-variant="primary" class="ui-button h-10 px-4 text-sm" onclick={() => void searchPlots()}>{loading ? 'Searching...' : 'Search'}</button>
+					<button type="button" data-variant="primary" class="ui-button h-10 px-4 text-sm" onclick={() => void searchPlots()}>{loading ? 'Searching…' : 'Search'}</button>
 				</div>
 				<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 					<div class="flex flex-wrap gap-2">
@@ -483,7 +460,7 @@ async function createStudy() {
 				<div class="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_320px]">
 					<div class="min-h-0 overflow-auto">
 							{#if loading}
-								<p class="p-5 text-sm text-fg-4">Searching plots...</p>
+								<p class="p-5 text-sm text-fg-4">Searching plots…</p>
 							{:else if visiblePlots.length === 0}
 								<p class="p-5 text-sm text-fg-4">Search by plot number, project, or community.</p>
 							{:else}

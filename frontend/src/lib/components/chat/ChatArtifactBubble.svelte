@@ -166,7 +166,6 @@ function resultSummary(): string {
 					{#if !artifact.data?.listings?.length}
 						<div class="rounded-md border border-dashed border-border bg-card p-5 text-center">
 							<p class="text-sm font-semibold text-fg-1">No matching records</p>
-							<p class="mt-1 text-xs leading-5 text-fg-4">Try a broader area, budget, or bedroom range.</p>
 						</div>
 					{:else}
 						{#each artifact.data.listings as listing (listing.listing_id)}
@@ -227,13 +226,6 @@ function resultSummary(): string {
 							</article>
 						{/each}
 					{/if}
-				</div>
-				<div class="rounded-md border border-border bg-panel p-3 text-xs leading-5 text-fg-3">
-					<span class="font-semibold text-fg-2">Source:</span>
-					Listings import
-					<span class="mx-1 text-fg-5">/</span>
-					<span class="font-semibold text-fg-2">Scope:</span>
-					current exact matches
 				</div>
 			</div>
 		{/if}
