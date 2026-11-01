@@ -18,6 +18,7 @@ from typing import Any
 import orjson
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.async_work import run_in_thread
 from app.core.cache import RedisCache
 from app.crm import owner_repository
 from app.crm.identity import ParsedContact
@@ -25,7 +26,7 @@ from app.crm.import_models import CrmOwnerHistorySummary
 from app.crm.owner_namespaces import history_unit_aliases, registry_namespace
 from app.crm.source_lifecycle import annotate_source_lifecycle
 
-ASSESSMENT_VERSION = "owner-assessment-17-property-first"
+ASSESSMENT_VERSION = "owner-assessment-18-committed-sources"
 ASSESSMENT_TTL_SECONDS = 3600
 _BUILD_LOCKS: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
 _DATE_FIELDS = {
@@ -261,7 +262,7 @@ async def _fresh_sales(
 ) -> dict[str, list[dict[str, Any]]]:
     candidates = [candidate for _, candidate in valid]
     bundle = await capture_owner_evidence(candidates)
-    return await asyncio.to_thread(match_owner_evidence, candidates, bundle)
+    return await run_in_thread(match_owner_evidence, candidates, bundle)
 
 
 def _cache_client() -> RedisCache:
@@ -274,10 +275,7 @@ def _cache_client() -> RedisCache:
 
 
 async def _source_revision(db: AsyncSession, organization_id: str) -> str:
-    row = await owner_repository.owner_assessment_revision(db, organization_id)
-    return hashlib.sha256(orjson.dumps(tuple(row), default=RedisCache._json_default)).hexdigest()[
-        :24
-    ]
+    return str(await owner_repository.owner_assessment_revision(db, organization_id))
 
 
 def _encode(snapshot: OwnerAssessmentSnapshot) -> str:
@@ -324,7 +322,7 @@ async def _source_rows(
     if isinstance(cached, dict) and cached.get("revision") == revision:
         payload = cached["data"]
         try:
-            rows = await asyncio.to_thread(
+            rows = await run_in_thread(
                 lambda: orjson.loads(zlib.decompress(base64.b64decode(payload)))
             )
             for row in rows:
@@ -338,7 +336,7 @@ async def _source_rows(
         except (ValueError, TypeError, KeyError, zlib.error):
             logger.warning("Invalid CRM ownership source cache")
     rows = await owner_repository.list_owner_history_rows(db, organization_id=organization_id)
-    payload = await asyncio.to_thread(
+    payload = await run_in_thread(
         lambda: base64.b64encode(
             zlib.compress(orjson.dumps(rows, default=RedisCache._json_default), level=1)
         ).decode()
@@ -451,7 +449,7 @@ async def _build(
     from app.crm.source_audit import source_audit_for_row
 
     rows = await _source_rows(db, organization_id, source_revision)
-    valid = await asyncio.to_thread(
+    valid = await run_in_thread(
         lambda: [
             (row, _candidate(row))
             for row in rows
@@ -460,10 +458,10 @@ async def _build(
     )
     for row, candidate in valid:
         candidate.evidence["source_import_scope"] = str(row.get("import_id") or "")
-    await asyncio.to_thread(annotate_source_lifecycle, [candidate for _, candidate in valid])
+    await run_in_thread(annotate_source_lifecycle, [candidate for _, candidate in valid])
     checked_at = datetime.now(timezone.utc)
     if rows and all(source_audit_for_row(row) for row in rows):
-        return await asyncio.to_thread(_source_snapshot, rows, checked_at)
+        return await run_in_thread(_source_snapshot, rows, checked_at)
     warehouse_status = "available"
     try:
         if not warehouse_available:
@@ -475,9 +473,7 @@ async def _build(
         logger.warning("CRM ownership warehouse assessment unavailable")
         warehouse_status = "unavailable"
         sales = {}
-    return await asyncio.to_thread(
-        _finish_assessment, rows, valid, sales, checked_at, warehouse_status
-    )
+    return await run_in_thread(_finish_assessment, rows, valid, sales, checked_at, warehouse_status)
 
 
 def _finish_assessment(rows, valid, sales, checked_at, warehouse_status) -> OwnerAssessmentSnapshot:
@@ -717,7 +713,7 @@ async def get_owner_assessment(
         payload = await cache.get(key)
         if payload:
             try:
-                snapshot = await asyncio.to_thread(_decode, payload)
+                snapshot = await run_in_thread(_decode, payload)
                 remaining = _remaining_lifetime(snapshot)
                 if remaining > 0:
                     _recent = (key, time.monotonic() + remaining, snapshot)
@@ -739,10 +735,10 @@ async def get_owner_assessment(
         stable = revision == current_revision and warehouse_revision == current_warehouse
         if not stable:
             # Never publish confirmed ownership across changing evidence inputs.
-            snapshot = await asyncio.to_thread(_unavailable_snapshot, snapshot)
+            snapshot = await run_in_thread(_unavailable_snapshot, snapshot)
             return snapshot
         snapshot.cached_at = datetime.now(timezone.utc)
-        payload = await asyncio.to_thread(_encode, snapshot)
+        payload = await run_in_thread(_encode, snapshot)
         remaining = _remaining_lifetime(snapshot)
         if remaining > 0:
             await cache.set(key, payload, expire=max(1, int(remaining)))

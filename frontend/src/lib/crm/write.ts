@@ -7,7 +7,8 @@ import { ApiError } from '$lib/api/client'
 import { getQueryClient } from '$lib/queries/client'
 import { track } from './analytics'
 import { crm } from './api'
-import { crmKeys } from './queries'
+import { clearCrmReadRequests } from './api/backend'
+import { crmScopeKey } from './identity.svelte'
 import { closeRecord, type RecordKind } from './stores/panel.svelte'
 import { toast } from './stores/toast.svelte'
 
@@ -35,9 +36,41 @@ export function errorText(e: unknown): string {
 }
 
 /** Refetch every CRM Beta query that is on screen. A failure is one line with Retry. */
-export function refreshCrm(): Promise<void> {
+export type CrmWriteDomain = 'leads' | 'owners' | 'imports' | 'renewals' | 'matches' | 'preferences'
+const WRITE_DOMAINS: Record<CrmWriteDomain, string[]> = {
+	leads: ['leads', 'lead', 'home', 'counts', 'inbox', 'matches', 'search', 'feed'],
+	owners: ['owners', 'owner', 'search', 'lead', 'leads', 'matches', 'renewal', 'feed'],
+	imports: [
+		'imports',
+		'owners',
+		'owner',
+		'owner-history-summary',
+		'search',
+		'lead',
+		'leads',
+		'matches',
+		'renewal',
+		'feed',
+		'counts',
+		'home',
+		'inbox'
+	],
+	renewals: ['renewal', 'renewals', 'feed', 'leads', 'lead', 'matches'],
+	matches: ['lead', 'matches'],
+	preferences: ['feed', 'leads', 'lead', 'matches']
+}
+
+export function refreshCrm(
+	domain?: CrmWriteDomain,
+	scope: readonly unknown[] = crmScopeKey()
+): Promise<void> {
 	return getQueryClient()
-		.invalidateQueries({ queryKey: crmKeys.all })
+		.invalidateQueries({
+			queryKey: scope,
+			predicate: domain
+				? (query) => WRITE_DOMAINS[domain].includes(String(query.queryKey[scope.length]))
+				: undefined
+		})
 		.catch(() => {
 			toast.show('Could not refresh the CRM.', {
 				tone: 'error',
@@ -96,6 +129,7 @@ export async function undoAll(tokens: string[]): Promise<void> {
 }
 
 interface WriteOptions<R> {
+	domain?: CrmWriteDomain
 	call: () => Promise<R>
 	/** Change cached data before the call; return the rollback. */
 	optimistic?: () => () => void
@@ -111,16 +145,21 @@ interface WriteOptions<R> {
 
 /** Returns the result, or null when the call failed (already rolled back and shown). */
 export async function write<R>(opts: WriteOptions<R>): Promise<R | null> {
+	const scope = crmScopeKey()
+	const sameIdentity = () => JSON.stringify(scope) === JSON.stringify(crmScopeKey())
 	const rollback = opts.optimistic?.()
 	let result: R
 	try {
 		result = await opts.call()
 	} catch (e) {
+		if (!sameIdentity()) return null
 		rollback?.()
 		toast.show(errorText(e), { tone: 'error' })
 		return null
 	}
-	void refreshCrm()
+	if (!sameIdentity()) return null
+	clearCrmReadRequests()
+	void refreshCrm(opts.domain, scope)
 	const token =
 		result && typeof result === 'object' && 'undo_token' in result
 			? ((result as { undo_token: string | null }).undo_token ?? null)

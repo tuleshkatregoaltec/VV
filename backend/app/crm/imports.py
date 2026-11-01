@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from fastapi import HTTPException, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.crm import import_repository, owner_repository
+from app.core.async_work import run_in_thread
+from app.crm import import_jobs, import_repository, owner_repository
 from app.crm.ai import _llm_mapping
 from app.crm.brokers import load_broker_index
 from app.crm.identity import (
@@ -145,7 +145,7 @@ async def preview_contact_import(
     """
     filename, suffix, data = await _read_upload(upload)
     inspector = _inspect_xlsx if suffix == ".xlsx" else _inspect_csv
-    profiles = await asyncio.to_thread(inspector, data, filename)
+    profiles = await run_in_thread(inspector, data, filename)
     sheets: list[CrmSheetPreview] = []
     for profile in profiles:
         saved = None
@@ -184,6 +184,34 @@ async def process_contact_import(
     reprocess_import_id: int | None = None,
     mapping_override: dict[str, Any] | None = None,
 ) -> CrmContactImportResponse:
+    filename, _, data = await _read_upload(upload)
+    record = await import_jobs.enqueue(
+        db,
+        kind="owner",
+        data=data,
+        filename=filename,
+        name=name,
+        user_id=user_id,
+        organization_id=organization_id,
+        reprocess_import_id=reprocess_import_id,
+        mapping_override=mapping_override,
+    )
+    return await _import_response(db, record)
+
+
+async def _execute_contact_import(
+    db: AsyncSession,
+    *,
+    upload: UploadFile,
+    name: str,
+    user_id: str,
+    organization_id: str,
+    reprocess_import_id: int | None = None,
+    mapping_override: dict[str, Any] | None = None,
+    _record: CrmContactImport | None = None,
+    _commit: Callable[[], Awaitable[None]] | None = None,
+    _drop_log_revision: str | None = None,
+) -> CrmContactImportResponse:
     filename, suffix, data = await _read_upload(upload)
     sha256 = hashlib.sha256(data).hexdigest()
     now = datetime.now(timezone.utc)
@@ -198,7 +226,7 @@ async def process_contact_import(
         )
         if not record or record.sha256 != sha256:
             raise HTTPException(status_code=409, detail="Replay requires the original import file.")
-        if record.status == "processing":
+        if record.status in {"queued", "processing", "retry_wait"} and _record is None:
             raise HTTPException(status_code=409, detail="This import is already processing.")
         if record.mapping.get("resolver_version") == IMPORT_RESOLVER_VERSION:
             return await _import_response(db, record)
@@ -213,6 +241,8 @@ async def process_contact_import(
                 sheet, _, number = source.rpartition(":")
                 if number.isdigit():
                     preserved_owner_keys[(sheet, int(number))] = claim.owner_key
+    elif _record is not None:
+        record = _record
     else:
         existing = await import_repository.find_import_by_digest(db, organization_id, sha256)
         if existing:
@@ -238,7 +268,7 @@ async def process_contact_import(
     import_id = record.id
     try:
         inspector = _inspect_xlsx if suffix == ".xlsx" else _inspect_csv
-        profiles = await asyncio.to_thread(inspector, data, filename)
+        profiles = await run_in_thread(inspector, data, filename)
         # Replay must be deterministic and must not send source data to a model.
         profiles = await _resolve_sheet_mappings(
             db,
@@ -250,7 +280,7 @@ async def process_contact_import(
         )
         parser = _parse_xlsx if suffix == ".xlsx" else _parse_csv
         dropped: list[dict[str, Any]] = []
-        candidates, total_rows = await asyncio.to_thread(parser, data, filename, profiles, dropped)
+        candidates, total_rows = await run_in_thread(parser, data, filename, profiles, dropped)
         for candidate in candidates:
             candidate.evidence["source_file_sha256"] = sha256
         if not total_rows:
@@ -258,6 +288,8 @@ async def process_contact_import(
                 raise ValueError(
                     "Replay parsed no source records; existing results were preserved."
                 )
+            if _record is not None:
+                raise ValueError(_EMPTY_FILE)
             # Nothing to import: remove the record so no empty import or list is left behind.
             await import_repository.delete_record(db, record)
             await db.commit()
@@ -274,7 +306,7 @@ async def process_contact_import(
             for source in missing_sources
         ):
             raise ValueError("Replay would lose named source records; results were preserved.")
-        await asyncio.to_thread(annotate_source_lifecycle, candidates)
+        await run_in_thread(annotate_source_lifecycle, candidates)
         await prepare_file_context(candidates)
         await _recover_property_identity_from_transaction(candidates)
         await _recover_property_identity_from_near_transaction(candidates)
@@ -283,7 +315,7 @@ async def process_contact_import(
         sales = await _sales_evidence(candidates)
         await _apply_registry_unit_fallbacks(candidates, sales)
         rentals = await _rental_evidence(candidates)
-        await asyncio.to_thread(annotate_source_lifecycle, candidates)
+        await run_in_thread(annotate_source_lifecycle, candidates)
         # The property-first matcher decides; the legacy stages above only found the property
         # keys, leases and lifecycle that renewal leads and the ownership projection read.
         await run_owner_matching(candidates, await load_broker_index(db))
@@ -388,14 +420,11 @@ async def process_contact_import(
         )
         # Publish a replay log under a new key. A failed database commit must not
         # replace the log referenced by the previous saved result.
+        drop_revision = _drop_log_revision or (IMPORT_RESOLVER_VERSION if replay else None)
         summary.dropped_log = (
             True
             if replay and not dropped
-            else await save_drop_log(
-                organization_id, record.id, dropped, revision=IMPORT_RESOLVER_VERSION
-            )
-            if replay
-            else await save_drop_log(organization_id, record.id, dropped)
+            else await save_drop_log(organization_id, record.id, dropped, revision=drop_revision)
         )
         if missing_sources and not summary.dropped_log:
             raise ValueError("Nameless rows cannot be removed without a saved dropped-row log.")
@@ -405,9 +434,9 @@ async def process_contact_import(
             "sheets": [saved_sheet_mapping(profile) for profile in profiles],
             "resolver_version": IMPORT_RESOLVER_VERSION,
         }
+        if dropped and drop_revision is not None:
+            record.mapping["drop_log_revision"] = drop_revision
         if replay:
-            if dropped:
-                record.mapping["drop_log_revision"] = IMPORT_RESOLVER_VERSION
             record.mapping["previous_result"] = {
                 "mapping": previous_mapping,
                 "summary": previous_summary,
@@ -416,12 +445,18 @@ async def process_contact_import(
         record.summary = summary.model_dump()
         record.completed_at = datetime.now(timezone.utc)
         import_repository.save(db, record)
-        await db.commit()
+        if _commit is not None:
+            await _commit()
+        else:
+            await db.commit()
         _invalidate_owner_summary_cache(organization_id)
         return await _import_response(db, record)
     except HTTPException:
         raise
     except Exception as exc:
+        if _record is not None:
+            await db.rollback()
+            raise
         logger.exception("CRM contact import failed", extra={"import_id": import_id})
         await db.rollback()
         if replay:
@@ -439,12 +474,16 @@ async def process_contact_import(
         raise HTTPException(status_code=422, detail=f"Import failed: {exc}") from exc
 
 
+_UNFETCHED_LIST = object()
+
+
 async def _import_response(
     db: AsyncSession,
     record: CrmContactImport,
+    contact_list=_UNFETCHED_LIST,
 ) -> CrmContactImportResponse:
-    list_result = await import_repository.find_import_list(db, record)
-    contact_list = list_result
+    if contact_list is _UNFETCHED_LIST:
+        contact_list = await import_repository.find_import_list(db, record)
     raw_sheets = record.mapping.get("sheets", []) if record.mapping else []
     summary = dict(record.summary or {})
     matching = summary.get("transaction_matching")
@@ -487,7 +526,11 @@ async def list_contact_imports(
     organization_id: str,
 ) -> list[CrmContactImportResponse]:
     result = await import_repository.list_imports(db, organization_id)
-    return [await _import_response(db, record) for record in result]
+    lists = await import_repository.lists_for_imports(
+        db, organization_id, [record.id for record in result]
+    )
+    by_import = {item.source_import_id: item for item in lists}
+    return [await _import_response(db, record, by_import.get(record.id)) for record in result]
 
 
 async def rename_contact_import(
@@ -528,6 +571,7 @@ async def delete_contact_import(
     if not record:
         raise HTTPException(status_code=404, detail="Owner-data import not found")
 
+    input_key = await import_jobs.delete_input_for_import(db, record)
     # Remove only records published by this import. Agent-maintained lead
     # workspaces, notes, and manually saved properties are intentionally kept.
     await import_repository.delete_import_claims(db, import_id, organization_id)
@@ -535,6 +579,8 @@ async def delete_contact_import(
     await import_repository.delete_record(db, record)
     await db.commit()
     _invalidate_owner_summary_cache(organization_id)
+    if input_key:
+        await import_jobs.remove_input(input_key)
     revisions = {None}
     mapping = record.mapping or {}
     while mapping:

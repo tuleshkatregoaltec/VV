@@ -47,6 +47,7 @@ function saveReviewNote(e: SubmitEvent) {
 	const text = note.trim()
 	if (!text) return
 	write({
+		domain: 'owners',
 		call: () => crm.owners.addNote(id, text),
 		success: 'Note saved',
 		after: () => {
@@ -56,7 +57,11 @@ function saveReviewNote(e: SubmitEvent) {
 }
 
 function marketUpdate(name: string) {
-	write({ call: () => crm.owners.sendMarketUpdate(id), success: `Market update for ${name} sent` })
+	write({
+		domain: 'owners',
+		call: () => crm.owners.sendMarketUpdate(id),
+		success: `Market update for ${name} sent`
+	})
 }
 
 const matchText = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)

@@ -139,7 +139,7 @@ async def test_an_import_decides_through_the_property_first_matcher(
     warehouse(monkeypatch)
     org = str(uuid4())
     csv = "\n".join([HEADERS, *ROWS]).encode()
-    response = await imports.process_contact_import(
+    response = await imports._execute_contact_import(
         pg_session,
         upload=UploadFile(file=io.BytesIO(csv), filename="alpha.csv"),
         name="Alpha",
@@ -199,7 +199,7 @@ async def test_a_rematch_of_claims_with_no_stored_source_gives_the_same_verdicts
     warehouse(monkeypatch)
     org = str(uuid4())
     csv = "\n".join([HEADERS, *ROWS]).encode()
-    response = await imports.process_contact_import(
+    response = await imports._execute_contact_import(
         pg_session,
         upload=UploadFile(file=io.BytesIO(csv), filename="alpha.csv"),
         name="Alpha",

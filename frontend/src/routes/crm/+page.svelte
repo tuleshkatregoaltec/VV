@@ -32,6 +32,8 @@ const facts = $derived.by(() => {
 
 <svelte:head><title>Home · CRM</title></svelte:head>
 
+{#if home.data?.limited}<p class="small muted">Lead counts and summaries cover the first 500 stored enquiries.</p>{/if}
+
 <PageHeader title="Home" {facts} />
 
 {#if home.data}

@@ -306,3 +306,16 @@ async def latest_mapping_for_signature(
             ):
                 return sheet
     return None
+
+
+async def lists_for_imports(db: AsyncSession, organization_id: str, import_ids: list[int]):
+    if not import_ids:
+        return []
+    return (
+        await db.exec(
+            select(CrmContactList).where(
+                CrmContactList.organization_id == organization_id,
+                CrmContactList.source_import_id.in_(import_ids),
+            )
+        )
+    ).all()

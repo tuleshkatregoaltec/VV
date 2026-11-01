@@ -49,6 +49,8 @@ const EMPTY: Record<MatchTabId, string> = {
 
 <svelte:head><title>Matches · CRM</title></svelte:head>
 
+{#if clients.data?.limited}<p class="small muted">Clients and tab counts cover the first 500 stored enquiries. Search in Leads to find other clients.</p>{/if}
+
 <PageHeader title="Matches" />
 
 <Tabs label="Clients" items={tabs} value={ui.matchTab} onselect={(t) => (ui.matchTab = t)} />
@@ -109,8 +111,8 @@ const EMPTY: Record<MatchTabId, string> = {
 							{#if m.tab !== 'sell'}
 								<span class="row-chips">
 									<label class="check">
-										<input type="checkbox" bind:checked={ui.matchOver} />
-										Up to 10% over budget
+										<input type="checkbox" checked={false} disabled />
+										Up to 10% over budget · unavailable
 									</label>
 									{#if m.tab === 'ready'}<span class="small muted">Shortlist: {m.shortlist}</span>{/if}
 								</span>

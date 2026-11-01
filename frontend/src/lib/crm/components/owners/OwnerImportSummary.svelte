@@ -1,5 +1,6 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
+import { importPollInterval } from '../../importStatus'
 import { crmQueries } from '../../queries'
 import QueryView from '../ui/QueryView.svelte'
 import OwnerHistorySummary from './OwnerHistorySummary.svelte'
@@ -11,7 +12,8 @@ let {
 }: { importId?: number; listId?: number | null; processing?: boolean } = $props()
 const summary = createQuery(() => ({
 	...crmQueries.ownerHistorySummary(importId),
-	refetchInterval: processing ? 5000 : false
+	refetchInterval: (q: { state: { dataUpdateCount: number } }) =>
+		importPollInterval(processing, q.state.dataUpdateCount)
 }))
 </script>
 

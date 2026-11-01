@@ -41,6 +41,7 @@ $effect(() => {
 
 function logCall(name: string) {
 	write({
+		domain: 'leads',
 		call: () => crm.leads.logCall(id),
 		success: `Call logged on ${name}`
 	})

@@ -15,12 +15,12 @@ vi.mock('@tanstack/svelte-query', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@tanstack/svelte-query')>()),
 	createQuery: (options: () => { queryKey: readonly unknown[] }) => {
 		const key = options().queryKey
-		if (key[1] === 'owners') {
-			data.requestedTab = (key[2] as { tab: string }).tab
-			data.requestedOwnership = (key[2] as { ownership: string }).ownership
+		if (key[4] === 'owners') {
+			data.requestedTab = (key[5] as { tab: string }).tab
+			data.requestedOwnership = (key[5] as { ownership: string }).ownership
 		}
 		return {
-			data: key[1] === 'owners' ? data.owners : [],
+			data: key[4] === 'owners' ? data.owners : [],
 			isPlaceholderData: false,
 			isError: false
 		}
@@ -37,14 +37,9 @@ afterEach(() => {
 describe('Owners labels unverified people separately from audited reference review cases', () => {
 	const owners: OwnerListResponse = {
 		items: [],
-		counts: { all: 37, mine: 0, multi: 0, event: 0, sold: 0, review: 37, update: 0 },
-		total: 0,
-		unit_total: 0,
-		with_event_90: 0,
-		on_file: 37,
+		pageFiltered: false,
 		areas: [],
-		page: { offset: 0, limit: 10, total: 37, loaded: 0 },
-		pageOnlyTabs: []
+		page: { offset: 0, limit: 10, total: 37, loaded: 0 }
 	}
 
 	it('retains the candidate filter while explaining the separate audit review count', () => {

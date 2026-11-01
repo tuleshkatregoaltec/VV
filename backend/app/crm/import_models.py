@@ -3,10 +3,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
-CrmContactImportStatus = Literal["processing", "completed", "failed"]
+CrmContactImportStatus = Literal["queued", "processing", "retry_wait", "completed", "failed"]
 CrmOwnershipStatus = Literal[
     "verified_current_owner",
     "probable_current_owner",
@@ -42,6 +43,13 @@ class CrmContactImport(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSON, nullable=False),
     )
+    owner_source_metadata: dict[str, Any] = SQLField(
+        default_factory=dict,
+        exclude=True,
+        sa_column=Column(
+            JSON().with_variant(JSONB(), "postgresql"), nullable=False, server_default=text("'{}'")
+        ),
+    )
     summary: dict[str, Any] = SQLField(
         default_factory=dict,
         sa_column=Column(JSON, nullable=False),
@@ -52,6 +60,15 @@ class CrmContactImport(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),
     )
+
+
+class CrmOwnerAssessmentRevision(SQLModel, table=True):
+    """Transactionally visible, non-reused source token for one tenant."""
+
+    __tablename__ = "crm_owner_assessment_revisions"
+
+    organization_id: str = SQLField(primary_key=True)
+    revision: int = SQLField(sa_type=BigInteger)
 
 
 class CrmContactList(SQLModel, table=True):
@@ -164,6 +181,13 @@ class CrmPropertyContactClaim(SQLModel, table=True):
     evidence: dict[str, Any] = SQLField(
         default_factory=dict,
         sa_column=Column(JSON, nullable=False),
+    )
+    owner_history_evidence: dict[str, Any] = SQLField(
+        default_factory=dict,
+        exclude=True,
+        sa_column=Column(
+            JSON().with_variant(JSONB(), "postgresql"), nullable=False, server_default=text("'{}'")
+        ),
     )
     created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))

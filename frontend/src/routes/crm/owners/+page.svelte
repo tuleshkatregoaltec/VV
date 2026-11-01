@@ -22,6 +22,7 @@ import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
 import Tabs from '$lib/crm/components/ui/Tabs.svelte'
 import { OWNER_PTYPE_OPTIONS, OWNER_SOURCES, stageOf } from '$lib/crm/config'
 import { fmt } from '$lib/crm/format'
+import { importIsActive } from '$lib/crm/importStatus'
 import { crmQueries } from '$lib/crm/queries'
 import { openOwner, panel } from '$lib/crm/stores/panel.svelte'
 import { clearOwnerFilters, ui } from '$lib/crm/stores/ui.svelte'
@@ -82,7 +83,9 @@ const loading = $derived(owners.isPlaceholderData)
 const pageText = $derived(
 	o
 		? o.page.total
-			? `Showing ${fmt(o.page.offset + 1)}–${fmt(o.page.offset + o.page.loaded)} of ${fmt(o.page.total)} owners`
+			? o.pageFiltered
+				? `${fmt(o.items.length)} matching owners on this page · ${fmt(o.page.total)} before page filters`
+				: `Showing ${fmt(o.page.offset + 1)}–${fmt(o.page.offset + o.page.loaded)} of ${fmt(o.page.total)} owners`
 			: 'No owners'
 		: ''
 )
@@ -94,7 +97,7 @@ function goPage(next: number) {
 const filtered = $derived(
 	Boolean(ui.ownerQ || ui.ownerSource || ui.ownerArea || ui.ownerPtype || ui.ownerTransactionMatch)
 )
-const waiting = $derived(imports.data?.filter((r) => r.status === 'Waiting').length ?? 0)
+const waiting = $derived(imports.data?.filter((r) => importIsActive(r.jobStatus)).length ?? 0)
 
 const tabs = $derived(
 	(
@@ -116,7 +119,9 @@ function unitCount(x: OwnerRow) {
 	return x.units_total > x.units.length ? `${shown} · ${x.units_total} in total` : shown
 }
 
-const facts = $derived(o ? `${listId ? 'Selected import · ' : ''}${fmt(o.on_file)} owners` : '')
+const facts = $derived(
+	o ? `${listId ? 'Selected import · ' : ''}${fmt(o.page.total)} owners in this view` : ''
+)
 </script>
 
 <svelte:head><title>Owners · CRM</title></svelte:head>
@@ -138,6 +143,7 @@ const facts = $derived(o ? `${listId ? 'Selected import · ' : ''}${fmt(o.on_fil
 
 {#if listId}<p class="small muted"><a href="/crm/owners?scope=needs_review">{o?.source_audit ? 'All candidates' : 'All imports'}</a></p>{/if}
 
+<p class="small muted">Source, type and area filters apply to this page only.</p>
 <div class="filters">
 	<label class="search">
 		<Search size={15} />
@@ -319,7 +325,7 @@ const facts = $derived(o ? `${listId ? 'Selected import · ' : ''}${fmt(o.on_fil
 							{#each list as r (r.id)}
 								<tr>
 									<td class="nm mono">{r.file}</td>
-									<td data-label="What">{r.kind} · {fmt(r.rows)} rows</td>
+									<td data-label="What">{r.kind}{r.jobStatus === 'completed' ? ` · ${fmt(r.rows)} rows` : ''}</td>
 									<td class="sub" data-label="Areas">{r.areas}</td>
 									<td class="sub" data-label="Sent">{r.who} · {r.at}</td>
 									<td data-label="Status"><Chip tone={r.tone}>{r.status}</Chip></td>

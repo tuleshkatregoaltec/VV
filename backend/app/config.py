@@ -9,6 +9,7 @@ from pydantic import (
     AnyUrl,
     BeforeValidator,
     EmailStr,
+    Field,
     PostgresDsn,
     computed_field,
     field_validator,
@@ -98,6 +99,14 @@ class Settings(BaseSettings):
     CLICKHOUSE_PASSWORD: str  # Bitwarden Secrets
     CLICKHOUSE_DATABASE: str  # configMap
     CLICKHOUSE_SECURE: bool = False  # configMap
+
+    # CRM worker-local resource budgets; account for all workers/replicas when sizing.
+    CRM_RENTAL_BASE_ENABLED: bool = False
+    CRM_MAX_EXPENSIVE_REQUESTS: int = Field(default=2, ge=1, le=32)
+    CRM_MAX_EXPENSIVE_REQUESTS_PER_ORG: int = Field(default=2, ge=1, le=16)
+    CRM_MAX_CONCURRENT_QUERIES: int = Field(default=1, ge=1, le=8)
+    CRM_QUERY_MAX_MEMORY_BYTES: int = Field(default=3_000_000_000, ge=67_108_864)
+    CRM_QUERY_MAX_THREADS: int = Field(default=2, ge=1, le=16)
 
     # Stripe
     STRIPE_SECRET_KEY: str  # Bitwarden Secrets

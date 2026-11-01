@@ -7,6 +7,7 @@ name = "holocron"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "crm-rental-sql",
     "dagster>=1.13.3",
     "dagster-webserver>=1.13.3",
     "boto3>=1.43.5",
@@ -57,3 +58,6 @@ dev = [
     "ruff>=0.15.12",
     "ty>=0.0.35",
 ]
+
+[tool.uv.sources]
+crm-rental-sql = { path = "packages/crm-rental-sql" }

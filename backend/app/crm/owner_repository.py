@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import orjson
-from sqlalchemy import JSON, Boolean, String, column, func, or_, text, true
+from sqlalchemy import String, exists, func, or_, text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -11,6 +11,7 @@ from app.crm.import_events import source_size_unit
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactList,
+    CrmOwnerAssessmentRevision,
     CrmPropertyContactClaim,
 )
 
@@ -47,8 +48,8 @@ async def list_owner_history_rows(
                 select(
                     CrmContactImport.id,
                     CrmContactImport.original_filename,
-                    CrmContactImport.mapping["sheets"].label("sheets"),
-                    CrmContactImport.mapping["resolver_version"]
+                    CrmContactImport.owner_source_metadata["sheets"].label("sheets"),
+                    CrmContactImport.owner_source_metadata["resolver_version"]
                     .as_string()
                     .label("resolver_version"),
                 ).where(CrmContactImport.organization_id == organization_id)
@@ -107,141 +108,20 @@ async def list_owner_history_rows(
             "match_reason",
         }
     ]
-    # PostgreSQL JSON is textual: separate -> extractions repeatedly parse the
-    # entire evidence document. Expand only these four fields in one parse.
-    metadata = (
-        func.json_to_record(claim.evidence)
-        .table_valued(
-            column("resolver_version", String),
-            column("event_family", String),
-            column("cadastral_identity", JSON),
-            column("scoped_identity_collision", Boolean),
-            column("source_fields", JSON),
-            column("source_size_unit", String),
-            column("property_identity_resolution", JSON),
-            column("file_context", JSON),
-            column("registry_unit_fallback", JSON),
-            column("unit_hierarchy_resolution", JSON),
-            column("source_unit_number", String),
-            column("duplicate_count", JSON),
-            column("source_audit", JSON),
-            column("original_identifiers", JSON),
-            column("original_property_fields", JSON),
-            column("inferred_size_unit", JSON),
-            column("amount_first_match", JSON),
-            column("property_identity_match", JSON),
-            column("owner_match_policy", String),
-            column("source_file_sha256", String),
-            column("source_identifiers", JSON),
-            column("source_area_field", String),
-            column("source_filename", String),
-            column("address_recovery", JSON),
-            column("inferred_file_context", JSON),
-            column("source_registry_location_resolution", JSON),
-            column("owner_match", JSON),
-            column("broker_contact", JSON),
-        )
-        .render_derived(with_types=True)
-        .lateral("history_evidence")
-    )
+    # Written transactionally by database triggers. Reads never detoast/reparse
+    # the original evidence or replay mapping, which remain the audit authority.
+    metadata = claim.owner_history_evidence
     statement = (
         select(
             *columns,
-            metadata.c.resolver_version.label("claim_resolver_version"),
-            metadata.c.event_family,
-            metadata.c.cadastral_identity["property_key"].as_string().label("cadastral_key"),
-            metadata.c.scoped_identity_collision.label("identity_collision"),
-            # Return one projected JSON string. The driver otherwise parses eight
-            # separate JSON values per event before the row can be constructed.
-            func.json_strip_nulls(
-                func.json_build_object(
-                    "source_size_unit",
-                    metadata.c.source_size_unit,
-                    "source_fields",
-                    func.json_build_object(
-                        "size_sqft",
-                        metadata.c.source_fields["size_sqft"],
-                        "size_sqm",
-                        metadata.c.source_fields["size_sqm"],
-                        "size_unknown",
-                        metadata.c.source_fields["size_unknown"],
-                        "property_type",
-                        metadata.c.source_fields["property_type"],
-                        "unit_number",
-                        metadata.c.source_fields["unit_number"],
-                        "area_name",
-                        metadata.c.source_fields["area_name"],
-                        "master_project",
-                        metadata.c.source_fields["master_project"],
-                        "project_name",
-                        metadata.c.source_fields["project_name"],
-                        "building_name",
-                        metadata.c.source_fields["building_name"],
-                        "building_number",
-                        metadata.c.source_fields["building_number"],
-                        "property_number",
-                        metadata.c.source_fields["property_number"],
-                        "plot_number",
-                        metadata.c.source_fields["plot_number"],
-                        "plot_pre_reg_number",
-                        metadata.c.source_fields["plot_pre_reg_number"],
-                        "transaction_price_aed",
-                        metadata.c.source_fields["transaction_price_aed"],
-                    ),
-                    "original_identifiers",
-                    metadata.c.original_identifiers,
-                    "original_property_fields",
-                    metadata.c.original_property_fields,
-                    "inferred_size_unit",
-                    metadata.c.inferred_size_unit,
-                    "amount_first_match",
-                    metadata.c.amount_first_match,
-                    "property_identity_match",
-                    metadata.c.property_identity_match,
-                    "owner_match_policy",
-                    metadata.c.owner_match_policy,
-                    "source_file_sha256",
-                    metadata.c.source_file_sha256,
-                    "source_identifiers",
-                    metadata.c.source_identifiers,
-                    "source_area_field",
-                    metadata.c.source_area_field,
-                    "source_filename",
-                    metadata.c.source_filename,
-                    "address_recovery",
-                    metadata.c.address_recovery,
-                    "inferred_file_context",
-                    metadata.c.inferred_file_context,
-                    "source_registry_location_resolution",
-                    metadata.c.source_registry_location_resolution,
-                    "property_identity_resolution",
-                    metadata.c.property_identity_resolution,
-                    "cadastral_identity",
-                    metadata.c.cadastral_identity,
-                    "file_context",
-                    metadata.c.file_context,
-                    "registry_unit_fallback",
-                    metadata.c.registry_unit_fallback,
-                    "unit_hierarchy_resolution",
-                    metadata.c.unit_hierarchy_resolution,
-                    "source_unit_number",
-                    metadata.c.source_unit_number,
-                    "duplicate_count",
-                    metadata.c.duplicate_count,
-                    "source_audit",
-                    metadata.c.source_audit,
-                    "owner_match",
-                    metadata.c.owner_match,
-                    "broker_contact",
-                    metadata.c.broker_contact,
-                )
-            )
-            .cast(String)
-            .label("history_evidence_json"),
+            metadata["resolver_version"].as_string().label("claim_resolver_version"),
+            metadata["event_family"].as_string().label("event_family"),
+            metadata["cadastral_identity"]["property_key"].as_string().label("cadastral_key"),
+            metadata["scoped_identity_collision"].as_boolean().label("identity_collision"),
+            metadata.op("-")("resolver_version").cast(String).label("history_evidence_json"),
             CrmContactList.name.label("source_list_name"),
         )
         .select_from(claim)
-        .join(metadata, true())
         .join(
             CrmContactList,
             (CrmContactList.id == claim.list_id)
@@ -679,51 +559,20 @@ async def list_claims_by_ids(db: AsyncSession, organization_id: str, claim_ids: 
     ).all()
 
 
-async def owner_assessment_revision(db: AsyncSession, organization_id: str):
-    claim = CrmPropertyContactClaim
-    claims = (
+async def owner_assessment_revision(db: AsyncSession, organization_id: str) -> int:
+    """One indexed row, including committed changes from every database writer.
+
+    Tokens come from a nontransactional sequence but their visibility is
+    transactional. A rollback cannot reuse a token already put in a source cache.
+    """
+    revision = (
         await db.exec(
-            select(
-                func.count(claim.id),
-                func.max(claim.updated_at),
-                # MVCC versions detect late commits and edits to older claims
-                # even when count and the greatest business timestamp stay put.
-                func.bit_xor(
-                    func.hashtextextended(
-                        func.concat(claim.id, ":", column("xmin", String).cast(String)), 0
-                    )
-                ),
-            ).where(claim.organization_id == organization_id)
-        )
-    ).one()
-    # Header units, resolver metadata and list names affect the read projection
-    # even when no claim timestamp changes. Never read the full replay mapping.
-    imports = (
-        await db.exec(
-            select(
-                CrmContactImport.id,
-                CrmContactImport.original_filename,
-                CrmContactImport.mapping["sheets"],
-                CrmContactImport.mapping["resolver_version"].as_string(),
-                column("xmin", String).cast(String).label("row_version"),
+            select(CrmOwnerAssessmentRevision.revision).where(
+                CrmOwnerAssessmentRevision.organization_id == organization_id
             )
-            .where(CrmContactImport.organization_id == organization_id)
-            .order_by(CrmContactImport.id)
         )
-    ).all()
-    lists = (
-        await db.exec(
-            select(
-                CrmContactList.id,
-                CrmContactList.name,
-                CrmContactList.updated_at,
-                column("xmin", String).cast(String).label("row_version"),
-            )
-            .where(CrmContactList.organization_id == organization_id)
-            .order_by(CrmContactList.id)
-        )
-    ).all()
-    return (*claims, [tuple(row) for row in imports], [tuple(row) for row in lists])
+    ).first()
+    return revision if revision is not None else 0
 
 
 async def fetch_owner_registry_totals(db: AsyncSession, list_id, organization_id):
@@ -879,11 +728,15 @@ async def list_claims_with_lists(db: AsyncSession, organization_id):
 async def owner_sources_only(db: AsyncSession, organization_id: str) -> bool:
     modes = (
         await db.exec(
-            select(CrmContactImport.mapping["mode"].as_string())
-            .join(CrmPropertyContactClaim, CrmPropertyContactClaim.import_id == CrmContactImport.id)
+            select(CrmContactImport.owner_source_metadata["mode"].as_string())
             .where(
                 CrmContactImport.organization_id == organization_id,
-                CrmPropertyContactClaim.organization_id == organization_id,
+                exists(
+                    select(CrmPropertyContactClaim.id).where(
+                        CrmPropertyContactClaim.import_id == CrmContactImport.id,
+                        CrmPropertyContactClaim.organization_id == organization_id,
+                    )
+                ),
             )
             .distinct()
         )

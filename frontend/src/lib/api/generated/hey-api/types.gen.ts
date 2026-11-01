@@ -1299,7 +1299,7 @@ export type CrmContactImportResponse = {
     /**
      * Status
      */
-    status: 'processing' | 'completed' | 'failed';
+    status: 'queued' | 'processing' | 'retry_wait' | 'completed' | 'failed';
     summary: CrmContactImportSummary;
     /**
      * Mappings
@@ -5696,7 +5696,7 @@ export type InboundImportResponse = {
     /**
      * Status
      */
-    status: 'processing' | 'completed' | 'failed';
+    status: 'queued' | 'processing' | 'retry_wait' | 'completed' | 'failed';
     summary: InboundImportSummary;
     /**
      * Mapping
@@ -12414,7 +12414,7 @@ export type CrmCrmInboundImportResponses = {
     /**
      * Successful Response
      */
-    201: InboundImportResponse;
+    202: InboundImportResponse;
 };
 
 export type CrmCrmInboundImportResponse = CrmCrmInboundImportResponses[keyof CrmCrmInboundImportResponses];
@@ -12512,7 +12512,7 @@ export type CrmCrmContactImportResponses = {
     /**
      * Successful Response
      */
-    201: CrmContactImportResponse;
+    202: CrmContactImportResponse;
 };
 
 export type CrmCrmContactImportResponse = CrmCrmContactImportResponses[keyof CrmCrmContactImportResponses];
@@ -12562,7 +12562,7 @@ export type CrmCrmSourceOnlyImportResponses = {
     /**
      * Successful Response
      */
-    201: CrmContactImportResponse;
+    202: CrmContactImportResponse;
 };
 
 export type CrmCrmSourceOnlyImportResponse = CrmCrmSourceOnlyImportResponses[keyof CrmCrmSourceOnlyImportResponses];

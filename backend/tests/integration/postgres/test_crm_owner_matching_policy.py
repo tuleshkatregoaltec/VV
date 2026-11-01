@@ -121,7 +121,7 @@ async def test_upload_history_roundtrip_retains_raw_policy_and_decimal_evidence(
         "Villa Review,Sun,Arabian Ranches 3,Arabian Ranches 3,305,R3 Sun-V-302,Land,2024-01-01,1000000.50,Buyer,Sale,100",
     ]
     org = str(uuid4())
-    response = await imports.process_contact_import(
+    response = await imports._execute_contact_import(
         pg_session,
         upload=UploadFile(
             file=io.BytesIO("\n".join(lines).encode()), filename="new-owner-sheet.csv"

@@ -3,7 +3,14 @@ import { goto } from '$app/navigation'
 import { crm } from '../../api'
 import type { ImportPreview, OwnerFilePreview, OwnerImportResult } from '../../api/types'
 import { fmt } from '../../format'
+import {
+	importIsActive,
+	importProgressNotice,
+	importUploadMessage,
+	ownerImportNotice
+} from '../../importStatus'
 import { fieldChecklist, fieldLabel } from '../../ownerImportReport'
+import { watchQueuedImport } from '../../stores/imports.svelte'
 import { panel } from '../../stores/panel.svelte'
 import { errorText, write } from '../../write'
 import Kv from '../ui/Kv.svelte'
@@ -16,8 +23,8 @@ import Seg from '../ui/Seg.svelte'
  * to their manager (approval requests are open question 9). The backend reads the file and
  * picks the columns; this screen only shows what it found. From the Owners page it imports owners only.
  *
- * An owners file is read in the browser first (row count, five rows); the backend then matches it
- * to sales before it answers, and the panel shows the headline counts. The preview speaks in our
+ * An owners file is read in the browser first, then queued for background processing.
+ * Upload acceptance and completed row results are shown separately. The preview speaks in our
  * fields (found or not found) and never prints the file's own column headers. Renaming and
  * deleting a file are on its report.
  */
@@ -106,31 +113,34 @@ async function read(f: File | undefined) {
 async function send() {
 	if (!file || !ready || sending) return
 	const f = file
+	sending = true
 	if (!owners) {
 		const r = await write({
+			domain: 'imports',
 			call: () => crm.imports.create(f, areas.trim()),
-			success: `Imported · ${fmt(rows)} rows`,
+			success: ({ data }) => importUploadMessage(data.jobStatus, data.rows),
 			event: 'import_requested'
 		})
+		sending = false
 		if (r) {
+			if (importIsActive(r.data.jobStatus)) watchQueuedImport(r.data.id)
 			panel.closeAll()
 			await goto('/crm/inbox')
 		}
 		return
 	}
-	sending = true
 	const r = await write({
+		domain: 'imports',
 		call: () => crm.imports.importOwners(f, listName),
 		success: ({ data }) =>
-			data.alreadyImported
-				? null
-				: data.status === 'completed'
-					? `Imported · ${fmt(data.summary.candidateRows)} rows`
-					: null,
+			importUploadMessage(data.status, data.summary.candidateRows, data.alreadyImported),
 		event: 'import_requested'
 	})
 	sending = false
-	if (r) result = r.data
+	if (r) {
+		result = r.data
+		if (importIsActive(r.data.status)) watchQueuedImport(`O${r.data.id}`)
+	}
 }
 </script>
 
@@ -142,17 +152,14 @@ async function send() {
 	<div class="form">
 		{#if result}
 			{@const s = result.summary}
-			{#if result.alreadyImported}
-				<div class="notice" role="status">
-					This file was already imported as “{result.name}”. Nothing new was added.
-				</div>
-			{/if}
+			{@const replayNotice = ownerImportNotice(result)}
+			{#if replayNotice}<div class="notice" role="status">{replayNotice}</div>{/if}
 			{#if result.status === 'failed'}
 				<div class="notice" role="alert">
 					The import of this file failed (import #{result.id}). Fix the file and upload it again.
 				</div>
-			{:else if result.status === 'processing'}
-				<div class="notice" role="status">This file is still being imported. Check back in a few minutes.</div>
+			{:else if importIsActive(result.status)}
+				<div class="notice" role="status">{importProgressNotice(result.status)}</div>
 			{:else}
 				<section class="sec">
 					<h3>{result.name}</h3>
@@ -331,11 +338,11 @@ async function send() {
 				<div class="acts">
 					<button type="button" class="btn ghost" disabled={sending} onclick={() => panel.closeAll()}>Cancel</button>
 					<button type="button" class="btn" disabled={sending} onclick={send}>
-						{sending ? 'Importing…' : `Import ${fmt(rows)} rows`}
+						{sending ? 'Uploading…' : `Import ${fmt(rows)} rows`}
 					</button>
 				</div>
 				{#if sending && owners}
-					<div class="small muted">Matching owners to sales. A large file can take a few minutes; keep this panel open.</div>
+					<div class="small muted">Uploading the file. Once accepted, processing continues in the background.</div>
 				{/if}
 			{/if}
 		{/if}

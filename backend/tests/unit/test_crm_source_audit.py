@@ -362,7 +362,7 @@ async def test_import_is_atomic_and_keeps_reviewed_mapping_without_enrichment(mo
         "find_import_list",
         AsyncMock(side_effect=lambda *args: db.records[1]),
     )
-    response = await source_audit.process_source_audit_import(
+    response = await source_audit._execute_source_audit_import(
         db,
         upload=UploadFile(
             file=io.BytesIO(json.dumps(payload_data()).encode()), filename="audit.json"
@@ -385,7 +385,7 @@ async def test_import_is_atomic_and_keeps_reviewed_mapping_without_enrichment(mo
         "find_import_by_digest",
         AsyncMock(return_value=db.records[0]),
     )
-    repeated = await source_audit.process_source_audit_import(
+    repeated = await source_audit._execute_source_audit_import(
         db,
         upload=UploadFile(
             file=io.BytesIO(json.dumps(payload_data()).encode()), filename="audit.json"
