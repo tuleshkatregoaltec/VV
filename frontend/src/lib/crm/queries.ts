@@ -1,6 +1,7 @@
 import { getQueryClient } from '$lib/queries/client'
 import { crm } from './api'
 import type {
+	CompanyListingFilter,
 	DealTab,
 	DealType,
 	ImportRequest,
@@ -83,7 +84,7 @@ export const crmKeys = {
 	leadMatches: (id: number, _o: MatchOptions = {}) =>
 		[...crmScopeKey(), 'lead', id, 'matches'] as const,
 	matchClients: () => [...crmScopeKey(), 'matches', 'clients'] as const,
-	inbox: (filter: InboxFilter) => [...crmScopeKey(), 'inbox', filter] as const,
+	inbox: (filter: InboxFilter, days = 30) => [...crmScopeKey(), 'inbox', filter, days] as const,
 	handout: () => [...crmScopeKey(), 'settings', 'handout'] as const,
 	leadConversation: (id: number) => [...crmScopeKey(), 'lead', id, 'conversation'] as const,
 	feedSummary: () => [...crmScopeKey(), 'feed', 'summary'] as const,
@@ -94,8 +95,13 @@ export const crmKeys = {
 		[...crmScopeKey(), 'deals', tab, type] as const,
 	deal: (id: string) => [...crmScopeKey(), 'deal', id] as const,
 	dealForm: (id: string, code: string) => [...crmScopeKey(), 'deal', id, 'form', code] as const,
-	listings: (scope: ListingScope, status?: ListingStatus) =>
-		[...crmScopeKey(), 'listings', scope, status ?? 'all'] as const,
+	listings: (
+		scope: ListingScope,
+		status?: ListingStatus,
+		limit = 100,
+		offset = 0,
+		companyAgent?: CompanyListingFilter
+	) => [...crmScopeKey(), 'listings', scope, status ?? 'all', limit, offset, companyAgent] as const,
 	listing: (id: string) => [...crmScopeKey(), 'listing', id] as const,
 	portfolio: () => [...crmScopeKey(), 'portfolio'] as const,
 	renewals: (p: RenewalListParams) => [...crmScopeKey(), 'renewals', p] as const,
@@ -168,10 +174,10 @@ export const crmQueries = {
 		queryKey: crmKeys.matchClients(),
 		queryFn: crm.matches.clients
 	}),
-	inbox: (filter: InboxFilter) => ({
+	inbox: (filter: InboxFilter, days = 30) => ({
 		enabled: crmIdentityKnown(),
-		queryKey: crmKeys.inbox(filter),
-		queryFn: () => crm.inbox.list(filter),
+		queryKey: crmKeys.inbox(filter, days),
+		queryFn: () => crm.inbox.list(filter, days),
 		placeholderData: crmPreviousData
 	}),
 	handout: () => ({
@@ -221,10 +227,16 @@ export const crmQueries = {
 		queryKey: crmKeys.dealForm(id, code),
 		queryFn: () => crm.deals.form(id, code)
 	}),
-	listings: (scope: ListingScope, status?: ListingStatus) => ({
+	listings: (
+		scope: ListingScope,
+		status?: ListingStatus,
+		limit = 100,
+		offset = 0,
+		companyAgent?: CompanyListingFilter
+	) => ({
 		enabled: crmIdentityKnown(),
-		queryKey: crmKeys.listings(scope, status),
-		queryFn: () => crm.listings.list(scope, status),
+		queryKey: crmKeys.listings(scope, status, limit, offset, companyAgent),
+		queryFn: () => crm.listings.list(scope, status, limit, offset, companyAgent),
 		placeholderData: crmPreviousData
 	}),
 	listing: (id: string) => ({

@@ -47,7 +47,7 @@ for (const theme of ['light', 'dark']) {
 		await expect(page.locator('main')).not.toContainText(providers);
 		await page.screenshot({ path: testInfo.outputPath(`dashboard-${theme}.png`), animations: 'disabled' });
 		await page.getByRole('button', { name: 'Edit cards', exact: true }).click();
-		await expect(page.getByRole('heading', { name: 'Drag cards into the dashboard' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Drag cards to add' })).toBeVisible();
 		await expect(page.locator('main')).not.toContainText(providers);
 		await page.getByRole('button', { name: 'Reset defaults', exact: true }).click();
 		await expect(page.locator('.ui-metric-card')).toHaveCount(5);

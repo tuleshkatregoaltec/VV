@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import type { MatchClient } from '$lib/crm/api/types'
+import BudgetRange from '$lib/crm/components/ui/BudgetRange.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'

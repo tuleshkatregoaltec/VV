@@ -59,6 +59,10 @@
       "CREATE INDEX ix_crm_agent_area_preferences_user_id ON crm_agent_area_preferences (user_id)"
     ]
   },
+  "crm_company_listing_sources": {
+    "ddl": "\nCREATE TABLE crm_company_listing_sources (\n\torganization_id VARCHAR NOT NULL, \n\tbroker_id VARCHAR NOT NULL, \n\tbroker_name VARCHAR NOT NULL, \n\tselected_by_user_id VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (organization_id), \n\tFOREIGN KEY(organization_id) REFERENCES organizations (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": []
+  },
   "crm_contact_imports": {
     "ddl": "\nCREATE TABLE crm_contact_imports (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\toriginal_filename VARCHAR NOT NULL, \n\tsha256 VARCHAR NOT NULL, \n\tsize_bytes INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tmapping JSON NOT NULL, \n\towner_source_metadata JSONB DEFAULT '{}' NOT NULL, \n\tsummary JSON NOT NULL, \n\terror_message TEXT, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcompleted_at TIMESTAMP WITH TIME ZONE, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_contact_import_organization_hash UNIQUE (organization_id, sha256)\n)\n\n",
     "indexes": [
@@ -116,6 +120,7 @@
       "CREATE INDEX ix_crm_inbound_enquiries_source_import_id ON crm_inbound_enquiries (source_import_id)",
       "CREATE INDEX ix_crm_inbound_enquiries_source_lead_id ON crm_inbound_enquiries (source_lead_id)",
       "CREATE INDEX ix_crm_inbound_enquiries_status ON crm_inbound_enquiries (status)",
+      "CREATE UNIQUE INDEX uq_crm_inbound_sold_owner ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Owner file \u00b7 recently sold'",
       "CREATE UNIQUE INDEX uq_crm_inbound_vitevue_lease_unit ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Vitevue lease lead'"
     ]
   },

@@ -431,6 +431,107 @@ class CrmLicensedBroker(SQLModel, table=True):
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class CrmCompanyListing(BaseModel):
+    """A listing the agency holds the mandate for, owned by one of its agents.
+
+    Matched first for buyers (sale) and tenants (rent): the agency knows it is available and can
+    earn both sides of the deal. Rent prices are yearly, like tenant budgets. Bedrooms use the
+    lead brief's numbers (0 = studio). Synthetic rows are test data and can be removed as a set.
+    """
+
+    id: int | None = None
+    organization_id: str
+    reference: str
+    agent_user_id: str | None = None
+    agent_name: str
+    agent_phone: str | None = None
+    mode: str
+    title: str
+    property_type: str
+    bedrooms: int | None = None
+    size_sqft: int | None = None
+    price_aed: int
+    area_name: str
+    building_name: str | None = None
+    unit_number: str | None = None
+    status: str = "active"
+    is_synthetic: bool = False
+    listed_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
+class CrmCompanyListingSource(SQLModel, table=True):
+    """The Property Finder broker selected for an organization's company inventory."""
+
+    __tablename__ = "crm_company_listing_sources"
+
+    organization_id: str = SQLField(
+        primary_key=True, foreign_key="organizations.id", ondelete="CASCADE"
+    )
+    broker_id: str
+    broker_name: str
+    selected_by_user_id: str
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmCompanyListingResponse(BaseModel):
+    """A company listing as Assets › Company listings shows it."""
+
+    reference: str
+    agent_name: str
+    agent_phone: str | None
+    mode: str
+    title: str
+    property_type: str
+    bedrooms: int | None
+    size_sqft: int | None
+    price_aed: int
+    area_name: str
+    building_name: str | None
+    unit_number: str | None
+    status: str
+    listed_at: datetime
+
+
+class CrmCompanyListingCompany(BaseModel):
+    broker_id: str
+    broker_name: str
+    listings: int
+    agents: int
+    last_scraped_at: datetime | None = None
+
+
+class CrmCompanyListingAgentInventory(BaseModel):
+    agent_id: str | None = None
+    agent_name: str
+    listings: int
+    # As published on the agent's Property Finder listings.
+    phone: str | None = None
+    email: str | None = None
+
+
+class CrmCompanyListingsResponse(BaseModel):
+    company: CrmCompanyListingCompany | None
+    matching_company: CrmCompanyListingCompany | None = None
+    companies: list[CrmCompanyListingCompany] = Field(default_factory=list)
+    agents: list[CrmCompanyListingAgentInventory] = Field(default_factory=list)
+    items: list[CrmCompanyListingResponse] = Field(default_factory=list)
+    total: int = 0
+    limit: int
+    offset: int
+
+
+class CrmCompanyListingSourceUpdate(BaseModel):
+    broker_id: str = Field(min_length=1, max_length=80)
+
+
+class CrmCompanyListingSourceResponse(BaseModel):
+    broker_id: str
+    broker_name: str
+
+
 class CrmAreaPreferencesUpdate(BaseModel):
     areas: list[str] = Field(max_length=50)
     forward_days: int = Field(

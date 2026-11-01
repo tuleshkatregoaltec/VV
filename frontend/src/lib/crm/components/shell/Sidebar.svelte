@@ -7,9 +7,11 @@ import FileText from 'lucide-svelte/icons/file-text'
 import House from 'lucide-svelte/icons/house'
 import Inbox from 'lucide-svelte/icons/inbox'
 import LayoutGrid from 'lucide-svelte/icons/layout-grid'
+import Plug from 'lucide-svelte/icons/plug'
 import Send from 'lucide-svelte/icons/send'
 import User from 'lucide-svelte/icons/user'
 import { page } from '$app/state'
+import ProfileDropdown from '$lib/components/navigation/ProfileDropdown.svelte'
 import SectionSwitch from '$lib/components/navigation/SectionSwitch.svelte'
 import type { Me, NavCounts } from '../../api/types'
 import { chrome } from '../../stores/chrome.svelte'
@@ -24,17 +26,15 @@ interface Item {
 	countLabel?: string
 }
 
-/**
- * v2 sidebar (6 Oct): Agent · Home, Leads, Inbox, Matches, Owners, Deals, Calendar, Assistant; Assets
- * stays until the founders decide (open question 3). Manager · Manager view (8 Oct) opens the lead
- * handout setting the Inbox depends on; the rest of Manager view is out of this build.
- * Counts: new leads, inbox waiting for me, open deals, today's events.
- */
+/** Group CRM workflows by purpose, following the Market sidebar hierarchy. */
 const groups = $derived<{ label: string; items: Item[] }[]>([
 	{
-		label: 'Agent',
+		label: 'CRM',
+		items: [{ href: '/crm', label: 'Home', icon: House, count: null }]
+	},
+	{
+		label: 'Leads and contacts',
 		items: [
-			{ href: '/crm', label: 'Home', icon: House, count: null },
 			{
 				href: '/crm/leads',
 				label: 'Leads',
@@ -50,35 +50,46 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 				countLabel: 'open'
 			},
 			{ href: '/crm/matches', label: 'Matches', icon: CircleDot, count: null },
-			{ href: '/crm/owners', label: 'Owners', icon: Building2, count: null },
+			{ href: '/crm/owners', label: 'Owners', icon: Building2, count: null }
+		]
+	},
+	{
+		label: 'Deals and properties',
+		items: [
 			{
 				href: '/crm/deals',
-				label: 'Deals · coming soon',
+				label: 'Deals',
 				icon: FileText,
 				count: counts?.open_deals ?? null,
 				countLabel: 'open'
 			},
-			{
-				href: '/crm/calendar',
-				label: 'Calendar · coming soon',
-				icon: CalendarDays,
-				count: counts?.events_today ?? null,
-				countLabel: 'today'
-			},
-			{ href: '/crm/assistant', label: 'Assistant · coming soon', icon: Send, count: null },
 			{ href: '/crm/assets', label: 'Assets', icon: LayoutGrid, count: null }
 		]
 	},
 	{
-		label: 'Manager',
+		label: 'Tools',
+		items: [
+			{
+				href: '/crm/calendar',
+				label: 'Calendar',
+				icon: CalendarDays,
+				count: counts?.events_today ?? null,
+				countLabel: 'today'
+			},
+			{ href: '/crm/assistant', label: 'Assistant', icon: Send, count: null }
+		]
+	},
+	{
+		label: 'Management',
 		items: [
 			{
 				href: '/crm/settings',
-				label: 'Manager view · coming soon',
+				label: 'Manager view',
 				icon: ChartNoAxesColumn,
 				count: counts?.waiting ?? null,
 				countLabel: 'waiting to assign'
-			}
+			},
+			{ href: '/crm/connectors', label: 'Connectors', icon: Plug, count: null }
 		]
 	}
 ])
@@ -99,7 +110,7 @@ const path = $derived(page.url.pathname.replace(/\/$/, ''))
 					class="nav-i"
 					href={it.href}
 					title={it.label}
-					aria-current={path === it.href ? 'page' : undefined}
+					aria-current={path === it.href || (it.href !== '/crm' && path.startsWith(`${it.href}/`)) ? 'page' : undefined}
 					onclick={() => (chrome.sbOpen = false)}
 				>
 					<it.icon size={16} aria-hidden="true" />
@@ -110,7 +121,8 @@ const path = $derived(page.url.pathname.replace(/\/$/, ''))
 		{/each}
 	</nav>
 	<div class="sb-foot">
-		<span class="avatar" aria-hidden="true">{me?.initials ?? ''}</span>
+		<!-- Same profile menu as the Market sidebar (My profile, Settings, Sign out). -->
+		<ProfileDropdown />
 		<span class="who"><b>{me?.name ?? ''}</b><br /><span class="muted">Agent{me?.areas.length ? ` · ${me.areas.join(', ')}` : ''}</span></span>
 	</div>
 </aside>

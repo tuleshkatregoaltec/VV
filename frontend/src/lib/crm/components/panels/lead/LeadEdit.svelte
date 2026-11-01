@@ -2,7 +2,7 @@
 import { untrack } from 'svelte'
 import { crm } from '../../../api'
 import type { LeadDetail, LeadFieldKey, LeadFields, LeadType } from '../../../api/types'
-import { LEAD_TYPE_ORDER, LEAD_TYPES } from '../../../config'
+import { fieldShown, LEAD_TYPE_ORDER, LEAD_TYPES } from '../../../config'
 import { panel } from '../../../stores/panel.svelte'
 import { write } from '../../../write'
 import MoneyInput from '../../ui/MoneyInput.svelte'
@@ -41,6 +41,8 @@ let language = $state(initial.language)
 let saving = $state(false)
 
 const fields = $derived(LEAD_TYPES[type].fields)
+/** Buyers and tenants are matched by area, so it is editable (and required) here too. */
+const areaRequired = $derived(LEAD_TYPES[type].areaRequired ?? false)
 /** A Vitevue lease lead stays "seller or landlord" until the agent picks one. */
 const types = $derived(
 	lead.lead_type === 'owner' ? (['owner', ...LEAD_TYPE_ORDER] as LeadType[]) : LEAD_TYPE_ORDER
@@ -52,12 +54,14 @@ async function save(e: SubmitEvent) {
 	const out: LeadFields = {}
 	for (const f of fields) {
 		const k = f.key as LeadFieldKey
-		if (f.money) out[k] = money[k] ?? null
+		if (!fieldShown(f, draft)) out[k] = null
+		else if (f.money) out[k] = money[k] ?? null
 		else {
 			const raw = String(draft[k] ?? '').trim()
 			out[k] = raw === '' ? null : raw
 		}
 	}
+	if (areaRequired) out.areas = String(draft.areas ?? '').trim() || null
 	const typeChanged = type !== lead.lead_type
 	const phoneChanged = phone.trim() !== lead.phone
 	const nameChanged = name.trim() !== initial.name
@@ -91,7 +95,7 @@ async function save(e: SubmitEvent) {
 			{/each}
 		</select>
 	</div>
-	{#each fields as f (f.key)}
+	{#each fields.filter((x) => fieldShown(x, draft)) as f (f.key)}
 		<div class="fld">
 			<label for="edit-{f.key}">{f.label}{f.money ? ' (AED)' : ''}</label>
 			{#if f.money}
@@ -106,6 +110,12 @@ async function save(e: SubmitEvent) {
 			{/if}
 		</div>
 	{/each}
+	{#if areaRequired}
+		<div class="fld">
+			<label for="edit-areas">Area</label>
+			<input id="edit-areas" placeholder="JVC, Dubai Marina" required bind:value={draft.areas} />
+		</div>
+	{/if}
 	<div class="fld">
 		<label for="edit-name">{lead.lease ? 'Owner name' : 'Name'}</label>
 		<input id="edit-name" autocomplete="off" required={!lead.lease} bind:value={name} />

@@ -95,7 +95,7 @@ const key = $derived.by(() => {
 	{:else if p.kind === 'new-owner'}
 		<NewOwnerPanel />
 	{:else if p.kind === 'new-import'}
-		<ImportPanel ownersOnly={p.ownersOnly} />
+		<ImportPanel ownersOnly={p.ownersOnly} leadsOnly={p.leadsOnly} />
 	{:else if p.kind === 'areas'}
 		<AreasPanel />
 	{:else if p.kind === 'add-record'}

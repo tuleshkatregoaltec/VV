@@ -181,3 +181,7 @@ export-unresolved-owner-rows *args:
 # Run one resource-bounded import at a time, separate from the HTTP process.
 crm-import-worker *args:
 	set -a && source .env.dev && set +a && cd backend && uv run python -m app.crm.import_worker {{args}}
+
+# Sample-only enterprise preview; no backend, credentials or service startup required.
+demo-assistant:
+	cd frontend && bun run dev -- --host 127.0.0.1 --port 5173

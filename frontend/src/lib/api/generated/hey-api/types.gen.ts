@@ -1287,6 +1287,178 @@ export type CrmBreakdownItem = {
 };
 
 /**
+ * CrmCompanyListingAgentInventory
+ */
+export type CrmCompanyListingAgentInventory = {
+    /**
+     * Agent Id
+     */
+    agent_id?: string | null;
+    /**
+     * Agent Name
+     */
+    agent_name: string;
+    /**
+     * Listings
+     */
+    listings: number;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+};
+
+/**
+ * CrmCompanyListingCompany
+ */
+export type CrmCompanyListingCompany = {
+    /**
+     * Broker Id
+     */
+    broker_id: string;
+    /**
+     * Broker Name
+     */
+    broker_name: string;
+    /**
+     * Listings
+     */
+    listings: number;
+    /**
+     * Agents
+     */
+    agents: number;
+    /**
+     * Last Scraped At
+     */
+    last_scraped_at?: string | null;
+};
+
+/**
+ * CrmCompanyListingResponse
+ *
+ * A company listing as Assets › Company listings shows it.
+ */
+export type CrmCompanyListingResponse = {
+    /**
+     * Reference
+     */
+    reference: string;
+    /**
+     * Agent Name
+     */
+    agent_name: string;
+    /**
+     * Agent Phone
+     */
+    agent_phone: string | null;
+    /**
+     * Mode
+     */
+    mode: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Bedrooms
+     */
+    bedrooms: number | null;
+    /**
+     * Size Sqft
+     */
+    size_sqft: number | null;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Building Name
+     */
+    building_name: string | null;
+    /**
+     * Unit Number
+     */
+    unit_number: string | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Listed At
+     */
+    listed_at: string;
+};
+
+/**
+ * CrmCompanyListingSourceResponse
+ */
+export type CrmCompanyListingSourceResponse = {
+    /**
+     * Broker Id
+     */
+    broker_id: string;
+    /**
+     * Broker Name
+     */
+    broker_name: string;
+};
+
+/**
+ * CrmCompanyListingSourceUpdate
+ */
+export type CrmCompanyListingSourceUpdate = {
+    /**
+     * Broker Id
+     */
+    broker_id: string;
+};
+
+/**
+ * CrmCompanyListingsResponse
+ */
+export type CrmCompanyListingsResponse = {
+    company: CrmCompanyListingCompany | null;
+    matching_company?: CrmCompanyListingCompany | null;
+    /**
+     * Companies
+     */
+    companies?: Array<CrmCompanyListingCompany>;
+    /**
+     * Agents
+     */
+    agents?: Array<CrmCompanyListingAgentInventory>;
+    /**
+     * Items
+     */
+    items?: Array<CrmCompanyListingResponse>;
+    /**
+     * Total
+     */
+    total?: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+};
+
+/**
  * CrmContactClaimResponse
  */
 export type CrmContactClaimResponse = {
@@ -5976,7 +6148,7 @@ export type InboundMatchResponse = {
     /**
      * Target Type
      */
-    target_type: 'owner' | 'unit' | 'listing' | 'project' | 'demand';
+    target_type: 'company' | 'owner' | 'unit' | 'listing' | 'project' | 'demand';
     /**
      * Target Key
      */
@@ -12728,6 +12900,14 @@ export type CrmCrmInboundEnquiriesData = {
          * Offset
          */
         offset?: number;
+        /**
+         * Within Days
+         */
+        within_days?: number | null;
+        /**
+         * Leads Only
+         */
+        leads_only?: boolean;
     };
     url: '/api/v1/crm/inbound/enquiries';
 };
@@ -12774,6 +12954,36 @@ export type CrmCrmCreateInboundEnquiryResponses = {
 };
 
 export type CrmCrmCreateInboundEnquiryResponse = CrmCrmCreateInboundEnquiryResponses[keyof CrmCrmCreateInboundEnquiryResponses];
+
+export type CrmCrmApproveRecentSellerData = {
+    body?: never;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/enquiries/{enquiry_id}/approve-buyer';
+};
+
+export type CrmCrmApproveRecentSellerErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmApproveRecentSellerError = CrmCrmApproveRecentSellerErrors[keyof CrmCrmApproveRecentSellerErrors];
+
+export type CrmCrmApproveRecentSellerResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryResponse;
+};
+
+export type CrmCrmApproveRecentSellerResponse = CrmCrmApproveRecentSellerResponses[keyof CrmCrmApproveRecentSellerResponses];
 
 export type CrmCrmInboundEnquiryData = {
     body?: never;
@@ -13057,6 +13267,101 @@ export type CrmCrmPreviewInboundImportResponses = {
 };
 
 export type CrmCrmPreviewInboundImportResponse = CrmCrmPreviewInboundImportResponses[keyof CrmCrmPreviewInboundImportResponses];
+
+export type CrmCrmCompanyListingsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * Broker Id
+         */
+        broker_id?: string | null;
+        /**
+         * All Companies
+         */
+        all_companies?: boolean;
+        /**
+         * Agent Id
+         */
+        agent_id?: string | null;
+        /**
+         * Agent Name
+         */
+        agent_name?: string | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+    };
+    url: '/api/v1/crm/company-listings';
+};
+
+export type CrmCrmCompanyListingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCompanyListingsError = CrmCrmCompanyListingsErrors[keyof CrmCrmCompanyListingsErrors];
+
+export type CrmCrmCompanyListingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmCompanyListingsResponse;
+};
+
+export type CrmCrmCompanyListingsResponse = CrmCrmCompanyListingsResponses[keyof CrmCrmCompanyListingsResponses];
+
+export type CrmCrmClearCompanyListingSourceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/company-listings/source';
+};
+
+export type CrmCrmClearCompanyListingSourceResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmClearCompanyListingSourceResponse = CrmCrmClearCompanyListingSourceResponses[keyof CrmCrmClearCompanyListingSourceResponses];
+
+export type CrmCrmSelectCompanyListingSourceData = {
+    body: CrmCompanyListingSourceUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/company-listings/source';
+};
+
+export type CrmCrmSelectCompanyListingSourceErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmSelectCompanyListingSourceError = CrmCrmSelectCompanyListingSourceErrors[keyof CrmCrmSelectCompanyListingSourceErrors];
+
+export type CrmCrmSelectCompanyListingSourceResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmCompanyListingSourceResponse;
+};
+
+export type CrmCrmSelectCompanyListingSourceResponse = CrmCrmSelectCompanyListingSourceResponses[keyof CrmCrmSelectCompanyListingSourceResponses];
 
 export type CrmCrmDeleteInboundImportData = {
     body?: never;

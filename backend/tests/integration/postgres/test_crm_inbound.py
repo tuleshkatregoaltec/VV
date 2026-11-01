@@ -9,6 +9,7 @@ from app.crm.inbound_models import (
     CrmInboundEnquiry,
     CrmInboundMatch,
     InboundEnquiryCreate,
+    InboundEnquiryUpdate,
 )
 
 
@@ -64,6 +65,56 @@ async def test_manual_enquiry_scope_history_and_match_state_survive_refresh(pg_s
     loaded = await inbound.get_inbound_enquiry(pg_session, response.id, org)
     assert loaded.criteria == criteria
     assert loaded.activities[0].activity_type == "created"
+
+
+async def test_changing_the_budget_keeps_saved_and_dismissed_matches(pg_session):
+    # Dragging the budget bar edits the brief; an agent's saved and dismissed choices must survive it.
+    org, user = str(uuid4()), str(uuid4())
+    response = await inbound.create_inbound_enquiry(
+        pg_session,
+        payload=InboundEnquiryCreate(
+            full_name="Budget buyer",
+            intent="buy",
+            record_kind="opportunity",
+            criteria={"locations": ["JBR"], "budget_max_aed": 3000000, "bedrooms_min": 2},
+        ),
+        user_id=user,
+        organization_id=org,
+    )
+    enquiry = await pg_session.get(CrmInboundEnquiry, response.id)
+    states = {}
+    for key, state in (("kept", "saved"), ("hidden", "dismissed"), ("plain", "suggested")):
+        item = await matching._upsert_match(
+            pg_session,
+            enquiry=enquiry,
+            target_type="listing",
+            target_key=key,
+            score=85,
+            title=key,
+            subtitle="",
+            reasons=[],
+            breakdown={},
+            snapshot={},
+        )
+        await pg_session.commit()
+        if state != "suggested":
+            await matching.update_inbound_match_state(
+                pg_session, match_id=item.id, organization_id=org, state=state
+            )
+        states[key] = item.id
+
+    await inbound.update_inbound_enquiry(
+        pg_session,
+        enquiry_id=response.id,
+        organization_id=org,
+        user_id=user,
+        payload=InboundEnquiryUpdate(
+            criteria={"locations": ["JBR"], "budget_max_aed": 2500000, "bedrooms_min": 2}
+        ),
+    )
+    pg_session.expire_all()
+    after = {key: (await pg_session.get(CrmInboundMatch, i)).state for key, i in states.items()}
+    assert after == {"kept": "saved", "hidden": "dismissed", "plain": "stale"}
 
 
 async def test_high_score_without_requirements_cannot_be_exact(pg_session):
@@ -183,3 +234,100 @@ async def test_new_lead_form_fields_persist_for_every_lead_type(pg_session, inte
     loaded = await inbound.get_inbound_enquiry(pg_session, response.id, org)
     assert loaded.criteria == criteria
     assert loaded.activities[0].activity_type == "created"
+
+
+async def test_a_rerun_keeps_matches_found_again_visible_when_they_were_loaded_first(pg_session):
+    # Opening the Matches tab loads the stored matches, then may re-run matching (rule version
+    # or brief change). A match found again must end up suggested in the database, not stale.
+    from app.crm import match_repository
+
+    org, user = str(uuid4()), str(uuid4())
+    response = await inbound.create_inbound_enquiry(
+        pg_session,
+        payload=InboundEnquiryCreate(
+            full_name="Rerun buyer",
+            intent="buy",
+            record_kind="opportunity",
+            criteria={"locations": ["JBR"], "budget_max_aed": 3000000, "bedrooms_min": 2},
+        ),
+        user_id=user,
+        organization_id=org,
+    )
+    enquiry = await pg_session.get(CrmInboundEnquiry, response.id)
+    arguments = dict(
+        enquiry=enquiry,
+        target_type="listing",
+        target_key="found-again",
+        title="Listing",
+        subtitle="",
+        reasons=[],
+        breakdown={},
+        snapshot={},
+    )
+    item = await matching._upsert_match(pg_session, score=85, **arguments)
+    await pg_session.commit()
+
+    await match_repository.list_matches_by_score(pg_session, response.id)
+    await match_repository.mark_refreshable_matches_stale(pg_session, response.id)
+    await matching._upsert_match(pg_session, score=80, **arguments)
+    await pg_session.commit()
+
+    item_id = item.id
+    pg_session.expire_all()
+    assert (await pg_session.get(CrmInboundMatch, item_id)).state == "suggested"
+
+
+async def test_company_listings_use_only_the_tenants_persisted_broker(pg_session, monkeypatch):
+    from datetime import datetime, timezone
+
+    from app.crm import company_listings
+    from app.crm.models import CrmCompanyListingSource
+    from app.organization.models import Organization
+
+    org, other = str(uuid4()), str(uuid4())
+    now = datetime.now(timezone.utc)
+    pg_session.add_all(
+        [
+            Organization(id=org, name="Agency", max_members=5, created_at=now, updated_at=now),
+            Organization(
+                id=other, name="Other agency", max_members=5, created_at=now, updated_at=now
+            ),
+        ]
+    )
+    await pg_session.flush()
+    pg_session.add(
+        CrmCompanyListingSource(
+            organization_id=org,
+            broker_id="approved-broker",
+            broker_name="Agency",
+            selected_by_user_id="owner",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await pg_session.commit()
+    calls = []
+
+    async def query(sql, parameters):
+        calls.append((sql, parameters))
+        return []
+
+    monkeypatch.setattr(company_listings, "query", query)
+    arguments = dict(
+        mode="sale",
+        locations=["Dubai Marina"],
+        band=(1750000, 3000000),
+        property_type="Apartment",
+        bedrooms=["2"],
+    )
+    assert (
+        await company_listings.find_matching_company_listings(pg_session, other, **arguments) == []
+    )
+    assert calls == []  # A different organization cannot borrow this source selection.
+    assert await company_listings.find_matching_company_listings(pg_session, org, **arguments) == []
+    sql, parameters = calls[0]
+    assert parameters["broker_id"] == "approved-broker"
+    assert parameters["price_min"] == 1750000 and parameters["price_max"] == 3000000
+    assert parameters["category_ids"] == [1, 3]
+    assert parameters["bedrooms"] == ["2"]
+    assert parameters["limit"] == 200 and "is_available = 1" in sql

@@ -72,6 +72,7 @@ export interface Me {
 	name: string
 	initials: string
 	role: 'agent'
+	is_owner: boolean
 	today: string
 	areas: string[]
 }
@@ -92,6 +93,8 @@ export interface NavCounts {
 
 export type LeadFieldKey =
 	| 'wants'
+	/** Studio, 1…6 or 7+; saved as bedrooms_min / bedrooms_max, which matching reads. */
+	| 'bedrooms'
 	| 'budget_aed'
 	| 'finance'
 	| 'purpose'
@@ -114,6 +117,17 @@ export type LeadFieldKey =
 	| 'handover_by'
 
 export type LeadFields = Partial<Record<LeadFieldKey, string | number | null>>
+
+/** One sale by a recently sold owner, as the Inbox sync stored it. */
+export interface RecentSale {
+	building: string
+	unit: string
+	sold_on: string
+	price_aed: number | null
+	bought_on: string | null
+	bought_price_aed: number | null
+	est_cash_in_hand_aed: number | null
+}
 
 export interface LeadRow {
 	id: number
@@ -150,6 +164,8 @@ export interface LeadRow {
 	listing: RecordRef | null
 	/** Vitevue lease lead: the unit's lease behind it. */
 	lease: VitevueLease | null
+	/** A lead approved from a recent sale: the owner's sales, newest first (else null). */
+	recent_sales: RecentSale[] | null
 }
 
 /**
@@ -421,6 +437,8 @@ export interface LeadMatches {
 	/** Off-plan and seller-side matching are planned (status chip). */
 	status: Chip | null
 	own_listing: RecordRef | null
+	/** No budget, area or property type yet (e.g. approved from a recent sale): no matching. */
+	needs_brief: boolean
 }
 
 export interface MatchOptions {
@@ -634,6 +652,39 @@ export interface ListingDetail extends ListingCard {
 export interface ListingListResponse {
 	items: ListingCard[]
 	counts: { live: number; pocket: number; expired: number }
+	company?: CompanyListingCompany | null
+	matching_company?: CompanyListingCompany | null
+	companies?: CompanyListingCompany[]
+	agent_inventory?: CompanyListingAgentInventory[]
+	total?: number
+	limit?: number
+	offset?: number
+}
+
+export interface CompanyListingCompany {
+	broker_id: string
+	broker_name: string
+	listings: number
+	agents: number
+	last_scraped_at: string | null
+}
+
+export interface CompanyListingAgentInventory {
+	agent_id: string | null
+	agent_name: string
+	listings: number
+	/** As published on the agent's Property Finder listings. */
+	phone?: string | null
+	email?: string | null
+}
+
+export interface CompanyListingFilter {
+	brokerId?: string
+	allCompanies?: boolean
+	agentId?: string
+	agentName?: string
+	/** Property name: matches a listing's title, building or area. */
+	search?: string
 }
 
 export interface ListingCreate {
@@ -1340,7 +1391,7 @@ export interface FeedPreferences {
 
 /** Manager assigns · First to ask gets it · Agents ask, manager confirms. Default not decided. */
 export type HandoutMode = 'manager' | 'request' | 'both'
-export type InboxFilter = 'all' | 'mine' | 'waiting' | 'dismissed'
+export type InboxFilter = 'all' | 'mine' | 'waiting'
 
 export interface InboxItem {
 	id: string
@@ -1370,7 +1421,15 @@ export interface InboxItem {
 	lead_id: number | null
 	conversation: ConversationMessage[]
 	/** What I can do here, decided by the backend from the handout mode. */
-	can: { ask: boolean; withdraw: boolean; release: boolean; dismiss: boolean; restore: boolean }
+	can: {
+		ask: boolean
+		withdraw: boolean
+		release: boolean
+		dismiss: boolean
+		restore: boolean
+		/** A recently sold owner can be approved into Leads as a possible buyer. */
+		approve: boolean
+	}
 	/** "Asked 10:05 · the manager confirms" when I asked. */
 	my_request: string | null
 }
@@ -1378,6 +1437,8 @@ export interface InboxItem {
 export interface InboxResponse {
 	limited?: boolean
 	items: InboxItem[]
+	/** Every tab's items from the same load: switching tabs needs no new request. */
+	lists: Record<InboxFilter, InboxItem[]>
 	counts: Record<InboxFilter, number>
 	today: number
 	waiting: number

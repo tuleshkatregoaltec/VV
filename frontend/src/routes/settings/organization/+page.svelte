@@ -162,7 +162,7 @@ function roleLabel(role: string): string {
 </svelte:head>
 
 		<!-- Header -->
-		<section class="mb-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+		<section class="mb-5 overflow-hidden rounded-lg border border-border bg-card shadow-sm">
 			<div class="bg-navy px-5 py-5 text-bone">
 				<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Settings</p>
 				<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
@@ -175,9 +175,9 @@ function roleLabel(role: string): string {
 		</section>
 
 		{#if !isOwner}
-			<div class="rounded-lg border border-border bg-white p-8 text-center shadow-sm">
+			<div class="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
 				<svg
-					class="mx-auto mb-4 h-14 w-14 text-slate-300"
+					class="mx-auto mb-4 h-14 w-14 text-fg-5"
 					fill="none"
 					stroke="currentColor"
 					viewBox="0 0 24 24"
@@ -189,8 +189,8 @@ function roleLabel(role: string): string {
 						d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
 					></path>
 				</svg>
-				<h2 class="mb-2 text-xl font-semibold text-slate-900">Access restricted</h2>
-				<p class="text-slate-600">Only the organization owner can access these settings.</p>
+				<h2 class="mb-2 text-xl font-semibold text-fg-1">Access restricted</h2>
+				<p class="text-fg-3">Only the organization owner can access these settings.</p>
 			</div>
 		{:else}
 			<!-- Subscription Info -->
@@ -225,7 +225,7 @@ function roleLabel(role: string): string {
 						</div>
 
 						{#if hasExcessUsers && withinPaidPeriod}
-							<div class="mb-6 rounded-lg border border-[rgba(165,90,19,0.2)] bg-warning-bg p-4">
+							<div class="mb-6 rounded-lg border border-warning-border bg-warning-bg p-4">
 								<div class="flex items-start gap-3">
 									<svg
 										class="mt-0.5 h-5 w-5 flex-shrink-0 text-warning"
@@ -258,7 +258,7 @@ function roleLabel(role: string): string {
 								</div>
 							</div>
 						{:else if hasExcessUsers && !withinPaidPeriod}
-							<div class="mb-6 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-4">
+							<div class="mb-6 rounded-lg border border-error-border bg-error-bg p-4">
 								<div class="flex items-start gap-3">
 									<svg
 										class="mt-0.5 h-5 w-5 flex-shrink-0 text-error"
@@ -288,7 +288,7 @@ function roleLabel(role: string): string {
 								</div>
 							</div>
 						{:else if availableSeats > 0}
-							<div class="mb-6 rounded-lg border border-[rgba(17,122,72,0.2)] bg-success-bg p-4">
+							<div class="mb-6 rounded-lg border border-success-border bg-success-bg p-4">
 								<div class="flex items-center gap-3">
 									<svg
 										class="h-5 w-5 text-success"
@@ -313,7 +313,7 @@ function roleLabel(role: string): string {
 
 						<button
 							onclick={handleManageSubscription}
-							class="rounded-md bg-navy px-5 py-2.5 text-sm font-semibold text-bone transition-colors hover:bg-primary-light"
+							class="rounded-md bg-action px-5 py-2.5 text-sm font-semibold text-on-action transition-colors hover:bg-action-hover"
 						>
 							Manage subscription
 						</button>
@@ -330,7 +330,7 @@ function roleLabel(role: string): string {
 					<button
 						onclick={() => (showInviteModal = true)}
 						disabled={subscription !== undefined && availableSeats <= 0}
-						class="rounded-md bg-navy px-4 py-2 text-sm font-semibold text-bone transition-colors hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
+						class="rounded-md bg-action px-4 py-2 text-sm font-semibold text-on-action transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						Invite member
 					</button>
@@ -366,7 +366,7 @@ function roleLabel(role: string): string {
 									</div>
 									<div class="flex items-center gap-3">
 										<span
-											class="rounded-sm border border-[rgba(17,122,72,0.2)] bg-success-bg px-3 py-1 text-xs font-semibold text-success"
+											class="rounded-sm border border-success-border bg-success-bg px-3 py-1 text-xs font-semibold text-success"
 										>
 											Active
 										</span>
@@ -422,7 +422,7 @@ function roleLabel(role: string): string {
 									</div>
 									<div class="flex items-center gap-3">
 										<span
-											class="rounded-sm border border-[rgba(165,90,19,0.2)] bg-warning-bg px-3 py-1 text-xs font-semibold text-warning"
+											class="rounded-sm border border-warning-border bg-warning-bg px-3 py-1 text-xs font-semibold text-warning"
 										>
 											Pending
 										</span>
@@ -456,13 +456,13 @@ function roleLabel(role: string): string {
 <!-- Invite Modal -->
 {#if showInviteModal}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
 		role="presentation"
 		onkeydown={(e) => e.key === 'Escape' && (showInviteModal = false)}
 		onclick={() => (showInviteModal = false)}
 	>
 		<div
-			class="w-full max-w-md rounded-lg border border-border bg-white p-6 shadow-xl"
+			class="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl"
 			role="dialog"
 			aria-modal="true"
 			tabindex="-1"
@@ -470,11 +470,11 @@ function roleLabel(role: string): string {
 			onclick={(e) => e.stopPropagation()}
 		>
 			<div class="flex items-center justify-between mb-4">
-				<h3 class="text-xl font-semibold text-slate-900">Invite team member</h3>
+				<h3 class="text-xl font-semibold text-fg-1">Invite team member</h3>
 				<button
 					onclick={() => (showInviteModal = false)}
 					aria-label="Close invite modal"
-					class="rounded-md p-1 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600"
+					class="rounded-md p-1 text-fg-4 transition hover:bg-panel hover:text-fg-2"
 				>
 					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -488,13 +488,13 @@ function roleLabel(role: string): string {
 			</div>
 
 			{#if inviteSuccess}
-				<div class="mb-4 rounded-lg border border-[rgba(17,122,72,0.2)] bg-success-bg p-4">
+				<div class="mb-4 rounded-lg border border-success-border bg-success-bg p-4">
 					<p class="text-sm text-success">Invitation sent successfully!</p>
 				</div>
 			{/if}
 
 			{#if inviteError}
-				<div class="mb-4 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-4">
+				<div class="mb-4 rounded-lg border border-error-border bg-error-bg p-4">
 					<p class="text-sm text-error">{inviteError}</p>
 				</div>
 			{/if}
@@ -506,7 +506,7 @@ function roleLabel(role: string): string {
 				}}
 			>
 				<div class="mb-4">
-					<label for="inviteEmail" class="mb-2 block text-sm font-medium text-slate-700">
+					<label for="inviteEmail" class="mb-2 block text-sm font-medium text-fg-2">
 						Email address
 					</label>
 					<input
@@ -514,7 +514,7 @@ function roleLabel(role: string): string {
 						type="email"
 						bind:value={inviteEmail}
 						placeholder="colleague@company.com"
-						class="w-full rounded-md border border-slate-300 px-4 py-2 focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
+						class="w-full rounded-md border border-strong bg-card px-4 py-2 text-fg-1 placeholder:text-fg-5 focus:border-fg-4 focus:outline-none focus:ring-2 focus:ring-focus"
 						required
 					/>
 				</div>
@@ -523,14 +523,14 @@ function roleLabel(role: string): string {
 					<button
 						type="submit"
 						disabled={inviteLoading}
-						class="flex-1 rounded-md bg-navy px-4 py-2 font-semibold text-bone transition-colors hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
+						class="flex-1 rounded-md bg-action px-4 py-2 font-semibold text-on-action transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{inviteLoading ? 'Sending...' : 'Send invitation'}
 					</button>
 					<button
 						type="button"
 						onclick={() => (showInviteModal = false)}
-						class="rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+						class="rounded-md border border-strong px-4 py-2 font-semibold text-fg-2 transition-colors hover:bg-panel"
 					>
 						Cancel
 					</button>

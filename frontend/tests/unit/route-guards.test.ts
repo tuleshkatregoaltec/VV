@@ -140,3 +140,18 @@ describe('decideRouteAccess', () => {
 		expect(decideRouteAccess('/dashboard', makeUser())).toEqual({ action: 'allow' })
 	})
 })
+
+describe('enterprise assistant preview boundary', () => {
+	it('allows the sample-only preview without exposing adjacent application routes', () => {
+		expect(decideRouteAccess('/demo/assistant', null)).toEqual({ action: 'allow' })
+		expect(getRouteCategory('/demo/assistant/')).toBe('public')
+		for (const path of [
+			'/demo/assistant/admin',
+			'/demo/assistant-private',
+			'/crm/connectors',
+			'/crm/assistant'
+		]) {
+			expect(decideRouteAccess(path, null)).toEqual({ action: 'redirect', location: '/auth' })
+		}
+	})
+})

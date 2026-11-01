@@ -32,6 +32,7 @@ from app.crm.inbound_models import (
 )
 from app.crm.models import (
     CrmAgentAreaPreference,
+    CrmCompanyListingSource,
     CrmLeadNote,
     CrmLeadWorkspace,
     CrmLicensedBroker,
@@ -69,6 +70,7 @@ __all__ = [
     "CrmAgentAreaPreference",
     "CrmLicensedBroker",
     "CrmImportJob",
+    "CrmCompanyListingSource",
     "CrmContactImport",
     "CrmContactList",
     "CrmPropertyContactClaim",
