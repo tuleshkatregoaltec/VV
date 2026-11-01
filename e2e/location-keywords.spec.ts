@@ -39,8 +39,8 @@ test('Analytics identifies a building scope without stripping its numbered name'
   await page.goto('/analytics');
   const search = page.getByRole('combobox').first();
   await search.fill('08 life');
-  // DLD registers it as a project; the numbered name stays whole.
-  const option = page.getByRole('option', { name: '08 Life Residences Project', exact: true });
+  // Preserve the full numbered project name while allowing the hierarchy's master label.
+  const option = page.getByRole('option', { name: /^08 Life Residences Project(?: · .+)?$/ });
   await expect(option).toBeVisible({ timeout: 60000 });
   await page.screenshot({ path: path.resolve('../docs/audits/location-unification-2026-10-12/analytics-building.png') });
 });
