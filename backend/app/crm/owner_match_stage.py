@@ -7,10 +7,10 @@ saved claims all pass through it, so they cannot disagree.
 
 from __future__ import annotations
 
-import asyncio
 from collections import defaultdict
 from typing import Any
 
+from app.core.async_work import run_in_thread
 from app.crm.brokers import BrokerIndex, annotate_broker_contacts
 from app.crm.identity import ParsedContact
 from app.crm.import_parsing import matcher_source_from_evidence
@@ -67,7 +67,7 @@ async def run_owner_matching(
     for group in scopes.values():
         sources = [candidate_source(candidate) for candidate in group]
         index = await load_sales_index(sources)
-        verdicts = await asyncio.to_thread(_match_import, index, sources)
+        verdicts = await run_in_thread(_match_import, index, sources)
         del index
         for candidate, source, (result, later) in zip(group, sources, verdicts, strict=True):
             if "matcher_source" not in candidate.evidence or candidate.evidence.get(

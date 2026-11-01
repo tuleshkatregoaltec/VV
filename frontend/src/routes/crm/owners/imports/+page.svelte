@@ -11,6 +11,7 @@ import InfoTip from '$lib/crm/components/ui/InfoTip.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import QueryView from '$lib/crm/components/ui/QueryView.svelte'
 import { fmt, plural } from '$lib/crm/format'
+import { importIsActive, IMPORT_STATUS as STATUS } from '$lib/crm/importStatus'
 import { crmQueries } from '$lib/crm/queries'
 import { panel } from '$lib/crm/stores/panel.svelte'
 
@@ -20,12 +21,6 @@ import { panel } from '$lib/crm/stores/panel.svelte'
  * dropped rows or left them without a property. The org-wide ownership summary sits below.
  */
 const imports = createQuery(() => crmQueries.ownerImportDetails())
-
-const STATUS = {
-	completed: { label: 'Completed', tone: 'green' },
-	processing: { label: 'Processing', tone: 'amber' },
-	failed: { label: 'Failed', tone: 'red' }
-} as const
 
 /** "Completed · 30,312 kept · 62 dropped". */
 function statusText(i: OwnerImportDetail) {
@@ -148,7 +143,7 @@ const upload = () => panel.open({ kind: 'new-import', ownersOnly: true })
 
 <section class="sec org" aria-label="Ownership across all imports">
 	<h3>Ownership across all imports</h3>
-	<OwnerImportSummary processing={imports.data?.some((i) => i.status === 'processing')} />
+	<OwnerImportSummary processing={imports.data?.some((i) => importIsActive(i.status))} />
 </section>
 
 <style>

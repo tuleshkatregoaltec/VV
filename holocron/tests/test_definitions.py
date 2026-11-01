@@ -73,6 +73,7 @@ def test_definitions_expose_source_assets() -> None:
         "market_sale_events",
         "market_rental_events",
         "dxbi_profiles",
+        "crm_rental_ranked_base",
     }
 
 

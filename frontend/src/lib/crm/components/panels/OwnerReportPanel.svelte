@@ -12,7 +12,7 @@ let { id }: { id: string } = $props()
 const report = createQuery(() => crmQueries.ownerReport(id))
 
 function send() {
-	write({ call: () => crm.owners.sendReport(id), success: 'Report sent' })
+	write({ domain: 'owners', call: () => crm.owners.sendReport(id), success: 'Report sent' })
 }
 </script>
 

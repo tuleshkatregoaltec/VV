@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.async_work import run_in_thread
 from app.crm import owner_queries, owner_repository
 from app.crm.identity import (
     _OWNERSHIP_PRIORITY,
@@ -643,7 +644,7 @@ async def _profiles_for_snapshot(snapshot: OwnerAssessmentSnapshot) -> dict[str,
     async with _owner_profiles_lock:
         if _owner_profiles_cache and _owner_profiles_cache[0] is snapshot:
             return _owner_profiles_cache[1]
-        profiles = await asyncio.to_thread(_build_snapshot_profiles, snapshot)
+        profiles = await run_in_thread(_build_snapshot_profiles, snapshot)
         _owner_profiles_cache = (snapshot, profiles)
         return profiles
 
@@ -849,7 +850,7 @@ async def get_owner_registry(
         profiles = list(full_profiles.values())
     else:
         rows = [row for row in snapshot.rows if row["list_id"] == list_id]
-        profiles = await asyncio.to_thread(
+        profiles = await run_in_thread(
             _assessed_profiles, rows, identity_rows=snapshot.rows, snapshot=snapshot
         )
     full_by_key = {profile.owner_key: profile for profile in full_profiles.values()}

@@ -97,7 +97,7 @@ async def test_audit_retains_source_accounting_without_promoting_a_mortgage(tmp_
     mapper = AsyncMock(side_effect=AssertionError("Replay must not call a model"))
     monkeypatch.setattr(imports, "_llm_mapping", mapper)
     db = MagicMock(commit=AsyncMock(), flush=AsyncMock(), rollback=AsyncMock())
-    await imports.process_contact_import(
+    await imports._execute_contact_import(
         db,
         upload=UploadFile(file=io.BytesIO(source.read_bytes()), filename=source.name),
         name="Synthetic",

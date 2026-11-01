@@ -41,7 +41,7 @@ describe('workbook reference counts stay separate from candidate people', () => 
 		})
 		const owners = await listOwners({ tab: 'review', area: 'JVC', offset: 50 })
 		expect(owners.source_audit).toEqual(audit)
-		expect(owners.on_file).toBe(6)
+		expect(owners.pageFiltered).toBe(true)
 		expect(owners.page.total).toBe(6)
 		expect(owners.page.offset).toBe(50)
 	})

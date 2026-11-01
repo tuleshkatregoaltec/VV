@@ -2512,3 +2512,9 @@ ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS building_id String DEFAU
 ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS building_display String DEFAULT '';
 ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS stray UInt8 DEFAULT 0;
 
+
+-- crm_rental_ranked_base is a downstream immutable MergeTree, built only by
+-- assets/crm_rentals.py from the canonical crm-rental-sql package. Its explicit
+-- CREATE ... AS ranking preserves source types; the validated revision and schema
+-- hash travel in its table COMMENT through EXCHANGE. Schema setup must not build
+-- this asset or mark an empty placeholder ready. Source pipelines remain manual.

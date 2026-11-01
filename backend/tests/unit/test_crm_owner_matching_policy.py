@@ -591,7 +591,7 @@ async def test_actual_upload_parser_shared_matcher_and_persistence_learn_new_she
     lines.append(
         "History,Alpha Tower,Alpha,Business Bay,101,Apartment,2024-02-01,500000,Buyer,Mortgage Registration,100"
     )
-    result = await imports.process_contact_import(
+    result = await imports._execute_contact_import(
         db,
         upload=UploadFile(
             file=io.BytesIO(("\n".join(lines)).encode()), filename="never-seen-before.csv"

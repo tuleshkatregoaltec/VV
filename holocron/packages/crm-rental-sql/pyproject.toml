@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crm-rental-sql"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "Canonical rental SQL shared by ingestion and the API"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["crm_rental_sql*"]
+
+[tool.setuptools.package-data]
+crm_rental_sql = ["py.typed"]

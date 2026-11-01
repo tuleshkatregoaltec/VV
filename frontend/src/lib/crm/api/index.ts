@@ -119,6 +119,7 @@ async function home(day: string): Promise<HomeResponse> {
 	const leads = await backend.listLeads({ stage: 'new' })
 	const fresh = [...leads.items].sort((a, b) => b.score - a.score)
 	return {
+		limited: leads.limited,
 		date,
 		facts: { events_today: 0, conveyancing: 0, permits_under_14: 0 },
 		counters: {
@@ -142,6 +143,7 @@ async function home(day: string): Promise<HomeResponse> {
 async function counts(): Promise<NavCounts> {
 	const leads = await backend.listLeads({})
 	return {
+		limited: leads.limited,
 		new_leads: leads.new_count,
 		inbox: 0,
 		open_deals: 0,
@@ -180,6 +182,7 @@ export const crm = {
 		) => notOnBackend<Written<CalendarEvent>>('Booking a viewing'),
 		/** The backend has no over-budget or after-move options; both are ignored. */
 		matches: (id: number, _o: MatchOptions = {}): Promise<LeadMatches> => backend.leadMatches(id),
+		refreshMatches: (id: number) => backend.refreshLeadMatches(id),
 		/** Pursue a match (again to stop): "Match pursued" on both records + the next action. */
 		pursue: (_id: number, _key: string) => notOnBackend<Written<PursueResult>>('Pursue'),
 		shortlist: (id: number, key: string) => backend.shortlistMatch(id, key),

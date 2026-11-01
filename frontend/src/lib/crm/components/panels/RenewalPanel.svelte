@@ -31,13 +31,13 @@ function editOwner(r: RenewalDetail) {
 async function saveOwner(e: SubmitEvent) {
 	e.preventDefault()
 	saving = true
-	const r = await write({ call: () => crm.renewals.saveOwner(id, owner), success: 'Owner saved' })
+	const r = await write({
+		domain: 'renewals',
+		call: () => crm.renewals.saveOwner(id, owner),
+		success: 'Owner saved'
+	})
 	saving = false
 	if (r) editing = false
-}
-
-function start(r: RenewalDetail) {
-	write({ call: () => crm.renewals.start(r.id), success: `Renewal started — ${r.unit}` })
 }
 </script>
 
@@ -134,7 +134,7 @@ function start(r: RenewalDetail) {
 		</section>
 
 		{#snippet footer()}
-			<button type="button" class="btn" onclick={() => start(r)}>Start renewal</button>
+			<button type="button" class="btn" disabled title="Renewal workflows are coming soon">Start renewal · coming soon</button>
 		{/snippet}
 	</Panel>
 {:else}

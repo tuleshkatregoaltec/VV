@@ -106,6 +106,7 @@ async function open(l: LeadRow) {
 	if (!l.lease) return
 	const leaseId = l.lease.id
 	const r = await write({
+		domain: 'leads',
 		call: () => crm.leads.openVitevue(leaseId),
 		success: `${l.lease.unit} is now a lead`
 	})
@@ -126,6 +127,8 @@ const typeLine = (l: LeadRow) =>
 </script>
 
 <svelte:head><title>Leads · CRM</title></svelte:head>
+
+{#if leads.data?.limited}<p class="small muted">Showing the first 500 stored leads and up to 500 lease leads. Filters and counts apply to loaded rows.</p>{/if}
 
 <PageHeader
 	title="Leads"
@@ -161,7 +164,7 @@ const typeLine = (l: LeadRow) =>
 		<span class="sep">·</span>
 		<span><b class="num">{fmt(feed.data.window_total)}</b> units</span>
 		<span class="sep">·</span>
-		<span><b class="num">{fmt(feed.data.on_file)}</b> with a known owner</span>
+		<span><b class="num">{fmt(feed.data.on_file)}</b> with a known owner in the loaded lease leads</span>
 		<span class="sep">·</span>
 		<span><b class="num">{fmt(feed.data.entered_today)}</b> entered the inbox today</span>
 	{:else if feed.isError}

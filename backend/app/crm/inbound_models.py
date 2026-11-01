@@ -246,7 +246,7 @@ class InboundImportResponse(BaseModel):
     id: int
     name: str
     original_filename: str
-    status: Literal["processing", "completed", "failed"]
+    status: Literal["queued", "processing", "retry_wait", "completed", "failed"]
     summary: InboundImportSummary
     mapping: dict[str, Any] = Field(default_factory=dict)
     error_message: str | None = None

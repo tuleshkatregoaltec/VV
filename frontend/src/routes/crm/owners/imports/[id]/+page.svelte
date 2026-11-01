@@ -16,6 +16,11 @@ import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import QueryView from '$lib/crm/components/ui/QueryView.svelte'
 import { fmt } from '$lib/crm/format'
 import {
+	importIsActive,
+	importProgressNotice,
+	IMPORT_STATUS as STATUS
+} from '$lib/crm/importStatus'
+import {
 	type ClaimStatus,
 	columnsRead,
 	DROP_REASON_INFO,
@@ -40,11 +45,6 @@ const imports = createQuery(() => crmQueries.ownerImportDetails())
 const id = $derived(Number(page.params.id))
 const imp = $derived(imports.data?.find((i) => i.id === id) ?? null)
 
-const STATUS = {
-	completed: { label: 'Completed', tone: 'green' },
-	processing: { label: 'Processing', tone: 'amber' },
-	failed: { label: 'Failed', tone: 'red' }
-} as const
 const statuses = Object.keys(STATUS_INFO) as ClaimStatus[]
 
 let editing = $state(false)
@@ -79,6 +79,7 @@ async function rename(i: OwnerImportDetail) {
 	}
 	busy = true
 	const r = await write({
+		domain: 'imports',
 		call: () => crm.imports.renameOwners(i.id, name),
 		success: `Renamed · ${name}`,
 		event: 'import_renamed'
@@ -90,6 +91,7 @@ async function rename(i: OwnerImportDetail) {
 async function remove(i: OwnerImportDetail) {
 	busy = true
 	const r = await write({
+		domain: 'imports',
 		call: () => crm.imports.removeOwners(i.id),
 		success: `Deleted · ${i.name}`,
 		event: 'import_deleted'
@@ -120,7 +122,7 @@ const facts = (i: OwnerImportDetail) =>
 	[
 		i.file,
 		i.status === 'completed' ? `${fmt(i.counts.rows)} rows` : STATUS[i.status].label,
-		`imported ${i.at}`,
+		`${i.status === 'completed' ? 'imported' : 'uploaded'} ${i.at}`,
 		`import #${i.id}`
 	].join(' · ')
 const count = (n: number, one: string, many: string) => `${fmt(n)} ${n === 1 ? one : many}`
@@ -201,8 +203,8 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 
 			{#if imp.status === 'failed'}
 				<div class="notice" role="alert">This import failed (import #{imp.id}). Fix the file and upload it again.</div>
-			{:else if imp.status === 'processing'}
-				<div class="notice" role="status">This file is still being imported. Counts appear when it finishes.</div>
+			{:else if importIsActive(imp.status)}
+				<div class="notice" role="status">{importProgressNotice(imp.status)}</div>
 			{/if}
 
 			<!-- 2. Match result -->
@@ -336,7 +338,7 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 				<SourceAuditSummary summary={imp.source_audit} />
 			{/if}
 
-				<OwnerImportSummary importId={imp.id} listId={imp.listId} processing={imp.status === 'processing'} />
+				<OwnerImportSummary importId={imp.id} listId={imp.listId} processing={importIsActive(imp.status)} />
 
 				<button type="button" class="btn ghost sm" aria-expanded={showProperties} aria-controls="property-rows" onclick={() => (showProperties = !showProperties)}>{showProperties ? 'Hide properties' : 'Show properties'}</button>
 

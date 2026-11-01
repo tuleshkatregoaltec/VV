@@ -14,6 +14,7 @@ async function submit(e: SubmitEvent) {
 	e.preventDefault()
 	saving = true
 	const r = await write({
+		domain: 'owners',
 		call: () => crm.owners.create({ name: name.trim(), units: units.split('\n') }),
 		success: (res) => `${res.data.name} added`
 	})

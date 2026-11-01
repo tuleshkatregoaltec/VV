@@ -49,6 +49,8 @@ function act(
 
 <svelte:head><title>Inbox · CRM</title></svelte:head>
 
+{#if inbox.data?.limited}<p class="small muted">Showing up to 500 enquiries per inbox group. Filters and counts apply to loaded rows.</p>{/if}
+
 <PageHeader title="Inbox" {facts} />
 
 {#if inbox.data}

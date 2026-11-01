@@ -2220,7 +2220,7 @@
 					"required": true
 				},
 				"responses": {
-					"201": {
+					"202": {
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
@@ -2355,7 +2355,7 @@
 					"required": true
 				},
 				"responses": {
-					"201": {
+					"202": {
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
@@ -2435,7 +2435,7 @@
 					"required": true
 				},
 				"responses": {
-					"201": {
+					"202": {
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
@@ -12302,7 +12302,7 @@
 					},
 					"status": {
 						"type": "string",
-						"enum": ["processing", "completed", "failed"],
+						"enum": ["queued", "processing", "retry_wait", "completed", "failed"],
 						"title": "Status"
 					},
 					"summary": {
@@ -19553,7 +19553,7 @@
 					},
 					"status": {
 						"type": "string",
-						"enum": ["processing", "completed", "failed"],
+						"enum": ["queued", "processing", "retry_wait", "completed", "failed"],
 						"title": "Status"
 					},
 					"summary": {

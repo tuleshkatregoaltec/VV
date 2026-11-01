@@ -91,6 +91,7 @@ $effect(() => {
 
 function move(body: LeadStageMove) {
 	return write({
+		domain: 'leads',
 		call: () => crm.leads.moveStage(lead.id, body),
 		success: `${lead.name} → ${target.label}`,
 		event: 'lead_stage_changed'
@@ -188,6 +189,7 @@ function onPicked() {
 	if (!f || !docTarget) return
 	const t = docTarget
 	write({
+		domain: 'leads',
 		call: () => crm.leads.uploadDocument(lead.id, f, t),
 		success: `${t} added to ${lead.name}`,
 		event: 'document_uploaded'

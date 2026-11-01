@@ -31,6 +31,7 @@ function openInMatches() {
 
 function setOffPlan(on: boolean) {
 	write({
+		domain: 'leads',
 		call: () => crm.leads.patch(lead.id, { off_plan: on }),
 		success: on ? `${lead.name} marked off-plan` : `${lead.name} no longer off-plan`
 	})
@@ -45,6 +46,7 @@ function value(key: (typeof type.fields)[number]) {
 /** A Vitevue lease lead starts undecided; the agent classifies it as a seller or a landlord. */
 function classify(to: LeadType) {
 	write({
+		domain: 'leads',
 		call: () => crm.leads.patch(lead.id, { lead_type: to }),
 		success: `${lead.name} → ${LEAD_TYPES[to].label}`,
 		event: 'lead_type_changed'
@@ -56,6 +58,7 @@ function pickStage(stage: LeadStage) {
 	if (stage === lead.stage) return
 	if (stage === 'new') {
 		write({
+			domain: 'leads',
 			call: () => crm.leads.moveStage(lead.id, { stage: 'new' }),
 			success: `${lead.name} → ${stageOf('new').label}`,
 			event: 'lead_stage_changed'
