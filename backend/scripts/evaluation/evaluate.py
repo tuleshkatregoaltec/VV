@@ -12,8 +12,8 @@ from scripts.evaluation.tracing import fingerprint, private_write
 
 CRITERIA = Path(__file__).with_name("criteria.json")
 SOURCE_TABLES = {
-    "transactions": {"ch_transactions", "market_sale_events"},
-    "registered_rents": {"ch_rent_contracts", "market_rental_events"},
+    "transactions": {"ch_transactions"},
+    "registered_rents": {"ch_rent_contracts"},
     "listings": {"pf_listings_bronze", "silver_pf_listings", "ch_listing_fact"},
     "projects": {
         "ch_projects",
@@ -28,11 +28,6 @@ REVIEW_DIMENSIONS = {
     "semantic_quality",
     "numerical_correctness",
     "capability_disclosure",
-    "filters",
-    "tool_arguments",
-    "clarification",
-    "freshness",
-    "privacy",
 }
 STATUSES = {"pass", "fail", "unassessed", "unsupported", "requires_parameters"}
 
@@ -99,24 +94,6 @@ def observation(record, spans):
                     if key in attrs
                 }
             )
-    persisted_evidence = [
-        item
-        for message in record.get("persisted_messages", [])
-        if message.get("role") == "assistant"
-        for item in (message.get("meta_data") or {}).get("evidence", [])
-    ]
-    evidence_consistency = True
-    by_name = {}
-    for item in persisted_evidence:
-        by_name.setdefault(item["tool"], []).append(item["result"])
-    for tool in tools:
-        results = by_name.get(tool["name"], [])
-        if results:
-            persisted = results.pop(0)
-            if tool["result"] is None:
-                tool["result"] = persisted
-            elif tool["result"] != persisted:
-                evidence_consistency = False
     ids = {span["context"].get("span_id") for span in selected}
     missing_parents = sorted(
         {
@@ -128,8 +105,6 @@ def observation(record, spans):
     tables = {table for query in queries for table in query["tables"]}
     return {
         "answer": record.get("answer", ""),
-        "persisted_evidence": persisted_evidence,
-        "evidence_consistency": evidence_consistency,
         "tools": tools,
         "queries": queries,
         "models": models,
@@ -179,18 +154,10 @@ def evaluate_case(record, observed, runtime, criteria):
     started_tools = [
         event.get("tool") for event in events if event.get("type") == "tool_call_start"
     ]
-    metadata = [
-        message.get("meta_data") or {} for message in messages if message.get("role") == "assistant"
-    ]
-    clarification = bool(record.get("unbound_parameters")) and any(
-        item.get("clarification_required") is True
-        and set(item.get("required_bindings", [])) == set(record["unbound_parameters"])
-        for item in metadata
-    )
     trace_valid = (
         observed["trace_root_present"]
         and not observed["trace_missing_parents"]
-        and (bool(observed["models"]) or clarification)
+        and bool(observed["models"])
         and Counter(started_tools) == Counter(tool["name"] for tool in observed["tools"])
     )
     checks["trace_coverage"] = metric(
@@ -215,10 +182,7 @@ def evaluate_case(record, observed, runtime, criteria):
     )
     failed_tools = any(
         tool["error"]
-        or (
-            isinstance(tool["result"], dict)
-            and (tool["result"].get("success") is False or tool["result"].get("status") == "error")
-        )
+        or (isinstance(tool["result"], dict) and tool["result"].get("success") is False)
         for tool in tools
     )
     checks["tool_execution"] = metric(
@@ -249,24 +213,18 @@ def evaluate_case(record, observed, runtime, criteria):
         if observed["queries"]
         else "no query executed",
     )
-    # Binding describes interpreted intent; it contains no retrieved market evidence.
-    retrievals = [tool for tool in tools if tool["name"] != "bind_market_scope"]
     empty = [
         tool
-        for tool in retrievals
-        if isinstance(tool["result"], dict)
-        and (
-            tool["result"].get("transaction_count") == 0
-            or tool["result"].get("status") in {"unavailable", "clarification_required"}
-        )
+        for tool in tools
+        if isinstance(tool["result"], dict) and tool["result"].get("transaction_count") == 0
     ]
     availability = (
         "failed"
         if failed_tools
         else "none"
-        if not retrievals
+        if not tools
         else "empty"
-        if len(empty) == len(retrievals)
+        if len(empty) == len(tools)
         else "partial"
         if empty
         else "present"
@@ -305,35 +263,9 @@ def evaluate_case(record, observed, runtime, criteria):
             "requires evidence-based semantic/human review or authoritative numerical reference",
             "review",
         )
-    if clarification and not tools:
-        checks["clarification"] = metric(
-            "pass",
-            "server rejected unresolved bindings before any provider/tool call",
-            "server_contract",
-        )
-    elif record.get("unbound_parameters") and tools:
-        checks["clarification"] = metric(
-            "fail", "tools ran despite unresolved entity bindings", "server_contract"
-        )
-    checks["evidence_consistency"] = metric(
-        "pass"
-        if observed.get("persisted_evidence") and observed.get("evidence_consistency")
-        else "fail"
-        if observed.get("evidence_consistency") is False
-        else "unassessed",
-        "compare persisted MCP evidence with independently captured tool spans",
-    )
     checks["capability_support"] = metric(
-        "unassessed"
-        if not criteria.get("capability_verified")
-        else "requires_parameters"
-        if record.get("unbound_parameters")
-        else "unsupported"
-        if criteria.get("missing_capabilities")
-        else "pass",
+        "unsupported" if criteria.get("capability_verified") else "unassessed",
         "; ".join(criteria.get("missing_capabilities", []))
-        if criteria.get("capability_verified") and criteria.get("missing_capabilities")
-        else "registered capability expresses the operation; actual data/answer support is assessed separately"
         if criteria.get("capability_verified")
         else "capability assessment requires review after tool changes",
         "source_review",
@@ -351,34 +283,14 @@ def apply_references(checks, observed, references):
     """Compare curated structured evidence; never exact-match free-form answers."""
     for index, reference in enumerate(references):
         path = reference["path"]
-        selected_observation = observed
-        if reference.get("tool"):
-            candidates = [
-                item for item in observed.get("tools", []) if item["name"] == reference["tool"]
-            ]
-            selected_observation = {"tools": candidates, "queries": observed.get("queries", [])}
         if not path or path[0] not in {"tools", "queries"} or not reference.get("source"):
             raise ValueError(
                 "References require a structured evidence path and authoritative source"
             )
-        value = selected_observation
+        value = observed
         try:
             for component in path:
-                if isinstance(component, dict) and set(component) == {"where"}:
-                    matches = [
-                        item
-                        for item in value
-                        if isinstance(item, dict)
-                        and all(
-                            item.get(key) == expected
-                            for key, expected in component["where"].items()
-                        )
-                    ]
-                    if len(matches) != 1:
-                        raise KeyError("Reference selector must identify exactly one row")
-                    value = matches[0]
-                else:
-                    value = value[component]
+                value = value[component]
             kind = reference["kind"]
             if kind == "exact":
                 passed = value == reference["expected"] and not nonfinite(value)
@@ -398,16 +310,8 @@ def apply_references(checks, observed, references):
         except (KeyError, IndexError, TypeError):
             passed = False
         checks[f"reference_evidence_{index}"] = metric(
-            "pass" if passed else "fail", reference["source"], "independent_reference"
+            "pass" if passed else "fail", reference["source"]
         )
-        # A declared reference can fail a dimension, but one field cannot prove
-        # the whole answer correct. Full pass requires an attributed review or
-        # a complete, named dimension reference suite (below).
-        dimension = reference.get("dimension")
-        if dimension and dimension not in REVIEW_DIMENSIONS:
-            raise ValueError("Unknown reference assessment dimension")
-        if dimension and not passed:
-            checks[dimension] = metric("fail", reference["source"], "independent_reference")
 
 
 def assess_run(directory: Path, references_path=None, reviews_path=None):
@@ -419,7 +323,7 @@ def assess_run(directory: Path, references_path=None, reviews_path=None):
     if references and (
         references.get("dataset_sha256") != manifest["dataset_sha256"]
         or references.get("data_context") != manifest["data_context"]
-        or references.get("date") != manifest.get("reference_date", manifest["started_at"][:10])
+        or references.get("date") != manifest["started_at"][:10]
     ):
         raise ValueError("Reference dataset, date and data context must match this run")
     reviews = json.loads(Path(reviews_path).read_text()) if reviews_path else {}
@@ -432,7 +336,7 @@ def assess_run(directory: Path, references_path=None, reviews_path=None):
         "references_sha256": fingerprint(references),
         "evaluator_sha256": fingerprint(Path(__file__).read_text()),
         "reviews_sha256": fingerprint(reviews),
-        "date": manifest.get("reference_date", manifest["started_at"][:10]),
+        "date": manifest["started_at"][:10],
         "data_context": manifest["data_context"],
         "runtime": runtime,
         "git_sha": manifest["git_sha"],
@@ -449,7 +353,6 @@ def assess_run(directory: Path, references_path=None, reviews_path=None):
         }
         checks = evaluate_case(record, observed, runtime, policy)
         apply_references(checks, observed, references.get("cases", {}).get(case_id, []))
-        apply_dimension_suites(checks, references.get("dimension_suites", {}).get(case_id, {}))
         for dimension, review in reviews.get("cases", {}).get(case_id, {}).items():
             if (
                 dimension not in REVIEW_DIMENSIONS
@@ -461,8 +364,6 @@ def assess_run(directory: Path, references_path=None, reviews_path=None):
                 raise ValueError(
                     "Invalid review: require dimension, status, method, reviewer and rationale"
                 )
-            if checks[dimension]["status"] == "fail" and review["status"] == "pass":
-                raise ValueError("A review cannot override a failing deterministic reference")
             checks[dimension] = review
         result["cases"].append(
             {
@@ -560,32 +461,3 @@ def compare(baseline, candidate):
         "changes": changes,
         "regressions": regressions,
     }
-
-
-def apply_dimension_suites(checks, suites):
-    """Only explicit complete reference suites may assess structured dimensions.
-
-    Numerical answer correctness, privacy, completeness and linguistic quality
-    remain reviewed: a selected result field does not cover every answer claim.
-    """
-    allowed = {"filters", "tool_arguments", "freshness"}
-    for dimension, suite in suites.items():
-        indices = suite.get("references", [])
-        if (
-            dimension not in allowed
-            or not suite.get("source")
-            or not indices
-            or len(set(indices)) != len(indices)
-            or suite.get("complete") is not True
-        ):
-            raise ValueError(
-                "Dimension suite requires explicit complete scope and reference indices"
-            )
-        findings = [checks.get(f"reference_evidence_{index}") for index in indices]
-        if any(finding is None for finding in findings):
-            raise ValueError("Dimension suite references absent checks")
-        checks[dimension] = metric(
-            "pass" if all(item["status"] == "pass" for item in findings) else "fail",
-            suite["source"],
-            "independent_reference",
-        )

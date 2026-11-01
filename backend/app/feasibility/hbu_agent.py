@@ -18,6 +18,7 @@ from app.feasibility.research import (
     get_off_plan_pricing_curve,
     rank_plot_comparables,
 )
+from app.market.units import per_sqm
 from app.plots.evidence import get_land_sale_evidence
 from app.plots.models import PlotDetails, Usage
 from app.project.service import get_project_market_snapshot
@@ -332,7 +333,7 @@ async def get_area_rental_market(ctx: RunContext[HBUSeedDeps]) -> dict:
         area_name=detail.area_name,
         rental_contract_count_12m=detail.rental_contract_count_12m,
         median_annual_rent=detail.median_annual_rent,
-        avg_rent_price_sqm_12m=detail.avg_rent_price_sqm_12m,
+        avg_rent_price_sqm_12m=per_sqm(detail.avg_rent_price_sqft_12m),
         gross_yield_pct=detail.gross_yield_pct,
         top_developers=detail.top_developers,
         top_master_projects=detail.top_master_projects,
@@ -370,7 +371,9 @@ async def get_rental_comparables(
                 no_of_units=row.no_of_units,
                 rental_contract_count_12m=snapshot.rental_contract_count_12m if snapshot else 0,
                 median_annual_rent=snapshot.median_annual_rent if snapshot else None,
-                avg_rent_price_sqm_12m=snapshot.avg_rent_price_sqm_12m if snapshot else None,
+                avg_rent_price_sqm_12m=per_sqm(snapshot.avg_rent_price_sqft_12m)
+                if snapshot
+                else None,
                 gross_yield_pct=snapshot.gross_yield_pct if snapshot else None,
                 rationale=list(row.rationale),
             )

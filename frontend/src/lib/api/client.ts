@@ -243,7 +243,7 @@ async function stream(endpoint: string, onChunk: StreamCallback, options: Stream
 				onChunk(
 					JSON.stringify({
 						type: 'error',
-						error: 'Stream ended before completion. Reload the conversation to check its status.'
+						error: 'Stream ended before completion. Please try again.'
 					})
 				)
 			}

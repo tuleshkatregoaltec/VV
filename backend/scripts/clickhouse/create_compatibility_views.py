@@ -337,7 +337,7 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
                     lowerUTF8(project_name_en) AS project_key,
                     count() AS sales_transaction_count_12m,
                     sum(actual_worth) AS total_sales_volume_12m,
-                    quantile(0.5)(actual_worth) AS median_sale_price,
+                    quantileExact(0.5)(actual_worth) AS median_sale_price,
                     avg(meter_sale_price) AS avg_sale_price_sqm_12m
                 FROM ch_transactions, anchor
                 WHERE trans_group_en = 'Sales'
@@ -350,7 +350,7 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
                 SELECT
                     lowerUTF8(project_name_en) AS project_key,
                     count() AS rental_contract_count_12m,
-                    quantile(0.5)(annual_amount) AS median_annual_rent,
+                    quantileExact(0.5)(annual_amount) AS median_annual_rent,
                     avg(rent_per_sqm) AS avg_rent_price_sqm_12m
                 FROM ch_rent_contracts, anchor
                 WHERE annual_amount > 0
@@ -413,6 +413,9 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
         "ch_area_fact",
         """
         CREATE OR REPLACE VIEW ch_area_fact AS
+        -- One row per official DLD district. Sales and rentals use the canonical district
+        -- of the market layer (open-data labels such as DUBAI MARINA no longer form their
+        -- own areas); the project register names the district directly.
         WITH
             anchor AS (
                 SELECT max(instance_date) AS max_date
@@ -421,7 +424,8 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
             ),
             projects AS (
                 SELECT
-                    area_name_en,
+                    lowerUTF8(area_name_en) AS area_key,
+                    any(area_name_en) AS area_label,
                     any(area_id) AS area_id,
                     count() AS active_projects,
                     countIf(completion_status = 'completed') AS completed_projects,
@@ -443,44 +447,51 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
                     groupUniqArray(10)(master_project_en) AS top_master_projects
                 FROM ch_project_fact
                 WHERE area_name_en != ''
-                GROUP BY area_name_en
+                GROUP BY area_key
             ),
             sales AS (
                 SELECT
-                    area_name_en,
+                    lowerUTF8(district_name) AS area_key,
+                    any(district_name) AS area_label,
+                    any(district_id) AS area_id,
                     count() AS sales_transaction_count_12m,
                     sum(actual_worth) AS total_sales_volume_12m,
-                    quantile(0.5)(actual_worth) AS median_sale_price,
+                    quantileExact(0.5)(actual_worth) AS median_sale_price,
                     avg(meter_sale_price) AS avg_sale_price_sqm_12m
                 FROM ch_transactions, anchor
                 WHERE trans_group_en = 'Sales'
                   AND actual_worth > 0
-                  AND area_name_en != ''
+                  AND district_name != ''
                   AND instance_date >= max_date - INTERVAL 365 DAY
-                GROUP BY area_name_en
+                GROUP BY area_key
             ),
             rents AS (
                 SELECT
-                    area_name_en,
+                    lowerUTF8(district_name) AS area_key,
+                    any(district_name) AS area_label,
                     count() AS rental_contract_count_12m,
-                    quantile(0.5)(annual_amount) AS median_annual_rent,
+                    quantileExact(0.5)(annual_amount) AS median_annual_rent,
                     avg(rent_per_sqm) AS avg_rent_price_sqm_12m
                 FROM ch_rent_contracts, anchor
                 WHERE annual_amount > 0
-                  AND area_name_en != ''
+                  AND district_name != ''
                   AND contract_start_date >= max_date - INTERVAL 365 DAY
-                GROUP BY area_name_en
+                GROUP BY area_key
             ),
             area_names AS (
-                SELECT area_name_en FROM projects
-                UNION DISTINCT
-                SELECT area_name_en FROM sales
-                UNION DISTINCT
-                SELECT area_name_en FROM rents
+                SELECT area_key, any(area_label) AS area_label
+                FROM (
+                    SELECT area_key, area_label FROM sales
+                    UNION ALL
+                    SELECT area_key, area_label FROM rents
+                    UNION ALL
+                    SELECT area_key, area_label FROM projects
+                )
+                GROUP BY area_key
             )
         SELECT
-            names.area_name_en AS area_name_en,
-            ifNull(p.area_id, 0) AS area_id,
+            names.area_label AS area_name_en,
+            if(ifNull(p.area_id, 0) != 0, p.area_id, ifNull(s.area_id, 0)) AS area_id,
             ifNull(p.active_projects, 0) AS active_projects,
             ifNull(p.completed_projects, 0) AS completed_projects,
             ifNull(p.overdue_projects, 0) AS overdue_projects,
@@ -504,9 +515,9 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
             ifNull(p.top_developers, []) AS top_developers,
             ifNull(p.top_master_projects, []) AS top_master_projects
         FROM area_names names
-        LEFT JOIN projects p ON p.area_name_en = names.area_name_en
-        LEFT JOIN sales s ON s.area_name_en = names.area_name_en
-        LEFT JOIN rents r ON r.area_name_en = names.area_name_en
+        LEFT JOIN projects p ON p.area_key = names.area_key
+        LEFT JOIN sales s ON s.area_key = names.area_key
+        LEFT JOIN rents r ON r.area_key = names.area_key
         """,
     ),
 )
@@ -534,6 +545,61 @@ def get_client():
     )
 
 
+# Views served from the canonical market layer, and the Holocron table each one reads.
+MARKET_BACKED_VIEWS = {
+    "ch_transactions": "market_sale_events",
+    "ch_rent_contracts": "market_rental_events",
+}
+
+
+class MarketLayerNotPublished(RuntimeError):
+    """A market-backed view would serve an empty or never-published table."""
+
+
+def require_published_market_layer(client) -> None:
+    """Refuse to point the app at a market table no validated release has filled.
+
+    The views read Holocron's canonical release. On a warehouse where the market rebuild has
+    never published (fresh install, schedule never run), creating them would silently empty
+    every sales and rentals endpoint, so nothing is changed and the operator is told why. The
+    same holds for a release built before the uniform transforms (one table refreshed, the other
+    still on its old release): its property types and locations are all blank.
+    """
+    problems = []
+    for view, table in MARKET_BACKED_VIEWS.items():
+        exists = client.query(
+            "SELECT count() FROM system.tables "
+            "WHERE database = currentDatabase() AND name IN ({table:String}, 'market_release_ledger')",
+            parameters={"table": table},
+        ).result_rows[0][0]
+        if exists < 2:
+            problems.append(f"{view}: {table} or market_release_ledger does not exist")
+            continue
+        published = client.query(
+            "SELECT count() FROM market_release_ledger FINAL "
+            "WHERE dataset = {table:String} AND state = 'published'",
+            parameters={"table": table},
+        ).result_rows[0][0]
+        served, uniform = client.query(
+            f"SELECT count(), countIf(property_type != '' OR location_name != '') "
+            f"FROM `{table}` WHERE is_served = 1"
+        ).result_rows[0]
+        if not published or not served:
+            problems.append(
+                f"{view}: {table} has {published} published release(s) and {served} served rows"
+            )
+        elif not uniform:
+            # Built before the uniform transforms: the columns the app reads are all blank.
+            problems.append(
+                f"{view}: {table}'s release names no property type or location on any row"
+            )
+    if problems:
+        raise MarketLayerNotPublished(
+            "views not changed; run Holocron's market_events_refresh job first: "
+            + "; ".join(problems)
+        )
+
+
 def main() -> None:
     args = parse_args()
     if args.dry_run:
@@ -542,6 +608,7 @@ def main() -> None:
         return
 
     client = get_client()
+    require_published_market_layer(client)
     started = time.time()
     for name, ddl in VIEW_DDL:
         client.command(ddl)

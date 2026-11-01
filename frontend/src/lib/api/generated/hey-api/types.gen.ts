@@ -41,6 +41,83 @@ export type AcceptInviteResponse = {
 };
 
 /**
+ * ActionKind
+ */
+export type ActionKind = 'create_lead' | 'update_lead' | 'assign_lead' | 'delete_lead' | 'add_note' | 'create_reminder' | 'update_reminder' | 'delete_reminder' | 'schedule_viewing' | 'cancel_viewing' | 'create_listing_draft' | 'update_listing_draft' | 'send_message' | 'publish_listing' | 'book_external_viewing';
+
+/**
+ * ActionProposalRequest
+ */
+export type ActionProposalRequest = {
+    kind: ActionKind;
+    /**
+     * Conversation Id
+     */
+    conversation_id: number;
+    /**
+     * Payload
+     */
+    payload: CreateLead | UpdateLead | AssignLead | LeadTarget | AddNote | CreateReminder | UpdateReminder | DeleteReminder | ScheduleViewing | CancelViewing | CreateListingDraft | UpdateListingDraft | SendMessage | PublishListing;
+    /**
+     * Idempotency Key
+     */
+    idempotency_key: string;
+};
+
+/**
+ * ActionProposalResponse
+ */
+export type ActionProposalResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    kind: ActionKind;
+    /**
+     * Status
+     */
+    status: 'awaiting_confirmation' | 'succeeded' | 'cancelled' | 'expired' | 'failed' | 'not_connected' | 'queued' | 'unknown';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Preview
+     */
+    preview: {
+        [key: string]: unknown;
+    };
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Result
+     */
+    result?: {
+        [key: string]: unknown;
+    } | null;
+};
+
+/**
+ * AddNote
+ */
+export type AddNote = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
  * AnalyticsResponse
  *
  * Complete analytics response for dashboard
@@ -134,9 +211,11 @@ export type AnalyticsUnitComposition = {
      */
     pct_of_total: number;
     /**
-     * Avg Unit Size Sqm
+     * Avg Unit Size Sqft
+     *
+     * Median registered unit size (sq ft)
      */
-    avg_unit_size_sqm?: number;
+    avg_unit_size_sqft?: number;
 };
 
 /**
@@ -204,13 +283,13 @@ export type AreaDetailResponse = {
      */
     median_annual_rent: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Gross Yield Pct
      */
@@ -324,13 +403,13 @@ export type AreaListItem = {
      */
     median_annual_rent: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Gross Yield Pct
      */
@@ -426,6 +505,20 @@ export type AreaProjectSnapshot = {
 };
 
 /**
+ * AssignLead
+ */
+export type AssignLead = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Assignee Id
+     */
+    assignee_id: string;
+};
+
+/**
  * AuthMeResponse
  */
 export type AuthMeResponse = {
@@ -483,6 +576,20 @@ export type BodyCrmCrmContactImport = {
      * Name
      */
     name?: string;
+    /**
+     * Mapping Json
+     */
+    mapping_json?: string;
+};
+
+/**
+ * Body_crm-crm_contact_import_preview
+ */
+export type BodyCrmCrmContactImportPreview = {
+    /**
+     * File
+     */
+    file: Blob | File;
 };
 
 /**
@@ -519,6 +626,20 @@ export type BodyCrmCrmPreviewInboundImport = {
      * Campaign Context
      */
     campaign_context?: string;
+};
+
+/**
+ * Body_crm-crm_source_only_import
+ */
+export type BodyCrmCrmSourceOnlyImport = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Name
+     */
+    name?: string;
 };
 
 /**
@@ -626,6 +747,42 @@ export type BuildingInfo = {
 };
 
 /**
+ * BuildingStock
+ *
+ * One building of a project, with its registered units.
+ */
+export type BuildingStock = {
+    /**
+     * Building Id
+     */
+    building_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Sales
+     */
+    sales?: number;
+    /**
+     * Leases
+     */
+    leases?: number;
+    /**
+     * Units
+     */
+    units?: number | null;
+    /**
+     * Units Source
+     */
+    units_source?: string | null;
+    /**
+     * Units At Least
+     */
+    units_at_least?: boolean;
+};
+
+/**
  * BuildingUnitType
  *
  * Bedroom/type breakdown for a specific building
@@ -644,9 +801,19 @@ export type BuildingUnitType = {
      */
     percentage: number;
     /**
-     * Avg Area Sqm
+     * Avg Area Sqft
      */
-    avg_area_sqm: number | null;
+    avg_area_sqft: number | null;
+};
+
+/**
+ * CancelViewing
+ */
+export type CancelViewing = {
+    /**
+     * Viewing Id
+     */
+    viewing_id: number;
 };
 
 /**
@@ -886,6 +1053,72 @@ export type CreateConversationRequest = {
 };
 
 /**
+ * CreateLead
+ */
+export type CreateLead = {
+    /**
+     * Full Name
+     */
+    full_name: string;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Intent
+     */
+    intent?: 'unknown' | 'buy' | 'rent' | 'sell' | 'let';
+    /**
+     * Notes
+     */
+    notes?: string | null;
+};
+
+/**
+ * CreateListingDraft
+ */
+export type CreateListingDraft = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Location
+     */
+    location: string;
+};
+
+/**
+ * CreateReminder
+ */
+export type CreateReminder = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Due At
+     */
+    due_at: string;
+    /**
+     * Lead Id
+     */
+    lead_id?: number | null;
+};
+
+/**
  * CreateUserRequest
  */
 export type CreateUserRequest = {
@@ -943,6 +1176,46 @@ export type CreateUserResponse = {
      * Organization Name
      */
     organization_name: string;
+};
+
+/**
+ * CrmAreaPreferencesResponse
+ */
+export type CrmAreaPreferencesResponse = {
+    /**
+     * Areas
+     */
+    areas: Array<string>;
+    /**
+     * Forward Days
+     */
+    forward_days?: number;
+    /**
+     * Lookback Days
+     */
+    lookback_days?: number;
+    /**
+     * Updated At
+     */
+    updated_at?: string | null;
+};
+
+/**
+ * CrmAreaPreferencesUpdate
+ */
+export type CrmAreaPreferencesUpdate = {
+    /**
+     * Areas
+     */
+    areas: Array<string>;
+    /**
+     * Forward Days
+     */
+    forward_days?: number;
+    /**
+     * Lookback Days
+     */
+    lookback_days?: number;
 };
 
 /**
@@ -1014,6 +1287,178 @@ export type CrmBreakdownItem = {
 };
 
 /**
+ * CrmCompanyListingAgentInventory
+ */
+export type CrmCompanyListingAgentInventory = {
+    /**
+     * Agent Id
+     */
+    agent_id?: string | null;
+    /**
+     * Agent Name
+     */
+    agent_name: string;
+    /**
+     * Listings
+     */
+    listings: number;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+};
+
+/**
+ * CrmCompanyListingCompany
+ */
+export type CrmCompanyListingCompany = {
+    /**
+     * Broker Id
+     */
+    broker_id: string;
+    /**
+     * Broker Name
+     */
+    broker_name: string;
+    /**
+     * Listings
+     */
+    listings: number;
+    /**
+     * Agents
+     */
+    agents: number;
+    /**
+     * Last Scraped At
+     */
+    last_scraped_at?: string | null;
+};
+
+/**
+ * CrmCompanyListingResponse
+ *
+ * A company listing as Assets › Company listings shows it.
+ */
+export type CrmCompanyListingResponse = {
+    /**
+     * Reference
+     */
+    reference: string;
+    /**
+     * Agent Name
+     */
+    agent_name: string;
+    /**
+     * Agent Phone
+     */
+    agent_phone: string | null;
+    /**
+     * Mode
+     */
+    mode: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Bedrooms
+     */
+    bedrooms: number | null;
+    /**
+     * Size Sqft
+     */
+    size_sqft: number | null;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Building Name
+     */
+    building_name: string | null;
+    /**
+     * Unit Number
+     */
+    unit_number: string | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Listed At
+     */
+    listed_at: string;
+};
+
+/**
+ * CrmCompanyListingSourceResponse
+ */
+export type CrmCompanyListingSourceResponse = {
+    /**
+     * Broker Id
+     */
+    broker_id: string;
+    /**
+     * Broker Name
+     */
+    broker_name: string;
+};
+
+/**
+ * CrmCompanyListingSourceUpdate
+ */
+export type CrmCompanyListingSourceUpdate = {
+    /**
+     * Broker Id
+     */
+    broker_id: string;
+};
+
+/**
+ * CrmCompanyListingsResponse
+ */
+export type CrmCompanyListingsResponse = {
+    company: CrmCompanyListingCompany | null;
+    matching_company?: CrmCompanyListingCompany | null;
+    /**
+     * Companies
+     */
+    companies?: Array<CrmCompanyListingCompany>;
+    /**
+     * Agents
+     */
+    agents?: Array<CrmCompanyListingAgentInventory>;
+    /**
+     * Items
+     */
+    items?: Array<CrmCompanyListingResponse>;
+    /**
+     * Total
+     */
+    total?: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+};
+
+/**
  * CrmContactClaimResponse
  */
 export type CrmContactClaimResponse = {
@@ -1066,6 +1511,12 @@ export type CrmContactClaimResponse = {
      */
     property_type: string;
     /**
+     * Property Details
+     */
+    property_details?: {
+        [key: string]: string;
+    };
+    /**
      * Transaction Date
      */
     transaction_date?: string | null;
@@ -1076,7 +1527,7 @@ export type CrmContactClaimResponse = {
     /**
      * Ownership Status
      */
-    ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
+    ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'unverified_former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
     /**
      * Confidence Score
      */
@@ -1125,6 +1576,33 @@ export type CrmContactClaimResponse = {
      * Source Rows
      */
     source_rows?: Array<string>;
+    /**
+     * Match Outcome
+     */
+    match_outcome?: string | null;
+    /**
+     * Match Colour
+     */
+    match_colour?: 'green' | 'amber' | 'blue' | 'red' | 'grey' | null;
+    /**
+     * Match Reasons
+     */
+    match_reasons?: Array<string>;
+    /**
+     * Match Warnings
+     */
+    match_warnings?: Array<string>;
+    matched_sale?: CrmMatchedSale | null;
+};
+
+/**
+ * CrmContactImportPreview
+ */
+export type CrmContactImportPreview = {
+    /**
+     * Sheets
+     */
+    sheets?: Array<CrmSheetPreview>;
 };
 
 /**
@@ -1160,7 +1638,7 @@ export type CrmContactImportResponse = {
     /**
      * Status
      */
-    status: 'processing' | 'completed' | 'failed';
+    status: 'queued' | 'processing' | 'retry_wait' | 'completed' | 'failed';
     summary: CrmContactImportSummary;
     /**
      * Mappings
@@ -1184,6 +1662,8 @@ export type CrmContactImportResponse = {
  * CrmContactImportSummary
  */
 export type CrmContactImportSummary = {
+    owner_match?: CrmOwnerMatchSummary | null;
+    source_audit?: CrmSourceAuditSummary | null;
     /**
      * Total Rows
      */
@@ -1193,9 +1673,30 @@ export type CrmContactImportSummary = {
      */
     candidate_rows?: number;
     /**
+     * Distinct Properties
+     */
+    distinct_properties?: number | null;
+    source_property_counts?: CrmSourcePropertyCounts | null;
+    /**
+     * Rows With Sales History
+     */
+    rows_with_sales_history?: number | null;
+    /**
+     * Properties Linked Rows
+     */
+    properties_linked_rows?: number | null;
+    /**
+     * Plot Only Rows
+     */
+    plot_only_rows?: number | null;
+    /**
      * Duplicate Rows Collapsed
      */
     duplicate_rows_collapsed?: number;
+    /**
+     * Dropped No Unit
+     */
+    dropped_no_unit?: number;
     /**
      * Valid Contacts
      */
@@ -1216,6 +1717,10 @@ export type CrmContactImportSummary = {
      * Former Owners
      */
     former_owners?: number;
+    /**
+     * Unverified Former Owners
+     */
+    unverified_former_owners?: number;
     /**
      * Conflicting Claims
      */
@@ -1240,6 +1745,16 @@ export type CrmContactImportSummary = {
      * Contact Ready
      */
     contact_ready?: number;
+    /**
+     * Dropped By Reason
+     */
+    dropped_by_reason?: {
+        [key: string]: number;
+    };
+    /**
+     * Dropped Log
+     */
+    dropped_log?: boolean;
 };
 
 /**
@@ -1395,6 +1910,86 @@ export type CrmDashboardResponse = {
 };
 
 /**
+ * CrmDroppedRow
+ *
+ * A row the import did not keep, with the file's own values and why it was dropped.
+ */
+export type CrmDroppedRow = {
+    /**
+     * Sheet
+     */
+    sheet: string;
+    /**
+     * Row
+     */
+    row: number;
+    /**
+     * Reason
+     */
+    reason: 'no_name' | 'not_buyer_seller' | 'not_a_sale' | 'no_unit';
+    /**
+     * Name
+     */
+    name?: string;
+    /**
+     * Building
+     */
+    building?: string;
+    /**
+     * Unit
+     */
+    unit?: string;
+    /**
+     * Date
+     */
+    date?: string;
+    /**
+     * Price
+     */
+    price?: string;
+    /**
+     * Role
+     */
+    role?: string;
+    /**
+     * Procedure
+     */
+    procedure?: string;
+};
+
+/**
+ * CrmDroppedRowsResponse
+ */
+export type CrmDroppedRowsResponse = {
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * By Reason
+     */
+    by_reason: {
+        [key: string]: number;
+    };
+    /**
+     * Rows
+     */
+    rows: Array<CrmDroppedRow>;
+};
+
+/**
  * CrmFilters
  */
 export type CrmFilters = {
@@ -1414,6 +2009,152 @@ export type CrmFilters = {
      * Property Types
      */
     property_types?: Array<string>;
+};
+
+/**
+ * CrmImportPropertiesResponse
+ */
+export type CrmImportPropertiesResponse = {
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Rows
+     */
+    rows: Array<CrmImportProperty>;
+};
+
+/**
+ * CrmImportProperty
+ *
+ * One distinct property (building + unit) of an import, with its kept rows.
+ */
+export type CrmImportProperty = {
+    /**
+     * Property Key
+     */
+    property_key: string;
+    /**
+     * Area
+     */
+    area: string;
+    /**
+     * Project
+     */
+    project: string;
+    /**
+     * Building
+     */
+    building: string;
+    /**
+     * Unit
+     */
+    unit: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Rows
+     */
+    rows: number;
+    /**
+     * Buyers
+     */
+    buyers: number;
+    /**
+     * Sellers
+     */
+    sellers: number;
+    /**
+     * Current Owner
+     */
+    current_owner?: string | null;
+    /**
+     * Latest Date
+     */
+    latest_date?: string | null;
+    /**
+     * Latest Price Aed
+     */
+    latest_price_aed?: number | null;
+    /**
+     * Records
+     */
+    records: Array<CrmImportPropertyRecord>;
+    /**
+     * Records Truncated
+     */
+    records_truncated?: boolean;
+};
+
+/**
+ * CrmImportPropertyRecord
+ *
+ * One retained source event; sale_date is the legacy API name for its date.
+ */
+export type CrmImportPropertyRecord = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Sale Date
+     */
+    sale_date?: string | null;
+    /**
+     * Price Aed
+     */
+    price_aed?: number | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Sheet
+     */
+    sheet: string;
+    /**
+     * Row
+     */
+    row: number;
+    /**
+     * Procedure
+     */
+    procedure?: string;
+    /**
+     * Event Family
+     */
+    event_family?: string;
+    /**
+     * Identifiers
+     */
+    identifiers?: {
+        [key: string]: string;
+    };
+    /**
+     * Match Reason
+     */
+    match_reason?: string;
+    /**
+     * Property Details
+     */
+    property_details?: {
+        [key: string]: string;
+    };
 };
 
 /**
@@ -1643,6 +2384,7 @@ export type CrmLead = {
  */
 export type CrmLeadDetailResponse = {
     lead: CrmLead;
+    owner?: CrmRenewalOwner | null;
     /**
      * Timeline
      */
@@ -1700,7 +2442,7 @@ export type CrmLeadImportedContact = {
     /**
      * Ownership Status
      */
-    ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
+    ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'unverified_former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
     /**
      * Confidence Score
      */
@@ -1758,6 +2500,46 @@ export type CrmLeadNoteResponse = {
 };
 
 /**
+ * CrmMatchedSale
+ *
+ * The sale a row was matched to: a DXBI event or a Transactions (DLD) row.
+ */
+export type CrmMatchedSale = {
+    /**
+     * Unit
+     */
+    unit?: string;
+    /**
+     * Building
+     */
+    building?: string;
+    /**
+     * Project
+     */
+    project?: string;
+    /**
+     * Area
+     */
+    area?: string;
+    /**
+     * Amount Aed
+     */
+    amount_aed?: number | null;
+    /**
+     * Date
+     */
+    date?: string;
+    /**
+     * Sqft
+     */
+    sqft?: number | null;
+    /**
+     * Source
+     */
+    source?: string;
+};
+
+/**
  * CrmNoteCreate
  */
 export type CrmNoteCreate = {
@@ -1790,9 +2572,282 @@ export type CrmOwnerBulkUpdate = {
 };
 
 /**
+ * CrmOwnerHistoryEvent
+ */
+export type CrmOwnerHistoryEvent = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Import Id
+     */
+    import_id: number;
+    /**
+     * Source Filename
+     */
+    source_filename: string;
+    /**
+     * Source Sheet
+     */
+    source_sheet: string;
+    /**
+     * Source Row Number
+     */
+    source_row_number: number;
+    /**
+     * Contact Name
+     */
+    contact_name: string;
+    /**
+     * Property Key
+     */
+    property_key?: string | null;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Building Name
+     */
+    building_name: string;
+    /**
+     * Unit Number
+     */
+    unit_number: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Party Role
+     */
+    party_role: string;
+    /**
+     * Procedure Type
+     */
+    procedure_type: string;
+    /**
+     * Event Family
+     */
+    event_family: string;
+    /**
+     * Transaction Date
+     */
+    transaction_date?: string | null;
+    /**
+     * Transaction Price Aed
+     */
+    transaction_price_aed?: number | null;
+    /**
+     * Observed Ownership Status
+     */
+    observed_ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'unverified_former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
+    /**
+     * Current Ownership Status
+     */
+    current_ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'unverified_former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
+    /**
+     * Confidence Score
+     */
+    confidence_score: number;
+    /**
+     * Evidence Reason
+     */
+    evidence_reason: string;
+    /**
+     * Current Evidence Reason
+     */
+    current_evidence_reason: string;
+    /**
+     * Resolver Version
+     */
+    resolver_version?: string | null;
+};
+
+/**
+ * CrmOwnerHistoryResponse
+ */
+export type CrmOwnerHistoryResponse = {
+    /**
+     * Owner Key
+     */
+    owner_key: string;
+    summary: CrmOwnerHistorySummary;
+    /**
+     * Events
+     */
+    events: Array<CrmOwnerHistoryEvent>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+};
+
+/**
+ * CrmOwnerHistorySummary
+ *
+ * Source rows and evidence associations, not a legal ownership guarantee.
+ */
+export type CrmOwnerHistorySummary = {
+    /**
+     * Source Event Count
+     */
+    source_event_count: number;
+    /**
+     * Identifiable Property Count
+     */
+    identifiable_property_count: number;
+    /**
+     * Owner Property Count
+     */
+    owner_property_count: number;
+    /**
+     * Verified Current Count
+     */
+    verified_current_count: number;
+    /**
+     * Probable Current Count
+     */
+    probable_current_count: number;
+    /**
+     * Former Count
+     */
+    former_count: number;
+    /**
+     * Unresolved Count
+     */
+    unresolved_count: number;
+    /**
+     * Invalid Identity Source Count
+     */
+    invalid_identity_source_count: number;
+    /**
+     * Legacy Source Event Count
+     */
+    legacy_source_event_count: number;
+    /**
+     * Resolver Versions
+     */
+    resolver_versions: {
+        [key: string]: number;
+    };
+    /**
+     * Unverified Former Count
+     */
+    unverified_former_count?: number;
+    /**
+     * Checked At
+     */
+    checked_at?: string | null;
+    /**
+     * Warehouse Status
+     */
+    warehouse_status?: 'available' | 'unavailable' | 'not_requested';
+    /**
+     * Assessment Version
+     */
+    assessment_version?: string;
+};
+
+/**
+ * CrmOwnerMatchSales
+ *
+ * Distinct sales that confirmed rows are tied to, by where the sale came from.
+ */
+export type CrmOwnerMatchSales = {
+    /**
+     * Transactions
+     */
+    transactions?: number;
+    /**
+     * Registry
+     */
+    registry?: number;
+    /**
+     * Total
+     */
+    total?: number;
+};
+
+/**
+ * CrmOwnerMatchSummary
+ *
+ * What the property-first matcher made of an import's rows.
+ */
+export type CrmOwnerMatchSummary = {
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Rows
+     */
+    rows: {
+        [key: string]: number;
+    };
+    units: CrmOwnerMatchUnits;
+    /**
+     * Rows Without Unit
+     */
+    rows_without_unit: number;
+    /**
+     * Review Reasons
+     */
+    review_reasons?: {
+        [key: string]: number;
+    };
+    sales_matched?: CrmOwnerMatchSales;
+};
+
+/**
+ * CrmOwnerMatchUnits
+ *
+ * Distinct units (building or project label + identifier keys) by their best row's tier.
+ */
+export type CrmOwnerMatchUnits = {
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Confirmed
+     */
+    confirmed: number;
+    /**
+     * Review
+     */
+    review: number;
+    /**
+     * Property Only
+     */
+    property_only: number;
+    /**
+     * Not Matched
+     */
+    not_matched: number;
+};
+
+/**
  * CrmOwnerProfile
  */
 export type CrmOwnerProfile = {
+    /**
+     * Phone Numbers
+     */
+    phone_numbers?: Array<string>;
     /**
      * Owner Key
      */
@@ -1816,7 +2871,7 @@ export type CrmOwnerProfile = {
     /**
      * Highest Ownership Status
      */
-    highest_ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
+    highest_ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'unverified_former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
     /**
      * Highest Confidence Score
      */
@@ -1845,12 +2900,34 @@ export type CrmOwnerProfile = {
      * Properties
      */
     properties?: Array<CrmOwnerProperty>;
+    history_summary?: CrmOwnerHistorySummary | null;
+    /**
+     * Relationship Role
+     */
+    relationship_role?: 'unknown' | 'possible_intermediary' | 'organization';
+    /**
+     * Role Signals
+     */
+    role_signals?: Array<string>;
+    /**
+     * Developer Side Seller
+     */
+    developer_side_seller?: boolean;
+    /**
+     * Current Property Count
+     */
+    current_property_count?: number;
+    /**
+     * Total Property Count
+     */
+    total_property_count?: number | null;
 };
 
 /**
  * CrmOwnerProperty
  */
 export type CrmOwnerProperty = {
+    source_reference?: CrmOwnerSourceReference | null;
     /**
      * Property Key
      */
@@ -1878,7 +2955,7 @@ export type CrmOwnerProperty = {
     /**
      * Ownership Status
      */
-    ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
+    ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'unverified_former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
     /**
      * Confidence Score
      */
@@ -1907,6 +2984,10 @@ export type CrmOwnerProperty = {
      * Imported Property Type
      */
     imported_property_type?: string;
+    /**
+     * Imported Party Role
+     */
+    imported_party_role?: string;
     /**
      * Latest Sale Date
      */
@@ -1948,6 +3029,18 @@ export type CrmOwnerProperty = {
      */
     registry_market_status?: string | null;
     /**
+     * Registry Unit Number
+     */
+    registry_unit_number?: string | null;
+    /**
+     * Registry Building Name
+     */
+    registry_building_name?: string | null;
+    /**
+     * Registry Area Name
+     */
+    registry_area_name?: string | null;
+    /**
      * Later Sale Date
      */
     later_sale_date?: string | null;
@@ -1977,10 +3070,11 @@ export type CrmOwnerProperty = {
  * CrmOwnerRegistryResponse
  */
 export type CrmOwnerRegistryResponse = {
+    source_audit?: CrmSourceAuditSummary | null;
     /**
      * Scope
      */
-    scope: 'all' | 'rental_ready' | 'registry' | 'prior_owners';
+    scope: 'all' | 'current_owners' | 'rental_ready' | 'registry' | 'prior_owners' | 'needs_review';
     /**
      * Owners
      */
@@ -2027,6 +3121,52 @@ export type CrmOwnerRegistrySummary = {
 };
 
 /**
+ * CrmOwnerSourceReference
+ */
+export type CrmOwnerSourceReference = {
+    /**
+     * Transaction Match Status
+     */
+    transaction_match_status?: 'matched' | 'unmatched' | 'ambiguous' | 'excluded' | null;
+    /**
+     * Ownership Evidence Basis
+     */
+    ownership_evidence_basis?: 'transaction_supported' | 'workbook_only' | null;
+    /**
+     * Reference Id
+     */
+    reference_id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Source Key
+     */
+    source_key: Array<string>;
+    /**
+     * Building Number
+     */
+    building_number?: string;
+    /**
+     * Land Number
+     */
+    land_number?: string;
+    /**
+     * Dm Sub Number
+     */
+    dm_sub_number?: string;
+    /**
+     * Size Sqm
+     */
+    size_sqm?: string | null;
+    /**
+     * Disposition
+     */
+    disposition: string;
+};
+
+/**
  * CrmOwnerWorkspaceSummary
  */
 export type CrmOwnerWorkspaceSummary = {
@@ -2062,6 +3202,20 @@ export type CrmOwnerWorkspaceSummary = {
      * Updated At
      */
     updated_at: string;
+};
+
+/**
+ * CrmPreviewColumn
+ */
+export type CrmPreviewColumn = {
+    /**
+     * Header
+     */
+    header: string;
+    /**
+     * Field
+     */
+    field?: string | null;
 };
 
 /**
@@ -2207,6 +3361,127 @@ export type CrmPropertyReportResponse = {
      * Generated At
      */
     generated_at: string;
+};
+
+/**
+ * CrmRenewalArea
+ */
+export type CrmRenewalArea = {
+    /**
+     * Area
+     */
+    area: string;
+    /**
+     * Upcoming 90 Days
+     */
+    upcoming_90_days: number;
+};
+
+/**
+ * CrmRenewalLead
+ */
+export type CrmRenewalLead = {
+    lead: CrmLead;
+    owner?: CrmRenewalOwner | null;
+    /**
+     * Lead Record Id
+     */
+    lead_record_id?: number | null;
+};
+
+/**
+ * CrmRenewalLeadsResponse
+ */
+export type CrmRenewalLeadsResponse = {
+    /**
+     * Items
+     */
+    items: Array<CrmRenewalLead>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Entered Today
+     */
+    entered_today: number;
+    preferences: CrmAreaPreferencesResponse;
+    /**
+     * As Of
+     */
+    as_of: string;
+};
+
+/**
+ * CrmRenewalOwner
+ *
+ * A manual owner or one unambiguous, verified imported owner.
+ */
+export type CrmRenewalOwner = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Source
+     */
+    source: 'workspace' | 'owner_import';
+};
+
+/**
+ * CrmRenewalsResponse
+ *
+ * Assets › Renewals: one page of the lease-expiry dataset and the options for its filters.
+ */
+export type CrmRenewalsResponse = {
+    /**
+     * Leads
+     */
+    leads: Array<CrmLead>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Property Types
+     */
+    property_types?: Array<string>;
+    /**
+     * Projects
+     */
+    projects?: Array<string>;
+    /**
+     * Buildings
+     */
+    buildings?: Array<string>;
+    /**
+     * As Of
+     */
+    as_of: string;
 };
 
 /**
@@ -2417,7 +3692,7 @@ export type CrmSheetMapping = {
     /**
      * Mapping Source
      */
-    mapping_source: 'heuristic' | 'llm' | 'heuristic_fallback';
+    mapping_source: 'heuristic' | 'llm' | 'reused' | 'override' | 'heuristic_fallback';
     /**
      * Confidence
      */
@@ -2432,6 +3707,160 @@ export type CrmSheetMapping = {
      * Warnings
      */
     warnings?: Array<string>;
+};
+
+/**
+ * CrmSheetPreview
+ */
+export type CrmSheetPreview = {
+    /**
+     * Sheet Name
+     */
+    sheet_name: string;
+    /**
+     * Rows
+     */
+    rows: number;
+    /**
+     * Columns
+     */
+    columns?: Array<CrmPreviewColumn>;
+    /**
+     * Mapped At Import
+     */
+    mapped_at_import?: boolean;
+};
+
+/**
+ * CrmSourceAuditSummary
+ */
+export type CrmSourceAuditSummary = {
+    /**
+     * Mode
+     */
+    mode?: 'source_only' | 'source_transaction_matched';
+    /**
+     * Matched Reference Count
+     */
+    matched_reference_count?: number;
+    /**
+     * Matched Registry Property Count
+     */
+    matched_registry_property_count?: number;
+    /**
+     * Unmatched Reference Count
+     */
+    unmatched_reference_count?: number;
+    /**
+     * Ambiguous Reference Count
+     */
+    ambiguous_reference_count?: number;
+    /**
+     * Excluded Match Reference Count
+     */
+    excluded_match_reference_count?: number;
+    /**
+     * Current Owner Association Count
+     */
+    current_owner_association_count?: number;
+    /**
+     * Former Owner Association Count
+     */
+    former_owner_association_count?: number;
+    /**
+     * Import Count
+     */
+    import_count?: number;
+    /**
+     * Reference Count
+     */
+    reference_count?: number;
+    /**
+     * Owner Candidate Reference Count
+     */
+    owner_candidate_reference_count?: number;
+    /**
+     * Bank Reference Count
+     */
+    bank_reference_count?: number;
+    /**
+     * Excluded Nonownership Reference Count
+     */
+    excluded_nonownership_reference_count?: number;
+    /**
+     * Review Reference Count
+     */
+    review_reference_count?: number;
+    /**
+     * Excluded Scope Reference Count
+     */
+    excluded_scope_reference_count?: number;
+    /**
+     * Source Row Count
+     */
+    source_row_count?: number;
+    /**
+     * Disposition Counts
+     */
+    disposition_counts?: {
+        [key: string]: number;
+    };
+};
+
+/**
+ * CrmSourcePropertyCounts
+ *
+ * File inventory before owner filtering; identifiers are not verified properties.
+ */
+export type CrmSourcePropertyCounts = {
+    /**
+     * Total Rows
+     */
+    total_rows?: number;
+    /**
+     * Distinct Unit Numbers
+     */
+    distinct_unit_numbers?: number;
+    /**
+     * Distinct Building Numbers Without Unit
+     */
+    distinct_building_numbers_without_unit?: number;
+    /**
+     * Distinct Identifiers
+     */
+    distinct_identifiers?: number;
+    /**
+     * Distinct Property Numbers Without Unit
+     */
+    distinct_property_numbers_without_unit?: number;
+    /**
+     * Source Property References
+     */
+    source_property_references?: number;
+    /**
+     * Identifiers In Both Columns
+     */
+    identifiers_in_both_columns?: number;
+    /**
+     * Location Scoped Units
+     */
+    location_scoped_units?: number;
+    /**
+     * Unit Rows
+     */
+    unit_rows?: number;
+    /**
+     * Building Fallback Rows
+     */
+    building_fallback_rows?: number;
+    /**
+     * Rows Without Identifiers
+     */
+    rows_without_identifiers?: number;
+    /**
+     * Unit Rows Without Location
+     */
+    unit_rows_without_location?: number;
 };
 
 /**
@@ -2850,6 +4279,16 @@ export type DdaPlotFeature = {
      * Subdivision Confirmed Count
      */
     subdivision_confirmed_count?: number;
+};
+
+/**
+ * DeleteReminder
+ */
+export type DeleteReminder = {
+    /**
+     * Reminder Id
+     */
+    reminder_id: number;
 };
 
 /**
@@ -3959,45 +5398,37 @@ export type FeasibilityVatApplicability = {
 /**
  * FilterOptionsResponse
  *
- * Filter options for transactions and rentals - dynamically narrowed by selections.
+ * Filter options for the DXBI sales or rentals page, narrowed by the current filters.
  */
 export type FilterOptionsResponse = {
     /**
-     * Projects
+     * Locations
      */
-    projects?: Array<string>;
+    locations?: Array<string>;
     /**
      * Buildings
      */
     buildings?: Array<string>;
     /**
+     * Projects
+     */
+    projects?: Array<string>;
+    /**
      * Property Types
      */
     property_types?: Array<string>;
     /**
-     * Property Sub Types
+     * Bedrooms
      */
-    property_sub_types?: Array<string>;
+    bedrooms?: Array<string>;
     /**
-     * Rooms
+     * Statuses
      */
-    rooms?: Array<string>;
+    statuses?: Array<string>;
     /**
-     * Registration Types
+     * Contract Types
      */
-    registration_types?: Array<string>;
-    /**
-     * Tenant Types
-     */
-    tenant_types?: Array<string>;
-    /**
-     * Contract Reg Types
-     */
-    contract_reg_types?: Array<string>;
-    /**
-     * Areas
-     */
-    areas?: Array<string>;
+    contract_types?: Array<string>;
 };
 
 /**
@@ -4517,6 +5948,18 @@ export type InboundEnquiryUpdate = {
      * Preferred Channel
      */
     preferred_channel?: string | null;
+    /**
+     * Full Name
+     */
+    full_name?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
 };
 
 /**
@@ -4602,7 +6045,7 @@ export type InboundImportResponse = {
     /**
      * Status
      */
-    status: 'processing' | 'completed' | 'failed';
+    status: 'queued' | 'processing' | 'retry_wait' | 'completed' | 'failed';
     summary: InboundImportSummary;
     /**
      * Mapping
@@ -4705,7 +6148,7 @@ export type InboundMatchResponse = {
     /**
      * Target Type
      */
-    target_type: 'owner' | 'unit' | 'listing' | 'project' | 'demand';
+    target_type: 'company' | 'owner' | 'unit' | 'listing' | 'project' | 'demand';
     /**
      * Target Key
      */
@@ -5073,6 +6516,16 @@ export type LandSaleEvidence = {
 };
 
 /**
+ * LeadTarget
+ */
+export type LeadTarget = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+};
+
+/**
  * ListingAnalyticsResponse
  */
 export type ListingAnalyticsResponse = {
@@ -5250,6 +6703,10 @@ export type ListingCardResponse = {
      * Broker Logo Url
      */
     broker_logo_url?: string | null;
+    /**
+     * Captured At
+     */
+    captured_at?: string | null;
     /**
      * Listed Date
      */
@@ -5429,6 +6886,10 @@ export type ListingDetailResponse = {
      */
     broker_logo_url?: string | null;
     /**
+     * Captured At
+     */
+    captured_at?: string | null;
+    /**
      * Listed Date
      */
     listed_date?: string | null;
@@ -5557,6 +7018,36 @@ export type ListingDetailResponse = {
     source_metadata?: {
         [key: string]: unknown;
     };
+};
+
+/**
+ * ListingDraftResponse
+ */
+export type ListingDraftResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Publication
+     */
+    publication?: 'draft_only';
 };
 
 /**
@@ -5758,12 +7249,20 @@ export type ListingTrendPoint = {
 
 /**
  * MarketCoverage
+ *
+ * Load evidence for the period's days, from the served release's coverage record.
+ *
+ * verified: the source window holding the day was read to the end of its result set (or
+ * the archive it came from is attested), so a day without records is a true zero.
+ * partial: the load covering the day stopped inside its window. unverified: no load
+ * evidence; records may exist but absence proves nothing. complete = every day verified;
+ * unavailable = no evidence and no records.
  */
 export type MarketCoverage = {
     /**
      * Status
      */
-    status: 'complete' | 'partial' | 'unavailable';
+    status: 'complete' | 'partial' | 'unverified' | 'unavailable';
     /**
      * Data From
      */
@@ -5781,13 +7280,53 @@ export type MarketCoverage = {
      */
     covered_to?: string | null;
     /**
+     * Verified Days
+     */
+    verified_days?: number;
+    /**
+     * Partial Days
+     */
+    partial_days?: number;
+    /**
+     * Unverified Days
+     */
+    unverified_days?: number;
+    /**
+     * Ranges
+     */
+    ranges?: Array<MarketCoverageRange>;
+    /**
+     * Evidence Loaded At
+     */
+    evidence_loaded_at?: string | null;
+    /**
      * Note
      */
     note: string;
 };
 
 /**
+ * MarketCoverageRange
+ */
+export type MarketCoverageRange = {
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * End
+     */
+    end: string;
+    /**
+     * Status
+     */
+    status: 'verified' | 'partial' | 'unverified';
+};
+
+/**
  * MarketLocationMatch
+ *
+ * Raw source names of matched rows and the canonical place the crosswalk gave them.
  */
 export type MarketLocationMatch = {
     /**
@@ -5798,6 +7337,18 @@ export type MarketLocationMatch = {
      * Master Project
      */
     master_project: string;
+    /**
+     * District
+     */
+    district?: string;
+    /**
+     * Community
+     */
+    community?: string;
+    /**
+     * Method
+     */
+    method?: string;
     /**
      * Records
      */
@@ -5844,6 +7395,10 @@ export type MarketMetricRow = {
     values?: {
         [key: string]: number | null;
     };
+    /**
+     * Coverage
+     */
+    coverage?: 'verified' | 'partial' | 'unverified' | null;
 };
 
 /**
@@ -5859,7 +7414,7 @@ export type MarketMetricsRequest = {
     /**
      * Metrics
      */
-    metrics?: Array<'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqm' | 'median_aed_per_sqm' | 'weighted_aed_per_sqm' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed'>;
+    metrics?: Array<'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed'>;
     period: MarketPeriodRequest;
     /**
      * Location
@@ -5877,8 +7432,10 @@ export type MarketMetricsRequest = {
     project?: string | null;
     /**
      * Property Type
+     *
+     * villa includes townhouses; townhouse is townhouses only
      */
-    property_type?: 'apartment' | 'hotel_apartment' | 'villa' | 'office' | 'shop' | 'land' | null;
+    property_type?: 'apartment' | 'hotel_apartment' | 'villa' | 'townhouse' | 'office' | 'shop' | 'land' | null;
     /**
      * Usage
      */
@@ -5914,43 +7471,29 @@ export type MarketMetricsRequest = {
     /**
      * Min Value Aed
      *
-     * Sale price or annual rent lower bound
+     * Sale price or annual rent, inclusive
      */
     min_value_aed?: number | null;
     /**
      * Max Value Aed
      *
-     * Sale price or annual rent upper bound
+     * Sale price or annual rent, exclusive
      */
     max_value_aed?: number | null;
     /**
-     * Min Value Inclusive
-     */
-    min_value_inclusive?: boolean;
-    /**
-     * Max Value Inclusive
-     */
-    max_value_inclusive?: boolean;
-    /**
      * Group By
      */
-    group_by?: 'area' | 'master_project' | 'project' | 'building' | 'month' | 'bedrooms' | 'property_type' | 'price_band' | 'registration' | 'contract_version' | null;
+    group_by?: 'area' | 'community' | 'master_project' | 'project' | 'building' | 'month' | 'bedrooms' | 'property_type' | 'price_band' | 'registration' | 'contract_version' | null;
     /**
      * Price Bands
      *
-     * Ascending AED cutoffs for price_band; default upper bounds are exclusive.
+     * Ascending AED boundaries for group_by=price_band: [b0,b1) ... [bn,inf)
      */
     price_bands?: Array<number> | null;
     /**
-     * Price Band Upper Inclusive
-     *
-     * One flag per price_bands boundary: true puts equality in the lower band; false puts it in the upper band. Omitted means all false.
-     */
-    price_band_upper_inclusive?: Array<boolean> | null;
-    /**
      * Sort By
      */
-    sort_by?: 'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqm' | 'median_aed_per_sqm' | 'weighted_aed_per_sqm' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed';
+    sort_by?: 'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed';
     /**
      * Limit
      */
@@ -6019,6 +7562,10 @@ export type MarketMetricsResponse = {
     sources?: {
         [key: string]: number;
     };
+    /**
+     * Release Id
+     */
+    release_id?: string | null;
     /**
      * Release Built At
      */
@@ -6143,9 +7690,9 @@ export type MarketTrendPoint = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft?: number | null;
 };
 
 /**
@@ -6167,9 +7714,9 @@ export type MarketTrendResponse = {
      */
     avg_price_change_pct?: number | null;
     /**
-     * Avg Price Sqm Change Pct
+     * Avg Price Sqft Change Pct
      */
-    avg_price_sqm_change_pct?: number | null;
+    avg_price_sqft_change_pct?: number | null;
 };
 
 /**
@@ -7208,6 +8755,10 @@ export type PriceDistributionBucket = {
      */
     p05_price?: number;
     /**
+     * P16 Price
+     */
+    p16_price?: number;
+    /**
      * P25 Price
      */
     p25_price?: number;
@@ -7220,17 +8771,21 @@ export type PriceDistributionBucket = {
      */
     p75_price?: number;
     /**
+     * P84 Price
+     */
+    p84_price?: number;
+    /**
      * P95 Price
      */
     p95_price?: number;
     /**
-     * Mean Price Sqm
+     * Mean Price Sqft
      */
-    mean_price_sqm: number;
+    mean_price_sqft: number;
     /**
-     * Std Price Sqm
+     * Std Price Sqft
      */
-    std_price_sqm: number;
+    std_price_sqft: number;
 };
 
 /**
@@ -7239,6 +8794,20 @@ export type PriceDistributionBucket = {
  * Full analytics response for a single project
  */
 export type ProjectAnalyticsResponse = {
+    /**
+     * Usage
+     *
+     * Usage the figures cover: Residential or Commercial (resolved from 'auto')
+     */
+    usage?: string;
+    /**
+     * Usage Counts
+     *
+     * The scope's sales and leases per usage
+     */
+    usage_counts?: {
+        [key: string]: UsageCount;
+    };
     project?: ProjectMeta | null;
     sales: ProjectSalesSummary;
     rentals: ProjectRentalSummary;
@@ -7266,6 +8835,18 @@ export type ProjectAnalyticsResponse = {
      * Configuration Analysis
      */
     configuration_analysis: Array<ProjectConfigurationRow>;
+    /**
+     * Buildings
+     *
+     * A project's buildings with their units
+     */
+    buildings?: Array<BuildingStock>;
+    /**
+     * Recent Periods End
+     *
+     * Last day of the recent 90-day and 12-month windows: the newest recorded sale
+     */
+    recent_periods_end?: string | null;
 };
 
 /**
@@ -7301,13 +8882,15 @@ export type ProjectConfigurationRow = {
      */
     median_sale_price: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm: number;
+    avg_sale_price_sqft: number;
     /**
-     * Avg Unit Size Sqm
+     * Avg Unit Size Sqft
+     *
+     * Median observed DXBI sale size (sq ft), across all recorded dates
      */
-    avg_unit_size_sqm: number;
+    avg_unit_size_sqft: number;
     /**
      * Rental Count
      */
@@ -7317,9 +8900,9 @@ export type ProjectConfigurationRow = {
      */
     median_annual_rent: number;
     /**
-     * Median Rent Sqm
+     * Median Rent Sqft
      */
-    median_rent_sqm: number;
+    median_rent_sqft: number;
     /**
      * Gross Yield Pct
      */
@@ -7332,10 +8915,6 @@ export type ProjectConfigurationRow = {
      * Sales Momentum Pct
      */
     sales_momentum_pct?: number | null;
-    /**
-     * Absorption Rate Pct
-     */
-    absorption_rate_pct?: number | null;
     /**
      * Price P25
      */
@@ -7468,9 +9047,9 @@ export type ProjectForecastPoint = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft: number;
     /**
      * Series
      */
@@ -7502,13 +9081,67 @@ export type ProjectForecastResponse = {
 /**
  * ProjectMeta
  *
- * Metadata from ch_projects + ch_developers
+ * A scope's metadata. ``field_sources`` names each filled field's source: "dxbi_buildings"
+ * (DXBInteract's building list), "dld_units" (DLD's unit register), "buildings" (its
+ * buildings' counts added up), "dld_projects" (DLD's project register), "dld_land_plots"
+ * (DLD's land register, villa plots),
+ * "unit_numbers" (our own count: the distinct unit numbers in the records and DLD's register),
+ * "units_traded" (no register count: the distinct units traded, ``units_at_least``) or
+ * "projects_rollup" (a master: its projects' counts added up).
  */
 export type ProjectMeta = {
     /**
      * Project Name
      */
     project_name: string;
+    /**
+     * Scope Level
+     */
+    scope_level?: 'project' | 'building' | 'master' | 'market' | null;
+    /**
+     * Master Name
+     *
+     * The scope's master project
+     */
+    master_name?: string | null;
+    /**
+     * Parent Project
+     *
+     * A building's project
+     */
+    parent_project?: string | null;
+    /**
+     * Building Id
+     */
+    building_id?: string | null;
+    /**
+     * Units Source
+     */
+    units_source?: string | null;
+    /**
+     * Units At Least
+     *
+     * No register count covers the units that traded: no_of_units is those units (at least)
+     */
+    units_at_least?: boolean;
+    /**
+     * Units Traded
+     *
+     * Distinct units with a recorded sale or lease
+     */
+    units_traded?: number | null;
+    /**
+     * No Of Projects
+     *
+     * A master's projects
+     */
+    no_of_projects?: number | null;
+    /**
+     * Projects With Units
+     *
+     * A master's projects with a register unit count
+     */
+    projects_with_units?: number | null;
     /**
      * Area Name
      */
@@ -7541,6 +9174,12 @@ export type ProjectMeta = {
      * No Of Buildings
      */
     no_of_buildings?: number | null;
+    /**
+     * Field Sources
+     */
+    field_sources?: {
+        [key: string]: string;
+    };
 };
 
 /**
@@ -7569,6 +9208,22 @@ export type ProjectPipelinePoint = {
  * ProjectPipelineResponse
  */
 export type ProjectPipelineResponse = {
+    /**
+     * Reference Date
+     */
+    reference_date?: string | null;
+    /**
+     * Overdue Units
+     *
+     * Uncompleted units with an elapsed planned end date
+     */
+    overdue_units?: number;
+    /**
+     * Undated Units
+     *
+     * Uncompleted units without a delivery date
+     */
+    undated_units?: number;
     /**
      * Area Name
      */
@@ -7675,13 +9330,13 @@ export type ProjectRadarArea = {
      */
     median_annual_rent: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Gross Yield Pct
      */
@@ -7699,13 +9354,13 @@ export type ProjectRadarArea = {
      */
     dda_plot_count: number;
     /**
-     * Dda Total Plot Area Sqm
+     * Dda Total Plot Area Sqft
      */
-    dda_total_plot_area_sqm: number;
+    dda_total_plot_area_sqft: number;
     /**
-     * Dda Total Gfa Sqm
+     * Dda Total Gfa Sqft
      */
-    dda_total_gfa_sqm: number;
+    dda_total_gfa_sqft: number;
     /**
      * Dda Dominant Land Uses
      */
@@ -7723,13 +9378,13 @@ export type ProjectRadarArea = {
      */
     total_sales_volume?: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm?: number | null;
+    avg_sale_price_sqft?: number | null;
     /**
-     * Avg Rent Price Sqm
+     * Avg Rent Price Sqft
      */
-    avg_rent_price_sqm?: number | null;
+    avg_rent_price_sqft?: number | null;
 };
 
 /**
@@ -7876,13 +9531,13 @@ export type ProjectRadarProject = {
      */
     gross_yield_pct: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Sales Transaction Count
      */
@@ -7896,13 +9551,13 @@ export type ProjectRadarProject = {
      */
     total_sales_volume?: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm?: number | null;
+    avg_sale_price_sqft?: number | null;
     /**
-     * Avg Rent Price Sqm
+     * Avg Rent Price Sqft
      */
-    avg_rent_price_sqm?: number | null;
+    avg_rent_price_sqft?: number | null;
 };
 
 /**
@@ -7973,13 +9628,13 @@ export type ProjectRadarStats = {
      */
     dda_plot_count: number;
     /**
-     * Dda Total Plot Area Sqm
+     * Dda Total Plot Area Sqft
      */
-    dda_total_plot_area_sqm: number;
+    dda_total_plot_area_sqft: number;
     /**
-     * Dda Total Gfa Sqm
+     * Dda Total Gfa Sqft
      */
-    dda_total_gfa_sqm: number;
+    dda_total_gfa_sqft: number;
     /**
      * Activity Period Days
      */
@@ -8039,9 +9694,9 @@ export type ProjectRentalSummary = {
      */
     median_annual_rent: number;
     /**
-     * Median Rent Sqm
+     * Median Rent Sqft
      */
-    median_rent_sqm: number;
+    median_rent_sqft: number;
 };
 
 /**
@@ -8061,9 +9716,9 @@ export type ProjectSalesSummary = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft: number;
     /**
      * Median Price
      */
@@ -8075,6 +9730,10 @@ export type ProjectSalesSummary = {
  */
 export type ProjectSearchItem = {
     /**
+     * Scope Kind
+     */
+    scope_kind?: string;
+    /**
      * Name
      */
     name: string;
@@ -8082,6 +9741,22 @@ export type ProjectSearchItem = {
      * Filter Type
      */
     filter_type: string;
+    /**
+     * Building
+     */
+    building?: string;
+    /**
+     * Building Id
+     */
+    building_id?: string;
+    /**
+     * Project
+     */
+    project?: string;
+    /**
+     * Master
+     */
+    master?: string;
 };
 
 /**
@@ -8147,9 +9822,9 @@ export type ProjectTrendPoint = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft: number;
 };
 
 /**
@@ -8181,9 +9856,9 @@ export type ProjectUnitComposition = {
      */
     percentage: number;
     /**
-     * Avg Area Sqm
+     * Avg Area Sqft
      */
-    avg_area_sqm: number | null;
+    avg_area_sqft: number | null;
 };
 
 /**
@@ -8206,6 +9881,16 @@ export type PropertyTypeBreakdown = {
      * Pct Of Total
      */
     pct_of_total: number;
+};
+
+/**
+ * PublishListing
+ */
+export type PublishListing = {
+    /**
+     * Listing Id
+     */
+    listing_id: number;
 };
 
 /**
@@ -8311,6 +9996,28 @@ export type RegTypeBreakdown = {
      * Pct Of Total
      */
     pct_of_total: number;
+};
+
+/**
+ * ReminderResponse
+ */
+export type ReminderResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Lead Id
+     */
+    lead_id: number | null;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Due At
+     */
+    due_at: string;
 };
 
 /**
@@ -8420,6 +10127,8 @@ export type RentalContractListResponse = {
 
 /**
  * RentalContractResponse
+ *
+ * One DXBI lease of one unit (dxbi_rental_events): sizes in sq ft, amounts in AED.
  */
 export type RentalContractResponse = {
     /**
@@ -8427,69 +10136,81 @@ export type RentalContractResponse = {
      */
     contract_id: string;
     /**
-     * Contract Start Date
+     * Lease Start
      */
-    contract_start_date?: string | null;
+    lease_start?: string | null;
     /**
-     * Contract End Date
+     * Lease End
      */
-    contract_end_date?: string | null;
+    lease_end?: string | null;
     /**
-     * Ejari Property Type En
+     * Unit Number
      */
-    ejari_property_type_en?: string | null;
+    unit_number?: string | null;
     /**
-     * Ejari Property Sub Type En
+     * Building Name
      */
-    ejari_property_sub_type_en?: string | null;
+    building_name?: string | null;
     /**
-     * Tenant Type En
+     * Project Name
      */
-    tenant_type_en?: string | null;
+    project_name?: string | null;
     /**
-     * Contract Reg Type En
+     * Master Project
+     *
+     * DLD master project (filled from the matched DLD record)
      */
-    contract_reg_type_en?: string | null;
+    master_project?: string | null;
     /**
-     * Area Name En
+     * Dld Area
+     *
+     * DLD's official area name
      */
-    area_name_en?: string | null;
+    dld_area?: string | null;
     /**
-     * Project Name En
+     * Location
+     *
+     * Unit, building, project, master project and area in one line
      */
-    project_name_en?: string | null;
+    location?: string | null;
     /**
-     * Actual Area
+     * Map Url
+     *
+     * Google Maps link to the location
      */
-    actual_area?: number | null;
+    map_url?: string | null;
     /**
-     * Annual Amount
+     * Location Name
      */
-    annual_amount?: number | null;
+    location_name?: string | null;
     /**
-     * Contract Amount
+     * Property Type
      */
-    contract_amount?: number | null;
+    property_type?: string | null;
     /**
-     * No Of Prop
+     * Bedrooms
      */
-    no_of_prop?: number | null;
+    bedrooms?: string | null;
     /**
-     * Is Free Hold
+     * Size Sqft
      */
-    is_free_hold?: boolean | null;
+    size_sqft?: number | null;
     /**
-     * Nearest Landmark En
+     * Annual Rent Aed
      */
-    nearest_landmark_en?: string | null;
+    annual_rent_aed?: number | null;
     /**
-     * Nearest Metro En
+     * Contract Amount Aed
      */
-    nearest_metro_en?: string | null;
+    contract_amount_aed?: number | null;
     /**
-     * Nearest Mall En
+     * Term Months
      */
-    nearest_mall_en?: string | null;
+    term_months?: number | null;
+    /**
+     * Contract Type
+     */
+    contract_type?: string | null;
 };
 
 /**
@@ -8639,9 +10360,9 @@ export type RoomAnalytics = {
      */
     avg_sale_price: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm: number;
+    avg_sale_price_sqft: number;
     /**
      * Rental Count
      */
@@ -8651,13 +10372,57 @@ export type RoomAnalytics = {
      */
     median_annual_rent: number;
     /**
-     * Median Rent Sqm
+     * Median Rent Sqft
      */
-    median_rent_sqm: number;
+    median_rent_sqft: number;
     /**
      * Gross Yield Pct
      */
     gross_yield_pct?: number | null;
+};
+
+/**
+ * ScheduleViewing
+ */
+export type ScheduleViewing = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Starts At
+     */
+    starts_at: string;
+    /**
+     * Ends At
+     */
+    ends_at: string;
+    /**
+     * Location
+     */
+    location: string;
+};
+
+/**
+ * SendMessage
+ */
+export type SendMessage = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Channel
+     */
+    channel: 'email' | 'sms' | 'whatsapp';
+    /**
+     * Body
+     */
+    body: string;
 };
 
 /**
@@ -8670,10 +10435,6 @@ export type SendMessageRequest = {
      * Message
      */
     message: string;
-    /**
-     * Request Id
-     */
-    request_id?: string | null;
 };
 
 /**
@@ -9374,6 +11135,8 @@ export type TransactionListResponse = {
 
 /**
  * TransactionResponse
+ *
+ * One DXBI sale (dxbi_sales_unit_events): sizes in sq ft, prices in AED.
  */
 export type TransactionResponse = {
     /**
@@ -9381,69 +11144,73 @@ export type TransactionResponse = {
      */
     transaction_id: string;
     /**
-     * Instance Date
+     * Transaction Date
      */
-    instance_date?: string | null;
+    transaction_date?: string | null;
     /**
-     * Trans Group En
+     * Unit Number
      */
-    trans_group_en?: string | null;
+    unit_number?: string | null;
     /**
-     * Procedure Name En
+     * Building Name
      */
-    procedure_name_en?: string | null;
+    building_name?: string | null;
     /**
-     * Property Type En
+     * Project Name
      */
-    property_type_en?: string | null;
+    project_name?: string | null;
     /**
-     * Property Sub Type En
+     * Master Project
+     *
+     * DLD master project (filled from the matched DLD record)
      */
-    property_sub_type_en?: string | null;
+    master_project?: string | null;
     /**
-     * Rooms En
+     * Dld Area
+     *
+     * DLD's official area name
      */
-    rooms_en?: string | null;
+    dld_area?: string | null;
     /**
-     * Area Name En
+     * Location
+     *
+     * Unit, building, project, master project and area in one line
      */
-    area_name_en?: string | null;
+    location?: string | null;
     /**
-     * Project Name En
+     * Map Url
+     *
+     * Google Maps link to the location
      */
-    project_name_en?: string | null;
+    map_url?: string | null;
     /**
-     * Building Name En
+     * Location Name
      */
-    building_name_en?: string | null;
+    location_name?: string | null;
     /**
-     * Procedure Area
+     * Property Type
      */
-    procedure_area?: number | null;
+    property_type?: string | null;
     /**
-     * Actual Worth
+     * Bedrooms
      */
-    actual_worth?: number | null;
+    bedrooms?: string | null;
     /**
-     * Meter Sale Price
+     * Status
      */
-    meter_sale_price?: number | null;
+    status?: string | null;
     /**
-     * Reg Type En
+     * Size Sqft
      */
-    reg_type_en?: string | null;
+    size_sqft?: number | null;
     /**
-     * Nearest Landmark En
+     * Price Aed
      */
-    nearest_landmark_en?: string | null;
+    price_aed?: number | null;
     /**
-     * Nearest Metro En
+     * Price Per Sqft Aed
      */
-    nearest_metro_en?: string | null;
-    /**
-     * Nearest Mall En
-     */
-    nearest_mall_en?: string | null;
+    price_per_sqft_aed?: number | null;
 };
 
 /**
@@ -9573,6 +11340,58 @@ export type UpdateConversationRequest = {
 };
 
 /**
+ * UpdateLead
+ */
+export type UpdateLead = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Status
+     */
+    status?: 'new' | 'needs_review' | 'assigned' | 'attempted' | 'contacted' | 'qualified' | 'viewing' | 'valuation' | 'signed' | 'active' | 'won' | 'nurture' | 'closed_lost' | 'disqualified' | null;
+    /**
+     * Intent
+     */
+    intent?: 'unknown' | 'buy' | 'rent' | 'sell' | 'let' | null;
+    /**
+     * Next Follow Up
+     */
+    next_follow_up?: string | null;
+    /**
+     * Lost Reason
+     */
+    lost_reason?: string | null;
+};
+
+/**
+ * UpdateListingDraft
+ */
+export type UpdateListingDraft = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Listing Id
+     */
+    listing_id: number;
+};
+
+/**
  * UpdateOrgRequest
  */
 export type UpdateOrgRequest = {
@@ -9615,6 +11434,24 @@ export type UpdateProfileResponse = {
 };
 
 /**
+ * UpdateReminder
+ */
+export type UpdateReminder = {
+    /**
+     * Reminder Id
+     */
+    reminder_id: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Due At
+     */
+    due_at: string;
+};
+
+/**
  * UpdateSubscriptionRequest
  */
 export type UpdateSubscriptionRequest = {
@@ -9654,6 +11491,22 @@ export type UploadHealthResponse = {
      * Error
      */
     error?: string | null;
+};
+
+/**
+ * UsageCount
+ *
+ * A scope's records of one usage.
+ */
+export type UsageCount = {
+    /**
+     * Sales
+     */
+    sales?: number;
+    /**
+     * Leases
+     */
+    leases?: number;
 };
 
 /**
@@ -9807,6 +11660,44 @@ export type ValidationError = {
 };
 
 /**
+ * ViewingResponse
+ */
+export type ViewingResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Starts At
+     */
+    starts_at: string;
+    /**
+     * Ends At
+     */
+    ends_at: string;
+    /**
+     * Delivery
+     */
+    delivery?: 'internal_only';
+};
+
+/**
  * WebhookStatusResponse
  *
  * Simple webhook acknowledgement response.
@@ -9924,7 +11815,7 @@ export type AnalyticsGetSalesAnalyticsData = {
         /**
          * Market Type
          *
-         * Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts
+         * Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land
          */
         market_type?: string | null;
         /**
@@ -10096,7 +11987,7 @@ export type AnalyticsGetMarketTrendData = {
         /**
          * Market Type
          *
-         * Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts
+         * Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land
          */
         market_type?: string | null;
         /**
@@ -10134,7 +12025,7 @@ export type AnalyticsSearchProjectsEndpointData = {
         /**
          * Search
          *
-         * Master project name search term
+         * Building, project or area keywords
          */
         search?: string;
         /**
@@ -10180,7 +12071,7 @@ export type AnalyticsGetSubProjectsEndpointData = {
          *
          * Filter type: master or virtual_master
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
     };
     url: '/api/v1/analytics/project/sub-projects';
 };
@@ -10220,11 +12111,29 @@ export type AnalyticsGetProjectSummaryEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
+        /**
+         * Summary Days
+         *
+         * Window for headline sales, rental, yield and usage counts: last N calendar days including today in Dubai. Omit for all dates. Configuration history is unchanged.
+         */
+        summary_days?: number | null;
+        /**
+         * Usage
+         *
+         * Residential or Commercial records; auto shows Commercial for a scope with no residential records
+         */
+        usage?: 'auto' | 'Residential' | 'Commercial';
     };
     url: '/api/v1/analytics/project/summary';
 };
@@ -10264,17 +12173,29 @@ export type AnalyticsGetProjectTrendsEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
          * Days
          *
          * Number of days to look back
          */
         days?: number;
+        /**
+         * Usage
+         *
+         * Residential or Commercial records; auto shows Commercial for a scope with no residential records
+         */
+        usage?: 'auto' | 'Residential' | 'Commercial';
     };
     url: '/api/v1/analytics/project/trends';
 };
@@ -10314,11 +12235,17 @@ export type AnalyticsGetProjectForecastEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
          * Days
          *
@@ -10364,11 +12291,17 @@ export type AnalyticsGetProjectPipelineEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
     };
     url: '/api/v1/analytics/project/pipeline';
 };
@@ -10408,17 +12341,29 @@ export type AnalyticsGetProjectPriceDistributionEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
          * Reg Type
          *
          * Optional registration type filter (e.g. 'Off-Plan Properties')
          */
         reg_type?: string | null;
+        /**
+         * Usage
+         *
+         * Residential or Commercial records; auto shows Commercial for a scope with no residential records
+         */
+        usage?: 'auto' | 'Residential' | 'Commercial';
     };
     url: '/api/v1/analytics/project/price-distribution';
 };
@@ -10670,6 +12615,10 @@ export type ChatGetConversationMessagesEndpointData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Before Id
+         */
+        before_id?: number | null;
     };
     url: '/api/v1/chat/conversations/{conversation_id}/messages';
 };
@@ -10722,6 +12671,207 @@ export type ChatSendMessageResponses = {
     200: unknown;
 };
 
+export type AssistantActionsListActionsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: number;
+    };
+    url: '/api/v1/assistant/actions/proposals';
+};
+
+export type AssistantActionsListActionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantActionsListActionsError = AssistantActionsListActionsErrors[keyof AssistantActionsListActionsErrors];
+
+export type AssistantActionsListActionsResponses = {
+    /**
+     * Response Assistant Actions-List Actions
+     *
+     * Successful Response
+     */
+    200: Array<ActionProposalResponse>;
+};
+
+export type AssistantActionsListActionsResponse = AssistantActionsListActionsResponses[keyof AssistantActionsListActionsResponses];
+
+export type AssistantActionsProposeActionData = {
+    body: ActionProposalRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/assistant/actions/proposals';
+};
+
+export type AssistantActionsProposeActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantActionsProposeActionError = AssistantActionsProposeActionErrors[keyof AssistantActionsProposeActionErrors];
+
+export type AssistantActionsProposeActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ActionProposalResponse;
+};
+
+export type AssistantActionsProposeActionResponse = AssistantActionsProposeActionResponses[keyof AssistantActionsProposeActionResponses];
+
+export type AssistantActionsListRemindersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/assistant/actions/reminders';
+};
+
+export type AssistantActionsListRemindersResponses = {
+    /**
+     * Response Assistant Actions-List Reminders
+     *
+     * Successful Response
+     */
+    200: Array<ReminderResponse>;
+};
+
+export type AssistantActionsListRemindersResponse = AssistantActionsListRemindersResponses[keyof AssistantActionsListRemindersResponses];
+
+export type AssistantActionsListViewingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/assistant/actions/viewings';
+};
+
+export type AssistantActionsListViewingsResponses = {
+    /**
+     * Response Assistant Actions-List Viewings
+     *
+     * Successful Response
+     */
+    200: Array<ViewingResponse>;
+};
+
+export type AssistantActionsListViewingsResponse = AssistantActionsListViewingsResponses[keyof AssistantActionsListViewingsResponses];
+
+export type AssistantActionsListListingDraftsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/assistant/actions/listing-drafts';
+};
+
+export type AssistantActionsListListingDraftsResponses = {
+    /**
+     * Response Assistant Actions-List Listing Drafts
+     *
+     * Successful Response
+     */
+    200: Array<ListingDraftResponse>;
+};
+
+export type AssistantActionsListListingDraftsResponse = AssistantActionsListListingDraftsResponses[keyof AssistantActionsListListingDraftsResponses];
+
+export type AssistantActionsGetActionData = {
+    body?: never;
+    path: {
+        /**
+         * Action Id
+         */
+        action_id: string;
+    };
+    query?: never;
+    url: '/api/v1/assistant/actions/{action_id}';
+};
+
+export type AssistantActionsGetActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantActionsGetActionError = AssistantActionsGetActionErrors[keyof AssistantActionsGetActionErrors];
+
+export type AssistantActionsGetActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ActionProposalResponse;
+};
+
+export type AssistantActionsGetActionResponse = AssistantActionsGetActionResponses[keyof AssistantActionsGetActionResponses];
+
+export type AssistantActionsConfirmActionData = {
+    body?: never;
+    path: {
+        /**
+         * Action Id
+         */
+        action_id: string;
+    };
+    query?: never;
+    url: '/api/v1/assistant/actions/{action_id}/confirm';
+};
+
+export type AssistantActionsConfirmActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantActionsConfirmActionError = AssistantActionsConfirmActionErrors[keyof AssistantActionsConfirmActionErrors];
+
+export type AssistantActionsConfirmActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ActionProposalResponse;
+};
+
+export type AssistantActionsConfirmActionResponse = AssistantActionsConfirmActionResponses[keyof AssistantActionsConfirmActionResponses];
+
+export type AssistantActionsCancelActionData = {
+    body?: never;
+    path: {
+        /**
+         * Action Id
+         */
+        action_id: string;
+    };
+    query?: never;
+    url: '/api/v1/assistant/actions/{action_id}/cancel';
+};
+
+export type AssistantActionsCancelActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantActionsCancelActionError = AssistantActionsCancelActionErrors[keyof AssistantActionsCancelActionErrors];
+
+export type AssistantActionsCancelActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ActionProposalResponse;
+};
+
+export type AssistantActionsCancelActionResponse = AssistantActionsCancelActionResponses[keyof AssistantActionsCancelActionResponses];
+
 export type CrmCrmInboundEnquiriesData = {
     body?: never;
     path?: never;
@@ -10750,6 +12900,14 @@ export type CrmCrmInboundEnquiriesData = {
          * Offset
          */
         offset?: number;
+        /**
+         * Within Days
+         */
+        within_days?: number | null;
+        /**
+         * Leads Only
+         */
+        leads_only?: boolean;
     };
     url: '/api/v1/crm/inbound/enquiries';
 };
@@ -10796,6 +12954,36 @@ export type CrmCrmCreateInboundEnquiryResponses = {
 };
 
 export type CrmCrmCreateInboundEnquiryResponse = CrmCrmCreateInboundEnquiryResponses[keyof CrmCrmCreateInboundEnquiryResponses];
+
+export type CrmCrmApproveRecentSellerData = {
+    body?: never;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/enquiries/{enquiry_id}/approve-buyer';
+};
+
+export type CrmCrmApproveRecentSellerErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmApproveRecentSellerError = CrmCrmApproveRecentSellerErrors[keyof CrmCrmApproveRecentSellerErrors];
+
+export type CrmCrmApproveRecentSellerResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryResponse;
+};
+
+export type CrmCrmApproveRecentSellerResponse = CrmCrmApproveRecentSellerResponses[keyof CrmCrmApproveRecentSellerResponses];
 
 export type CrmCrmInboundEnquiryData = {
     body?: never;
@@ -11050,7 +13238,7 @@ export type CrmCrmInboundImportResponses = {
     /**
      * Successful Response
      */
-    201: InboundImportResponse;
+    202: InboundImportResponse;
 };
 
 export type CrmCrmInboundImportResponse = CrmCrmInboundImportResponses[keyof CrmCrmInboundImportResponses];
@@ -11079,6 +13267,101 @@ export type CrmCrmPreviewInboundImportResponses = {
 };
 
 export type CrmCrmPreviewInboundImportResponse = CrmCrmPreviewInboundImportResponses[keyof CrmCrmPreviewInboundImportResponses];
+
+export type CrmCrmCompanyListingsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * Broker Id
+         */
+        broker_id?: string | null;
+        /**
+         * All Companies
+         */
+        all_companies?: boolean;
+        /**
+         * Agent Id
+         */
+        agent_id?: string | null;
+        /**
+         * Agent Name
+         */
+        agent_name?: string | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+    };
+    url: '/api/v1/crm/company-listings';
+};
+
+export type CrmCrmCompanyListingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCompanyListingsError = CrmCrmCompanyListingsErrors[keyof CrmCrmCompanyListingsErrors];
+
+export type CrmCrmCompanyListingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmCompanyListingsResponse;
+};
+
+export type CrmCrmCompanyListingsResponse = CrmCrmCompanyListingsResponses[keyof CrmCrmCompanyListingsResponses];
+
+export type CrmCrmClearCompanyListingSourceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/company-listings/source';
+};
+
+export type CrmCrmClearCompanyListingSourceResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmClearCompanyListingSourceResponse = CrmCrmClearCompanyListingSourceResponses[keyof CrmCrmClearCompanyListingSourceResponses];
+
+export type CrmCrmSelectCompanyListingSourceData = {
+    body: CrmCompanyListingSourceUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/company-listings/source';
+};
+
+export type CrmCrmSelectCompanyListingSourceErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmSelectCompanyListingSourceError = CrmCrmSelectCompanyListingSourceErrors[keyof CrmCrmSelectCompanyListingSourceErrors];
+
+export type CrmCrmSelectCompanyListingSourceResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmCompanyListingSourceResponse;
+};
+
+export type CrmCrmSelectCompanyListingSourceResponse = CrmCrmSelectCompanyListingSourceResponses[keyof CrmCrmSelectCompanyListingSourceResponses];
 
 export type CrmCrmDeleteInboundImportData = {
     body?: never;
@@ -11148,10 +13431,60 @@ export type CrmCrmContactImportResponses = {
     /**
      * Successful Response
      */
-    201: CrmContactImportResponse;
+    202: CrmContactImportResponse;
 };
 
 export type CrmCrmContactImportResponse = CrmCrmContactImportResponses[keyof CrmCrmContactImportResponses];
+
+export type CrmCrmContactImportPreviewData = {
+    body: BodyCrmCrmContactImportPreview;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/contact-imports/preview';
+};
+
+export type CrmCrmContactImportPreviewErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactImportPreviewError = CrmCrmContactImportPreviewErrors[keyof CrmCrmContactImportPreviewErrors];
+
+export type CrmCrmContactImportPreviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmContactImportPreview;
+};
+
+export type CrmCrmContactImportPreviewResponse = CrmCrmContactImportPreviewResponses[keyof CrmCrmContactImportPreviewResponses];
+
+export type CrmCrmSourceOnlyImportData = {
+    body: BodyCrmCrmSourceOnlyImport;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/contact-imports/source-only';
+};
+
+export type CrmCrmSourceOnlyImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmSourceOnlyImportError = CrmCrmSourceOnlyImportErrors[keyof CrmCrmSourceOnlyImportErrors];
+
+export type CrmCrmSourceOnlyImportResponses = {
+    /**
+     * Successful Response
+     */
+    202: CrmContactImportResponse;
+};
+
+export type CrmCrmSourceOnlyImportResponse = CrmCrmSourceOnlyImportResponses[keyof CrmCrmSourceOnlyImportResponses];
 
 export type CrmCrmDeleteContactImportData = {
     body?: never;
@@ -11213,6 +13546,96 @@ export type CrmCrmRenameContactImportResponses = {
 
 export type CrmCrmRenameContactImportResponse = CrmCrmRenameContactImportResponses[keyof CrmCrmRenameContactImportResponses];
 
+export type CrmCrmContactImportDroppedRowsData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: number;
+    };
+    query?: {
+        /**
+         * Reason
+         */
+        reason?: string | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/contact-imports/{import_id}/dropped-rows';
+};
+
+export type CrmCrmContactImportDroppedRowsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactImportDroppedRowsError = CrmCrmContactImportDroppedRowsErrors[keyof CrmCrmContactImportDroppedRowsErrors];
+
+export type CrmCrmContactImportDroppedRowsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmDroppedRowsResponse;
+};
+
+export type CrmCrmContactImportDroppedRowsResponse = CrmCrmContactImportDroppedRowsResponses[keyof CrmCrmContactImportDroppedRowsResponses];
+
+export type CrmCrmContactImportPropertiesData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: number;
+    };
+    query?: {
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/contact-imports/{import_id}/properties';
+};
+
+export type CrmCrmContactImportPropertiesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactImportPropertiesError = CrmCrmContactImportPropertiesErrors[keyof CrmCrmContactImportPropertiesErrors];
+
+export type CrmCrmContactImportPropertiesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmImportPropertiesResponse;
+};
+
+export type CrmCrmContactImportPropertiesResponse = CrmCrmContactImportPropertiesResponses[keyof CrmCrmContactImportPropertiesResponses];
+
 export type CrmCrmContactListsData = {
     body?: never;
     path?: never;
@@ -11244,6 +13667,18 @@ export type CrmCrmContactListData = {
          * Status
          */
         status?: string | null;
+        /**
+         * Match Colour
+         *
+         * Keep rows whose property-first match is one of these colours.
+         */
+        match_colour?: Array<'green' | 'amber' | 'blue' | 'red' | 'grey'> | null;
+        /**
+         * Match Outcome
+         *
+         * Keep rows with one of these match outcomes (for example `lender` or `broker`).
+         */
+        match_outcome?: Array<string> | null;
         /**
          * Search
          */
@@ -11295,6 +13730,10 @@ export type CrmCrmOwnerRegistryData = {
          */
         status?: string | null;
         /**
+         * Transaction Match Status
+         */
+        transaction_match_status?: string | null;
+        /**
          * Search
          */
         search?: string | null;
@@ -11322,6 +13761,14 @@ export type CrmCrmOwnerRegistryData = {
          * Max Value Aed
          */
         max_value_aed?: number | null;
+        /**
+         * Min Properties
+         */
+        min_properties?: number | null;
+        /**
+         * Next Event Days
+         */
+        next_event_days?: number | null;
         /**
          * Limit
          */
@@ -11396,6 +13843,109 @@ export type CrmCrmBulkUpdateOwnerWorkspacesResponses = {
 };
 
 export type CrmCrmBulkUpdateOwnerWorkspacesResponse = CrmCrmBulkUpdateOwnerWorkspacesResponses[keyof CrmCrmBulkUpdateOwnerWorkspacesResponses];
+
+export type CrmCrmOwnerHistorySummaryData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Import Id
+         */
+        import_id?: number | null;
+    };
+    url: '/api/v1/crm/owner-history/summary';
+};
+
+export type CrmCrmOwnerHistorySummaryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmOwnerHistorySummaryError = CrmCrmOwnerHistorySummaryErrors[keyof CrmCrmOwnerHistorySummaryErrors];
+
+export type CrmCrmOwnerHistorySummaryResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmOwnerHistorySummary;
+};
+
+export type CrmCrmOwnerHistorySummaryResponse = CrmCrmOwnerHistorySummaryResponses[keyof CrmCrmOwnerHistorySummaryResponses];
+
+export type CrmCrmContactImportOwnerSummaryData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/contact-imports/{import_id}/owner-summary';
+};
+
+export type CrmCrmContactImportOwnerSummaryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactImportOwnerSummaryError = CrmCrmContactImportOwnerSummaryErrors[keyof CrmCrmContactImportOwnerSummaryErrors];
+
+export type CrmCrmContactImportOwnerSummaryResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmOwnerHistorySummary;
+};
+
+export type CrmCrmContactImportOwnerSummaryResponse = CrmCrmContactImportOwnerSummaryResponses[keyof CrmCrmContactImportOwnerSummaryResponses];
+
+export type CrmCrmOwnerHistoryData = {
+    body?: never;
+    path: {
+        /**
+         * Owner Key
+         */
+        owner_key: string;
+    };
+    query?: {
+        /**
+         * Import Id
+         */
+        import_id?: number | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/owners/{owner_key}/history';
+};
+
+export type CrmCrmOwnerHistoryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmOwnerHistoryError = CrmCrmOwnerHistoryErrors[keyof CrmCrmOwnerHistoryErrors];
+
+export type CrmCrmOwnerHistoryResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmOwnerHistoryResponse;
+};
+
+export type CrmCrmOwnerHistoryResponse = CrmCrmOwnerHistoryResponses[keyof CrmCrmOwnerHistoryResponses];
 
 export type CrmCrmOwnerProfileData = {
     body?: never;
@@ -11504,6 +14054,209 @@ export type CrmCrmDashboardResponses = {
 };
 
 export type CrmCrmDashboardResponse = CrmCrmDashboardResponses[keyof CrmCrmDashboardResponses];
+
+export type CrmCrmAreaPreferencesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/area-preferences';
+};
+
+export type CrmCrmAreaPreferencesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmAreaPreferencesResponse;
+};
+
+export type CrmCrmAreaPreferencesResponse = CrmCrmAreaPreferencesResponses[keyof CrmCrmAreaPreferencesResponses];
+
+export type CrmCrmUpdateAreaPreferencesData = {
+    body: CrmAreaPreferencesUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/area-preferences';
+};
+
+export type CrmCrmUpdateAreaPreferencesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmUpdateAreaPreferencesError = CrmCrmUpdateAreaPreferencesErrors[keyof CrmCrmUpdateAreaPreferencesErrors];
+
+export type CrmCrmUpdateAreaPreferencesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmAreaPreferencesResponse;
+};
+
+export type CrmCrmUpdateAreaPreferencesResponse = CrmCrmUpdateAreaPreferencesResponses[keyof CrmCrmUpdateAreaPreferencesResponses];
+
+export type CrmCrmRenewalsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Window
+         */
+        window?: string | null;
+        /**
+         * Area
+         */
+        area?: string | null;
+        /**
+         * Property Type
+         */
+        property_type?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
+        /**
+         * Building
+         */
+        building?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/renewals';
+};
+
+export type CrmCrmRenewalsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRenewalsError = CrmCrmRenewalsErrors[keyof CrmCrmRenewalsErrors];
+
+export type CrmCrmRenewalsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmRenewalsResponse;
+};
+
+export type CrmCrmRenewalsResponse = CrmCrmRenewalsResponses[keyof CrmCrmRenewalsResponses];
+
+export type CrmCrmRenewalAreasData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/renewal-areas';
+};
+
+export type CrmCrmRenewalAreasErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRenewalAreasError = CrmCrmRenewalAreasErrors[keyof CrmCrmRenewalAreasErrors];
+
+export type CrmCrmRenewalAreasResponses = {
+    /**
+     * Response Crm-Crm Renewal Areas
+     *
+     * Successful Response
+     */
+    200: Array<CrmRenewalArea>;
+};
+
+export type CrmCrmRenewalAreasResponse = CrmCrmRenewalAreasResponses[keyof CrmCrmRenewalAreasResponses];
+
+export type CrmCrmRenewalLeadsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Kind
+         */
+        kind?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/renewal-leads';
+};
+
+export type CrmCrmRenewalLeadsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRenewalLeadsError = CrmCrmRenewalLeadsErrors[keyof CrmCrmRenewalLeadsErrors];
+
+export type CrmCrmRenewalLeadsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmRenewalLeadsResponse;
+};
+
+export type CrmCrmRenewalLeadsResponse = CrmCrmRenewalLeadsResponses[keyof CrmCrmRenewalLeadsResponses];
+
+export type CrmCrmOpenRenewalLeadData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/renewal-leads/{lease_id}/lead';
+};
+
+export type CrmCrmOpenRenewalLeadErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmOpenRenewalLeadError = CrmCrmOpenRenewalLeadErrors[keyof CrmCrmOpenRenewalLeadErrors];
+
+export type CrmCrmOpenRenewalLeadResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryResponse;
+};
+
+export type CrmCrmOpenRenewalLeadResponse = CrmCrmOpenRenewalLeadResponses[keyof CrmCrmOpenRenewalLeadResponses];
 
 export type CrmCrmLeadDetailData = {
     body?: never;
@@ -11830,99 +14583,93 @@ export type FiltersGetSalesFilterOptionsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
-        /**
-         * Project
-         *
-         * Filter buildings by project
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Filter subtypes and rooms
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Filter by property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Rooms
+         * Status
          *
-         * Filter by room count
+         * Off-Plan or Ready
          */
-        rooms?: string;
+        status?: string | null;
         /**
-         * Registration Type
+         * Location
          *
-         * Filter by registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        registration_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Location Search
          *
-         * Filter by area
+         * Keywords across DXBI building, project and area
          */
-        area?: string;
+        location_search?: string | null;
         /**
          * Building
          *
-         * Filter by building
+         * DXBI building name
          */
-        building?: string;
+        building?: string | null;
+        /**
+         * Project
+         *
+         * DXBI project name
+         */
+        project?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Price Min
          *
-         * Minimum price
+         * Minimum price (AED), inclusive
          */
-        price_min?: number;
+        price_min?: number | null;
         /**
          * Price Max
          *
-         * Maximum price
+         * Maximum price (AED), exclusive
          */
-        price_max?: number;
+        price_max?: number | null;
         /**
-         * Price Per Sqm Min
+         * Price Per Sqft Min
          *
-         * Minimum price per sqm
+         * Minimum price per sq ft (AED), inclusive
          */
-        price_per_sqm_min?: number;
+        price_per_sqft_min?: number | null;
         /**
-         * Price Per Sqm Max
+         * Price Per Sqft Max
          *
-         * Maximum price per sqm
+         * Maximum price per sq ft (AED), exclusive
          */
-        price_per_sqm_max?: number;
+        price_per_sqft_max?: number | null;
     };
     url: '/api/v1/filters/sales';
 };
@@ -11952,81 +14699,81 @@ export type FiltersGetRentalFilterOptionsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
-        /**
-         * Project
-         *
-         * Filter buildings by project
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Filter subtypes
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Filter by property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Tenant Type
+         * Contract Type
          *
-         * Filter by tenant type
+         * New or Renewed
          */
-        tenant_type?: string;
+        contract_type?: string | null;
         /**
-         * Contract Reg Type
+         * Location
          *
-         * Filter by contract registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        contract_reg_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Location Search
          *
-         * Filter by area
+         * Keywords across DXBI building, project and area
          */
-        area?: string;
+        location_search?: string | null;
+        /**
+         * Building
+         *
+         * DXBI building name
+         */
+        building?: string | null;
+        /**
+         * Project
+         *
+         * DXBI project name
+         */
+        project?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Leases starting in the last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Rent Min
          *
-         * Minimum annual rent
+         * Minimum annual rent (AED), inclusive
          */
-        rent_min?: number;
+        rent_min?: number | null;
         /**
          * Rent Max
          *
-         * Maximum annual rent
+         * Maximum annual rent (AED), exclusive
          */
-        rent_max?: number;
+        rent_max?: number | null;
     };
     url: '/api/v1/filters/rentals';
 };
@@ -12093,18 +14840,6 @@ export type ListingsListListingsData = {
          * Price Max
          */
         price_max?: number | null;
-        /**
-         * Price Min Inclusive
-         *
-         * False for strictly above the lower price bound.
-         */
-        price_min_inclusive?: boolean;
-        /**
-         * Price Max Inclusive
-         *
-         * False for strictly below the upper price bound.
-         */
-        price_max_inclusive?: boolean;
     };
     url: '/api/v1/listings';
 };
@@ -12197,18 +14932,6 @@ export type ListingsListingAnalyticsData = {
          * Price Max
          */
         price_max?: number | null;
-        /**
-         * Price Min Inclusive
-         *
-         * False for strictly above the lower price bound.
-         */
-        price_min_inclusive?: boolean;
-        /**
-         * Price Max Inclusive
-         *
-         * False for strictly below the upper price bound.
-         */
-        price_max_inclusive?: boolean;
     };
     url: '/api/v1/listings/analytics';
 };
@@ -13396,99 +16119,93 @@ export type TransactionsGetSalesTransactionsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Rooms
+         * Status
          *
-         * Number of rooms
+         * Off-Plan or Ready
          */
-        rooms?: string;
+        status?: string | null;
         /**
-         * Registration Type
+         * Location
          *
-         * Registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        registration_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Location Search
          *
-         * Area name
+         * Keywords across DXBI building, project and area
          */
-        area?: string;
-        /**
-         * Project
-         *
-         * Project name
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        location_search?: string | null;
         /**
          * Building
          *
-         * Building name
+         * DXBI building name
          */
-        building?: string;
+        building?: string | null;
+        /**
+         * Project
+         *
+         * DXBI project name
+         */
+        project?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Price Min
          *
-         * Minimum price
+         * Minimum price (AED), inclusive
          */
-        price_min?: number;
+        price_min?: number | null;
         /**
          * Price Max
          *
-         * Maximum price
+         * Maximum price (AED), exclusive
          */
-        price_max?: number;
+        price_max?: number | null;
         /**
-         * Price Per Sqm Min
+         * Price Per Sqft Min
          *
-         * Minimum price per sqm
+         * Minimum price per sq ft (AED), inclusive
          */
-        price_per_sqm_min?: number;
+        price_per_sqft_min?: number | null;
         /**
-         * Price Per Sqm Max
+         * Price Per Sqft Max
          *
-         * Maximum price per sqm
+         * Maximum price per sq ft (AED), exclusive
          */
-        price_per_sqm_max?: number;
+        price_per_sqft_max?: number | null;
     };
     url: '/api/v1/transactions/sales';
 };
@@ -13530,81 +16247,81 @@ export type TransactionsGetRentalContractsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type (ejari)
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type (ejari)
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Tenant Type
+         * Contract Type
          *
-         * Tenant type
+         * New or Renewed
          */
-        tenant_type?: string;
+        contract_type?: string | null;
         /**
-         * Contract Reg Type
+         * Location
          *
-         * Contract registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        contract_reg_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Location Search
          *
-         * Area name
+         * Keywords across DXBI building, project and area
          */
-        area?: string;
+        location_search?: string | null;
+        /**
+         * Building
+         *
+         * DXBI building name
+         */
+        building?: string | null;
         /**
          * Project
          *
-         * Project name
+         * DXBI project name
          */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        project?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Leases starting in the last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Rent Min
          *
-         * Minimum annual rent
+         * Minimum annual rent (AED), inclusive
          */
-        rent_min?: number;
+        rent_min?: number | null;
         /**
          * Rent Max
          *
-         * Maximum annual rent
+         * Maximum annual rent (AED), exclusive
          */
-        rent_max?: number;
+        rent_max?: number | null;
     };
     url: '/api/v1/transactions/rentals';
 };
@@ -13642,103 +16359,97 @@ export type TransactionsExportSalesTransactionsEndpointData = {
          *
          * Comma-separated transaction IDs (overrides filters and limit)
          */
-        transaction_ids?: string;
+        transaction_ids?: string | null;
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Rooms
+         * Status
          *
-         * Number of rooms
+         * Off-Plan or Ready
          */
-        rooms?: string;
+        status?: string | null;
         /**
-         * Registration Type
+         * Location
          *
-         * Registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        registration_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Location Search
          *
-         * Area name
+         * Keywords across DXBI building, project and area
          */
-        area?: string;
-        /**
-         * Project
-         *
-         * Project name
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        location_search?: string | null;
         /**
          * Building
          *
-         * Building name
+         * DXBI building name
          */
-        building?: string;
+        building?: string | null;
+        /**
+         * Project
+         *
+         * DXBI project name
+         */
+        project?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Price Min
          *
-         * Minimum price
+         * Minimum price (AED), inclusive
          */
-        price_min?: number;
+        price_min?: number | null;
         /**
          * Price Max
          *
-         * Maximum price
+         * Maximum price (AED), exclusive
          */
-        price_max?: number;
+        price_max?: number | null;
         /**
-         * Price Per Sqm Min
+         * Price Per Sqft Min
          *
-         * Minimum price per sqm
+         * Minimum price per sq ft (AED), inclusive
          */
-        price_per_sqm_min?: number;
+        price_per_sqft_min?: number | null;
         /**
-         * Price Per Sqm Max
+         * Price Per Sqft Max
          *
-         * Maximum price per sqm
+         * Maximum price per sq ft (AED), exclusive
          */
-        price_per_sqm_max?: number;
+        price_per_sqft_max?: number | null;
     };
     url: '/api/v1/transactions/sales/export';
 };
@@ -13774,85 +16485,85 @@ export type TransactionsExportRentalContractsEndpointData = {
          *
          * Comma-separated contract IDs (overrides filters and limit)
          */
-        contract_ids?: string;
+        contract_ids?: string | null;
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type (ejari)
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type (ejari)
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Tenant Type
+         * Contract Type
          *
-         * Tenant type
+         * New or Renewed
          */
-        tenant_type?: string;
+        contract_type?: string | null;
         /**
-         * Contract Reg Type
+         * Location
          *
-         * Contract registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        contract_reg_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Location Search
          *
-         * Area name
+         * Keywords across DXBI building, project and area
          */
-        area?: string;
+        location_search?: string | null;
+        /**
+         * Building
+         *
+         * DXBI building name
+         */
+        building?: string | null;
         /**
          * Project
          *
-         * Project name
+         * DXBI project name
          */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        project?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Leases starting in the last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Rent Min
          *
-         * Minimum annual rent
+         * Minimum annual rent (AED), inclusive
          */
-        rent_min?: number;
+        rent_min?: number | null;
         /**
          * Rent Max
          *
-         * Maximum annual rent
+         * Maximum annual rent (AED), exclusive
          */
-        rent_max?: number;
+        rent_max?: number | null;
     };
     url: '/api/v1/transactions/rentals/export';
 };

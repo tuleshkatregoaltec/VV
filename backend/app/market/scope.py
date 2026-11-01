@@ -1,35 +1,28 @@
 from typing import Literal
 
-ProjectFilterType = Literal["project", "master", "virtual_master"]
-ProjectScopeType = Literal["project", "master", "virtual_master", "market"]
+ProjectFilterType = Literal["project", "master", "virtual_master", "building"]
+ProjectScopeType = Literal["project", "master", "virtual_master", "building", "market"]
 
-# Server-side market type filters — frontend passes market_type, never raw predicates.
-# See analytics_architecture.md for taxonomy rationale.
-MARKET_FILTERS: dict[str, dict] = {
+# Server-side market types: the frontend passes market_type, never raw predicates. Each is a
+# transaction group and a trusted predicate on the served rows' uniform columns (property_type in
+# DXBI's words). DLD's own labels no longer fit: it registers most villas as 'Building' or
+# against their land ('Land'), and the served type has no 'Unit'.
+MARKET_FILTERS: dict[str, dict[str, str]] = {
     "residential_units": {
-        "property_type_en": "Unit",
-        "property_usage_en": "Residential",
         "trans_group_en": "Sales",
+        "where": "property_usage_en = 'Residential'"
+        " AND property_type IN ('Apartment', 'Hotel Apartment')",
     },
-    "villas": {
-        "property_type_en": "Villa",
-        "trans_group_en": "Sales",
-    },
+    "villas": {"trans_group_en": "Sales", "where": "property_type IN ('Villa', 'Townhouse')"},
     "commercial_units": {
-        "property_type_en": "Unit",
-        "property_usage_en__in": ["Commercial", "Hospitality"],
         "trans_group_en": "Sales",
+        # Units only: DLD's commercial-usage villas, plots and whole buildings are not units.
+        "where": "property_usage_en IN ('Commercial', 'Hospitality')"
+        " AND property_type NOT IN ('Villa', 'Townhouse', 'Plot', 'Building', '')",
     },
-    "bulk_building": {
-        "property_type_en": "Building",
-        "trans_group_en": "Sales",
-    },
-    "land": {
-        "property_type_en": "Land",
-        "trans_group_en": "Sales",
-    },
-    "mortgages": {"trans_group_en": "Mortgages"},
-    "gifts": {"trans_group_en": "Gifts"},
+    "bulk_building": {"trans_group_en": "Sales", "where": "property_type = 'Building'"},
+    "land": {"trans_group_en": "Sales", "where": "property_type = 'Plot'"},
+    # Mortgages and gifts are DLD registrations; the Analytics DXBI records are sales only.
 }
 
 
@@ -47,22 +40,32 @@ def project_filter_clause(filter_type: ProjectScopeType) -> str:
                 AND (master_project_en = '' OR master_project_en IS NULL)))"""
     if filter_type == "virtual_master":
         return "project_name_en LIKE {project_name:String}"
+    if filter_type == "building":
+        return "building_id = {project_name:String}"
     return "project_name_en = {project_name:String}"
 
 
-# Community predicate over DLD-shaped rows (area_name_en, master_project_en). A known master
-# project wins; an official DLD area that also holds other communities matches only rows
-# without a master project. Terms come from market.reference.community_location.
+# Location predicate over canonical market rows (ch_transactions / ch_rent_contracts), whose
+# community_key and district_name come from Holocron's evidence crosswalk; location_name is
+# the uniform display location (DXBI's community name), which also places DXBI-only rows the
+# crosswalk cannot. Terms come from market.reference.community_location.
 LOCATION_PREDICATE = (
-    "(lowerUTF8(master_project_en) IN {loc_masters:Array(String)}"
-    " OR lowerUTF8(area_name_en) IN {loc_areas:Array(String)}"
-    " OR (master_project_en = '' AND lowerUTF8(area_name_en) IN {loc_official:Array(String)}))"
+    "(community_key IN {loc_communities:Array(String)}"
+    " OR replaceRegexpAll(lowerUTF8(trimBoth(location_name)), '[[:space:]]+', ' ')"
+    " IN {loc_communities:Array(String)}"
+    " OR lowerUTF8(district_name) IN {loc_districts:Array(String)})"
+)
+# The same terms over the DLD project register (ch_projects), which names the official
+# district and master project directly.
+PROJECT_LOCATION_PREDICATE = (
+    "(replaceRegexpAll(lowerUTF8(trimBoth(master_project_en)), '[[:space:]]+', ' ')"
+    " IN {loc_communities:Array(String)}"
+    " OR lowerUTF8(area_name_en) IN {loc_districts:Array(String)})"
 )
 
 
 def location_parameters(location) -> dict[str, list[str]]:
     return {
-        "loc_masters": list(location.master_projects),
-        "loc_areas": list(location.areas),
-        "loc_official": list(location.official_areas),
+        "loc_communities": list(location.communities),
+        "loc_districts": list(location.districts),
     }

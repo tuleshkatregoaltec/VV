@@ -6,18 +6,21 @@ through the fixed fragments below, selected by validated Literal names.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
 from app.clickhouse import query
 from app.market.reference import SQM_TO_SQFT
+from app.market.releases import pinned_table
 from app.market.scope import LOCATION_PREDICATE
 
 
 @dataclass(frozen=True, slots=True)
 class Dataset:
     table: str
+    release_table: str
     event_date: str
     value: str
     area_sqm: str
@@ -27,57 +30,64 @@ class Dataset:
     property_types: dict[str, str]
 
 
+# Capability property types on the uniform property_type column (one list for both datasets
+# and both sources; holocron.market.transforms.PROPERTY_TYPES).
+UNIFORM_PROPERTY_TYPES = {
+    "apartment": "property_type = 'Apartment'",
+    "hotel_apartment": "property_type = 'Hotel Apartment'",
+    # DLD has no townhouse type: its villas, which this used to read, include them.
+    "villa": "property_type IN ('Villa', 'Townhouse')",
+    "townhouse": "property_type = 'Townhouse'",
+    "office": "property_type = 'Office'",
+    "shop": "property_type = 'Shop'",
+    "land": "property_type = 'Plot'",
+}
+
 SALES = Dataset(
     table="ch_transactions",
-    # DLD instance_date is the registration date as recorded (Dubai local time).
+    release_table="market_sale_events",
+    # Transaction date (decision 2026-10-07): DXBI's date where DXBI lists the sale, otherwise
+    # DLD's registration date as recorded (Dubai local time).
     event_date="toDate(instance_date)",
     value="toFloat64(actual_worth)",
-    area_sqm="procedure_area",
+    area_sqm="size_sqm",
     # Achieved sale prices only: mortgages, gifts and zero-value records are not sales.
     eligible="trans_group_en = 'Sales' AND actual_worth > 0",
     bedrooms="rooms_en",
     building="if(building_name_en != '', building_name_en, dxbi_building_name)",
-    property_types={
-        "apartment": "property_sub_type_en = 'Flat'",
-        "hotel_apartment": "property_sub_type_en = 'Hotel Apartment'",
-        "villa": "property_sub_type_en = 'Villa'",
-        "office": "property_sub_type_en = 'Office'",
-        "shop": "property_sub_type_en = 'Shop'",
-        "land": "property_type_en = 'Land'",
-    },
+    property_types=UNIFORM_PROPERTY_TYPES,
 )
 
 RENTALS = Dataset(
     table="ch_rent_contracts",
-    # A contract is observed when it is registered; start dates can lie in the future.
-    event_date="toDate(registration_date)",
+    release_table="market_rental_events",
+    # A lease counts in the month it starts (decision 2026-10-07), on every page; DXBI has no
+    # registration date. Leases starting after the requested period are not in it.
+    event_date="toDate(contract_start_date)",
     # DLD annual_amount is the annualised rent; contract_amount is the whole-term value.
     value="toFloat64(annual_amount)",
-    area_sqm="actual_area",
+    area_sqm="size_sqm",
     eligible="annual_amount > 0 AND contract_end_date > contract_start_date",
-    # DLD open-data rentals carry no bedroom count; DXBI-matched rows and Ejari "Studio"
-    # sub-types do. Rows without either stay unknown ('') and are reported as coverage.
-    bedrooms="""multiIf(
-        bedrooms = 'Studio' OR ejari_property_sub_type_en = 'Studio', 'Studio',
-        match(bedrooms, '^[0-9]+ Beds?$'), concat(extract(bedrooms, '^([0-9]+)'), ' B/R'),
-        '')""",
+    # Uniform label from the market layer: DXBI's count where it has one, Ejari "Studio";
+    # DLD rentals carry no count, so those rows stay unknown ('') and are reported as coverage.
+    bedrooms="rooms_en",
     # DLD rentals name the project (usually the building); DXBI-matched rows name the building.
     building="if(dxbi_building_name != '', dxbi_building_name, project_name_en)",
-    property_types={
-        "apartment": "ejari_property_sub_type_en IN ('Flat', 'Studio')",
-        "hotel_apartment": "ejari_property_sub_type_en = 'Hotel Apartment'",
-        "villa": "ejari_property_sub_type_en IN ('Villa', 'Complex Villas')",
-        "office": "ejari_property_sub_type_en = 'Office'",
-        "shop": "ejari_property_sub_type_en = 'Shop'",
-        "land": "0",
-    },
+    property_types=UNIFORM_PROPERTY_TYPES,
 )
 
 DATASETS = {"sales": SALES, "rentals": RENTALS}
 
 
+def _from(dataset: str) -> str:
+    """The served rows to read: the pinned immutable release inside a pin, else the view."""
+    table = pinned_table(dataset)
+    return f"(SELECT * FROM `{table}` WHERE is_served = 1)" if table else DATASETS[dataset].table
+
+
 def _rate(ds: Dataset) -> str:
-    return f"{ds.value} / {ds.area_sqm}"
+    """AED per square foot of one record (sizes are stored in m²)."""
+    return f"{ds.value} / ({ds.area_sqm} * {SQM_TO_SQFT})"
 
 
 def metric_expressions(ds: Dataset) -> dict[str, str]:
@@ -92,14 +102,12 @@ def metric_expressions(ds: Dataset) -> dict[str, str]:
         "p25_aed": f"quantileExactInclusive(0.25)({ds.value})",
         "p75_aed": f"quantileExactInclusive(0.75)({ds.value})",
         "rated_count": f"toFloat64(countIf({rated}))",
-        "mean_aed_per_sqm": f"avgIf({_rate(ds)}, {rated})",
-        "median_aed_per_sqm": f"quantileExactInclusiveIf(0.5)({_rate(ds)}, {rated})",
-        "weighted_aed_per_sqm": f"sumIf({ds.value}, {rated}) / sumIf({ds.area_sqm}, {rated})",
+        "mean_aed_per_sqft": f"avgIf({_rate(ds)}, {rated})",
+        "median_aed_per_sqft": f"quantileExactInclusiveIf(0.5)({_rate(ds)}, {rated})",
+        "weighted_aed_per_sqft": (
+            f"sumIf({ds.value}, {rated}) / sumIf({ds.area_sqm} * {SQM_TO_SQFT}, {rated})"
+        ),
     }
-    for name in ("mean", "median", "weighted"):
-        expressions[f"{name}_aed_per_sqft"] = (
-            f"({expressions[f'{name}_aed_per_sqm']}) / {SQM_TO_SQFT}"
-        )
     if ds is RENTALS:
         expressions["total_contract_aed"] = "sum(toFloat64(contract_amount))"
         expressions["median_contract_aed"] = (
@@ -111,7 +119,15 @@ def metric_expressions(ds: Dataset) -> dict[str, str]:
 def group_expressions(ds: Dataset) -> dict[str, tuple[str, str]]:
     """Group name -> (key expression, display label expression)."""
     return {
-        "area": ("lowerUTF8(area_name_en)", "any(area_name_en)"),
+        # Official DLD district and evidence-placed community (canonical geography).
+        "area": (
+            "lowerUTF8(district_name)",
+            "if(any(district_name) = '', '(no district)', any(district_name))",
+        ),
+        "community": (
+            "community_key",
+            "if(any(community_name) = '', '(no community)', any(community_name))",
+        ),
         "master_project": ("lowerUTF8(master_project_en)", "any(master_project_en)"),
         "project": ("lowerUTF8(project_name_en)", "any(project_name_en)"),
         "building": (f"lowerUTF8({ds.building})", f"any({ds.building})"),
@@ -132,9 +148,8 @@ def group_expressions(ds: Dataset) -> dict[str, tuple[str, str]]:
 class MetricFilters:
     start: date
     end: date
-    location_masters: tuple[str, ...] = ()
-    location_areas: tuple[str, ...] = ()
-    location_official_areas: tuple[str, ...] = ()
+    location_communities: tuple[str, ...] = ()
+    location_districts: tuple[str, ...] = ()
     building: str | None = None
     project: str | None = None
     property_type: str | None = None
@@ -146,8 +161,6 @@ class MetricFilters:
     max_term_days: int | None = None
     value_min: float | None = None
     value_max: float | None = None
-    min_value_inclusive: bool = True
-    max_value_inclusive: bool = False
 
 
 def where_clause(
@@ -155,12 +168,11 @@ def where_clause(
 ) -> tuple[str, dict[str, Any]]:
     clauses = [ds.eligible, f"{ds.event_date} BETWEEN {{start:Date}} AND {{end:Date}}"]
     params: dict[str, Any] = {"start": filters.start, "end": filters.end}
-    if filters.location_masters or filters.location_areas or filters.location_official_areas:
+    if filters.location_communities or filters.location_districts:
         clauses.append(LOCATION_PREDICATE)
         params |= {
-            "loc_masters": list(filters.location_masters),
-            "loc_areas": list(filters.location_areas),
-            "loc_official": list(filters.location_official_areas),
+            "loc_communities": list(filters.location_communities),
+            "loc_districts": list(filters.location_districts),
         }
     if filters.building:
         clauses.append(f"lowerUTF8({ds.building}) = lowerUTF8({{building:String}})")
@@ -190,24 +202,18 @@ def where_clause(
         clauses.append(f"{term} <= {{max_term:Int32}}")
         params["max_term"] = filters.max_term_days
     if filters.value_min is not None:
-        operator = ">=" if filters.min_value_inclusive else ">"
-        clauses.append(f"{ds.value} {operator} {{value_min:Float64}}")
+        clauses.append(f"{ds.value} >= {{value_min:Float64}}")
         params["value_min"] = filters.value_min
     if filters.value_max is not None:
-        operator = "<=" if filters.max_value_inclusive else "<"
-        clauses.append(f"{ds.value} {operator} {{value_max:Float64}}")
+        clauses.append(f"{ds.value} < {{value_max:Float64}}")
         params["value_max"] = filters.value_max
     return " AND ".join(clauses), params
 
 
-def _band_expression(
-    ds: Dataset, bands: tuple[float, ...], upper_inclusive: tuple[bool, ...] = ()
-) -> tuple[str, str]:
-    # The first matching bound owns equality; every value belongs to exactly one band.
-    flags = upper_inclusive or (False,) * len(bands)
+def _band_expression(ds: Dataset, bands: tuple[float, ...]) -> tuple[str, str]:
+    # Bands are [b0, b1), [b1, b2) ... ; boundaries are bound as parameters.
     conditions = ", ".join(
-        f"{ds.value} {'<=' if inclusive else '<'} {{band_{index}:Float64}}, {index}"
-        for index, inclusive in enumerate(flags)
+        f"{ds.value} < {{band_{index}:Float64}}, {index}" for index in range(len(bands))
     )
     key = f"multiIf({conditions}, {len(bands)})"
     return key, key
@@ -220,7 +226,6 @@ async def fetch_metric_rows(
     *,
     group_by: str | None = None,
     price_bands: tuple[float, ...] = (),
-    price_band_upper_inclusive: tuple[bool, ...] = (),
     min_group_count: int = 1,
     order_by: str = "count",
     limit: int = 50,
@@ -231,9 +236,9 @@ async def fetch_metric_rows(
     names = dict.fromkeys(("count", *metrics))
     selected = ", ".join(f"{expressions[name]} AS {name}" for name in names)
     if group_by is None:
-        return await query(f"SELECT {selected} FROM {ds.table} WHERE {where}", params)
+        return await query(f"SELECT {selected} FROM {_from(dataset)} WHERE {where}", params)
     if group_by == "price_band":
-        key, label = _band_expression(ds, price_bands, price_band_upper_inclusive)
+        key, label = _band_expression(ds, price_bands)
         params |= {f"band_{index}": value for index, value in enumerate(price_bands)}
     else:
         key, label = group_expressions(ds)[group_by]
@@ -241,7 +246,7 @@ async def fetch_metric_rows(
     return await query(
         f"""
         SELECT {key} AS group_key, {label} AS group_label, {selected}
-        FROM {ds.table}
+        FROM {_from(dataset)}
         WHERE {where}
         GROUP BY group_key
         HAVING count() >= {{min_group_count:UInt32}}
@@ -258,26 +263,54 @@ async def fetch_bedroom_coverage(dataset: str, filters: MetricFilters) -> dict[s
     where, params = where_clause(ds, filters, include_bedrooms=False)
     rows = await query(
         f"SELECT count() AS rows, countIf({ds.bedrooms} = '') AS unknown_bedrooms "
-        f"FROM {ds.table} WHERE {where}",
+        f"FROM {_from(dataset)} WHERE {where}",
         params,
     )
     return rows[0] if rows else {"rows": 0, "unknown_bedrooms": 0}
 
 
 async def fetch_matched_locations(dataset: str, filters: MetricFilters) -> list[dict[str, Any]]:
+    """Raw source names behind the matched rows, with where the crosswalk placed them."""
     ds = DATASETS[dataset]
     where, params = where_clause(ds, filters)
     return await query(
         f"""
-        SELECT area_name_en AS area, master_project_en AS master_project, count() AS records
-        FROM {ds.table}
+        SELECT area_name_en AS area, master_project_en AS master_project,
+               district_name AS district, community_name AS community, geo_method AS method,
+               count() AS records
+        FROM {_from(dataset)}
         WHERE {where}
-        GROUP BY area, master_project
+        GROUP BY area, master_project, district, community, method
         ORDER BY records DESC
         LIMIT 10
         """,
         params,
     )
+
+
+async def fetch_district_only_rows(
+    dataset: str, filters: MetricFilters, districts: tuple[str, ...]
+) -> int:
+    """Rows matching every other filter that DLD locates only by one of ``districts``.
+
+    They may belong to the requested community, but no source evidence says so, so they are
+    excluded from a community answer and disclosed instead.
+    """
+    ds = DATASETS[dataset]
+    unlocated = MetricFilters(
+        **{
+            **{f: getattr(filters, f) for f in filters.__dataclass_fields__},
+            "location_communities": (),
+            "location_districts": (),
+        }
+    )
+    where, params = where_clause(ds, unlocated)
+    rows = await query(
+        f"SELECT count() AS records FROM {_from(dataset)} WHERE {where} "
+        "AND community_key = '' AND lowerUTF8(district_name) IN {coarse:Array(String)}",
+        params | {"coarse": [district.lower() for district in districts]},
+    )
+    return int(rows[0]["records"]) if rows else 0
 
 
 async def fetch_source_breakdown(dataset: str, filters: MetricFilters) -> list[dict[str, Any]]:
@@ -286,7 +319,7 @@ async def fetch_source_breakdown(dataset: str, filters: MetricFilters) -> list[d
     return await query(
         f"""
         SELECT source_system, match_status, count() AS records
-        FROM {ds.table}
+        FROM {_from(dataset)}
         WHERE {where}
         GROUP BY source_system, match_status
         ORDER BY records DESC
@@ -295,17 +328,73 @@ async def fetch_source_breakdown(dataset: str, filters: MetricFilters) -> list[d
     )
 
 
+async def fetch_release_id(dataset: str) -> str:
+    """The release the served table holds right now ('' before releases had ids)."""
+    rows = await query(f"SELECT any(release_id) AS release_id FROM {_from(dataset)}", {})
+    return str(rows[0]["release_id"]) if rows else ""
+
+
 async def fetch_release(dataset: str) -> dict[str, Any]:
-    """Date coverage and build identity of the served release for the dataset."""
+    """Identity, record dates and load-evidence coverage of the served release."""
     ds = DATASETS[dataset]
     rows = await query(
         f"""
-        SELECT min({ds.event_date}) AS data_from,
+        SELECT any(release_id) AS release_id,
+               count() AS eligible_count,
+               min({ds.event_date}) AS data_from,
                max({ds.event_date}) AS data_to,
                max(built_at) AS built_at
-        FROM {ds.table}
+        FROM {_from(dataset)}
         WHERE {ds.eligible} AND {ds.event_date} <= today()
         """,
         {},
     )
-    return rows[0] if rows else {}
+    release = dict(rows[0]) if rows else {}
+    release["coverage"] = {}
+    if release.get("release_id"):
+        ledger = await query(
+            "SELECT coverage_json FROM market_release_ledger FINAL "
+            "WHERE dataset = {dataset:String} AND release_id = {release_id:String}",
+            {"dataset": ds.release_table, "release_id": release["release_id"]},
+        )
+        if ledger:
+            release["coverage"] = json.loads(ledger[0]["coverage_json"] or "{}")
+    return release
+
+
+async def fetch_comparable_evidence(
+    dataset: str,
+    filters: MetricFilters,
+    *,
+    size_min: float | None,
+    size_max: float | None,
+    limit: int,
+) -> tuple[dict, list[dict]]:
+    """Exact aggregate plus a bounded recent comparable sample; no contact or unit IDs."""
+    ds = DATASETS[dataset]
+    where, params = where_clause(ds, filters)
+    if size_min is not None:
+        where += f" AND {ds.area_sqm} * {SQM_TO_SQFT} BETWEEN {{size_min:Float64}} AND {{size_max:Float64}}"
+        params |= {"size_min": size_min, "size_max": size_max}
+    expressions = metric_expressions(ds)
+    aggregate = await query(
+        f"SELECT {', '.join(expressions[name] + ' AS ' + name for name in ('count', 'median_aed', 'p25_aed', 'p75_aed', 'rated_count', 'median_aed_per_sqft'))} FROM {_from(dataset)} WHERE {where}",
+        params,
+    )
+    rental = (
+        ", version_en AS contract_version, toDate(contract_end_date) AS contract_end, toFloat64(contract_amount) AS contract_amount_aed"
+        if dataset == "rentals"
+        else ", reg_type_en AS registration"
+    )
+    rows = await query(
+        f"""SELECT {ds.event_date} AS event_date, {ds.value} AS amount_aed,
+            if({ds.area_sqm} > 0, {ds.area_sqm} * {SQM_TO_SQFT}, NULL) AS size_sqft,
+            if({ds.area_sqm} > 0, {_rate(ds)}, NULL) AS amount_per_sqft_aed,
+            {ds.building} AS building, {ds.bedrooms} AS bedrooms, source_system AS source
+            {rental}
+            FROM {_from(dataset)} WHERE {where}
+            ORDER BY {ds.event_date} DESC, {ds.value}, {ds.building}
+            LIMIT {{limit:UInt32}}""",
+        params | {"limit": limit},
+    )
+    return aggregate[0] if aggregate else {}, rows

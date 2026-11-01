@@ -312,8 +312,7 @@ $effect(() => {
 	<div class="grid min-h-[240px] place-items-center rounded-md border border-dashed border-border bg-panel p-5 text-center">
 		<div>
 			<p class="text-sm font-semibold text-fg-1">No chart data</p>
-			<p class="mt-1 text-xs leading-5 text-fg-4">Try a broader filter or a longer lookback window.</p>
-		</div>
+					</div>
 	</div>
 {:else}
 	<div class="grid gap-3">
@@ -346,10 +345,7 @@ $effect(() => {
 
 		<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-panel p-3 text-xs leading-5 text-fg-3">
 			<span>
-				<span class="font-semibold text-fg-2">Source:</span>
-				{artifact.data?.data_source ?? 'DLD data'}
 				{#if periodLabel()}
-					<span class="mx-1 text-fg-5">/</span>
 					<span class="font-semibold text-fg-2">Period:</span>
 					{periodLabel()}
 				{/if}

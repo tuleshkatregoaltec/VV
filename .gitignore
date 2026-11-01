@@ -285,3 +285,6 @@ projects-*.png
 
 # Full AI execution/evaluation evidence is private and local only.
 .evaluation/
+docs/superpowers/
+# Private owner-recovery snapshots, source workbooks and generated runs.
+/.local/owner-recovery/

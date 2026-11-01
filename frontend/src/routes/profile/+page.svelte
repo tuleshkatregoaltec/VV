@@ -1,7 +1,6 @@
 <script lang="ts">
 import { logout, update_user_profile } from '$lib/api/auth'
 import ThemePreferenceControl from '$lib/components/preferences/ThemePreferenceControl.svelte'
-import { areaUnit } from '$lib/stores/preferences.svelte'
 import { currentUser, refreshUser } from '$lib/stores/user.svelte'
 
 let editingName = $state(false)
@@ -217,30 +216,6 @@ function handleAvatarError() {
 			<div class="ui-surface p-6">
 				<h2 class="text-lg font-semibold text-fg-1 mb-4">Preferences</h2>
 				<div class="space-y-4">
-					<div class="flex items-center justify-between">
-						<div>
-							<span class="text-fg-2">Area unit</span>
-							<p class="text-xs text-fg-4">Display areas in square meters or square feet</p>
-						</div>
-						<div class="ui-segmented flex items-center gap-1">
-							<button
-								type="button"
-								onclick={() => (areaUnit.current = 'sqm')}
-								data-active={areaUnit.current === 'sqm'}
-								class="ui-segmented-item px-3 py-1.5 text-sm"
-							>
-								sq.m
-							</button>
-							<button
-								type="button"
-								onclick={() => (areaUnit.current = 'sqft')}
-								data-active={areaUnit.current === 'sqft'}
-								class="ui-segmented-item px-3 py-1.5 text-sm"
-							>
-								sq.ft
-							</button>
-						</div>
-					</div>
 					<div class="flex items-center justify-between gap-4">
 						<div>
 							<span class="text-fg-2">Theme</span>

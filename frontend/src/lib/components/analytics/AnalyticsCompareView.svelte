@@ -8,23 +8,21 @@ import type {
 	ProjectSearchItem,
 	ProjectTrendPoint
 } from '$lib/api/analytics'
-import type { ProjectSearchResult } from '$lib/api/projects'
 import { analyticsQueries } from '$lib/queries/analytics'
 import { getChartTheme } from '$lib/utils/chartTheme'
+import AnalyticsError from './AnalyticsError.svelte'
 
 Chart.register(...registerables)
 
 let {
 	projectA,
-	projectB,
-	allProjects = []
+	projectB
 }: {
 	projectA: ProjectSearchItem
 	projectB: ProjectSearchItem
-	allProjects?: ProjectSearchResult[]
 } = $props()
 
-type TrendMode = 'avg_price' | 'avg_price_sqm'
+type TrendMode = 'avg_price' | 'avg_price_sqft'
 type DeltaMode = 'pct_change' | 'points'
 
 let trendMode = $state<TrendMode>('avg_price')
@@ -56,6 +54,7 @@ const error = $derived(summaryQueryA.isError || summaryQueryB.isError)
 
 function toQueryParams(selection: ProjectSearchItem) {
 	if (selection.filter_type === 'market') return {}
+	if (selection.filter_type === 'building') return { buildingId: selection.building_id ?? '' }
 	return selection.filter_type === 'project'
 		? { project: selection.name }
 		: { masterProject: selection.name, filterType: selection.filter_type }
@@ -66,15 +65,12 @@ function isMarketSelection(selection: ProjectSearchItem): boolean {
 }
 
 function isMasterSelection(selection: ProjectSearchItem): boolean {
-	return selection.filter_type !== 'project' && selection.filter_type !== 'market'
+	return !['project', 'market', 'building'].includes(selection.filter_type)
 }
 
 function fmtCurrency(n: number | null | undefined): string {
 	if (n == null || !Number.isFinite(n) || n <= 0) return '-'
-	if (n >= 1_000_000_000) return `AED ${(n / 1_000_000_000).toFixed(2)}B`
-	if (n >= 1_000_000) return `AED ${(n / 1_000_000).toFixed(2)}M`
-	if (n >= 1_000) return `AED ${(n / 1_000).toFixed(0)}K`
-	return `AED ${Math.round(n).toLocaleString('en-AE')}`
+	return `AED ${n.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`
 }
 
 function fmtCompact(n: number | null | undefined): string {
@@ -142,40 +138,12 @@ function getDisplayName(selection: ProjectSearchItem, summary: ProjectAnalyticsR
 function getKnownArea(selection: ProjectSearchItem, summary: ProjectAnalyticsResponse): string {
 	const fromProject = summary.project?.area_name
 	if (fromProject) return fromProject
-	const fromSearch = allProjects.find((project) =>
-		isMasterSelection(selection)
-			? project.master_project_en === selection.name
-			: project.project_name === selection.name
-	)
-	return fromSearch?.area_name ?? 'Area unavailable'
+	return 'Area unavailable'
 }
 
 function getDevelopmentCount(selection: ProjectSearchItem, subProjectCount: number): number | null {
 	if (!isMasterSelection(selection)) return null
-	const fromSearch = allProjects.filter(
-		(project) => project.master_project_en === selection.name
-	).length
-	return fromSearch || subProjectCount || null
-}
-
-function getHandoverLabel(
-	selection: ProjectSearchItem,
-	summary: ProjectAnalyticsResponse,
-	developmentCount: number | null
-): string {
-	if (isMarketSelection(selection)) return 'All completions'
-	if (isMasterSelection(selection)) {
-		return developmentCount && developmentCount > 1 ? 'Multiple phases' : 'Aggregate timeline'
-	}
-	if (summary.project?.completion_date) {
-		return new Date(summary.project.completion_date).toLocaleDateString('en-GB', {
-			month: 'short',
-			year: 'numeric'
-		})
-	}
-	if (summary.project?.percent_completed != null)
-		return `${fmtPct(summary.project.percent_completed, 0)} complete`
-	return 'Not available'
+	return subProjectCount || null
 }
 
 function getOffPlanShare(summary: ProjectAnalyticsResponse): number | null {
@@ -207,7 +175,7 @@ function getKpis(summary: ProjectAnalyticsResponse) {
 		{
 			label: 'Avg sale price',
 			value: fmtCurrency(summary.sales.avg_price),
-			detail: `${fmtCurrency(summary.sales.avg_price_sqm)}/sqm`
+			detail: `${fmtCurrency(summary.sales.avg_price_sqft)}/sq ft`
 		},
 		{
 			label: 'Median rent',
@@ -217,12 +185,12 @@ function getKpis(summary: ProjectAnalyticsResponse) {
 		{
 			label: 'Gross yield',
 			value: fmtPct(summary.overall_gross_yield_pct),
-			detail: 'rent / sale'
+			detail: ''
 		},
 		{
 			label: 'Off-plan share',
 			value: fmtPct(getOffPlanShare(summary)),
-			detail: 'sales mix'
+			detail: ''
 		}
 	]
 }
@@ -231,7 +199,7 @@ function getTopConfigRows(summary: ProjectAnalyticsResponse): ProjectConfigurati
 	return summary.configuration_analysis
 		.filter((row) => row.market_segment === 'all')
 		.slice()
-		.sort((left, right) => right.sales_last_12m - left.sales_last_12m)
+		.sort((left, right) => right.sale_count - left.sale_count)
 		.slice(0, 5)
 }
 
@@ -255,10 +223,10 @@ function getMetricRows(
 			deltaMode: 'pct_change' as DeltaMode
 		},
 		{
-			label: 'Avg price / sqm',
-			a: summaryLeft.sales.avg_price_sqm,
-			b: summaryRight.sales.avg_price_sqm,
-			format: (value: number | null | undefined) => `${fmtCurrency(value)}/sqm`,
+			label: 'Avg price / sq ft',
+			a: summaryLeft.sales.avg_price_sqft,
+			b: summaryRight.sales.avg_price_sqft,
+			format: (value: number | null | undefined) => `${fmtCurrency(value)}/sq ft`,
 			deltaMode: 'pct_change' as DeltaMode
 		},
 		{
@@ -314,7 +282,7 @@ function getShortName(
 }
 
 function trendValue(point: ProjectTrendPoint): number {
-	return trendMode === 'avg_price' ? point.avg_price : point.avg_price_sqm
+	return trendMode === 'avg_price' ? point.avg_price : point.avg_price_sqft
 }
 
 function buildTrendChart() {
@@ -351,9 +319,9 @@ function buildTrendChart() {
 					backgroundColor: theme.line,
 					borderWidth: 2.5,
 					tension: 0.32,
-					pointRadius: 0,
+					pointRadius: 2,
 					pointHoverRadius: 4,
-					spanGaps: true
+					spanGaps: false
 				},
 				{
 					label: getShortName(projectB, summaryB),
@@ -362,9 +330,9 @@ function buildTrendChart() {
 					backgroundColor: theme.lineAlt,
 					borderWidth: 2.5,
 					tension: 0.32,
-					pointRadius: 0,
+					pointRadius: 2,
 					pointHoverRadius: 4,
-					spanGaps: true
+					spanGaps: false
 				}
 			]
 		},
@@ -393,7 +361,7 @@ function buildTrendChart() {
 						label: (context) =>
 							trendMode === 'avg_price'
 								? ` ${context.dataset.label}: ${fmtCurrency(Number(context.parsed.y ?? 0))}`
-								: ` ${context.dataset.label}: AED ${fmtNumber(Number(context.parsed.y ?? 0), 0)}/sqm`
+								: ` ${context.dataset.label}: AED ${fmtNumber(Number(context.parsed.y ?? 0), 0)}/sq ft`
 					}
 				}
 			},
@@ -536,9 +504,7 @@ onMount(() => {
 		<div class="h-[360px] animate-pulse rounded-lg border border-border bg-card"></div>
 	</div>
 {:else if error}
-	<div class="rounded-lg border border-error bg-error-bg px-8 py-16 text-center text-sm text-error">
-		Failed to load comparison analytics.
-	</div>
+	<AnalyticsError message="Failed to load comparison analytics." retry={() => Promise.all([summaryQueryA.refetch(), summaryQueryB.refetch()])} fetching={summaryQueryA.isFetching || summaryQueryB.isFetching} />
 {:else if summaryA && summaryB}
 	{@const subCountA = subProjectsQueryA.data?.sub_projects.length ?? 0}
 	{@const subCountB = subProjectsQueryB.data?.sub_projects.length ?? 0}
@@ -549,6 +515,9 @@ onMount(() => {
 	{@const topRowsB = getTopConfigRows(summaryB)}
 
 	<div class="space-y-5">
+		{#if subProjectsQueryA.isError || subProjectsQueryB.isError}
+			<AnalyticsError message="Failed to load development counts for the comparison." retry={() => Promise.all([subProjectsQueryA.refetch(), subProjectsQueryB.refetch()])} fetching={subProjectsQueryA.isFetching || subProjectsQueryB.isFetching} />
+		{/if}
 		<section class="grid gap-5 xl:grid-cols-2">
 			{@render SummaryCard(
 				'Project A',
@@ -572,7 +541,7 @@ onMount(() => {
 					<p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-4">
 						Shared price trend
 					</p>
-					<h2 class="mt-1 text-lg font-semibold text-fg-1">One market signal, two selections</h2>
+					<h2 class="mt-1 text-lg font-semibold text-fg-1">Price trend</h2>
 				</div>
 				<div class="ui-segmented self-start md:self-auto">
 					<button
@@ -586,15 +555,17 @@ onMount(() => {
 					<button
 						type="button"
 						class="ui-segmented-item px-3 py-1.5 text-sm"
-						data-active={trendMode === 'avg_price_sqm'}
-						onclick={() => (trendMode = 'avg_price_sqm')}
+						data-active={trendMode === 'avg_price_sqft'}
+						onclick={() => (trendMode = 'avg_price_sqft')}
 					>
-						AED / sqm
+						AED / sq ft
 					</button>
 				</div>
 			</div>
 			<div class="mt-4 h-[340px]">
-				{#if trendsQueryA.isLoading || trendsQueryB.isLoading}
+				{#if trendsQueryA.isError || trendsQueryB.isError}
+					<AnalyticsError message="Failed to load comparison trends." retry={() => Promise.all([trendsQueryA.refetch(), trendsQueryB.refetch()])} fetching={trendsQueryA.isFetching || trendsQueryB.isFetching} />
+				{:else if trendsQueryA.isLoading || trendsQueryB.isLoading}
 					<div class="h-full animate-pulse rounded-lg bg-panel"></div>
 				{:else if (trendsQueryA.data?.data.length ?? 0) > 0 || (trendsQueryB.data?.data.length ?? 0) > 0}
 					<canvas bind:this={trendCanvas}></canvas>
@@ -706,6 +677,13 @@ onMount(() => {
 					{getDisplayName(selection, summary)}
 				</h2>
 				<p class="mt-1 text-sm text-fg-3">{getKnownArea(selection, summary)}</p>
+				<!-- Each side shows its own usage: an office tower compares as Commercial. -->
+				<span
+					class="mt-2 inline-flex rounded-sm bg-panel px-2 py-0.5 text-[11px] font-semibold text-fg-3 ring-1 ring-border"
+					data-testid="compare-usage"
+				>
+					{summary.usage === 'Commercial' ? 'Commercial' : 'Residential'} records
+				</span>
 			</div>
 			<span
 				class="inline-flex w-fit items-center rounded-sm px-2.5 py-1 text-xs font-semibold {isMarketSelection(
@@ -722,53 +700,18 @@ onMount(() => {
 			</span>
 		</div>
 
-		<div class="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-4">
-			<div>
-				<p class="text-[11px] uppercase tracking-[0.14em] text-fg-4">
-					{isMasterSelection(selection) ? 'Developments' : 'Units'}
-				</p>
-				<p class="mt-1 text-sm font-semibold text-fg-1">
-					{#if isMasterSelection(selection)}
-						{subProjectsLoading && developmentCount == null
-							? 'Loading'
-							: developmentCount != null
-								? `${fmtNumber(developmentCount)} developments`
-								: 'Aggregate'}
-					{:else}
-						{fmtNumber(summary.project?.no_of_units)}
-					{/if}
-				</p>
-			</div>
-			<div>
-				<p class="text-[11px] uppercase tracking-[0.14em] text-fg-4">Handover</p>
-				<p class="mt-1 text-sm font-semibold text-fg-1">
-					{getHandoverLabel(selection, summary, developmentCount)}
-				</p>
-			</div>
-			<div>
-				<p class="text-[11px] uppercase tracking-[0.14em] text-fg-4">
-					{isMasterSelection(selection) ? 'Sales records' : 'Developer'}
-				</p>
-				<p class="mt-1 truncate text-sm font-semibold text-fg-1">
-					{isMasterSelection(selection)
-						? fmtNumber(summary.sales.transaction_count)
-						: summary.project?.developer_name ?? '-'}
-				</p>
-			</div>
-			<div>
-				<p class="text-[11px] uppercase tracking-[0.14em] text-fg-4">Units</p>
-				<p class="mt-1 text-sm font-semibold text-fg-1">
-					{fmtNumber(summary.project?.no_of_units)}
-				</p>
-			</div>
-		</div>
+		{#if isMasterSelection(selection) && developmentCount != null}
+			<p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
+				{fmtNumber(developmentCount)} developments
+			</p>
+		{/if}
 
 		<div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
 			{#each getKpis(summary) as item (item.label)}
 				<div class="rounded-md border border-border bg-panel p-3">
 					<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-4">{item.label}</p>
 					<p class="mt-1.5 break-words text-lg font-semibold text-fg-1">{item.value}</p>
-					<p class="mt-1 text-xs text-fg-4">{item.detail}</p>
+					{#if item.detail}<p class="mt-1 text-xs text-fg-4">{item.detail}</p>{/if}
 				</div>
 			{/each}
 		</div>
@@ -797,7 +740,7 @@ onMount(() => {
 					<div class="flex items-start justify-between gap-3">
 						<p class="min-w-0 font-semibold text-fg-1">{row.rooms}</p>
 						<p class="shrink-0 text-sm font-semibold text-fg-2">
-							{fmtNumber(row.sales_last_12m)} sales
+							{fmtNumber(row.sale_count)} sales
 						</p>
 					</div>
 					<div class="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
@@ -806,8 +749,8 @@ onMount(() => {
 							<p class="mt-1 font-semibold text-fg-2">{fmtCurrency(row.avg_sale_price)}</p>
 						</div>
 						<div>
-							<p class="uppercase tracking-[0.12em] text-fg-5">Price / sqm</p>
-							<p class="mt-1 font-semibold text-fg-2">{fmtCurrency(row.avg_sale_price_sqm)}</p>
+							<p class="uppercase tracking-[0.12em] text-fg-5">Price / sq ft</p>
+							<p class="mt-1 font-semibold text-fg-2">{fmtCurrency(row.avg_sale_price_sqft)}</p>
 						</div>
 						<div>
 							<p class="uppercase tracking-[0.12em] text-fg-5">Yield</p>

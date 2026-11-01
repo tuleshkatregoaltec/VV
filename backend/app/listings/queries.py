@@ -72,7 +72,7 @@ async def fetch_inventory_freshness(parameters):
 
 LISTINGS_TABLE = "pf_listings_bronze"
 
-PRICE_VALUE_EXPR = "JSONExtractFloat(price_json, 'value')"
+PRICE_VALUE_EXPR = "JSONExtractInt(price_json, 'value')"
 
 PRICE_PERIOD_EXPR = "lower(JSON_VALUE(price_json, '$.period'))"
 
@@ -166,13 +166,14 @@ def _where_sql(
     property_type: str | None,
     bedrooms: str | None,
     bedrooms_in: list[str] | None,
-    price_min: float | None,
-    price_max: float | None,
+    price_min: int | None,
+    price_max: int | None,
     asset_class: ListingAssetClass | None = None,
     price_period: str | None = None,
     price_basis: str = "raw",
-    price_min_inclusive: bool = True,
-    price_max_inclusive: bool = True,
+    building: str | None = None,
+    min_age_days: int | None = None,
+    max_age_days: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
     clauses = ["category_id IN {category_ids:Array(UInt16)}", "is_available = 1"]
     params: dict[str, Any] = {"category_ids": list(_category_ids(mode, asset_class))}
@@ -208,13 +209,25 @@ def _where_sql(
         clauses.append(f"{PRICE_PERIOD_EXPR} = {{price_period:String}}")
         params["price_period"] = normalized_period
     if price_min is not None:
-        operator = ">=" if price_min_inclusive else ">"
-        clauses.append(f"{price_filter_expr} {operator} {{price_min:Float64}}")
+        clauses.append(f"{price_filter_expr} >= {{price_min:Int64}}")
         params["price_min"] = price_min
     if price_max is not None:
-        operator = "<=" if price_max_inclusive else "<"
-        clauses.append(f"{price_filter_expr} {operator} {{price_max:Float64}}")
+        clauses.append(f"{price_filter_expr} <= {{price_max:Int64}}")
         params["price_max"] = price_max
+    if building:
+        clauses.append(f"lowerUTF8({PEER_LOCATION_EXPR}) = lowerUTF8({{building:String}})")
+        params["building"] = building
+    if min_age_days is not None or max_age_days is not None:
+        clauses.append(
+            f"{LISTED_AT_EXPR} >= toDateTime('2010-01-01') AND {LISTED_AT_EXPR} <= {SCRAPED_AT_EXPR}"
+        )
+        age = f"dateDiff('day', {LISTED_AT_EXPR}, {SCRAPED_AT_EXPR})"
+        if min_age_days is not None:
+            clauses.append(f"{age} >= {{min_age_days:UInt32}}")
+            params["min_age_days"] = min_age_days
+        if max_age_days is not None:
+            clauses.append(f"{age} <= {{max_age_days:UInt32}}")
+            params["max_age_days"] = max_age_days
     return " AND ".join(clauses), params
 
 
@@ -416,7 +429,7 @@ async def fetch_listing_rows(filters, *, limit: int, offset: int):
             {SIZE_BUCKET_EXPR} AS benchmark_size_bucket,
             {VALID_BENCHMARK_SIZE_EXPR} AS has_valid_benchmark_size,
             {LISTED_AT_EXPR} AS listed_at,
-            coalesce({SCRAPED_AT_EXPR}, now()) AS snapshot_at,
+            {SCRAPED_AT_EXPR} AS snapshot_at,
             {market_price_expr} AS market_price_aed,
             {SIZE_VALUE_EXPR} AS size_sqft,
             if(
@@ -544,7 +557,7 @@ async def fetch_listing_analytics(filters):
                     {SIZE_BUCKET_EXPR} AS benchmark_size_bucket,
                     {VALID_BENCHMARK_SIZE_EXPR} AS has_valid_benchmark_size,
                     {LISTED_AT_EXPR} AS listed_at,
-                    coalesce({SCRAPED_AT_EXPR}, now()) AS snapshot_at,
+                    {SCRAPED_AT_EXPR} AS snapshot_at,
                     {market_price_expr} AS market_price_aed,
                     {SIZE_VALUE_EXPR} AS size_sqft
                 FROM {LISTINGS_TABLE}
@@ -602,7 +615,7 @@ async def fetch_listing_trend(filters):
         FROM (
             SELECT
                 {LISTED_AT_EXPR} AS listed_at,
-                coalesce({SCRAPED_AT_EXPR}, now()) AS snapshot_at,
+                {SCRAPED_AT_EXPR} AS snapshot_at,
                 {market_price_expr} AS market_price_aed,
                 {SIZE_VALUE_EXPR} AS size_sqft
             FROM {LISTINGS_TABLE}

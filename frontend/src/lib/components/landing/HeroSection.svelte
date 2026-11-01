@@ -13,7 +13,7 @@ import {
 const marketSignals = [
 	{
 		label: 'Business Bay radar',
-		value: 'DDA parcels',
+		value: 'Planning parcels',
 		icon: MapPinned
 	},
 	{

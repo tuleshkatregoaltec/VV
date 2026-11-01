@@ -33,7 +33,7 @@ ROWS = [
     # the open-data values (120 units) and the Pulse project_id.
     project("p1-pulse", PULSE, 100, 555, "", datetime(2027, 6, 30), 100, "Dev A"),
     project("p1-open", OPEN, 100, 0, "Alpha", datetime(2027, 6, 30), 120, "Dev A"),
-    # Open-data row without a master project, located by the official DLD area.
+    # Open-data row without a master project: only its official district is known.
     project("p2", OPEN, 101, 0, "Beta", datetime(2028, 1, 31), 80, "Dev B", master=""),
     # Repeated identical row inside one run: counted once.
     project("p10-a", OPEN, 109, 0, "Kappa", datetime(2027, 3, 31), 20, "Dev B"),
@@ -78,12 +78,23 @@ async def test_developer_share_of_units_due_in_the_next_two_years(register):
         reference_date=REFERENCE,
     )
     assert result.horizon_end == date(2028, 10, 3)
-    # Due by 2028-10-03: Alpha 120 (Dev A), Beta 80 + Kappa 20 (Dev B) = 220 units.
+    # Due by 2028-10-03 in Dubai South: Alpha 120 (Dev A), Kappa 20 (Dev B) = 140 units.
+    # Beta names only the district Madinat Al Mataar (which also holds Dubai World Central),
+    # so it is disclosed, not attributed to Dubai South.
     assert [(r.group, r.project_count, r.units, r.share_of_units) for r in result.rows] == [
-        ("Dev A", 1, 120, round(120 / 220, 4)),
-        ("Dev B", 2, 100, round(100 / 220, 4)),
+        ("Dev A", 1, 120, round(120 / 140, 4)),
+        ("Dev B", 1, 20, round(20 / 140, 4)),
     ]
-    assert "Madinat Al Mataar also contains Dubai World Central" in " ".join(result.limitations)
+    assert "1 projects in Madinat Al Mataar have no master project and are not counted" in " ".join(
+        result.limitations
+    )
+    district = await get_delivery_summary(
+        location="Madinat Al Mataar",
+        delivery_statuses=("scheduled_in_horizon",),
+        group_by="developer",
+        reference_date=REFERENCE,
+    )
+    assert sum(r.units for r in district.rows) == 220
 
 
 async def test_missing_and_overdue_dates_are_separated_from_future_delivery(register):
@@ -92,7 +103,7 @@ async def test_missing_and_overdue_dates_are_separated_from_future_delivery(regi
     )
     by_status = {row.group: (row.project_count, row.units) for row in result.by_delivery_status}
     assert by_status == {
-        "scheduled_in_horizon": (3, 220),
+        "scheduled_in_horizon": (2, 140),
         "completed": (1, 60),
         "scheduled_later": (1, 50),
         "overdue": (1, 40),

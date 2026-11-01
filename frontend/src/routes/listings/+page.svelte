@@ -301,14 +301,6 @@ function formatAxisValue(value: number): string {
 	return `AED ${Math.round(value).toLocaleString()}`
 }
 
-function benchmarkDescription(listing: ListingCardResponse | ListingDetailResponse): string {
-	if (listing.benchmark_level === 'building_layout')
-		return 'Same building, property type, bedrooms, and approximate size'
-	if (listing.benchmark_level === 'project_layout')
-		return 'Same project, property type, bedrooms, and approximate size'
-	return 'Not enough exact peer evidence'
-}
-
 function trendChange(points: ListingTrendPoint[]): number | null {
 	const values = points
 		.map((point) => point.median_price_per_sqft_aed)
@@ -332,9 +324,7 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 	<PageContainer variant="wide" class="gap-4 pb-12">
 		<header class="flex flex-col gap-4 border-b border-border pb-5 pt-5 lg:flex-row lg:items-end lg:justify-between">
 			<div>
-				<p class="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-4">Inventory intelligence</p>
 				<h1 class="mt-1 text-2xl font-semibold tracking-tight text-fg-1">Listings</h1>
-				<p class="mt-1 text-sm text-fg-3">Structured supply, asking-price benchmarks, and listing velocity.</p>
 			</div>
 			<div class="w-full rounded-xl border border-border bg-panel p-1.5 sm:w-auto sm:min-w-[430px]">
 				<nav class="grid grid-cols-2 gap-1" aria-label="Asset class">
@@ -357,13 +347,13 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 						<button
 							type="button"
 							aria-pressed={mode === 'rent'}
-							class="rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {mode === 'rent' ? 'bg-fg-1 text-bg shadow-sm' : 'text-fg-3 hover:bg-panel hover:text-fg-1'}"
+							class="rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {mode === 'rent' ? 'bg-fg-1 text-app shadow-sm' : 'text-fg-3 hover:bg-panel hover:text-fg-1'}"
 							onclick={() => setMode('rent')}>For rent</button
 						>
 						<button
 							type="button"
 							aria-pressed={mode === 'sale'}
-							class="rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {mode === 'sale' ? 'bg-fg-1 text-bg shadow-sm' : 'text-fg-3 hover:bg-panel hover:text-fg-1'}"
+							class="rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {mode === 'sale' ? 'bg-fg-1 text-app shadow-sm' : 'text-fg-3 hover:bg-panel hover:text-fg-1'}"
 							onclick={() => setMode('sale')}>For sale</button
 						>
 					</nav>
@@ -373,17 +363,17 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 
 		<section class="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
 			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Available inventory</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.total?.toLocaleString() ?? '—'}</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Median asking price</p><p class="mt-2 text-2xl font-semibold tabular-nums">{formatMetricMoney(analytics?.median_price_aed)}</p><p class="mt-1 text-xs text-fg-4">{mode === 'rent' ? 'Annualized' : 'Current asking'}</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Median AED / sqft</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.median_price_per_sqft_aed ? `AED ${Math.round(analytics.median_price_per_sqft_aed).toLocaleString()}` : '—'}</p><p class="mt-1 text-xs text-fg-4">{mode === 'rent' ? 'Per year' : 'Sale basis'}</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Average age at capture</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.average_listing_age_days != null ? `${Math.round(analytics.average_listing_age_days)} days` : '—'}</p><p class="mt-1 text-xs text-fg-4">Listed date → scrape date · median {analytics?.median_listing_age_days != null ? `${Math.round(analytics.median_listing_age_days)} days` : '—'}</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">New in 30 days</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.newly_listed_30d?.toLocaleString() ?? '—'}</p><p class="mt-1 text-xs text-fg-4">At the inventory snapshot</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Below-market signals</p><p class="mt-2 text-2xl font-semibold tabular-nums text-success">{analytics?.below_market_count?.toLocaleString() ?? '—'}</p><p class="mt-1 text-xs text-fg-4">More than 10% below benchmark</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Median asking price</p><p class="mt-2 text-2xl font-semibold tabular-nums">{formatMetricMoney(analytics?.median_price_aed)}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Median AED / sqft</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.median_price_per_sqft_aed ? `AED ${Math.round(analytics.median_price_per_sqft_aed).toLocaleString()}` : '—'}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Average age at capture</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.average_listing_age_days != null ? `${Math.round(analytics.average_listing_age_days)} days` : '—'}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">New in 30 days</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.newly_listed_30d?.toLocaleString() ?? '—'}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Below-market signals</p><p class="mt-2 text-2xl font-semibold tabular-nums text-success">{analytics?.below_market_count?.toLocaleString() ?? '—'}</p></div>
 		</section>
 
 		<section class="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.75fr)]">
 			<div class="ui-surface p-5">
 				<div class="flex flex-wrap items-start justify-between gap-3">
-					<div><p class="font-mono text-[10px] uppercase tracking-[0.1em] text-fg-4">Asking versus achieved</p><h2 class="mt-1 text-sm font-semibold">Median AED / sqft by month</h2><p class="mt-1 text-xs text-fg-4">Current listing cohorts compared with registered {mode === 'rent' ? 'lease' : 'sale'} transactions in the same period.</p></div>
+					<div><p class="font-mono text-[10px] uppercase tracking-[0.1em] text-fg-4">Asking versus achieved</p><h2 class="mt-1 text-sm font-semibold">Median AED / sqft by month</h2></div>
 					{#if trendChangeValue != null}<span class="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-semibold {trendChangeValue < 0 ? 'text-error' : 'text-success'}">{#if trendChangeValue < 0}<TrendingDown size={13} />{:else}<TrendingUp size={13} />{/if}{Math.abs(trendChangeValue * 100).toFixed(1)}% AED/sqft</span>{/if}
 				</div>
 				{#if analyticsQuery.isPending}
@@ -404,19 +394,17 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 						</div>
 						<div class="ml-[81px] mt-2 flex items-center justify-between font-mono text-[9px] uppercase text-fg-4"><span>{trend[0]?.period}</span><span>{trend.at(-1)?.period}</span></div>
 						<div class="mt-3 flex flex-wrap gap-4 text-[11px] text-fg-3"><span class="inline-flex items-center gap-1.5"><i class="h-0.5 w-4 bg-info"></i> Listing asking AED/sqft</span><span class="inline-flex items-center gap-1.5"><i class="h-0.5 w-4 border-t border-dashed border-success"></i> Registered {mode === 'rent' ? 'lease' : 'sale'} AED/sqft</span></div>
-						<p class="mt-2 text-[10px] leading-4 text-fg-4">Listing cohorts are grouped by original listed month and may contain survivorship bias; achieved records are completed transactions.</p>
 					</div>
 				{:else}<div class="mt-5 grid h-36 place-items-center rounded-lg border border-dashed border-border text-xs text-fg-4">Not enough dated listings for a trend.</div>{/if}
 			</div>
 
 			<div class="ui-surface p-5">
-				<p class="font-mono text-[10px] uppercase tracking-[0.1em] text-fg-4">Market positioning</p><h2 class="mt-1 text-sm font-semibold">Exact peer asking benchmark</h2><p class="mt-1 text-xs text-fg-4">Same building or landed project, property type, bedrooms, and approximate size.</p>
+				<p class="font-mono text-[10px] uppercase tracking-[0.1em] text-fg-4">Market positioning</p><h2 class="mt-1 text-sm font-semibold">Exact peer asking benchmark</h2>
 				<div class="mt-5 space-y-4">
 					<div><div class="flex items-center justify-between text-xs"><span class="inline-flex items-center gap-2 font-medium"><TrendingDown size={14} class="text-success" /> Below market</span><strong class="tabular-nums">{analytics?.below_market_count?.toLocaleString() ?? '—'}</strong></div><div class="mt-2 h-1.5 overflow-hidden rounded-full bg-panel"><div class="h-full bg-success" style={`width: ${analytics?.benchmarked_count ? Math.min(100, (analytics.below_market_count / analytics.benchmarked_count) * 100) : 0}%`}></div></div></div>
 					<div><div class="flex items-center justify-between text-xs"><span class="inline-flex items-center gap-2 font-medium"><Minus size={14} class="text-info" /> Within ±10%</span><strong class="tabular-nums">{analytics?.near_market_count?.toLocaleString() ?? '—'}</strong></div><div class="mt-2 h-1.5 overflow-hidden rounded-full bg-panel"><div class="h-full bg-info" style={`width: ${analytics?.benchmarked_count ? Math.min(100, (analytics.near_market_count / analytics.benchmarked_count) * 100) : 0}%`}></div></div></div>
 					<div><div class="flex items-center justify-between text-xs"><span class="inline-flex items-center gap-2 font-medium"><TrendingUp size={14} class="text-error" /> Above market</span><strong class="tabular-nums">{analytics?.above_market_count?.toLocaleString() ?? '—'}</strong></div><div class="mt-2 h-1.5 overflow-hidden rounded-full bg-panel"><div class="h-full bg-error" style={`width: ${analytics?.benchmarked_count ? Math.min(100, (analytics.above_market_count / analytics.benchmarked_count) * 100) : 0}%`}></div></div></div>
 				</div>
-				<p class="mt-5 border-t border-border pt-3 text-[10px] leading-4 text-fg-4">Indicative peer asking-price signal, not a formal valuation. Implausible sizes are excluded and at least five matching records are required.</p>
 			</div>
 		</section>
 
@@ -437,14 +425,14 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 
 		<div class="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
 			<section class="ui-surface min-w-0 overflow-hidden">
-				<header class="flex items-center justify-between border-b border-border px-4 py-3"><div><h2 class="text-sm font-semibold">{assetClass === 'commercial' ? 'Commercial' : 'Residential'} {mode === 'rent' ? 'rental' : 'sales'} inventory</h2><p class="mt-0.5 text-xs text-fg-4">{listingSummary?.total?.toLocaleString() ?? '—'} standardized records</p></div><button type="button" class="ui-button" data-variant="ghost" data-size="icon" aria-label="Refresh listings" onclick={() => { listingsQuery.refetch(); filtersQuery.refetch(); analyticsQuery.refetch() }}><RefreshCw size={14} class={listingsQuery.isFetching && !listingsQuery.isFetchingNextPage ? 'animate-spin' : ''} /></button></header>
+				<header class="flex items-center justify-between border-b border-border px-4 py-3"><div><h2 class="text-sm font-semibold">{assetClass === 'commercial' ? 'Commercial' : 'Residential'} {mode === 'rent' ? 'rental' : 'sales'} inventory</h2><p class="mt-0.5 text-xs text-fg-4">{listingSummary?.total?.toLocaleString() ?? '—'} records</p></div><button type="button" class="ui-button" data-variant="ghost" data-size="icon" aria-label="Refresh listings" onclick={() => { listingsQuery.refetch(); filtersQuery.refetch(); analyticsQuery.refetch() }}><RefreshCw size={14} class={listingsQuery.isFetching && !listingsQuery.isFetchingNextPage ? 'animate-spin' : ''} /></button></header>
 
 				{#if listingsQuery.isPending}
 					<div class="space-y-px bg-border">{#each Array.from({ length: 10 }) as _, index (index)}<div class="h-16 animate-pulse bg-card"></div>{/each}</div>
 				{:else if listingsQuery.isError}
 					<div class="p-8 text-center"><p class="text-sm font-semibold text-error">Listings failed to load</p><button type="button" class="ui-button mt-4" data-variant="secondary" data-size="sm" onclick={() => listingsQuery.refetch()}><RefreshCw size={13} /> Try again</button></div>
 				{:else if listings.length === 0}
-					<div class="p-10 text-center"><p class="text-sm font-semibold">No matching inventory</p><p class="mt-1 text-xs text-fg-4">Broaden the area, property type, bedroom, or price filters.</p></div>
+					<div class="p-10 text-center"><p class="text-sm font-semibold">No matching inventory</p></div>
 				{:else}
 					<div class="overflow-x-auto">
 						<table class="w-full min-w-[1380px] border-collapse text-left">
@@ -453,7 +441,7 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 								{#each listings as listing (listing.listing_id)}
 									<tr class="transition-colors {selectedListingId === listing.listing_id ? 'bg-info-bg' : 'bg-card hover:bg-panel'}">
 										<td class="whitespace-nowrap px-4 py-3"><p class="text-sm font-semibold tabular-nums text-fg-1">{formatMoney(listing.price_value, listing.price_period)}</p>{#if listing.is_verified}<p class="mt-1 inline-flex items-center gap-1 text-[9px] font-semibold uppercase text-success"><BadgeCheck size={11} /> Verified</p>{/if}</td>
-									<td class="whitespace-nowrap px-3 py-3"><span class="inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold {marketTone(listing.market_position)}">{marketLabel(listing.market_position, listing.market_delta_pct)}</span><p class="mt-1 text-[9px] text-fg-4">{listing.comparable_count ? `${listing.comparable_count.toLocaleString()} exact peers` : 'Insufficient exact peers'}</p>{#if mode === 'sale' && listing.urgency_signal === 'explicit_urgency'}<p class="mt-1 inline-flex items-center gap-1 text-[9px] font-semibold text-warning"><TriangleAlert size={10} /> Seller urgency language</p>{/if}</td>
+									<td class="whitespace-nowrap px-3 py-3"><span class="inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold {marketTone(listing.market_position)}">{marketLabel(listing.market_position, listing.market_delta_pct)}</span><p class="mt-1 text-[9px] text-fg-4">{listing.comparable_count ? `${listing.comparable_count.toLocaleString()} peers` : ''}</p>{#if mode === 'sale' && listing.urgency_signal === 'explicit_urgency'}<p class="mt-1 inline-flex items-center gap-1 text-[9px] font-semibold text-warning"><TriangleAlert size={10} /> Seller urgency</p>{/if}</td>
 										<td class="max-w-48 px-3 py-3 text-xs font-medium text-fg-2"><span class="line-clamp-2">{text(listing.area_name)}</span></td>
 										<td class="max-w-44 px-3 py-3 text-xs text-fg-3"><span class="line-clamp-2">{text(listing.subcommunity_name)}</span></td>
 										<td class="max-w-44 px-3 py-3 text-xs font-semibold text-fg-1"><span class="line-clamp-2">{text(listing.tower_name)}</span></td>
@@ -478,29 +466,29 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 				{#if !selectedRecord}
 					<div class="grid min-h-80 place-items-center p-8 text-center"><div><Building2 class="mx-auto text-fg-4" size={24} /><p class="mt-3 text-sm font-semibold">Select an inventory record</p></div></div>
 				{:else}
-					<header class="border-b border-border p-5"><div class="flex items-start justify-between gap-3"><div><p class="font-mono text-[9px] uppercase tracking-[0.1em] text-fg-4">{selectedRecord.asset_class} · {mode === 'rent' ? 'Rental record' : 'Sales record'} · {text(selectedRecord.reference)}</p><h2 class="mt-2 text-xl font-semibold leading-6">{selectedRecord.tower_name ?? selectedRecord.subcommunity_name ?? selectedRecord.area_name ?? 'Location not stated'}</h2><p class="mt-1 text-xs text-fg-4">{[selectedRecord.area_name, selectedRecord.subcommunity_name, selectedRecord.tower_name].filter(Boolean).join(' · ') || 'Location not stated'}</p></div>{#if selectedRecord.is_verified}<span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-success-border bg-success-bg px-2 py-1 text-[9px] font-semibold uppercase text-success"><BadgeCheck size={12} /> Verified</span>{/if}</div></header>
+					<header class="border-b border-border p-5"><div class="flex items-start justify-between gap-3"><div><p class="font-mono text-[9px] uppercase tracking-[0.1em] text-fg-4">{text(selectedRecord.reference)}</p><h2 class="mt-2 text-xl font-semibold leading-6">{selectedRecord.tower_name ?? selectedRecord.subcommunity_name ?? selectedRecord.area_name ?? 'Location not stated'}</h2></div>{#if selectedRecord.is_verified}<span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-success-border bg-success-bg px-2 py-1 text-[9px] font-semibold uppercase text-success"><BadgeCheck size={12} /> Verified</span>{/if}</div></header>
 
 					<div class="space-y-5 p-5">
-						<section><p class="font-mono text-[9px] uppercase tracking-[0.1em] text-fg-4">Asking price</p><p class="mt-1 text-2xl font-semibold tabular-nums">{formatMoney(selectedRecord.price_value, selectedRecord.price_period)}</p><p class="mt-1 text-xs text-fg-4">{pricePerSqft(selectedRecord)} per sqft {mode === 'rent' ? 'annualized' : ''}</p></section>
-						{#if mode === 'sale' && selectedRecord.urgency_signal !== 'none'}<section class="rounded-lg border border-warning-border bg-warning-bg p-3 text-warning"><p class="inline-flex items-center gap-1.5 text-xs font-semibold"><TriangleAlert size={14} /> {selectedRecord.urgency_signal === 'explicit_urgency' ? 'Possible seller urgency language' : 'Promotional value language'}</p><p class="mt-1 text-[10px] leading-4 opacity-80">Matched wording: {selectedRecord.urgency_terms.join(', ')}. Treat this as an outreach clue, not proof of distress.</p></section>{/if}
+						<section><p class="font-mono text-[9px] uppercase tracking-[0.1em] text-fg-4">Asking price</p><p class="mt-1 text-2xl font-semibold tabular-nums">{formatMoney(selectedRecord.price_value, selectedRecord.price_period)}</p><p class="mt-1 text-xs text-fg-4">{pricePerSqft(selectedRecord)} per sqft</p></section>
+						{#if mode === 'sale' && selectedRecord.urgency_signal !== 'none'}<section class="rounded-lg border border-warning-border bg-warning-bg p-3 text-warning"><p class="inline-flex items-center gap-1.5 text-xs font-semibold"><TriangleAlert size={14} /> {selectedRecord.urgency_signal === 'explicit_urgency' ? 'Seller urgency' : 'Promotional wording'}</p><p class="mt-1 text-[10px] leading-4 opacity-80">{selectedRecord.urgency_terms.join(', ')}</p></section>{/if}
 
 						<section class="rounded-lg border p-4 {marketTone(selectedRecord.market_position)}">
 							<div class="flex items-start justify-between gap-3"><div><p class="font-mono text-[9px] uppercase tracking-[0.1em] opacity-70">Market benchmark</p><p class="mt-1 text-base font-semibold">{marketLabel(selectedRecord.market_position, selectedRecord.market_delta_pct)}</p></div>{#if selectedRecord.market_position === 'below_market'}<TrendingDown size={20} />{:else if selectedRecord.market_position === 'above_market'}<TrendingUp size={20} />{:else}<Minus size={20} />{/if}</div>
 							<div class="mt-3 grid grid-cols-2 gap-3 border-t border-current/10 pt-3 text-xs"><div><p class="opacity-65">Indicative value</p><p class="mt-1 font-semibold tabular-nums">{formatMetricMoney(selectedRecord.market_estimate_aed)}</p></div><div><p class="opacity-65">Comparable median</p><p class="mt-1 font-semibold tabular-nums">{selectedRecord.market_median_price_per_sqft_aed ? `AED ${Math.round(selectedRecord.market_median_price_per_sqft_aed).toLocaleString()} / sqft` : '—'}</p></div></div>
-							<p class="mt-3 text-[10px] opacity-65">{selectedRecord.comparable_count.toLocaleString()} peer listings · {benchmarkDescription(selectedRecord)}</p>
+							<p class="mt-3 text-[10px] opacity-65">{selectedRecord.comparable_count.toLocaleString()} peer listings</p>
 						</section>
 
 						<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Location hierarchy</h3><dl class="mt-2 divide-y divide-border rounded-lg border border-border bg-panel text-xs"><div class="grid grid-cols-[130px_1fr] gap-3 px-3 py-2.5"><dt class="text-fg-4">Area / master project</dt><dd class="font-semibold text-fg-1">{text(selectedRecord.area_name)}</dd></div><div class="grid grid-cols-[130px_1fr] gap-3 px-3 py-2.5"><dt class="text-fg-4">Project / phase</dt><dd class="font-semibold text-fg-1">{text(selectedRecord.subcommunity_name)}</dd></div>{#if selectedRecord.tower_name}<div class="grid grid-cols-[130px_1fr] gap-3 px-3 py-2.5"><dt class="text-fg-4">Building</dt><dd class="font-semibold text-fg-1">{selectedRecord.tower_name}</dd></div>{/if}<div class="grid grid-cols-[130px_1fr] gap-3 px-3 py-2.5"><dt class="text-fg-4">City</dt><dd class="font-semibold text-fg-1">{text(selectedRecord.city_name)}</dd></div></dl></section>
 
 						<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Property data</h3><dl class="mt-2 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border text-xs"><div class="bg-panel p-3"><dt class="text-fg-4">Property type</dt><dd class="mt-1 font-semibold">{text(selectedRecord.property_type)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Size</dt><dd class="mt-1 font-semibold tabular-nums">{formatSize(selectedRecord.size_value, selectedRecord.size_unit)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Bedrooms</dt><dd class="mt-1 font-semibold tabular-nums">{text(selectedRecord.bedrooms)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Bathrooms</dt><dd class="mt-1 font-semibold tabular-nums">{text(selectedRecord.bathrooms)}</dd></div>{#if selectedListing}<div class="bg-panel p-3"><dt class="text-fg-4">Furnished</dt><dd class="mt-1 font-semibold">{text(selectedListing.furnished)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Completion</dt><dd class="mt-1 font-semibold">{text(selectedListing.completion_status)}</dd></div>{/if}</dl></section>
 
-						<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing data</h3><dl class="mt-2 divide-y divide-border rounded-lg border border-border text-xs"><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Status</dt><dd class="font-semibold">{availabilityLabel(selectedRecord)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Listed date</dt><dd class="font-semibold">{formatDate(selectedRecord.listed_date)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Age when captured</dt><dd class="font-semibold">{listingAge(selectedRecord.listing_age_days)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Reference</dt><dd class="max-w-52 truncate font-mono text-[10px] font-semibold">{text(selectedRecord.reference)}</dd></div>{#if selectedListing}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">RERA</dt><dd class="max-w-52 truncate font-semibold">{text(selectedListing.rera)}</dd></div>{#if mode === 'rent'}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Cheques</dt><dd class="font-semibold">{selectedListing.number_of_cheques ?? '—'}</dd></div>{/if}{/if}</dl><p class="mt-2 text-[10px] leading-4 text-fg-4">Age is measured from the source-listed date to the date this record was scraped. It is not a live count to today.</p></section>
+						<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing data</h3><dl class="mt-2 divide-y divide-border rounded-lg border border-border text-xs"><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Status</dt><dd class="font-semibold">{availabilityLabel(selectedRecord)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Listed date</dt><dd class="font-semibold">{formatDate(selectedRecord.listed_date)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Age when captured</dt><dd class="font-semibold">{listingAge(selectedRecord.listing_age_days)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Reference</dt><dd class="max-w-52 truncate font-mono text-[10px] font-semibold">{text(selectedRecord.reference)}</dd></div>{#if selectedListing}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">RERA</dt><dd class="max-w-52 truncate font-semibold">{text(selectedListing.rera)}</dd></div>{#if mode === 'rent'}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Cheques</dt><dd class="font-semibold">{selectedListing.number_of_cheques ?? '—'}</dd></div>{/if}{/if}</dl></section>
 
 						{#if selectedListing}
 							<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing contact</h3><div class="mt-2 rounded-lg border border-border p-3"><p class="text-sm font-semibold">{selectedListing.agent?.name ?? selectedListing.broker?.name ?? 'Contact not stated'}</p><p class="mt-1 text-xs text-fg-4">{selectedListing.broker?.name ?? 'Broker not stated'}</p><div class="mt-3 flex flex-wrap gap-2">{#if selectedListing.share_url}<a href={selectedListing.share_url} target="_blank" rel="noreferrer" class="ui-button" data-variant="primary" data-size="sm"><ExternalLink size={13} /> Source record</a>{/if}{#if selectedListing.agent?.phone}<a href={`tel:${selectedListing.agent.phone}`} class="ui-button" data-variant="secondary" data-size="sm"><Phone size={13} /> Call</a>{/if}{#if selectedListing.agent?.email}<a href={`mailto:${selectedListing.agent.email}`} class="ui-button" data-variant="secondary" data-size="sm"><Mail size={13} /> Email</a>{/if}</div></div></section>
 						{/if}
 
-						{#if detailQuery.isFetching}<p class="text-center text-xs text-fg-4">Loading complete record…</p>{/if}
+						{#if detailQuery.isFetching}<p class="text-center text-xs text-fg-4">Loading…</p>{/if}
 					</div>
 				{/if}
 			</aside>

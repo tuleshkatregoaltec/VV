@@ -9,13 +9,14 @@ from app.crm.identity import (
     ParsedContact,
     _building_match_strength,
     _dedupe_candidates,
+    _drop_candidates_without_unit,
     _location_similarity,
     _normalize_phone,
     _normalize_unit,
     _recover_embedded_property_identity,
 )
 from app.crm.import_models import CrmOwnerProfile, CrmOwnerProperty
-from app.crm.import_parsing import _heuristic_mapping, _unique_headers
+from app.crm.import_parsing import _heuristic_mapping, _summary, _unique_headers
 from app.crm.imports import delete_contact_import
 from app.crm.owner_repository import _owner_filter_sql, _owner_scope_clause
 from app.crm.ownership import (
@@ -132,7 +133,7 @@ def test_embedded_property_identifiers_are_recovered_from_building_field():
 
 
 @pytest.mark.asyncio
-async def test_unique_transaction_signature_recovers_canonical_property(monkeypatch):
+async def test_unique_transaction_signature_cannot_invent_a_missing_source_unit(monkeypatch):
     contact = _contact(
         area_name="",
         project_name="Sidra 2",
@@ -163,13 +164,9 @@ async def test_unique_transaction_signature_recovers_canonical_property(monkeypa
 
     result = await _recover_property_identity_from_transaction([contact])
 
-    assert result["unique"] == 1
-    assert contact.area_name == "Dubai Hills Estate"
-    assert contact.building_name == "Sidra 2"
-    assert contact.unit_number == "DE-SIDRA2-V-117"
-    assert (
-        contact.evidence["property_identity_resolution"]["method"] == "unique_transaction_signature"
-    )
+    assert result["resolved"] == 0
+    assert contact.unit_number == "NULL"
+    assert "property_identity_resolution" not in contact.evidence
 
 
 @pytest.mark.asyncio
@@ -261,7 +258,7 @@ async def test_transaction_collision_requires_unique_location_context(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_near_transaction_date_recovers_unit_with_project_context(monkeypatch):
+async def test_near_date_and_project_cannot_replace_an_original_unit_identifier(monkeypatch):
     contact = _contact(
         area_name="",
         project_name="Sidra 2",
@@ -292,12 +289,9 @@ async def test_near_transaction_date_recovers_unit_with_project_context(monkeypa
 
     result = await _recover_property_identity_from_near_transaction([contact])
 
-    assert result["resolved"] == 1
-    assert contact.building_name == "Sidra 2"
-    assert contact.unit_number == "DESIDRA2-V-57"
-    resolution = contact.evidence["property_identity_resolution"]
-    assert resolution["method"] == "near_transaction_signature_with_location"
-    assert resolution["date_delta_days"] == 1
+    assert result["resolved"] == 0
+    assert contact.unit_number == "NULL"
+    assert "property_identity_resolution" not in contact.evidence
 
 
 @pytest.mark.asyncio
@@ -427,8 +421,19 @@ def test_aura_plot_preregistration_column_is_used_as_the_villa_identifier():
 
 
 @pytest.mark.asyncio
-async def test_delete_import_removes_published_records_and_the_import():
+async def test_delete_import_removes_published_records_and_the_import(monkeypatch):
+    monkeypatch.setattr("app.crm.imports.delete_drop_log", AsyncMock())
+    input_lookup = AsyncMock(return_value="private-input")
+
+    async def remove_committed_input(key):
+        assert key == "private-input"
+        assert db.commit.await_count == 1  # Never orphan a still-committed import on rollback.
+
+    cleanup = AsyncMock(side_effect=remove_committed_input)
+    monkeypatch.setattr("app.crm.imports.import_jobs.delete_input_for_import", input_lookup)
+    monkeypatch.setattr("app.crm.imports.import_jobs.remove_input", cleanup)
     record = MagicMock()
+    record.mapping = {}
     lookup = MagicMock()
     lookup.first.return_value = record
     db = AsyncMock()
@@ -441,6 +446,8 @@ async def test_delete_import_removes_published_records_and_the_import():
     )
 
     assert db.exec.await_count == 3
+    input_lookup.assert_awaited_once_with(db, record)
+    cleanup.assert_awaited_once_with("private-input")
     db.delete.assert_awaited_once_with(record)
     db.commit.assert_awaited_once()
 
@@ -522,7 +529,7 @@ def test_contact_only_row_remains_unverified_even_with_exact_unit():
     _apply_evidence(contact, sales=sales, rentals={})
 
     assert contact.ownership_status == "unit_linked_unverified"
-    assert "does not provide an acquisition date" in contact.match_reason
+    assert "does not establish a sale acquisition" in contact.match_reason
 
 
 def test_unresolvable_source_and_registry_gap_are_distinct_states():
@@ -585,6 +592,51 @@ def test_same_contact_across_two_properties_remains_two_property_claims():
 
     assert collapsed == 0
     assert len(unique) == 2
+
+
+def test_rows_without_a_unit_after_matching_are_dropped_and_counted():
+    # A row with no unit cannot identify a property; keeping it only adds an empty
+    # owner entry that a later import of the same owner never replaces.
+    with_unit = _contact(unit_number="602", row_fingerprint="with-unit")
+    no_unit = _contact(unit_number="", row_fingerprint="no-unit")
+    no_building = _contact(
+        building_name="", project_name="", unit_number="1001", row_fingerprint="no-building"
+    )
+
+    kept, dropped = _drop_candidates_without_unit([with_unit, no_unit, no_building])
+
+    assert dropped == 1
+    assert kept == [with_unit, no_building]
+    assert _summary(kept, total_rows=3, dropped_no_unit=dropped).dropped_no_unit == 1
+
+
+def test_summary_counts_each_property_once_across_buyer_and_seller_rows():
+    # Managers asked how many units/villas a file covers; one unit sold twice, with a buyer and
+    # a seller row per sale, is one property, and rows with no unit are not properties.
+    rows = [
+        _contact(contact_name="Buyer A", party_role="Buyer", row_fingerprint="a"),
+        _contact(contact_name="Seller B", party_role="Seller", row_fingerprint="b"),
+        _contact(contact_name="Buyer C", building_name="ASPECT TOWER", row_fingerprint="c"),
+        _contact(unit_number="603", row_fingerprint="d"),
+        _contact(unit_number="", row_fingerprint="e"),
+    ]
+
+    summary = _summary(rows, total_rows=5)
+
+    assert summary.candidate_rows == 5
+    assert summary.distinct_properties == 2
+
+
+def test_unit_recovered_by_registry_match_is_kept():
+    # Matching runs before the drop, so a unit filled in from an exact sale signature
+    # keeps the row even when the uploaded unit cell was empty.
+    recovered = _contact(unit_number="")
+    recovered.unit_number = "1204"
+
+    kept, dropped = _drop_candidates_without_unit([recovered])
+
+    assert dropped == 0
+    assert kept == [recovered]
 
 
 def test_prior_owners_are_separated_from_current_owner_registry():

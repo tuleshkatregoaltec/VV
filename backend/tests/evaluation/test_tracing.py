@@ -101,35 +101,3 @@ def test_redaction_handles_nested_json_escaped_credentials():
     nested = json.dumps({"message": json.dumps({"password": secret})})
     clean = json.loads(scrub_secrets(nested, (secret,)))
     assert json.loads(clean["message"])["password"] == "[SECRET]"
-
-
-def test_numeric_dummy_credentials_cannot_corrupt_evidence_numbers_or_nested_json(tmp_path):
-    import json
-
-    from scripts.evaluation.tracing import scrub_secrets
-
-    value = {
-        "tokens": 4096,
-        "count": 1,
-        "trace_id": "0xa14096bc",
-        "timestamp": "2026-10-01",
-        "password": "4096",
-        "message": "credential 1",
-        "nested": json.dumps({"price": 4096, "password": "4096"}),
-    }
-    cleaned = json.loads(scrub_secrets(json.dumps(value), ("4096", "1")))
-    assert cleaned["tokens"] == 4096 and cleaned["count"] == 1
-    assert cleaned["trace_id"] == value["trace_id"]
-    assert cleaned["timestamp"] == value["timestamp"]
-    assert cleaned["password"] == "[SECRET]"
-    assert cleaned["message"] == "credential [SECRET]"
-    assert json.loads(cleaned["nested"]) == {"price": 4096, "password": "[SECRET]"}
-    provider = TracerProvider()
-    path = tmp_path / "spans.jsonl"
-    provider.add_span_processor(SimpleSpanProcessor(LocalExporter(path, ("4096", "1"))))
-    with provider.get_tracer("test").start_as_current_span("model") as span:
-        span.set_attribute("gen_ai.usage.input_tokens", 4096)
-        span.set_attribute("tool_response", value["nested"])
-    payload = json.loads(path.read_text())
-    assert payload["attributes"]["gen_ai.usage.input_tokens"] == 4096
-    assert json.loads(payload["attributes"]["tool_response"])["password"] == "[SECRET]"

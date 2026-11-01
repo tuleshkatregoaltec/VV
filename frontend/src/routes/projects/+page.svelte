@@ -1,7 +1,6 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import {
-	Activity,
 	ArrowLeft,
 	Building2,
 	Clock3,
@@ -162,7 +161,7 @@ const activeSelectionLabel = $derived.by(() => {
 	if (panelView === 'project') {
 		return selectedRadarProject?.project_name ?? projectDetails?.project_name ?? 'Project details'
 	}
-	if (panelView === 'area') return selectedArea?.area_name ?? selectedAreaName ?? 'Area lens'
+	if (panelView === 'area') return selectedArea?.area_name ?? selectedAreaName ?? 'Area'
 	return 'Radar overview'
 })
 
@@ -503,12 +502,6 @@ $effect(() => {
 					<span class="h-2.5 w-2.5 rounded-full bg-teal-600"></span>
 					{modeLabel(overlayMode)} overlay
 				</div>
-					<p class="mt-1">
-						{visibleMapProjects.length.toLocaleString()} visible projects · {radarAreas.length} area bubbles
-						{#if showDDAPlots}
-							· {renderedDDAFeatures.length.toLocaleString()} DDA {visibleDDALabel}
-						{/if}
-					</p>
 			</div>
 
 			{#if isMinimized}
@@ -565,12 +558,8 @@ $effect(() => {
 					<header class="border-b border-slate-200 px-4 py-3">
 						<div class="flex items-start justify-between gap-3">
 							<div>
-								<div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-teal-700">
-									<Activity size={14} />
-									Projects Radar
-								</div>
-								<h1 class="mt-1 text-xl font-semibold tracking-normal text-slate-950">
-									Supply, demand, and planning signals
+																<h1 class="text-xl font-semibold tracking-normal text-slate-950">
+									Projects radar
 								</h1>
 							</div>
 							<button
@@ -788,7 +777,7 @@ $effect(() => {
 
 						{#if isLoading}
 							<div class="flex h-32 items-center justify-center text-sm text-slate-500">
-								Loading radar signals...
+								Loading…
 							</div>
 						{:else if panelView === 'building' && buildingDetails}
 							<BuildingDetails building={buildingDetails} onBack={handleBackToProject} />
@@ -930,7 +919,7 @@ $effect(() => {
 											<div>
 												<p class="text-slate-500">GFA</p>
 												<p class="font-semibold text-slate-950">
-													{formatCompact(selectedArea.dda_total_gfa_sqm)} sqm
+													{formatCompact(selectedArea.dda_total_gfa_sqft)} sq ft
 												</p>
 											</div>
 										</div>
@@ -964,7 +953,7 @@ $effect(() => {
 						{:else if panelView === 'area' && selectedArea}
 							<section class="space-y-4 p-4">
 								<div class="rounded-md border border-slate-200 bg-white p-4">
-									<p class="text-xs font-semibold uppercase tracking-wide text-teal-700">Area lens</p>
+									<p class="text-xs font-semibold uppercase tracking-wide text-teal-700">Area</p>
 									<h2 class="mt-1 text-lg font-semibold text-slate-950">{selectedArea.area_name}</h2>
 									<div class="mt-4 grid grid-cols-2 gap-2">
 										<div class="rounded-md bg-slate-50 px-3 py-2">
@@ -988,7 +977,7 @@ $effect(() => {
 										<div class="rounded-md bg-slate-50 px-3 py-2">
 											<p class="text-[11px] text-slate-500">DDA GFA</p>
 											<p class="text-sm font-semibold text-slate-950">
-												{formatCompact(selectedArea.dda_total_gfa_sqm)} sqm
+												{formatCompact(selectedArea.dda_total_gfa_sqft)} sq ft
 											</p>
 										</div>
 									</div>
@@ -1005,7 +994,7 @@ $effect(() => {
 
 								<div class="rounded-md border border-slate-200 bg-white">
 									<div class="border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-950">
-										Top projects in view mode
+										Top projects
 									</div>
 									<div class="divide-y divide-slate-100">
 										{#each radarProjects.filter((project) => project.area_name === selectedArea.area_name).slice(0, 8) as project (project.project_id)}

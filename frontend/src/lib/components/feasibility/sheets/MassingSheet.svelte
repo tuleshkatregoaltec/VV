@@ -1,5 +1,6 @@
 <script lang="ts">
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { fromSqft, toSqft } from '$lib/utils/units'
 
 function fmt(value: number | null | undefined, digits = 0) {
 	if (value === null || value === undefined || !Number.isFinite(value)) return '-'
@@ -21,6 +22,24 @@ function setNumber(key: keyof typeof workbookStore.inputs, raw: string) {
 	}
 	const value = Number(raw)
 	workbookStore.updateInputs({ [key]: Number.isFinite(value) ? value : 0 } as any)
+}
+
+// The workbook model is in m²; areas are shown and typed in square feet.
+function fmtSqft(valueSqm: number | null | undefined) {
+	return valueSqm === null || valueSqm === undefined ? '-' : fmt(toSqft(valueSqm))
+}
+
+function setAreaFromSqft(key: keyof typeof workbookStore.inputs, raw: string) {
+	if (raw.trim() === '') {
+		clearInput(key)
+		return
+	}
+	const value = Number(raw)
+	workbookStore.updateInputs({ [key]: Number.isFinite(value) ? fromSqft(value) : 0 } as any)
+}
+
+function sqftInput(valueSqm: number | null | undefined) {
+	return valueSqm === null || valueSqm === undefined ? '' : Math.round(toSqft(valueSqm))
 }
 
 function clearInput(key: keyof typeof workbookStore.inputs) {
@@ -74,7 +93,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 		</div>
 		<div class="px-3 py-2 border-r border-[#D9D9D9]">
 			<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Gross Floorplate</div>
-			<div class="text-[13px] font-bold text-slate-900">{fmt(massing.typicalGrossFloorplateSqm)} sqm</div>
+			<div class="text-[13px] font-bold text-slate-900">{fmtSqft(massing.typicalGrossFloorplateSqm)} sq ft</div>
 		</div>
 		<div class="px-3 py-2 border-r border-[#D9D9D9]">
 			<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Physical Units</div>
@@ -117,16 +136,16 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			</tr>
 			<tr class="border-b border-[#D9D9D9]">
 				<td class={LABEL}>Max efficient tower floorplate</td>
-				<td class="p-0"><input type="number" step="100" min="0" class={INPUT} value={inputs.maxEfficientTowerFloorplateSqm ?? ''} placeholder="2000" oninput={(e) => setNumber('maxEfficientTowerFloorplateSqm', e.currentTarget.value)} /></td>
-				<td class={UNIT}>sqm</td>
+				<td class="p-0"><input type="number" step="1000" min="0" class={INPUT} value={sqftInput(inputs.maxEfficientTowerFloorplateSqm)} placeholder={String(Math.round(toSqft(2000)))} oninput={(e) => setAreaFromSqft('maxEfficientTowerFloorplateSqm', e.currentTarget.value)} /></td>
+				<td class={UNIT}>sq ft</td>
 				<td class="px-2 py-[3px] text-slate-500">
 					<button type="button" class="text-[#1565C0] hover:underline" onclick={() => clearInput('maxEfficientTowerFloorplateSqm')}>Auto benchmark</button>
 				</td>
 			</tr>
 			<tr class="border-b border-[#D9D9D9]">
 				<td class={LABEL}>Min efficient tower floorplate</td>
-				<td class="p-0"><input type="number" step="100" min="0" class={INPUT} value={inputs.minEfficientTowerFloorplateSqm ?? ''} placeholder="700" oninput={(e) => setNumber('minEfficientTowerFloorplateSqm', e.currentTarget.value)} /></td>
-				<td class={UNIT}>sqm</td>
+				<td class="p-0"><input type="number" step="1000" min="0" class={INPUT} value={sqftInput(inputs.minEfficientTowerFloorplateSqm)} placeholder={String(Math.round(toSqft(700)))} oninput={(e) => setAreaFromSqft('minEfficientTowerFloorplateSqm', e.currentTarget.value)} /></td>
+				<td class={UNIT}>sq ft</td>
 				<td class="px-2 py-[3px] text-slate-500">
 					<button type="button" class="text-[#1565C0] hover:underline" onclick={() => clearInput('minEfficientTowerFloorplateSqm')}>Auto benchmark</button>
 				</td>
@@ -165,22 +184,22 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Unit</th>
 				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Note</th>
 			</tr>
-			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Plot area</td><td class={VALUE}>{fmt(massing.plotAreaSqm)}</td><td class={UNIT}>sqm</td><td class="px-2 py-[3px] text-slate-500">From plot file / DDA data.</td></tr>
-			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Maximum GFA</td><td class={VALUE}>{fmt(massing.maxGfaSqm)}</td><td class={UNIT}>sqm</td><td class="px-2 py-[3px] text-slate-500">Regulatory GFA used by the model.</td></tr>
+			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Plot area</td><td class={VALUE}>{fmtSqft(massing.plotAreaSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">From plot data.</td></tr>
+			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Maximum GFA</td><td class={VALUE}>{fmtSqft(massing.maxGfaSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">Regulatory GFA used by the model.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Building form</td><td class={VALUE}>{formLabel(massing.buildingForm)}</td><td class={UNIT}></td><td class="px-2 py-[3px] text-slate-500">Classified from max storeys.</td></tr>
-			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Covered footprint</td><td class={VALUE}>{fmt(massing.coveredFootprintSqm)}</td><td class={UNIT}>sqm</td><td class="px-2 py-[3px] text-slate-500">Plot area x applied coverage.</td></tr>
-			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Total modelled footprint</td><td class={VALUE}>{fmt(massing.totalFootprintSqm)}</td><td class={UNIT}>sqm</td><td class="px-2 py-[3px] text-slate-500">Sum of building footprints.</td></tr>
+			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Covered footprint</td><td class={VALUE}>{fmtSqft(massing.coveredFootprintSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">Plot area x applied coverage.</td></tr>
+			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Total modelled footprint</td><td class={VALUE}>{fmtSqft(massing.totalFootprintSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">Sum of building footprints.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Coverage utilization</td><td class={VALUE}>{fmtPct(massing.coverageUtilizationPct)}</td><td class={UNIT}></td><td class="px-2 py-[3px] text-slate-500">Modelled footprint / covered footprint.</td></tr>
-			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>GFA capacity at selected floors</td><td class={VALUE}>{fmt(massing.physicalMaxGfaSqm)}</td><td class={UNIT}>sqm</td><td class="px-2 py-[3px] text-slate-500">Covered footprint x selected / capped floors.</td></tr>
+			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>GFA capacity at selected floors</td><td class={VALUE}>{fmtSqft(massing.physicalMaxGfaSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">Covered footprint x selected / capped floors.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Required total GFA floors at coverage</td><td class={VALUE}>{fmt(massing.requiredFloorsAtCoverage)}</td><td class={UNIT}>floors</td><td class="px-2 py-[3px] text-slate-500">Maximum GFA / covered footprint.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Required coverage at selected floors</td><td class={VALUE}>{fmtPct(massing.requiredCoverageAtMaxStoreysPct)}</td><td class={UNIT}></td><td class="px-2 py-[3px] text-slate-500">Coverage required to fit max GFA within selected / capped floors.</td></tr>
-			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>GFA shortfall</td><td class={VALUE}>{fmt(massing.gfaShortfallSqm)}</td><td class={UNIT}>sqm</td><td class="px-2 py-[3px] text-slate-500">Unbuildable GFA under current coverage and selected-floor assumptions.</td></tr>
-			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Weighted average unit size</td><td class={VALUE}>{fmt(massing.weightedAvgUnitSizeSqm, 1)}</td><td class={UNIT}>sqm</td><td class="px-2 py-[3px] text-slate-500">From current unit mix.</td></tr>
+			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>GFA shortfall</td><td class={VALUE}>{fmtSqft(massing.gfaShortfallSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">Unbuildable GFA under current coverage and selected-floor assumptions.</td></tr>
+			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Weighted average unit size</td><td class={VALUE}>{fmtSqft(massing.weightedAvgUnitSizeSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">From current unit mix.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Target unit count</td><td class={VALUE}>{fmt(massing.targetUnitCount)}</td><td class={UNIT}>units</td><td class="px-2 py-[3px] text-slate-500">Current unit mix count.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Required residential floors for unit mix</td><td class={VALUE}>{fmt(massing.requiredResidentialFloorsForUnits)}</td><td class={UNIT}>floors</td><td class="px-2 py-[3px] text-slate-500">Current unit GLA / total net residential floorplate.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Physical unit capacity</td><td class={VALUE}>{fmt(massing.totalPhysicalUnitCapacity)}</td><td class={UNIT}>units</td><td class="px-2 py-[3px] text-slate-500">Estimated units that fit on typical residential floors.</td></tr>
 			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Unit capacity gap</td><td class={massing.unitCapacityGap < 0 ? 'px-2 py-[3px] text-right tabular-nums text-amber-700 font-semibold' : VALUE}>{fmt(massing.unitCapacityGap)}</td><td class={UNIT}>units</td><td class="px-2 py-[3px] text-slate-500">Physical capacity less current unit count flags an impossible unit programme.</td></tr>
-			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Allocated GFA</td><td class={VALUE}>{fmt(massing.totalAllocatedGfaSqm)}</td><td class={UNIT}>sqm</td><td class="px-2 py-[3px] text-slate-500">Gross above-grade floor area allocated to buildings.</td></tr>
+			<tr class="border-b border-[#D9D9D9]"><td class={LABEL}>Allocated GFA</td><td class={VALUE}>{fmtSqft(massing.totalAllocatedGfaSqm)}</td><td class={UNIT}>sq ft</td><td class="px-2 py-[3px] text-slate-500">Gross above-grade floor area allocated to buildings.</td></tr>
 
 			<tr class="bg-[#1F3864]">
 				<td colspan="10" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">C.&nbsp;&nbsp;BUILDING SCHEDULE</td>
@@ -193,10 +212,10 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
 				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Building</th>
 				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Type</th>
-				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Footprint sqm</th>
-				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Floorplate sqm</th>
-				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Net floorplate</th>
-				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">GFA sqm</th>
+				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Footprint sq ft</th>
+				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Floorplate sq ft</th>
+				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Net floorplate sq ft</th>
+				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">GFA sq ft</th>
 				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Floors</th>
 				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Height m</th>
 				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Units / floor</th>
@@ -208,10 +227,10 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 				<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 					<td class="px-2 py-[3px] text-slate-800">{building.label}</td>
 					<td class="px-2 py-[3px] text-slate-600">{building.buildingType.replaceAll('_', ' ')}</td>
-					<td class={VALUE}>{fmt(building.footprintSqm)}</td>
-					<td class={VALUE}>{fmt(building.grossFloorplateSqm)}</td>
-					<td class={VALUE}>{fmt(building.netFloorplateSqm)}</td>
-					<td class={VALUE}>{fmt(building.allocatedGfaSqm)}</td>
+					<td class={VALUE}>{fmtSqft(building.footprintSqm)}</td>
+					<td class={VALUE}>{fmtSqft(building.grossFloorplateSqm)}</td>
+					<td class={VALUE}>{fmtSqft(building.netFloorplateSqm)}</td>
+					<td class={VALUE}>{fmtSqft(building.allocatedGfaSqm)}</td>
 					<td class={VALUE_BLUE}>{fmt(building.totalFloors)}</td>
 					<td class={VALUE}>{fmt(building.estimatedHeightM, 1)}</td>
 					<td class={VALUE}>{fmt(building.unitsPerTypicalFloor)}</td>

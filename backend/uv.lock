@@ -200,6 +200,7 @@ dependencies = [
     { name = "beautifulsoup4" },
     { name = "clickhouse-connect" },
     { name = "clickhouse-driver" },
+    { name = "crm-rental-sql" },
     { name = "fastapi" },
     { name = "fastmcp" },
     { name = "gunicorn" },
@@ -214,6 +215,7 @@ dependencies = [
     { name = "openrouter" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
+    { name = "orjson" },
     { name = "pandas" },
     { name = "passlib", extra = ["bcrypt"] },
     { name = "pillow" },
@@ -262,6 +264,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "clickhouse-connect", specifier = ">=0.10.0" },
     { name = "clickhouse-driver", specifier = ">=0.2.10" },
+    { name = "crm-rental-sql", directory = "../holocron/packages/crm-rental-sql" },
     { name = "fastapi", specifier = ">=0.120.1" },
     { name = "fastmcp", specifier = ">=2.14.1" },
     { name = "gunicorn", specifier = ">=23.0.0" },
@@ -277,6 +280,7 @@ requires-dist = [
     { name = "openrouter", specifier = ">=0.1.1" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = "==1.39.1" },
     { name = "opentelemetry-sdk", specifier = "==1.39.1" },
+    { name = "orjson", specifier = "==3.12.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7.4" },
     { name = "pillow", specifier = ">=11.0.0" },
@@ -835,6 +839,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/4c/36/bcc504fdd5169301b52568802bb1b9cdde2e27a01d39fbb3b4b508ab7c2c/coverage-7.12.0-cp314-cp314t-win_arm64.whl", hash = "sha256:01d24af36fedda51c2b1aca56e4330a3710f83b02a5ff3743a6b015ffa7c9384", size = 220459, upload-time = "2025-11-18T13:34:17.222Z" },
     { url = "https://files.pythonhosted.org/packages/ce/a3/43b749004e3c09452e39bb56347a008f0a0668aad37324a99b5c8ca91d9e/coverage-7.12.0-py3-none-any.whl", hash = "sha256:159d50c0b12e060b15ed3d39f87ed43d4f7f7ad40b8a534f4dd331adbb51104a", size = 209503, upload-time = "2025-11-18T13:34:18.892Z" },
 ]
+
+[[package]]
+name = "crm-rental-sql"
+version = "0.1.0"
+source = { directory = "../holocron/packages/crm-rental-sql" }
 
 [[package]]
 name = "cryptography"

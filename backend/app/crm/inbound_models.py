@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Text, UniqueConstraint, text
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
@@ -25,6 +25,11 @@ InboundStatus = Literal[
     "disqualified",
 ]
 InboundMatchState = Literal["suggested", "saved", "dismissed", "contacted", "stale"]
+
+# Leads Vitevue supplies from the lease data; source_lead_id holds the unit's candidate key.
+VITEVUE_LEASE_SOURCE = "Vitevue lease lead"
+# Owners on the agency file whose unit just resold; source_lead_id holds the owner key.
+SOLD_OWNER_SOURCE = "Owner file · recently sold"
 
 
 class CrmInboundImport(SQLModel, table=True):
@@ -69,6 +74,24 @@ class CrmInboundContact(SQLModel, table=True):
 
 class CrmInboundEnquiry(SQLModel, table=True):
     __tablename__ = "crm_inbound_enquiries"
+    # One shared Vitevue lease lead per unit per agency, even when two agents open it at once.
+    __table_args__ = (
+        Index(
+            "uq_crm_inbound_vitevue_lease_unit",
+            "organization_id",
+            "source_lead_id",
+            unique=True,
+            postgresql_where=text(f"source = '{VITEVUE_LEASE_SOURCE}'"),
+        ),
+        # One recently-sold Inbox item per owner, however often the sync runs.
+        Index(
+            "uq_crm_inbound_sold_owner",
+            "organization_id",
+            "source_lead_id",
+            unique=True,
+            postgresql_where=text(f"source = '{SOLD_OWNER_SOURCE}'"),
+        ),
+    )
 
     id: int | None = SQLField(default=None, primary_key=True)
     organization_id: str = SQLField(index=True)
@@ -233,7 +256,7 @@ class InboundImportResponse(BaseModel):
     id: int
     name: str
     original_filename: str
-    status: Literal["processing", "completed", "failed"]
+    status: Literal["queued", "processing", "retry_wait", "completed", "failed"]
     summary: InboundImportSummary
     mapping: dict[str, Any] = Field(default_factory=dict)
     error_message: str | None = None
@@ -311,6 +334,10 @@ class InboundEnquiryUpdate(BaseModel):
     consent_status: Literal["unknown", "provided", "withdrawn"] | None = None
     do_not_contact: bool | None = None
     preferred_channel: str | None = Field(default=None, max_length=40)
+    # The contact's own details, e.g. the owner an agent finds for a Vitevue lease lead.
+    full_name: str | None = Field(default=None, max_length=240)
+    phone: str | None = Field(default=None, max_length=80)
+    email: str | None = Field(default=None, max_length=320)
 
 
 class InboundNoteCreate(BaseModel):
@@ -410,7 +437,7 @@ class InboundEnquiryListResponse(BaseModel):
 
 class InboundMatchResponse(BaseModel):
     id: int
-    target_type: Literal["owner", "unit", "listing", "project", "demand"]
+    target_type: Literal["company", "owner", "unit", "listing", "project", "demand"]
     target_key: str
     state: InboundMatchState
     fit: Literal["exact", "near", "review", "outside"]

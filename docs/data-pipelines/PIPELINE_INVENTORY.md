@@ -68,11 +68,19 @@ accepted or production enabled, and every new schedule defaults to `STOPPED`.
 | P09 | Browser route unwraps `props.pageProps`; empty-parse "success" now raises | #4 | Live smoke |
 | P13 | Plot/layer queries request only still-published fields | #4 | Stub rows on plot failure (F08) |
 | P20 | Fact builder rebuilds from source views (F13 fixed); `ch_transactions` / `ch_rent_contracts` read the canonical market layer | #5 | Real-database rebuild test; move to Holocron (5A) |
-| P23 | DDL for `silver_reelly_projects`, `reelly_project_unit_types_bronze` | #5 | Producer still missing (F02) |
+| P23 | DDL for `silver_reelly_projects`, `reelly_project_unit_types_bronze` | #5 | Producer in #21; live payload run pending |
 | new | Canonical `market_sale_events` / `market_rental_events` (job `market_events_refresh`) with 22 post-publication asset checks | #5 | Validate before promote (S4.1, Prompt 06) |
-| new | Staged release validated before exchange: blocking checks + 99% served-row floor on run-unique staging; last release kept as `__previous` | #10 (on #5) | Ledger/events exchange not atomic; Dagster concurrency; durable publication ledger |
-| P20 | `ch_projects` serves one row per DLD project number (was 4,129 rows for 3,413 projects, +21.6% units); facts need `just build-clickhouse-facts` | #11 (on #5) | Open-data area vocabulary (`area_id = 0`, upper-case community names) still needs a canonical crosswalk |
+| new | Staged release validated before exchange: blocking checks + 99% served-row floor on run-unique staging; last release kept as `__previous` | #10 (on #5) | Addressed by #15 (lock, ledger, recovery) |
+| P20 | `ch_projects` serves one row per DLD project number (was 4,129 rows for 3,413 projects, +21.6% units); facts need `just build-clickhouse-facts` | #11 (on #5) | Vocabulary split addressed by #18 |
 | — | Read-only census (`just census`) and `DATA_SOURCE_HEALTH.{json,md}` | #3 | Re-run against staging |
+| new | Publication: `market_release_lock`, durable `market_release_ledger`, release-stamped tables, ordered promotion, `recover`/`rollback`; per-day loss, source presence and NaN-check semantics | #15 | Staging drill of crash/rollback |
+| P01, P08, P11, P13 | Shared `http_retry` (429/Retry-After, backoff+jitter, deadline, denial stops), provider limiters + Dagster provider pools; DLD watermark only after a complete bronze load, 7-day-overlap catch-up, mid-crawl TOTAL check; DDA stops instead of stub rows (F08) | #16 | D1/D2 quotas; browser sources (DXBI, PF listings, Bayut) not behind `send()`; live smoke |
+| P01 → serving | Coverage from `source_load_windows` (page evidence) stored per release; API/chat statuses complete/partial/unverified/unavailable; `release_id` on answers | #17 | Existing data unverified until replayed or attested; view recreation at rollout |
+| P19/P20 | Canonical district/community via `market_geo_crosswalk` (evidence from DLD); area list, rankings, metrics, delivery use it | #18 | Chart/facet/radar queries still read raw `area_name_en` |
+| P01 | Bronze window replace via lightweight delete (62 s → 0.2 s on rents) | #19 | Staging measurement |
+| new | Immutable `__r<release>` versions + backend `pin_market_release` for chat (#13); 24 h retention vs 30 min pins | #20 | Wire #13's `acquire_market_release`; reader grants |
+| P17 | Bayut certified-snapshot loader, `bayut_listings_current`, withdrawals between certified snapshots only | #22 | D1 access/licensing; no backend endpoint; acquisition manual |
+| P01 → serving | Multi-line DLD transaction numbers served line by line (722 numbers / 3,614 lines were collapsed) | #23 | — |
 
 Out of scope for this inventory: chat/feasibility LLM calls, Stripe, auth, which the platform
 reference covers. They consume data but do not ingest market data.

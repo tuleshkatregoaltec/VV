@@ -70,8 +70,8 @@ async def _filters(
         areas=[row["area_name"] for row in areas_result],
         property_types=[row["property_type"] for row in property_types_result],
         bedrooms=[row["bedrooms"] for row in bedrooms_result],
-        price_min=_float_or_none(prices.get("price_min")),
-        price_max=_float_or_none(prices.get("price_max")),
+        price_min=_int_or_none(prices.get("price_min")),
+        price_max=_int_or_none(prices.get("price_max")),
     )
 
 
@@ -91,13 +91,14 @@ async def list_listings_from_clickhouse(
     property_type: str | None = None,
     bedrooms: str | None = None,
     bedrooms_in: list[str] | None = None,
-    price_min: float | None = None,
-    price_max: float | None = None,
+    price_min: int | None = None,
+    price_max: int | None = None,
     price_period: str | None = None,
     price_basis: str = "raw",
     include_filters: bool = True,
-    price_min_inclusive: bool = True,
-    price_max_inclusive: bool = True,
+    building: str | None = None,
+    min_age_days: int | None = None,
+    max_age_days: int | None = None,
 ) -> ListingListResponse:
     filters = dict(
         mode=mode,
@@ -109,10 +110,11 @@ async def list_listings_from_clickhouse(
         bedrooms_in=bedrooms_in,
         price_min=price_min,
         price_max=price_max,
-        price_min_inclusive=price_min_inclusive,
-        price_max_inclusive=price_max_inclusive,
         price_period=price_period,
         price_basis=price_basis,
+        building=building,
+        min_age_days=min_age_days,
+        max_age_days=max_age_days,
     )
     count_task = asyncio.create_task(queries.fetch_listing_count(filters))
     filters_task = asyncio.create_task(_filters(mode, asset_class)) if include_filters else None
@@ -191,10 +193,8 @@ async def listing_analytics_from_clickhouse(
     area: str | None = None,
     property_type: str | None = None,
     bedrooms: str | None = None,
-    price_min: float | None = None,
-    price_max: float | None = None,
-    price_min_inclusive: bool = True,
-    price_max_inclusive: bool = True,
+    price_min: int | None = None,
+    price_max: int | None = None,
 ) -> ListingAnalyticsResponse:
     """Return aggregate metrics for the same available-listing filter set as the grid."""
     filters = dict(
@@ -207,8 +207,6 @@ async def listing_analytics_from_clickhouse(
         bedrooms_in=None,
         price_min=price_min,
         price_max=price_max,
-        price_min_inclusive=price_min_inclusive,
-        price_max_inclusive=price_max_inclusive,
         price_basis="annual" if mode == "rent" else "raw",
     )
     result_future = queries.fetch_listing_analytics(filters)
@@ -243,7 +241,7 @@ async def listing_analytics_from_clickhouse(
         benchmarked_count=_int_or_none(row.get("benchmarked_count")) or 0,
         verified_count=_int_or_none(row.get("verified_count")) or 0,
         area_count=_int_or_none(row.get("area_count")) or 0,
-        snapshot_at=_parse_datetime(row.get("snapshot_at")) if row.get("total") else None,
+        snapshot_at=_parse_datetime(row.get("snapshot_at")),
         trend=[
             ListingTrendPoint(
                 period=str(point.get("period") or ""),

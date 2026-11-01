@@ -39,7 +39,9 @@ describe('shared query builders', () => {
 
 		const projectSearchQuery = analyticsQueries.projectSearch('', 500)
 		expect(projectSearchQuery.queryKey).toEqual(analyticsKeys.projectSearch('', 500))
-		expect(projectSearchQuery.staleTime).toBe(Infinity)
+		// New DXBI ingestions must become searchable without reloading the app.
+		expect(projectSearchQuery.staleTime).toBe(5 * 60 * 1000)
+		expect(projectSearchQuery.queryKey).toContain('dxbi-v2')
 		await projectSearchQuery.queryFn()
 		expect(projectSearchSpy).toHaveBeenCalledWith('', 500)
 
@@ -59,9 +61,9 @@ describe('shared query builders', () => {
 		const rentalFiltersSpy = vi.spyOn(filters, 'rentals').mockResolvedValue({} as never)
 
 		const params = {
-			property_usage: 'residential',
-			project: 'Downtown Views',
-			filter_type: 'project',
+			property_usage: 'Residential',
+			location: 'Downtown Dubai',
+			building: 'Burj Vista 1',
 			limit: 50,
 			offset: 0
 		}
@@ -90,7 +92,7 @@ describe('shared query builders', () => {
 		await rentalsQuery.queryFn()
 		expect(rentalsSpy).toHaveBeenCalledWith(params)
 
-		const filterParams = { property_usage: 'commercial', property_type: 'Office' }
+		const filterParams = { property_usage: 'Commercial', property_type: 'Office' }
 		const salesFilterOptionsQuery = transactionQueries.salesFilterOptions(filterParams)
 		expect(salesFilterOptionsQuery.queryKey).toEqual(
 			transactionKeys.filterOptions('sales', filterParams)
@@ -183,4 +185,17 @@ describe('shared query builders', () => {
 		await communitiesQuery.queryFn()
 		expect(communitiesSpy).toHaveBeenCalled()
 	})
+})
+
+it('keeps summary windows in separate caches and forwards the canonical API field', async () => {
+	const spy = vi.spyOn(analytics, 'projectSummary').mockResolvedValue({} as never)
+	const params = { project: 'Window Tower', summary_days: 365 }
+	const year = analyticsQueries.projectSummary(params)
+	const month = analyticsQueries.projectSummary({ ...params, summary_days: 30 })
+	const allTime = analyticsQueries.projectSummary({ project: 'Window Tower' })
+	expect(year.queryKey).not.toEqual(month.queryKey)
+	expect(year.queryKey).not.toEqual(allTime.queryKey)
+	await year.queryFn()
+	expect(spy).toHaveBeenCalledWith(params)
+	spy.mockRestore()
 })

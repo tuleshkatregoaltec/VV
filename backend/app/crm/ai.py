@@ -7,29 +7,53 @@ from typing import Any
 import httpx
 
 from app.config import settings
-from app.core.ai_policy import direct_provider_request as provider_request
-from app.core.observability import operation
-from app.crm.import_parsing import _CANONICAL_FIELDS, SheetProfile
+from app.core.observability import operation, provider_request
+from app.crm.import_mapping import column_samples, needs_model_mapping
+from app.crm.import_parsing import (
+    _CANONICAL_FIELDS,
+    SheetProfile,
+    _mapped_headers,
+    refresh_unmapped_headers,
+)
 from app.crm.inbound_policy import _ALIASES
 
 logger = logging.getLogger(__name__)
 
 
 @operation
-async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
+async def _llm_mapping(
+    profile: SheetProfile, samples: dict[str, list[str]] | None = None
+) -> SheetProfile:
+    # Known export schemas map deterministically. The model only runs when a data column has no
+    # role or a field matching needs is missing, and it only ever fills gaps.
+    if not needs_model_mapping(profile):
+        return profile
+    if samples is None:
+        samples = column_samples(profile, profile.sample_rows)
     prompt = {
-        "task": "Map spreadsheet headers to canonical CRM owner-import fields.",
-        "privacy": "Headers only. No owner names, phone numbers, emails, or row values are included.",
+        "task": "Map spreadsheet columns to canonical CRM owner-import fields.",
+        "privacy": (
+            "Headers plus up to five sample values per non-personal column. Owner names, phone "
+            "numbers, emails and ID values are never included."
+        ),
         "canonical_fields": sorted(_CANONICAL_FIELDS),
         "headers": [header.key for header in profile.headers],
         "heuristic_mapping": profile.field_map,
+        "heuristic_fallbacks": profile.fallback_map,
+        "unmapped_columns_with_data": profile.unmapped_headers,
+        "samples": samples,
         "requirements": [
             "Return JSON only.",
             "Only use canonical fields and exact supplied header names.",
+            "Map every unmapped column that clearly matches a canonical field; leave the rest.",
+            "A column such as 'Villa No.' or 'Unit Ref' holding unit codes is unit_number.",
             "Do not invent a unit number when no unit column exists.",
         ],
         "response_shape": {
             "field_map": {"canonical_field": "exact header"},
+            "fallback_map": {
+                "canonical_field": ["exact header used when the mapped cell is blank"]
+            },
             "sheet_family": "transaction_party or contact_list",
             "confidence": "number from 0 to 1",
             "warnings": ["string"],
@@ -59,7 +83,7 @@ async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
                     "response_format": {"type": "json_object"},
                     "temperature": 0,
                     "max_tokens": 900,
-                    "provider": {"zdr": True},
+                    "provider": {"zdr": True, "data_collection": "deny"},
                 },
             )
             response.raise_for_status()
@@ -69,6 +93,8 @@ async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
     except Exception:
         logger.warning(
             "CRM import schema mapping fell back to heuristics",
+            extra={"sheet": profile.name},
+            exc_info=True,
         )
         profile.mapping_source = "heuristic_fallback"
         profile.warnings.append("Automated schema confirmation was unavailable.")
@@ -78,10 +104,26 @@ async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
     llm_map = proposal.get("field_map") if isinstance(proposal, dict) else {}
     if isinstance(llm_map, dict):
         for canonical, header in llm_map.items():
-            if canonical in _CANONICAL_FIELDS and header in available:
-                profile.field_map.setdefault(canonical, header)
+            if canonical not in _CANONICAL_FIELDS or header not in available:
+                continue
+            existing = profile.field_map.get(canonical)
+            if existing is None:
+                # A header that already has another role stays with that role.
+                if header not in _mapped_headers(profile):
+                    profile.field_map[canonical] = header
+            elif existing != header:
+                profile.warnings.append(f"Model suggests {canonical} = {header}")
+    llm_fallbacks = proposal.get("fallback_map") if isinstance(proposal, dict) else {}
+    if isinstance(llm_fallbacks, dict):
+        for canonical, headers in llm_fallbacks.items():
+            if canonical not in _CANONICAL_FIELDS or not isinstance(headers, list):
+                continue
+            for header in headers:
+                current = profile.fallback_map.get(canonical, [])
+                if header in available and header not in _mapped_headers(profile):
+                    profile.fallback_map[canonical] = [*current, header]
     family = proposal.get("sheet_family")
-    if family in {"transaction_party", "contact_list"}:
+    if family in {"transaction_party", "contact_list"} and profile.field_map.get("party_role"):
         profile.sheet_family = family
     confidence = proposal.get("confidence")
     if isinstance(confidence, int | float):
@@ -90,6 +132,7 @@ async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
     if isinstance(warnings, list):
         profile.warnings.extend(str(item)[:300] for item in warnings if item)
     profile.mapping_source = "llm"
+    refresh_unmapped_headers(profile)
     return profile
 
 

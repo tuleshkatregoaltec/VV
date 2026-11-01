@@ -4,10 +4,13 @@ Global async client that releases GIL during I/O operations for better concurren
 Uses server-side parameter binding ({param:Type}) for security.
 """
 
+import asyncio
 import logging
+from collections.abc import Awaitable, Callable, Coroutine
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeVar
+from uuid import uuid4
 
 import clickhouse_connect
 import pandas as pd
@@ -18,29 +21,95 @@ from app.core.observability import warehouse_query
 
 logger = logging.getLogger(__name__)
 
-_query_bounds: ContextVar[dict | None] = ContextVar("clickhouse_query_bounds", default=None)
+# Global singleton async client
+_client: Optional[AsyncClient] = None
+
+T = TypeVar("T")
+
+# Set by run_cancellable: (query-id prefix, time limit in seconds) for the queries it runs.
+_query_scope: ContextVar[tuple[str, int] | None] = ContextVar(
+    "clickhouse_query_scope", default=None
+)
+
+
+_query_limits: ContextVar[tuple[asyncio.Semaphore, dict[str, int]] | None] = ContextVar(
+    "clickhouse_query_limits", default=None
+)
 
 
 @contextmanager
-def bounded_queries(*, max_execution_time: int, max_result_rows: int, max_result_bytes: int):
-    """Task-local read bounds; unrelated API queries retain their current settings."""
-    token = _query_bounds.set(
-        {
-            "max_execution_time": max_execution_time,
-            "max_result_rows": max_result_rows,
-            "max_result_bytes": max_result_bytes,
-            "result_overflow_mode": "throw",
-            "timeout_overflow_mode": "throw",
-        }
+def limit_queries(semaphore: asyncio.Semaphore, *, max_memory_bytes: int, max_threads: int):
+    """Apply a caller-owned concurrency and memory budget to its child queries."""
+    token = _query_limits.set(
+        (
+            semaphore,
+            {
+                "max_memory_usage": max_memory_bytes,
+                "max_threads": max_threads,
+                "max_execution_time": 60,
+            },
+        )
     )
     try:
         yield
     finally:
-        _query_bounds.reset(token)
+        _query_limits.reset(token)
 
 
-# Global singleton async client
-_client: Optional[AsyncClient] = None
+class ClientDisconnected(Exception):
+    """The caller went away; its ClickHouse queries were stopped."""
+
+
+def _scoped_settings() -> Dict[str, Any]:
+    scope = _query_scope.get()
+    limits = _query_limits.get()
+    options: Dict[str, Any] = dict(limits[1]) if limits else {}
+    if scope is not None:
+        group, max_seconds = scope
+        options.update(query_id=f"{group}-{uuid4().hex}", max_execution_time=max_seconds)
+    return options
+
+
+async def kill_query_group(group: str) -> None:
+    """Stop every running query started under one run_cancellable call."""
+    client = await get_client()
+    await client.command(f"KILL QUERY WHERE startsWith(query_id, '{group}-') ASYNC")
+
+
+async def run_cancellable(
+    is_disconnected: Callable[[], Awaitable[bool]],
+    work: Coroutine[Any, Any, T],
+    *,
+    max_seconds: int = 60,
+    poll_seconds: float = 0.25,
+) -> T:
+    """Run `work`, limiting each ClickHouse query it starts and stopping them if the caller leaves.
+
+    A request that is abandoned (the agent changed a filter) would otherwise keep a heavy query
+    running in ClickHouse for minutes. Each query gets a shared id prefix and a time limit;
+    when `is_disconnected()` turns true the queries are killed and ClientDisconnected raised.
+    """
+    group = uuid4().hex
+    token = _query_scope.set((group, max_seconds))
+    try:
+        task = asyncio.ensure_future(work)  # The task copies the scope set above.
+    finally:
+        _query_scope.reset(token)
+    try:
+        while not task.done():
+            await asyncio.wait({task}, timeout=poll_seconds)
+            if not task.done() and await is_disconnected():
+                raise ClientDisconnected
+        return task.result()
+    except BaseException:
+        if not task.done():
+            task.cancel()
+            try:
+                await kill_query_group(group)
+            finally:
+                # Do not release caller budgets while a cancelled child still owns them.
+                await asyncio.gather(task, return_exceptions=True)
+        raise
 
 
 async def get_client() -> AsyncClient:
@@ -79,6 +148,8 @@ async def close_clickhouse() -> None:
 async def query(
     sql: str,
     parameters: Optional[Dict[str, Any]] = None,
+    *,
+    external_data: Any = None,
 ) -> List[Dict[str, Any]]:
     """
     Execute ClickHouse query and return list of dicts.
@@ -86,12 +157,19 @@ async def query(
     Uses parameter binding ({param:Type} syntax) for security.
     Always include FINAL when querying ReplacingMergeTree tables.
     """
-    client = await get_client()
-    result = await client.query(
-        sql,
-        parameters=parameters or {},
-        **({"settings": bounds} if (bounds := _query_bounds.get()) else {}),
-    )
+    options = {"external_data": external_data} if external_data is not None else {}
+    limits = _query_limits.get()
+    if limits is None:
+        client = await get_client()
+        result = await client.query(
+            sql, parameters=parameters or {}, settings=_scoped_settings(), **options
+        )
+    else:
+        async with limits[0]:
+            client = await get_client()
+            result = await client.query(
+                sql, parameters=parameters or {}, settings=_scoped_settings(), **options
+            )
     column_names = result.column_names
     return [dict(zip(column_names, row)) for row in result.result_rows]
 
@@ -106,9 +184,10 @@ async def query_df(
 
     Useful for heavy aggregations. Always include FINAL for ReplacingMergeTree tables.
     """
-    client = await get_client()
-    return await client.query_df(
-        sql,
-        parameters=parameters or {},
-        **({"settings": bounds} if (bounds := _query_bounds.get()) else {}),
-    )
+    limits = _query_limits.get()
+    if limits is None:
+        client = await get_client()
+        return await client.query_df(sql, parameters=parameters or {})
+    async with limits[0]:
+        client = await get_client()
+        return await client.query_df(sql, parameters=parameters or {}, settings=_scoped_settings())

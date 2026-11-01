@@ -29,14 +29,8 @@ async def list_listings(
     area: str | None = Query(default=None, max_length=160),
     property_type: str | None = Query(default=None, max_length=120),
     bedrooms: str | None = Query(default=None, max_length=40),
-    price_min: float | None = Query(default=None, ge=0, allow_inf_nan=False),
-    price_max: float | None = Query(default=None, ge=0, allow_inf_nan=False),
-    price_min_inclusive: bool = Query(
-        default=True, description="False for strictly above the lower price bound."
-    ),
-    price_max_inclusive: bool = Query(
-        default=True, description="False for strictly below the upper price bound."
-    ),
+    price_min: int | None = Query(default=None, ge=0),
+    price_max: int | None = Query(default=None, ge=0),
     context: AuthContext = Depends(require_active_subscription),
 ):
     """List Property Finder listings from ph_box ClickHouse."""
@@ -51,8 +45,6 @@ async def list_listings(
         bedrooms=bedrooms,
         price_min=price_min,
         price_max=price_max,
-        price_min_inclusive=price_min_inclusive,
-        price_max_inclusive=price_max_inclusive,
         price_basis="annual" if mode == "rent" else "raw",
         include_filters=False,
     )
@@ -76,14 +68,8 @@ async def listing_analytics(
     area: str | None = Query(default=None, max_length=160),
     property_type: str | None = Query(default=None, max_length=120),
     bedrooms: str | None = Query(default=None, max_length=40),
-    price_min: float | None = Query(default=None, ge=0, allow_inf_nan=False),
-    price_max: float | None = Query(default=None, ge=0, allow_inf_nan=False),
-    price_min_inclusive: bool = Query(
-        default=True, description="False for strictly above the lower price bound."
-    ),
-    price_max_inclusive: bool = Query(
-        default=True, description="False for strictly below the upper price bound."
-    ),
+    price_min: int | None = Query(default=None, ge=0),
+    price_max: int | None = Query(default=None, ge=0),
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Aggregate metrics for the current Property Finder listing filters."""
@@ -96,8 +82,6 @@ async def listing_analytics(
         bedrooms=bedrooms,
         price_min=price_min,
         price_max=price_max,
-        price_min_inclusive=price_min_inclusive,
-        price_max_inclusive=price_max_inclusive,
     )
 
 

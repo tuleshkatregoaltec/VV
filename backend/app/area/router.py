@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/v1/areas", tags=["areas"])
 
 
 @router.get("", response_model=AreaListResponse)
-@cached_endpoint(prefix="areas_list_v2", expire=3600)
+@cached_endpoint(prefix="areas_list_v3", expire=3600)
 async def areas_list(
     limit: int = 50,
     offset: int = 0,
@@ -21,7 +21,7 @@ async def areas_list(
 
 
 @router.get("/{area_name}", response_model=AreaDetailResponse)
-@cached_endpoint(prefix="area_detail_v1", expire=3600)
+@cached_endpoint(prefix="area_detail_v2", expire=3600)
 async def area_detail(
     area_name: str,
     context: AuthContext = Depends(require_active_subscription),

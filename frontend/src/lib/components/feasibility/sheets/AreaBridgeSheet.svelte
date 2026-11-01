@@ -1,5 +1,6 @@
 <script lang="ts">
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { toSqft } from '$lib/utils/units'
 
 function fmt(value: number | null | undefined, digits = 0) {
 	if (value === null || value === undefined || !Number.isFinite(value)) return '—'
@@ -18,45 +19,50 @@ const outputs = $derived(workbookStore.outputs)
 const area = $derived(outputs?.area)
 const assumptions = $derived(workbookStore.assumptions)
 
-type BridgeRow = { label: string; sqm: string; note: string; isTotal?: boolean; isSub?: boolean }
+// The workbook model is in m²; the bridge shows square feet.
+type BridgeRow = { label: string; sqft: string; note: string; isTotal?: boolean; isSub?: boolean }
 
 const bridgeRows = $derived<BridgeRow[]>(
 	area
 		? [
-				{ label: 'Plot Area', sqm: fmt(area.plotAreaSqm), note: 'From DDA plot data' },
-				{ label: 'Max GFA (Regulatory)', sqm: fmt(area.maxGfaSqm), note: 'From site plan' },
+				{ label: 'Plot Area', sqft: fmt(toSqft(area.plotAreaSqm)), note: 'From plot data' },
+				{
+					label: 'Max GFA (Regulatory)',
+					sqft: fmt(toSqft(area.maxGfaSqm)),
+					note: 'From site plan'
+				},
 				{
 					label: 'Above-grade Costable BUA',
-					sqm: fmt(area.aboveGradeCostableBua),
+					sqft: fmt(toSqft(area.aboveGradeCostableBua)),
 					note: `GFA × ${fmt(assumptions?.aboveGradeBuaFactor ?? 1.1, 2)} factor`
 				},
 				{
 					label: 'Basement Parking BUA',
-					sqm: fmt(area.basementParkingBua),
+					sqft: fmt(toSqft(area.basementParkingBua)),
 					note: `${assumptions?.basementParkingFloors ?? 4} floors × floorplate`,
 					isSub: true
 				},
 				{
 					label: 'Podium Parking BUA Add-on',
-					sqm: fmt(area.podiumParkingBuaAddon),
+					sqft: fmt(toSqft(area.podiumParkingBuaAddon)),
 					note: `${assumptions?.podiumParkingFloorsOutsideGfa ?? 0} floors outside GFA`,
 					isSub: true
 				},
 				{
 					label: 'Service / BOH / Plant Add-on',
-					sqm: fmt(area.serviceBohPlantAddon),
+					sqft: fmt(toSqft(area.serviceBohPlantAddon)),
 					note: `${fmtPct((assumptions?.serviceBohPlantPct ?? 0.03) * 100)} of above-grade BUA`,
 					isSub: true
 				},
 				{
 					label: 'Total Costable BUA',
-					sqm: fmt(area.totalCostableBua),
+					sqft: fmt(toSqft(area.totalCostableBua)),
 					note: 'Sum of all above',
 					isTotal: true
 				},
 				{
 					label: 'Sellable Area (NSA)',
-					sqm: fmt(area.sellableArea),
+					sqft: fmt(toSqft(area.sellableArea)),
 					note: `GFA × ${fmtPct(assumptions?.nsaEfficiencyPct ?? 80)} efficiency`
 				}
 			]
@@ -90,7 +96,7 @@ const ratioRows = $derived(
 			<thead>
 				<tr class="bg-slate-50 text-[11px] uppercase tracking-[0.12em] text-slate-400">
 					<th class="text-left px-4 py-2 font-medium">Component</th>
-					<th class="text-right px-4 py-2 font-medium">Area (sqm)</th>
+					<th class="text-right px-4 py-2 font-medium">Area (sq ft)</th>
 					<th class="text-left px-4 py-2 font-medium">Basis</th>
 				</tr>
 			</thead>
@@ -98,7 +104,7 @@ const ratioRows = $derived(
 				{#each bridgeRows as row (row.label)}
 					<tr class="border-t border-slate-100 {row.isTotal ? 'bg-[#EEF2F7] font-semibold' : ''} {row.isSub ? 'bg-[#F9F9F9]' : ''}">
 						<td class="px-4 py-2 text-slate-800 {row.isSub ? 'pl-8' : ''}">{row.label}</td>
-						<td class="px-4 py-2 text-right text-slate-900">{row.sqm}</td>
+						<td class="px-4 py-2 text-right text-slate-900">{row.sqft}</td>
 						<td class="px-4 py-2 text-slate-500 text-xs">{row.note}</td>
 					</tr>
 				{/each}

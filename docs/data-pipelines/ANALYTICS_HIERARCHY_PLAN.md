@@ -1,0 +1,407 @@
+# Analytics hierarchy: implementation plan
+
+Status: implemented on the local warehouse, 21 Oct 2026 (branch `feat/dxbi-dld-complete-match`, #46),
+with the unit-count work below (section 6). Open items: the review of the wrong-project records
+(decision 3) and the unit counts DLD and the records disagree on
+(`~/vv/analytics-hierarchy-audit-2026-10-21/unit_count_gaps.md`).
+Findings this plan fixes: <https://claude.ai/artifact/LmJZ2HYpFQ29yL7nT2N8Qs> (audit) and
+`~/vv/analytics-hierarchy-audit-2026-10-21/wrong_project_records.md` (wrong-project records).
+
+## Decisions
+
+| # | Decision | Source |
+|---|---|---|
+| 1 | One spelling per name: DXBI's spelling wins where DXBI has the name; otherwise DLD's, title-cased. | User, 21 Oct |
+| 2 | DLD sub-communities fold into the community master: the 20 `DUBAI HILLS - …` masters into Dubai Hills Estate; `Springs - N`, `Meadows N` and `Lakes - …` into The Springs, The Meadows and The Lakes. Each sub-community stays a project. | User, 21 Oct |
+| 3 | Records filed under another project than their building's are **not re-filed**. They are listed with their cause in `wrong_project_records.md` for review; each listed record carries a `stray` flag so a re-file is one switch later. | User, 21 Oct |
+| 4 | Merges need evidence. Exact duplicates (case, spacing, punctuation) merge automatically. A near duplicate merges only when the records show it: shared buildings, the same DLD building, or a DLD register entry. Otherwise the names stay apart. | Plan |
+| 5 | Unit counts name their source. Order: DXBI's building list, then DLD's unit register (by building, matched by unit numbers; or by project), then DLD's land register (villa plots). A count below the units actually traded is not shown; the page shows "at least N units traded" instead. | Plan |
+
+## What changes
+
+### 1. Holocron: a canonical hierarchy, built after the profiles
+
+New module `holocron/market/analytics_hierarchy.py`, run by `build_profiles` and `build_listed`
+between the profiles and the listed tables. Every table is built in staging and swapped in, as the
+profiles are.
+
+| Table | One row per | Holds |
+|---|---|---|
+| `analytics_project_keys` | spelling seen (name key) | the canonical project key it belongs to |
+| `analytics_projects` | project | display name (rule 1), kind (Project / Building), the one master (rule 2), DLD area, record counts |
+| `analytics_building_keys` | DXBI building name + community (+ project when the name is shared) | the building id it belongs to |
+| `analytics_buildings` | building | display name, project, master, records, the DLD building it matches (unit numbers) |
+| `analytics_unit_stock` | project and building | units and their source, units traded, buildings, unit mix by bedrooms (DLD register), median size |
+
+Rules:
+
+- **Name key**: lower case, letters and digits only. `MERANO TOWER` = `Merano Tower`,
+  `INDIGO VILLE5` = `Indigo Ville 5`, `PARK VILLA\'S 2` = `Park Villas 2`.
+- **Project display name**: DXBI's most used spelling for the key (its project, building and
+  location-tree labels), else DLD's name in title case when DLD wrote it in capitals.
+- **Project master**: the most common master over the project's records after
+  `master_aliases.csv` (spellings, sub-communities, projects used as masters), unless
+  `project_masters.csv` names it with evidence (AMARANTA 2 → Villanova, not DLD's
+  "Jumeriah Beach Residence - JBR"). Every record of a project shows that one master, so a
+  project is never split across masters.
+- **Master display name**: DXBI's location-tree spelling where DXBI has the master
+  (Dubai Silicon Oasis, Jumeirah Lake Towers, Damac Hills 2), else DLD's in title case.
+- **Building**: a DXBI building name in its community. A name whose records clearly sit in one
+  project (>= 80% of >= 10) is one building of that project; a name shared by several projects
+  ("Tower 2") is one building per project. Not buildings: place names ("Al Warsan Industrial"),
+  DXBI project labels ("Binghatti Skyrise (all buildings)") and DLD plot references.
+  Two names in one project that match the same DLD building by unit numbers are one building
+  ("Merano" / "Merano Tower" if the units say so).
+- **Project near-duplicates** (`project_aliases.csv`): only pairs with evidence, each row
+  citing it.
+
+### 2. Listed tables carry the canonical columns
+
+`dxbi_sales_listed` / `dxbi_leases_listed` gain `scope_key`, `scope_name`, `scope_kind`,
+`master_name`, `building_id`, `building_name_display`, `stray`. A record loaded after the last
+hierarchy build still resolves through the key tables (its spelling's key).
+
+### 3. Backend Analytics
+
+- `analytics/dxbi.py` reads the canonical columns; the per-record master and scope expressions go.
+- Search reads `analytics_projects` / `analytics_buildings` (no scan of 2.6M records per
+  keystroke). A building result is a building scope: `filter_type=building`, `building_id`,
+  with its project and master for the label.
+- Every project endpoint (summary, trends, price distribution, compare) accepts
+  `filter_type=building` + `building_id`.
+- Header numbers:
+  - Building: units (source), unit mix, DXBI card developer and completion.
+  - Project: units (source), buildings, unit mix, and a table of its buildings with units,
+    sales and leases.
+  - Master: rollup of its projects (total units, projects, buildings, projects with unit data).
+- Cache key prefixes bumped.
+
+### 4. Frontend
+
+- Selector: building rows read "Building · Project · Master" and select the building.
+- Header: a breadcrumb Master › Project › Building with links up; units with their source;
+  "at least N units traded" where no register covers the traded units.
+- Project view: a Buildings table (units, sales, leases). Unit mix table from the stock table.
+- Compare accepts buildings.
+
+### 6. Unit counts where names and numbers disagree (21 Oct 2026, second pass)
+
+- **A project DLD holds under another name, or under no project.** 1.53M of DLD's 2.35M register
+  units carry no project name (most older towers). A project with no register units under its name
+  is linked to the register group holding its unit numbers at the same floor areas (within 2%), in
+  its DLD area (an area DLD renamed in 2026 matches its older areas through their master): the
+  group's DLD project, or for unnamed units its DLD building. The group must hold >= 80% of the
+  project's unit numbers, at least 5, more than any other group (twin towers tie and link
+  neither), and no other DXBI project may hold it by name or claim it. Stored in
+  `analytics_project_dld_keys`; the project's count, its buildings' DLD matching and the unit mix
+  read it.
+- **Towers that repeat unit numbers.** Where unit numbers alone spread over a project's DLD
+  buildings, the numbers at the same floor area (within 2%) pick the building (same 80% / >= 3 rule).
+- **One DLD building, one building.** A DLD building matched by two buildings that are not
+  spellings of one (Shoreline's towers all matched Al Das, the one DLD files under the project)
+  counts for neither (`analytics_buildings.dld_claims`). Before, each took its count.
+- **One name in one project is one building**, whatever DXBI community its records carry
+  ("Zaabeel 2" / "Zabeel 2", "Al Furjan" / "Jabal Ali 1"), unless they sit on different DLD
+  buildings. Before, 280 such pairs were two buildings each, and a project adding up DXBI
+  building cards counted them twice (Arabella 1,378 units, now 689).
+- **Units traded are counted once.** One unit key for matching and counting: "FLAT 415",
+  "Unit No. 415" and "415" are one; "A-0101" and "A101" are one. A shop, office or parking code
+  counts as traded only where the project's register holds it. Buildings on one DLD building hold
+  one set of unit numbers in the project's count.
+- **Land plots** are counted across both land-register snapshots by area name, land number and
+  sub-number (the snapshots tag one plot as area 505 / 0 and sub-number '0' / ''); Vardon is 692.
+- **DLD's unit register** is read from the newest complete snapshot (>= 90% of the largest). A
+  refresh was tried on 21 Oct: the gateway's `units` command answers 200 with no rows (unfiltered,
+  by area, either sort) while `lands` answers; the May snapshot stays.
+
+### 7. Trust DXBI's building (decision 3, 21 Oct 2026)
+
+The user chose: a record whose DXBI building clearly belongs to one project (>= 80% of >= 10 of
+its records) is filed under that project. Cause of most wrong-project records: DXBI names the
+building but not the project, DLD names the project but not the unit or building, so a record's
+project came from a DLD sale or lease of the same price and date. Sister phases launched at one
+price list (Damac Lagoons Nice 1 / Nice 2: 500 DLD sales at AED 1,706,000 for 1,550 sqft in 2022)
+then swap records.
+
+- **Pairing checks the building.** Sales: among equally good DLD candidates, one in the DXBI
+  building's project wins when the building's paired sales agree >= 80% (was 90%, so Nice 1 at
+  84% never used it). Leases: a first pass pairs a lease only with a DLD contract of its
+  building's project (same area, dates and rent), before the general pass.
+- **Listed records follow the building.** `scope_key` / `scope_name` / master are the building's
+  project; `stray = 1` marks a record re-filed because its pairing named another project.
+- **DXBI-only buildings** ("Geepas Tower", own-building scopes) are linked to the DLD building
+  holding their unit numbers at the same floor areas, as projects are (section 6).
+- **Unit key** drops Damac's estate prefixes ("DH2-XR1139B" = "XR1139B", "DL-K138" = "K138").
+
+| | Before | After |
+|---|---:|---:|
+| Records whose pairing named another project than their (clear) building's | 40,078 (5,510 sales, 34,568 leases), shown under the wrong project | 14,196 (4,107 sales, 10,089 leases), all filed under their building's project |
+| Records in another project than their building's, building clear | 40,078 | 0 |
+| Records in another project than their building's, building not clear (< 80%) | not counted | 16,656 (7,627 sales, 9,029 leases), unchanged |
+| Nice 1 / Nice 2 | 697 + 114 crossed / 511 + 112 crossed | 819 / 630, none crossed; 551 / 452 plots counted |
+| Projects with a register count | 3,445 | 3,543 |
+| Buildings with a register count | 4,075 | 4,183 |
+| DXBI sales / leases paired with DLD | 964,280 / 1,418,877 | 964,401 / 1,418,882 |
+
+Second pass, same day (user: "do all the fixes, check the web where they are the same or
+different"). The 16,656 records whose building was under 80% agreement were three cases:
+
+- **A project named like the building** is its project, whatever the share (Spring Oasis, 61%
+  It Plaza pairings; Dubai Jewel Tower vs Silver Park Residency in Warsan Fourth). Web: Spring
+  Oasis is a residential tower, IT Plaza an office building; Jewel Tower is in Internet City.
+- **Sister phases of one master community** re-file at >= 60% (Damac Hills 2 clusters,
+  International City clusters). Where a name splits below 60% between sisters it is one
+  building per project: DLD's register has Capria East buildings 1-9 (plot 527) and Capria
+  West buildings 1-12 (plot 528), so "Capria 5" is two buildings.
+- **A project in another master community** (a price-and-date pairing across the city:
+  Manchester Tower to Azizi Mirage 1) re-files at >= 50%.
+- **Generic names** ("Tower A", "Building 2") take DXBI's own project as part of the building:
+  DXBI files every "Tower A" sale under Club Drive, Address Residences, Golf Horizon, Damac
+  Towers by Paramount, etc. "G-24" is a named building, not a generic one.
+- **One development DLD registers as two projects** merge (`project_aliases.csv`, with the web
+  evidence): Palm Central Private Residences (Frond M + Frond N; Nakheel: one development
+  between the fronds), Bellagio by Sunrise (+ Bellavion by Sunrise; Sunrise Capital: two blocks,
+  255 units).
+
+| | After first pass | After second pass |
+|---|---:|---:|
+| Records re-filed to their building's project | 14,196 | 30,413 |
+| Records in another project than their building's | 16,656 | 40, then 3 (see below) |
+| Projects / buildings with a register count | 3,543 / 4,183 | 3,550 / 4,203 |
+
+The 40 (listed in `remaining_40_records.csv`) were buildings of under 10 records: a small
+building (3-9) now re-files at 60% unless generic (Oberoi Centre, Urbana stacked-house blocks,
+Executive Towers Plaza Boutiques), and in a building of under 5 records one record named like
+the building decides (Emaar Square 5, The Pulse Beachfront, Binghatti Galaxy). Three remain: two
+leases of Mog 193 unit 308 (Discovery Gardens, its building 51% Mogul Cluster; the two sources
+disagree) and one sale in a 2-record I Suites building. Executive Bay Podium's one Executive Bay B
+lease re-filed to Executive Bay A (2 of its 3 records), but its own DLD lease (same dates and
+1,268 sqft) is Executive Bay B: a podium's name now counts as generic, so its records keep their
+pairing. Five remain in another project than their building's: the three above and two podium
+records, by design.
+
+Pairing and size (measured 22 Oct 2026 on the current pairs; a pair "agrees" when its project is
+its clear building's, "disagrees" when it was re-filed):
+
+| Size gap DXBI vs DLD | Sales: pairs / agree / disagree | Leases: pairs / agree / disagree |
+|---|---|---|
+| <= 5% | 821,200 / 797,196 / 4,560 (0.6% wrong) | 356,589 / 315,960 / 4,157 (1.3%) |
+| 5-20% | 3,210 / 2,400 / 737 (24%) | 3,202 / 593 / 1,368 (70%) |
+| 20-50% | 2,015 / 1,062 / 854 (45%) | 2,934 / 470 / 1,211 (72%) |
+| > 50% | 1,791 / 727 / 868 (54%) | 2,152 / 270 / 910 (77%) |
+| a side has no size | 12,426 / 12,221 / 132 | 412 / 45 / 154 |
+
+A size check (both sizes known) is worth it for leases at 5%: it would drop 8,288 pairs, about
+3,500 of them wrong and 1,300 right. For sales it is a coin flip beyond 20% (about half of those
+pairs agree with their building) and is not proposed. Applied for leases on 22 Oct (user):
+leases paired 1,418,882 -> 1,411,948; leases re-filed because their pairing named another
+project 22,1xx -> 17,236.
+
+DLD's project register (`dld_od_projects_bronze`: `cnt_unit` + `cnt_villa`, newest snapshot,
+September 2026) is a unit source after the unit register and before land plots, by name or by
+the DLD project a unit-number link found. It counts 188 projects that showed "at least N
+traded", 43 of them launched after the unit register's May snapshot. Projects with a register
+count: 3,550 -> 3,730 of 4,394.
+
+No "at least N units traded" (user, 22 Oct): a project or building shows DXBI's building-list
+count, else a DLD register count, else our own count (`unit_numbers`): every distinct unit
+number its records and DLD's register name there (Skyvue: DLD's 1,850 and the tower D floors
+only its sales name, 2,281). Every project and building with a unit number has a count: 4,395
+projects (DXBI 1,580, DLD 2,151, ours 664) and 6,215 buildings (DXBI 1,567, DLD 2,633, ours
+2,015). Our own count misses units that never traded and DLD has not registered; on buildings
+with a DXBI or DLD count, traded units alone were a median 90% of it.
+
+The building steps are now computed once into work tables (`analytics_first_ids__work`,
+`analytics_record_ids__work`, `analytics_dld_votes__work`, `analytics_building_merge__work`);
+inlined as CTEs they recomputed the chain several times, outgrew 9 GB and took 8-12 minutes.
+The hierarchy build now takes 89 seconds.
+
+Re-filed records: `~/vv/analytics-hierarchy-audit-2026-10-21/refiled_by_building.csv`.
+
+### 5. Not changed (waiting for review)
+
+- The wrong-project records (decision 3).
+- Pairing rules in `transforms.py` (fixes are proposed in the error analysis).
+
+## Order
+
+1. Curated CSVs: master aliases, project masters, project aliases (with evidence).
+2. Holocron module, schema, tests; build on the local warehouse (one heavy build at a time).
+3. Backend: dxbi.py, queries, service, router, models, tests.
+4. Frontend: selector, panel, compare; tests.
+5. Verify: re-run the audit (exact duplicates 0; projects under one master; unit coverage),
+   check Skyrise, Merano and two villa communities against DXBI, run all suites, browser pass.
+
+## Results (local warehouse, 21 Oct 2026)
+
+| Check | Before | After |
+|---|---:|---|
+| Project names that differ only in case or punctuation | 174 groups | 0 |
+| Master names (spellings, sub-communities, projects as masters) | 469 | 177 |
+| Projects under more than one master | 1,307 | 0 |
+| Projects with a register unit count | 1,918 (41%) | 3,311 of 4,506 (73%) on the first pass; **3,445 (76%)** after section 6; 942 more show "at least N units traded" |
+| Buildings with a unit count | 0 (no view) | 3,863 of 6,536 (59%) on the first pass; **4,075 of 6,223 (65%)** after section 6 (280 duplicate buildings merged); 2,124 more "at least N traded" |
+| Masters with a unit count | 0 | every master: its projects' register counts added up, with "N of M projects counted" |
+| Building selection | opened the project | its own scope on every endpoint (`filter_type=building`, `building_id`) |
+| Records filed under another project than their building's | 38,679 (audit) | 39,975 marked `stray = 1`, listed for review; 40,078 after the building merges (159 added, 56 cleared: `wrong_project_records_delta.csv`) |
+
+Notes:
+
+- DLD's project register `no_of_units` agrees with its unit register for 2,121 of 2,563 projects
+  matched by project id (39 doubled). The audit's "about double" came from matching by name; Upcoming
+  Supply is unchanged.
+- Traded units count only a project's own buildings (and, for a project without buildings, its
+  records), and a unit share ("2510 (Q 3)", Ciel) is its unit: building-less leases that pairing
+  attached to a project are often another building's units.
+
+Section 6, step by step (projects / buildings with a register count; gaps P1–P4, B1–B3 as in
+`unit_count_gaps.md`):
+
+| Step | Projects | Buildings | Gaps after |
+|---|---:|---:|---|
+| First pass | 3,311 | 3,863 of 6,536 | P1 237, P2 41, P3 196, P4 53; B1 781, B2 836, B3 36 |
+| Link projects by unit numbers (423 links) | 3,434 | 4,077 | P1 125; B2 595 |
+| Floor-area tie-break; twin-tower ties link nothing; shared DLD buildings count for neither | 3,426 | 4,165 of 6,507 | B1 610; 8 projects lose a doubled sum |
+| Unit key, non-residential codes, plots, same-name buildings merged | 3,445 | 4,075 of 6,223 | P1 127, P2 44, P3 174, P4 53; B1 591, B2 575, B3 26 |
+
+What is left, and why it is not counted (listed with evidence in `unit_count_gaps.md`):
+
+- P1 127: unit numbers split over several DLD buildings or projects (65), not in the register at
+  their floor areas (32), the DLD project another DXBI project holds by name (11, likely a phase
+  or a duplicate), fewer than 5 matches (9), twin buildings (7), claimed by two projects (3).
+- P2 44 and B3 26: the register holds fewer units than traded even with one unit key: upper
+  floors or towers missing from the register (Skyvue D76xx, New Dubai Gate 1 B-7xx), villa codes
+  under a commercial register entry (Jumeirah Park), DXBI numbering DLD does not use (101A/101B).
+- P3 174: off-plan villa phases whose sub-plots DLD has not registered, and apartment projects
+  whose land register entry is the one site plot.
+- P4 53: first record after the May 2026 unit snapshot; DLD's units endpoint returns no rows.
+- Not countable from current data: villa clusters without a plot list, DXBI-only buildings, fewer
+  than 3 unit numbers, no unit numbers.
+
+Checks run: holocron 611 passed (live ClickHouse) with `ty` and ruff; backend unit/contract 223
+and ClickHouse 78; frontend vitest 71 and svelte-check; Playwright Analytics specs 24 (new
+`e2e/analytics-hierarchy.spec.ts`, screenshots in `docs/audits/analytics-hierarchy-2026-10-21/`).
+
+Checks run after section 6: holocron 613 passed (live ClickHouse; new tests: a project DLD files
+under no name gets its register count, repeated unit numbers resolve by floor area, format
+variants and a parking code do not inflate traded units, one name across communities is one
+building, a DLD building two buildings match counts for neither), `ty` and ruff; backend
+ClickHouse 78 and unit/contract 223; frontend vitest 71 and svelte-check; Playwright Analytics
+specs 24.
+
+
+## S1: DXBI lease phase spellings (22 Oct 2026)
+
+Merged all 46 reviewed short/phase-name pairs through evidence-backed project aliases.
+The review checked the global key map, both DXBI event tables (project and building labels,
+including the normalized "all buildings/phases" suffix), and profile areas/masters.
+Every raw short spelling is confined to its intended DXBI community or DLD area; no generic
+names, shared-name conflicts, or alias chains were found. No pairs were rejected. Sun/Ruba
+and Golf Horizon/Panorama have stray matched DLD area/master labels, but their raw DXBI
+locations consistently identify Arabian Ranches 3 or Damac Hills respectively. Those pairing
+labels are not evidence of another project sharing the short name.
+
+Project cards now resolve through the same curated aliases as records, so Joy's 486-unit
+DXBI card survives its merge. Source priority and the existing traded-unit plausibility floor
+are unchanged. The build logs the remaining same-area short/phase-name pair count, warning
+when nonzero without rejecting the build. Casa Viva's master is explicitly Serena, supported
+by [Dubai Properties' Casa Viva page](https://dp.ae/our-portfolio/all-projects/50/casa-viva-at-serena/).
+Golf Horizon resolves to Damac Hills and Deema 1 to The Lakes through the merged records.
+
+| Check | Before | After |
+|---|---:|---:|
+| Same-area short/phase-name pairs | 46 | 0 |
+| Projects | 4,488 | 4,442 |
+| Projects with a positive unit count | 4,395 | 4,353 |
+| Joy sales / leases (short + DLD name) | 0 + 750 / 318 + 542 | 750 / 860 |
+| Joy units | 486 + 519 | 486 (dxbi_buildings) |
+| Vardon sales / leases (short + DLD name) | 0 + 930 / 21 + 715 | 930 / 736 |
+| Vardon units | 692 + 692 | 692 (dxbi_buildings) |
+| Damac Hills 2 master units | 26,574 | 19,024 (−7,550) |
+| Arabian Ranches 3 master units | 6,379 | 4,583 (−1,796) |
+| Hierarchy sales / leases | 961,468 / 605,449 | 961,468 / 605,449 |
+
+All 46 merged projects retain positive unit counts. Exactly 42 counted short projects
+disappear; Caya, Elora, Trinity and Santorini 1 already had zero units. No surviving project
+loses unit coverage. All pair-level sales and lease totals are conserved: 1,485 leases and
+6 sales move from short names. The removed short projects held 9,814 units.
+
+Master reductions also include source changes on the retained projects. Damac Hills 2
+removes 7,607 short-name units and gains 57 from card priority (Aquilegia +60, Primrose +1,
+Zinnia −4), for a net reduction of 7,550. Arabian Ranches 3 removes 1,752 short-name units
+and adjusts retained counts by −44 (Joy −33, Sun +5, Ruba −16), reducing its total by 1,796.
+Raya's 240-unit card and Mulberry's 110-unit card remain below the existing plausibility
+floor, so their merged projects retain 317 observed units and 324 DLD land plots respectively.
+
+### Reviewed pairs and resulting stock
+
+Before values are short-name units + DLD-name units. Every row is merged; none is rejected.
+The DLD spellings, including lll, Sanctnary and double spaces, are preserved in the CSV.
+
+| Short name | Canonical project | Leases before → after | Units before → after | Final source |
+|---|---|---:|---:|---|
+| Joy | Arabian Ranches III - JOY | 318 + 542 → 860 | 486 + 519 → 486 | dxbi_buildings |
+| Sun | Arabian Ranches III - SUN | 309 + 551 → 860 | 439 + 434 → 439 | dxbi_buildings |
+| Ruba | Arabian Ranches lll - Ruba | 252 + 459 → 711 | 430 + 446 → 430 | dxbi_buildings |
+| Talia | The Valley - Talia | 126 + 297 → 423 | 75 + 443 → 443 | unit_numbers |
+| Spring | Arabian Ranches III - Spring | 111 + 168 → 279 | 154 + 154 → 154 | dxbi_buildings |
+| Casa Viva | Serena - Casa Viva | 74 + 440 → 514 | 17 + 448 → 448 | unit_numbers |
+| Orania | The Valley - Orania | 38 + 216 → 254 | 34 + 410 → 410 | unit_numbers |
+| Albizia | Damac Hills (2) - Albizia | 24 + 614 → 638 | 604 + 604 → 604 | dxbi_buildings |
+| Vardon | Damac Hills (2) - Vardon | 21 + 715 → 736 | 692 + 692 → 692 | dxbi_buildings |
+| Pacifica | Damac Hills (2) - Pacifica | 16 + 561 → 577 | 640 + 640 → 640 | dxbi_buildings |
+| Zinnia | Damac Hills (2) - Zinnia | 15 + 456 → 471 | 486 + 490 → 486 | dxbi_buildings |
+| Centaury | Damac Hills (2) - Centaury | 14 + 405 → 419 | 413 + 413 → 413 | dxbi_buildings |
+| Sanctnary | Damac Hills (2)  - Sanctnary | 14 + 320 → 334 | 388 + 388 → 388 | dxbi_buildings |
+| Primrose | Damac Hills (2) - Primrose | 14 + 321 → 335 | 354 + 353 → 354 | dxbi_buildings |
+| Amargo | Damac Hills (2) - Amargo | 13 + 437 → 450 | 398 + 398 → 398 | dxbi_buildings |
+| Avencia 2 | Damac Hills (2) - AVENCIA-2 | 11 + 421 → 432 | 10 + 408 → 408 | dxbi_buildings |
+| Janusia | Damac Hills (2) - Janusia | 11 + 457 → 468 | 478 + 478 → 478 | dxbi_buildings |
+| Claret | Damac Hills (2) - Claret | 10 + 264 → 274 | 315 + 315 → 315 | dxbi_buildings |
+| Sycamore | Damac Hills (2) - Sycamore | 10 + 177 → 187 | 184 + 184 → 184 | dxbi_buildings |
+| Aquilegia | Damac Hills (2) - Aquilegia | 9 + 437 → 446 | 424 + 364 → 424 | dxbi_buildings |
+| Juniper | Damac Hills (2) - Juniper | 8 + 264 → 272 | 314 + 314 → 314 | dxbi_buildings |
+| Basswood | Damac Hills (2) - Basswood | 7 + 464 → 471 | 419 + 419 → 419 | dxbi_buildings |
+| Odora | Damac Hills (2) - Odora | 7 + 230 → 237 | 254 + 254 → 254 | dxbi_buildings |
+| Aster | Damac Hills (2) - Aster | 7 + 337 → 344 | 378 + 378 → 378 | dxbi_buildings |
+| Mimosa | Damac Hills (2) - Mimosa | 6 + 375 → 381 | 338 + 338 → 338 | dxbi_buildings |
+| Golf Panorama | Damac Hills - Golf Panorama | 1 + 171 → 172 | 160 + 160 → 160 | dxbi_buildings |
+| Trixis | Damac Hills (2) - Trixis | 5 + 119 → 124 | 134 + 134 → 134 | dxbi_buildings |
+| Coursetia | Damac Hills (2) - Coursetia | 5 + 152 → 157 | 169 + 169 → 169 | dxbi_buildings |
+| Raya | Arabian Ranches lll - Raya | 4 + 112 → 116 | 240 + 317 → 317 | unit_numbers |
+| June 2 | Arabian Ranches lll - June 2 | 3 + 31 → 34 | 1 + 43 → 43 | unit_numbers |
+| Caya | Arabian Ranches lll - Caya | 2 + 122 → 124 | 0 + 247 → 247 | dld_land_plots |
+| Richmond | Damac Hills -  Richmond | 2 + 99 → 101 | 2 + 118 → 118 | dxbi_buildings |
+| Golf Horizon | Damac Hills - Golf Horizon | 1 + 185 → 186 | 159 + 160 → 159 | dxbi_buildings |
+| Bliss 2 | Arabian Ranches lll - Bliss 2 | 2 + 99 → 101 | 2 + 302 → 302 | unit_numbers |
+| Mulberry | Damac Hills (2) - Mulberry | 2 + 81 → 83 | 110 + 324 → 324 | dld_land_plots |
+| Amargo 2 | Damac Hills (2) - Amargo 2 | 2 + 111 → 113 | 105 + 105 → 105 | dxbi_buildings |
+| Brookfield-2 | Damac Hills - BROOKFIELD-2 | 2 + 53 → 55 | 2 + 75 → 75 | dxbi_buildings |
+| Elora | The Valley - Elora | 1 + 51 → 52 | 0 + 520 → 520 | unit_numbers |
+| Cavalli Estates | Damac Hills - Cavalli Estates | 1 + 0 → 1 | 1 + 41 → 41 | dld_land_plots |
+| Deema 1 | The Lakes - Deema 1 | 1 + 31 → 32 | 1 + 39 → 39 | unit_numbers |
+| The Flora | Damac Hills - The Flora | 1 + 42 → 43 | 1 + 67 → 67 | dxbi_buildings |
+| The Turf | Damac Hills - The Turf | 1 + 39 → 40 | 1 + 64 → 64 | dxbi_buildings |
+| Trinity | Damac Hills - Trinity | 1 + 75 → 76 | 0 + 116 → 116 | dxbi_buildings |
+| Costa Brava 2 | Damac Lagoons - Costa Brava (2) | 1 + 9 → 10 | 1 + 497 → 497 | dld_projects |
+| Whitefield | Damac Hills - Whitefield | 1 + 34 → 35 | 1 + 70 → 70 | dxbi_buildings |
+| Santorini 1 | Damac Lagoons - Santorini (1) | 1 + 223 → 224 | 0 + 459 → 459 | dld_land_plots |
+
+Outside these pairs, Al Helal Al Zahaby Building keeps 81 units but now attributes them to
+its aliased DXBI card instead of its building rollup. Red Diamond DMCC changes from the
+saved baseline's 51 building-register units to 25 observed units. An isolated rebuild of
+the unchanged ef16d72 hierarchy and CSVs against the same sources also produces 25 units
+and no DLD project link; this is pre-existing rebuild drift, not an S1 regression. Its
+source/link stability remains a separate data-quality issue. The diagnostic database was
+removed after comparison; shared source and scratch tables were untouched.
+
+Validation: the Joy regression first failed with an observed-unit fallback, then passed
+with the card alias lookup. All nine hierarchy tests pass, including same-area pair
+detection. The hierarchy/listed rebuild completed sequentially (96s + 5s + 5s).
+Holocron's full live-ClickHouse `just check` passed Ruff formatting/lint, ty, and 617 tests
+(no skips; one existing TestStopped collection warning). Backend unit/contracts passed
+223 tests and the separate ClickHouse suite passed 78, with no skips. The first backend
+run skipped three Bun parity tests; after enabling the installed Bun and generating this
+worktree's Svelte config from locked frontend dependencies, the complete run passed.
+Frontend browser tests were not run: this change touches hierarchy logic and curated
+data only, with no API, schema, routing, or UI changes.

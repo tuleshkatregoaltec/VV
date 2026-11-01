@@ -46,8 +46,8 @@ class ListingFiltersResponse(BaseModel):
     areas: list[str] = Field(default_factory=list)
     property_types: list[str] = Field(default_factory=list)
     bedrooms: list[str] = Field(default_factory=list)
-    price_min: float | None = None
-    price_max: float | None = None
+    price_min: int | None = None
+    price_max: int | None = None
 
 
 class ListingCardResponse(BaseModel):
@@ -57,7 +57,7 @@ class ListingCardResponse(BaseModel):
     title: str
     reference: str | None = None
     property_type: str | None = None
-    price_value: float | None = None
+    price_value: int | None = None
     price_currency: str | None = None
     price_period: str | None = None
     size_value: float | None = None
@@ -78,6 +78,7 @@ class ListingCardResponse(BaseModel):
     agent_image_url: str | None = None
     broker_name: str | None = None
     broker_logo_url: str | None = None
+    captured_at: AwareDatetime | None = None
     listed_date: AwareDatetime | None = None
     listing_age_days: int | None = None
     price_per_sqft_aed: float | None = None

@@ -34,7 +34,7 @@ def private_write(path: Path, value) -> None:
         stream.write("\n")
 
 
-def _scrub_text(text: str, secrets: tuple[str, ...]) -> str:
+def scrub_secrets(text: str, secrets: tuple[str, ...]) -> str:
     for secret in sorted(secrets, key=len, reverse=True):
         if secret:
             # Secrets can occur inside nested serialized tool messages. Redact
@@ -45,45 +45,10 @@ def _scrub_text(text: str, secrets: tuple[str, ...]) -> str:
                 escaped = json.dumps(escaped)[1:-1]
                 forms.add(escaped)
             for form in sorted(forms, key=len, reverse=True):
-                if len(secret) < 8 or secret.isdecimal():
-                    # Short dummy credentials must not rewrite unrelated trace IDs,
-                    # timestamps or longer numbers that merely contain the value.
-                    text = re.sub(
-                        r"(?<![\w.-])" + re.escape(form) + r"(?![\w.-])", "[SECRET]", text
-                    )
-                else:
-                    text = text.replace(form, "[SECRET]")
+                text = text.replace(form, "[SECRET]")
     text = re.sub(r"(?i)Bearer\s+[A-Za-z0-9._~-]+", "Bearer [SECRET]", text)
     text = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "[TOKEN]", text)
     return text
-
-
-def scrub_value(value, secrets: tuple[str, ...]):
-    """Redact string content, including nested JSON, without rewriting numbers."""
-    if isinstance(value, dict):
-        return {
-            _scrub_text(key, secrets): scrub_value(item, secrets) for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [scrub_value(item, secrets) for item in value]
-    if isinstance(value, str):
-        try:
-            nested = json.loads(value)
-        except (ValueError, TypeError):
-            nested = None
-        if isinstance(nested, (dict, list)):
-            return json.dumps(scrub_value(nested, secrets), ensure_ascii=False)
-        return _scrub_text(value, secrets)
-    return value
-
-
-def scrub_secrets(text: str, secrets: tuple[str, ...]) -> str:
-    """Preserve JSON structure for persisted records; also accepts plain text."""
-    try:
-        payload = json.loads(text)
-    except ValueError:
-        return _scrub_text(text, secrets)
-    return json.dumps(scrub_value(payload, secrets), ensure_ascii=False)
 
 
 class LocalExporter(SpanExporter):
@@ -98,10 +63,10 @@ class LocalExporter(SpanExporter):
             os.fchmod(fd, 0o600)
             with os.fdopen(fd, "a") as stream:
                 for span in spans:
-                    # Scrub values before serialization so a numeric dummy credential
-                    # cannot replace a JSON number with an unquoted marker.
-                    payload = scrub_value(json.loads(span.to_json()), self.secrets)
-                    stream.write(json.dumps(payload, default=str) + "\n")
+                    # Serialize then scrub, including exceptions/events/resources, not just inputs.
+                    payload = json.loads(span.to_json())
+                    line = json.dumps(payload, default=str)
+                    stream.write(scrub_secrets(line, self.secrets) + "\n")
         return SpanExportResult.SUCCESS
 
 

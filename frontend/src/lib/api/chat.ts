@@ -1,15 +1,17 @@
 import type { StreamCallback } from './client'
 import { client } from './client'
 import type {
+	ActionProposalRequest,
+	ActionProposalResponse,
 	ConversationListResponse,
 	ConversationResponse,
 	CreateConversationRequest,
 	MessageResponse,
-	SendMessageRequest,
 	UpdateConversationRequest
 } from './generated/hey-api/types.gen'
 
 export type {
+	ActionProposalResponse,
 	ConversationListResponse,
 	ConversationResponse,
 	CreateConversationRequest,
@@ -22,10 +24,31 @@ export interface ConversationListParams {
 }
 
 export interface MessageListParams {
+	before_id?: number
 	limit?: number
 }
 
 export const chat = {
+	getAction: (actionId: string) =>
+		client.get<ActionProposalResponse>(`/api/v1/assistant/actions/${encodeURIComponent(actionId)}`),
+	getActions: (conversationId: number) =>
+		client.get<ActionProposalResponse[]>(
+			client.withQuery('/api/v1/assistant/actions/proposals', { conversation_id: conversationId })
+		),
+	proposeAction: (data: ActionProposalRequest) =>
+		client.post<ActionProposalResponse, ActionProposalRequest>(
+			'/api/v1/assistant/actions/proposals',
+			data
+		),
+	confirmAction: (actionId: string) =>
+		client.post<ActionProposalResponse>(
+			`/api/v1/assistant/actions/${encodeURIComponent(actionId)}/confirm`
+		),
+	cancelAction: (actionId: string) =>
+		client.post<ActionProposalResponse>(
+			`/api/v1/assistant/actions/${encodeURIComponent(actionId)}/cancel`
+		),
+
 	createConversation: (data: CreateConversationRequest = {}) =>
 		client.post<ConversationResponse>('/api/v1/chat/conversations', data),
 
@@ -43,20 +66,18 @@ export const chat = {
 	deleteConversation: (conversationId: number) =>
 		client.delete(`/api/v1/chat/conversations/${conversationId}`),
 
-	getMessages: (conversationId: number, { limit = 100 }: MessageListParams = {}) =>
+	getMessages: (conversationId: number, { limit = 100, before_id }: MessageListParams = {}) =>
 		client.get<MessageResponse[]>(
-			client.withQuery(`/api/v1/chat/conversations/${conversationId}/messages`, { limit })
+			client.withQuery(`/api/v1/chat/conversations/${conversationId}/messages`, {
+				limit,
+				before_id
+			})
 		),
 
 	/** Streams AI response chunks via Server-Sent Events */
-	sendMessage: (
-		conversationId: number,
-		message: string,
-		onChunk: StreamCallback,
-		requestId: string = crypto.randomUUID()
-	) =>
+	sendMessage: (conversationId: number, message: string, onChunk: StreamCallback) =>
 		client.stream(`/api/v1/chat/conversations/${conversationId}/messages/stream`, onChunk, {
 			method: 'POST',
-			body: { message, request_id: requestId } satisfies SendMessageRequest
+			body: { message }
 		})
 }

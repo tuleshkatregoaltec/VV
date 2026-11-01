@@ -1,0 +1,225 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { client } from '$lib/api/client'
+import { getOwner, listOwnerImportProperties, listOwnerImportRows } from '$lib/crm/api/backend'
+
+/* A row on an import report opens its owner, and each of the owner's units shows what the file
+   said next to what DLD has, with the match result, as the old CRM's owner profile did. */
+afterEach(() => vi.restoreAllMocks())
+
+describe('import report rows', () => {
+	it('retains the explicit preview cap so omitted property history can be disclosed', async () => {
+		vi.spyOn(client, 'get').mockResolvedValue({
+			rows: [
+				{
+					property_key: 'synthetic|216',
+					area: '',
+					project: '',
+					building: 'Synthetic',
+					unit: '216',
+					property_type: 'Apartment',
+					rows: 51,
+					buyers: 1,
+					sellers: 0,
+					records_truncated: true,
+					records: Array.from({ length: 50 }, (_, index) => ({
+						name: 'Synthetic Owner',
+						role: 'Buyer',
+						status: 'unmatched',
+						sheet: 'Owners',
+						row: index + 2
+					}))
+				}
+			],
+			total: 1,
+			limit: 100,
+			offset: 0
+		} as never)
+		const page = await listOwnerImportProperties(7, { search: '', offset: 0 })
+		expect(page.rows[0].rows).toBe(51)
+		expect(page.rows[0].records).toHaveLength(50)
+		expect(page.rows[0].recordsTruncated).toBe(true)
+	})
+
+	it('carry the owner key the Owner panel opens with', async () => {
+		vi.spyOn(client, 'get').mockResolvedValue({
+			list: { id: 5 },
+			contacts: [
+				{
+					id: 1,
+					owner_key: 'abc123',
+					contact_name: 'WALDEMAR ROTFUSS',
+					phone_primary: '+971581465291',
+					area_name: 'Greens',
+					project_name: 'Greens',
+					building_name: 'Al Ghozlan 4',
+					unit_number: 'G01',
+					property_type: 'Unit',
+					transaction_date: '2024-02-27',
+					transaction_price_aed: 1_100_000,
+					ownership_status: 'verified_current_owner',
+					confidence_score: 98,
+					match_reason: 'Date and price match the latest sale.',
+					source_sheet: 'Old',
+					source_row_number: 12
+				}
+			],
+			total: 1,
+			limit: 100,
+			offset: 0
+		} as never)
+		const page = await listOwnerImportRows(5, { status: null, search: '', offset: 0 })
+		expect(page.rows[0]).toMatchObject({ ownerKey: 'abc123', unit: 'G01' })
+	})
+})
+
+describe('owner unit check', () => {
+	function serve(property: Record<string, unknown>) {
+		vi.spyOn(client, 'get').mockImplementation(async (url: string) => {
+			if (url.startsWith('/api/v1/crm/owner-workspaces')) return [] as never
+			if (url.startsWith('/api/v1/crm/contact-imports')) return [] as never
+			if (url.startsWith('/api/v1/crm/owners/'))
+				return {
+					owner_key: 'abc123',
+					contact_name: 'WALDEMAR ROTFUSS',
+					highest_ownership_status: 'verified_current_owner',
+					properties: [
+						{
+							property_key: 'alghozlan4|g01',
+							building_name: 'Al Ghozlan 4',
+							project_name: 'Greens',
+							area_name: 'Greens',
+							unit_number: 'G01',
+							property_type: 'Unit',
+							source_lists: ['Greens JAN 2025'],
+							source_rows: ['Old:12'],
+							...property
+						}
+					]
+				} as never
+			throw new Error(`unexpected GET ${url}`)
+		})
+	}
+
+	it('keeps two source rows of the same property apart', async () => {
+		// One owner can hold a villa on two rows (a sale and a resale). Keyed by the property alone,
+		// the panel's list throws a duplicate-key error and never leaves "Loading…".
+		vi.spyOn(client, 'get').mockImplementation(async (url: string) => {
+			if (url.startsWith('/api/v1/crm/owner-workspaces')) return [] as never
+			if (url.startsWith('/api/v1/crm/contact-imports')) return [] as never
+			const row = (n: number) => ({
+				property_key: 'maple3|demapleiii-v-349',
+				building_name: 'Maple 3',
+				project_name: 'Maple',
+				area_name: 'Dubai Hills Estate',
+				unit_number: 'DEMAPLEIII-V-349',
+				property_type: 'Villa',
+				ownership_status: 'probable_current_owner',
+				source_lists: ['Dubai Hills'],
+				source_rows: [`Reviewed source:${n}`]
+			})
+			return {
+				owner_key: 'abc123',
+				contact_name: 'X',
+				highest_ownership_status: 'probable_current_owner',
+				properties: [row(1), row(2)]
+			} as never
+		})
+		const o = await getOwner('abc123')
+		expect(o.unit_rows.map((u) => u.id)).toEqual([
+			'maple3|demapleiii-v-349',
+			'maple3|demapleiii-v-349#2'
+		])
+		expect(o.unit_rows.map((u) => u.key)).toEqual([
+			'maple3|demapleiii-v-349',
+			'maple3|demapleiii-v-349'
+		])
+	})
+
+	it('carries the whole portfolio, the current count and the developer-seller flag', async () => {
+		// The list counts properties in its view; the screens show it beside the whole portfolio.
+		vi.spyOn(client, 'get').mockImplementation(async (url: string) => {
+			if (url.startsWith('/api/v1/crm/owner-workspaces')) return [] as never
+			if (url.startsWith('/api/v1/crm/contact-imports')) return [] as never
+			return {
+				owner_key: 'abc123',
+				contact_name: 'X',
+				highest_ownership_status: 'former_owner',
+				property_count: 40,
+				current_property_count: 29,
+				developer_side_seller: true,
+				properties: []
+			} as never
+		})
+		const o = await getOwner('abc123')
+		expect([o.units_total, o.units_current, o.developer_side_seller]).toEqual([40, 29, true])
+	})
+
+	it('shows the file record, the DLD record, the result and the lease', async () => {
+		serve({
+			ownership_status: 'verified_current_owner',
+			confidence_score: 98,
+			match_reason: 'Acquisition date and price match the latest sale.',
+			imported_transaction_date: '2024-02-27',
+			imported_transaction_price_aed: 1_100_000,
+			imported_property_type: 'Unit',
+			registry_sale_date: '2024-02-27',
+			registry_sale_price_aed: 1_100_000,
+			registry_property_type: 'Apartment',
+			registry_bedrooms: '1 Bed',
+			registry_size_sqft: 1042,
+			registry_price_per_sqft_aed: 1056,
+			registry_market_status: 'Ready',
+			registry_unit_number: 'G01',
+			registry_building_name: 'Al Ghozlan 4',
+			registry_area_name: 'Greens',
+			imported_party_role: 'Buyer',
+			lease_end: '2026-09-22',
+			annual_rent_aed: 120_000
+		})
+		const o = await getOwner('abc123')
+		expect(o.unit_rows[0].check).toEqual({
+			imported: { date: '2024-02-27', aed: 1_100_000, type: 'Unit', unit: 'G01', role: 'Buyer' },
+			dld: {
+				unit: 'G01',
+				building: 'Al Ghozlan 4',
+				area: 'Greens',
+				date: '2024-02-27',
+				aed: 1_100_000,
+				type: 'Apartment',
+				bedrooms: '1 Bed',
+				size_sqft: 1042,
+				built_up_sqft: null,
+				aed_per_sqft: 1056,
+				market: 'Ready'
+			},
+			result: {
+				label: 'Current owner',
+				confidence: 98,
+				reason: 'Acquisition date and price match the latest sale.',
+				chip: { tone: 'green', label: 'Current owner' }
+			},
+			lease: { end: '2026-09-22', aed: 120_000 }
+		})
+	})
+
+	it('uses the import report wording and leaves missing DLD values empty', async () => {
+		serve({
+			ownership_status: 'former_owner',
+			confidence_score: 100,
+			match_reason: 'The uploaded record identifies this contact as the seller.'
+		})
+		const c = (await getOwner('abc123')).unit_rows[0].check
+		expect(c?.result.label).toBe('Former owner')
+		expect(c?.dld).toMatchObject({
+			unit: '',
+			building: '',
+			date: null,
+			aed: null,
+			type: '',
+			bedrooms: ''
+		})
+		expect(c?.imported.role).toBe('')
+		expect(c?.lease).toBeNull()
+	})
+})

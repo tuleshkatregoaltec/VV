@@ -83,9 +83,12 @@ def test_raw_files_are_archived_with_checksums_before_loading(tmp_path: Path) ->
 
 def test_loader_accounting_is_parsed_so_dropped_rows_stay_measurable() -> None:
     sales = evidence.parse_loader_output(
-        "sales", "INFO Sales load complete loaded=120 skipped=15 errors=0"
+        "sales",
+        "INFO Sales load complete loaded=120 skipped=15 errors=0 without_unit=30 superseded=4",
     )
     assert (sales.rows_loaded, sales.rows_skipped, sales.rows_rejected) == (120, 15, 0)
+    assert sales.details["without_unit"] == 30
+    assert sales.details["superseded"] == 4
     rentals = evidence.parse_loader_output(
         "rentals",
         'INFO Complete {"loaded_contracts": 90, "out_of_scope_rows": 4, '
@@ -141,3 +144,108 @@ def test_runs_already_in_the_ledger_are_not_reloaded(
     assert [(row[1], row[2], row[10]) for row in clickhouse.inserted] == [
         ("rentals", "run=2026-09-21", "success")
     ]
+
+
+def _reconciled(run_dir: Path, days: dict[str, str], *, status: str = "success") -> Path:
+    import json
+
+    (run_dir / "reconciliation.json").write_text(
+        json.dumps(
+            {
+                "status": status,
+                "terminal_partition_status": {"cfg": days},
+                "expected_partitions": len(days),
+                "completed_partitions": len(days),
+                "failed_partitions": 0,
+                "missing_partitions": 0,
+            }
+        )
+    )
+    return run_dir
+
+
+def test_a_scrape_run_replaces_only_an_unbroken_window_it_finished(tmp_path: Path) -> None:
+    """Replacing a window deletes what was stored for it, so only a run that finished every day
+    of an unbroken range may; a partial or gapped run is merged as before."""
+    complete = {"2026-09-24": "complete", "2026-09-25": "complete", "2026-09-26": "complete"}
+
+    def window(name: str, days: dict[str, str], **kwargs) -> tuple[str, str] | None:
+        run_dir = _reconciled(_run(tmp_path, "rentals", name), days, **kwargs)
+        return evidence.scrape_window(evidence.EvidenceRun("rentals", name, run_dir))
+
+    assert window("run=whole", complete) == ("2026-09-24", "2026-09-26")
+    assert window("run=failed-day", {**complete, "2026-09-25": "failed"}) is None
+    assert window("run=gap", {"2026-09-24": "complete", "2026-09-26": "complete"}) is None
+    assert window("run=not-success", complete, status="failed") is None
+    no_file = _run(tmp_path, "rentals", "run=legacy")
+    assert evidence.scrape_window(evidence.EvidenceRun("rentals", "run=legacy", no_file)) is None
+
+
+def test_complete_scrape_runs_load_one_by_one_with_their_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two runs given together must never replace the days between them: each complete run loads
+    on its own, oldest first; runs without a complete window merge together first."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        output = "Sales load complete loaded=10 skipped=0 errors=0 without_unit=1 superseded=0"
+        return subprocess.CompletedProcess(command, 0, output, "")
+
+    monkeypatch.setattr(evidence.subprocess, "run", fake_run)
+    days = {"2026-10-01": "complete", "2026-10-02": "complete"}
+    later = {"2026-10-05": "complete", "2026-10-06": "complete"}
+    runs = [
+        evidence.EvidenceRun("sales", "run=a", _reconciled(_run(tmp_path, "sales", "run=a"), days)),
+        evidence.EvidenceRun("sales", "run=b", _run(tmp_path, "sales", "run=b")),
+        evidence.EvidenceRun(
+            "sales", "run=c", _reconciled(_run(tmp_path, "sales", "run=c"), later)
+        ),
+    ]
+
+    result = evidence.run_loader("sales", runs, env={})
+
+    assert [command[2:] for command in commands] == [
+        [str(runs[1].path)],
+        ["--replace-window", "2026-10-01", "2026-10-02", str(runs[0].path)],
+        ["--replace-window", "2026-10-05", "2026-10-06", str(runs[2].path)],
+    ]
+    assert result.rows_loaded == 30
+
+
+def test_location_sweeps_are_discovered_and_accounted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sales = _run(tmp_path, "sales-sweep", "run=2026-10-08-nightly")
+    _run(tmp_path, "rentals-sweep", "run=2026-10-08-nightly", complete=False)
+
+    found = evidence.discover_completed_runs(tmp_path)
+
+    assert [(run.report, run.name) for run in found] == [("sales-sweep", sales.name)]
+    result = evidence.parse_loader_output(
+        "sales-sweep", "INFO Location members loaded runs=1 members=420 replaced=400 skipped=2"
+    )
+    assert (result.rows_loaded, result.rows_skipped) == (420, 2)
+    assert result.details["replaced"] == 400
+
+
+@pytest.mark.parametrize("report", ["sales", "rentals", "sales-sweep"])
+def test_missing_accounting_cannot_advance_success_ledger(report: str) -> None:
+    with pytest.raises(RuntimeError, match="accounting"):
+        evidence.parse_loader_output(report, "process exited normally")
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["expected_partitions", "completed_partitions", "failed_partitions", "missing_partitions"],
+)
+def test_inconsistent_accounting_cannot_authorize_deletion(tmp_path: Path, field: str) -> None:
+    import json
+
+    run = _reconciled(_run(tmp_path, "sales", "run=bad"), {"2026-10-09": "complete"})
+    path = run / "reconciliation.json"
+    data = json.loads(path.read_text())
+    data[field] += 1
+    path.write_text(json.dumps(data))
+    assert evidence.scrape_window(evidence.EvidenceRun("sales", run.name, run)) is None

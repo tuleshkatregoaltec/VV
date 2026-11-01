@@ -10,7 +10,7 @@ from app.listings.models import ListingFiltersResponse, ListingListResponse
 from app.market.reference import SQM_TO_SQFT
 
 
-def test_pydantic_history_includes_rendered_artifact_context():
+def test_legacy_rendered_artifacts_are_not_replayed_as_fresh_evidence():
     messages = [
         Message(
             conversation_id=1,
@@ -55,14 +55,7 @@ def test_pydantic_history_includes_rendered_artifact_context():
 
     history = chat_agent._convert_to_pydantic_messages(messages)
 
-    content = history[0].parts[0].content
-    assert "[Rendered card context for follow-up references]" in content
-    assert "Al Furjan: Gross yield 9.52, 305 records" in content
-    assert "Dubai South: Gross yield 8.84, 412 records" in content
-    assert (
-        "Rendered listings card: Sales listings; mode sale; area Al Furjan; exact matches 0."
-        in content
-    )
+    assert history == []
 
 
 @pytest.mark.asyncio
@@ -72,7 +65,7 @@ async def test_resolve_transaction_area_uses_master_project_alias(monkeypatch):
     async def fake_query(sql: str, params: dict[str, object]):
         seen["sql"] = sql
         seen["params"] = params
-        return [{"area_name_en": "Marsa Dubai"}]
+        return [{"location_name": "Marsa Dubai"}]
 
     monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
@@ -106,8 +99,8 @@ async def test_latest_transaction_date_applies_market_filters(monkeypatch):
 
     assert max_date == date(2026, 1, 20)
     assert "property_usage_en = {property_usage:String}" in str(seen["sql"])
-    assert "property_type_en = {property_type:String}" in str(seen["sql"])
-    assert "area_name_en = {area_name:String}" in str(seen["sql"])
+    assert "property_type = {property_type:String}" in str(seen["sql"])
+    assert "location_name = {area_name:String}" in str(seen["sql"])
     assert seen["params"] == {
         "property_usage": "Residential",
         "property_type": "Unit",
@@ -144,13 +137,13 @@ async def test_market_trend_artifact_anchors_to_latest_matching_transaction_date
                 "period": date(2025, 1, 1),
                 "transaction_count": 10,
                 "avg_price": 1_000_000,
-                "avg_price_sqm": 10_000,
+                "avg_price_sqft": 10_000,
             },
             {
                 "period": date(2026, 1, 1),
                 "transaction_count": 20,
                 "avg_price": 1_200_000,
-                "avg_price_sqm": 12_000,
+                "avg_price_sqft": 12_000,
             },
         ]
 
@@ -185,7 +178,7 @@ async def test_market_trend_artifact_anchors_to_latest_matching_transaction_date
     assert artifact["status"] == "ready"
     assert artifact["query"]["area"] == "Marsa Dubai"
     assert artifact["data"]["total_transactions"] == 30
-    assert artifact["data"]["avg_price_sqm_change_pct"] == 20.0
+    assert artifact["data"]["avg_price_sqft_change_pct"] == 20.0
 
 
 @pytest.mark.asyncio
@@ -341,15 +334,16 @@ async def test_custom_sales_chart_artifact_uses_agent_selected_dimension_and_met
         "area": None,
         "master_project": "Jumeirah Village Circle",
     }
-    assert "property_type_en AS label" in str(seen["sql"])
-    assert "round(avg(meter_sale_price), 0) AS value" in str(seen["sql"])
+    assert "property_type AS label" in str(seen["sql"])
+    # Asked per m², answered per sq ft: one unit everywhere.
+    assert "round(avg(meter_sale_price) / 10.7639, 0) AS value" in str(seen["sql"])
     assert seen["params"]["start_date"] == "2025-11-02"
     assert seen["params"]["end_date"] == "2026-01-31"
     assert artifact["status"] == "ready"
     assert artifact["query"]["area"] == "Jumeirah Village Circle"
     assert artifact["query"]["master_project"] == "Jumeirah Village Circle"
     assert artifact["query"]["chart_type"] == "doughnut"
-    assert artifact["data"]["metric_label"] == "Average price / sqm"
+    assert artifact["data"]["metric_label"] == "Average price / sq ft"
     assert artifact["data"]["points"][0]["label"] == "Unit"
     assert artifact["data"]["summary"]["total_records"] == 52
 
@@ -418,7 +412,7 @@ async def test_custom_sales_chart_artifact_can_rank_bottom_areas_by_sqft_metric(
     assert seen["params"]["min_records"] == 25
     assert artifact["query"]["sort_direction"] == "asc"
     assert artifact["query"]["days"] == 365
-    assert artifact["data"]["metric_label"] == "Average price / sqft"
+    assert artifact["data"]["metric_label"] == "Average price / sq ft"
     assert artifact["data"]["sort_direction"] == "asc"
     assert [point["label"] for point in artifact["data"]["points"]] == [
         "International City",

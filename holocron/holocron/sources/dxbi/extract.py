@@ -15,7 +15,7 @@ from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 from playwright.sync_api import BrowserContext, Page, Playwright, TimeoutError, sync_playwright
 from twocaptcha import TwoCaptcha
@@ -1001,13 +1001,18 @@ def _build_column_payload(cell: dict) -> dict:
 
 
 def _detail_urls(links: list[dict]) -> list[str]:
-    return list(
-        dict.fromkeys(
-            str(link.get("href") or "")
-            for link in links
-            if urlparse(str(link.get("href") or "")).netloc.lower() == "dxb.is"
-        )
-    )
+    urls = []
+    for link in links:
+        href = str(link.get("href") or "")
+        parsed = urlparse(href)
+        if parsed.netloc.lower() == "dxb.is":
+            urls.append(href)
+        elif parsed.netloc.lower() in {"", "dxbinteract.com"} and re.fullmatch(
+            r"/sold/[^/?#]+/?", parsed.path
+        ):
+            # Current DXBI history links use first-party /sold/... paths.
+            urls.append(urljoin(DXBI_BASE_URL, href))
+    return list(dict.fromkeys(urls))
 
 
 def _normalize_cell_text(value: str) -> str:

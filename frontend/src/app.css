@@ -42,6 +42,7 @@ body {
 	--color-navy-900: #0b1b2b;
 	--color-navy-800: #122739;
 	--color-navy-700: #1c344a;
+	--color-navy-600: #2c4a66;
 	--color-navy-100: #d9e1ea;
 	--color-navy-50: #ecf0f5;
 	--color-bone-50: #f6f1e7;
@@ -77,6 +78,26 @@ body {
 	--color-info-bg: var(--color-navy-50);
 	--color-info-border: var(--color-navy-100);
 	--color-overlay: rgba(5, 13, 24, 0.48);
+	/* Charts (utils/chartTheme.ts reads these; they were missing, so dark mode drew navy on navy). */
+	--color-chart-line: #0b1b2b;
+	--color-chart-line-alt: #3a8fad;
+	--color-chart-line-tertiary: #a55a13;
+	--color-chart-fill: rgba(11, 27, 43, 0.1);
+	--color-chart-soft-fill: rgba(42, 70, 96, 0.18);
+	--color-chart-grid: #e2e8f0;
+	--color-chart-axis: #cbd5e1;
+	--color-chart-muted: #64748b;
+	/* Accent text: the teal at a shade that reads on light cards (4.5:1). */
+	--color-accent-text: #1f6f8b;
+
+	/* Main call-to-action: navy in light mode, bone in dark mode so it stays visible on dark cards. */
+	--color-action: var(--color-navy-900);
+	--color-action-hover: var(--color-navy-800);
+	--color-fg-on-action: var(--color-fg-on-navy);
+
+	/* Auth / onboarding shell. */
+	--color-bg-marketing: #f4f6f9;
+	--color-border-warm: #e7e0d2;
 
 	--radius-sm: 4px;
 	--radius-md: 6px;
@@ -116,6 +137,20 @@ body {
 	--color-info-bg: rgba(217, 225, 234, 0.11);
 	--color-info-border: rgba(217, 225, 234, 0.22);
 	--color-overlay: rgba(0, 0, 0, 0.66);
+	--color-action: var(--color-bone-50);
+	--color-action-hover: var(--color-bone-200);
+	--color-fg-on-action: var(--color-navy-900);
+	--color-bg-marketing: var(--color-bg-app);
+	--color-border-warm: var(--color-border);
+	--color-chart-line: #d9e1ea;
+	--color-chart-line-alt: #5fb3cf;
+	--color-chart-line-tertiary: #d3a15f;
+	--color-chart-fill: rgba(217, 225, 234, 0.12);
+	--color-chart-soft-fill: rgba(217, 225, 234, 0.18);
+	--color-chart-grid: rgba(148, 163, 184, 0.17);
+	--color-chart-axis: rgba(148, 163, 184, 0.32);
+	--color-chart-muted: #94a3b8;
+	--color-accent-text: #5fb3cf;
 }
 
 @layer components {
@@ -124,6 +159,14 @@ body {
 		border-radius: var(--radius-lg);
 		background: var(--color-bg-card);
 		box-shadow: var(--shadow-sm);
+		color: var(--color-fg-1);
+	}
+
+	.ui-menu {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-card);
+		box-shadow: var(--shadow-lg);
 		color: var(--color-fg-1);
 	}
 
@@ -195,6 +238,240 @@ body {
 		cursor: not-allowed;
 		opacity: 0.55;
 	}
+
+	/* An input or a dropdown trigger: a bordered field on the card colour, in both themes. */
+	.ui-field {
+		border: 1px solid var(--color-border-strong);
+		border-radius: var(--radius-md);
+		background: var(--color-bg-card);
+		color: var(--color-fg-1);
+		transition:
+			border-color var(--duration-fast) var(--ease-out),
+			box-shadow var(--duration-fast) var(--ease-out);
+	}
+
+	.ui-field:hover {
+		border-color: var(--color-fg-5);
+	}
+
+	.ui-field:focus,
+	.ui-field:focus-visible {
+		border-color: var(--color-fg-4);
+		box-shadow: 0 0 0 3px var(--color-border-focus);
+		outline: none;
+	}
+
+	.ui-field::placeholder {
+		color: var(--color-fg-5);
+	}
+
+	/* A recessed block inside a card. */
+	.ui-panel {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-panel);
+		color: var(--color-fg-1);
+	}
+
+	.ui-badge {
+		display: inline-flex;
+		align-items: center;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-panel);
+		color: var(--color-fg-2);
+		white-space: nowrap;
+	}
+
+	.ui-selection-badge {
+		border: 1px solid var(--color-info-border);
+		border-radius: var(--radius-md);
+		background: var(--color-info-bg);
+		color: var(--color-info);
+	}
+
+	.ui-table-head {
+		border-bottom: 1px solid var(--color-border);
+		background: var(--color-bg-panel);
+	}
+
+	.ui-table-row {
+		transition: background-color var(--duration-fast) var(--ease-out);
+	}
+
+	.ui-table-row:hover {
+		background: var(--color-bg-panel);
+	}
+
+	/* A checkbox visible in both themes: a strong border unchecked, the primary fill checked. */
+	.ui-checkbox {
+		appearance: none;
+		display: inline-grid;
+		place-content: center;
+		width: 18px;
+		height: 18px;
+		flex: none;
+		border: 1.5px solid var(--color-fg-4);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-card);
+		cursor: pointer;
+	}
+
+	.ui-checkbox:checked,
+	.ui-checkbox:indeterminate {
+		border-color: var(--color-navy-900);
+		background-color: var(--color-navy-900);
+		background-position: center;
+		background-repeat: no-repeat;
+		background-size: 12px;
+	}
+
+	.ui-checkbox:checked {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23f6f1e7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2 5 8.5l4.5-5'/%3E%3C/svg%3E");
+	}
+
+	.ui-checkbox:indeterminate {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23f6f1e7' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 6h6'/%3E%3C/svg%3E");
+	}
+
+	:root[data-theme="dark"] .ui-checkbox:checked,
+	:root[data-theme="dark"] .ui-checkbox:indeterminate {
+		border-color: var(--color-bone-50);
+		background-color: var(--color-bone-50);
+	}
+
+	:root[data-theme="dark"] .ui-checkbox:checked {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%230b1b2b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2 5 8.5l4.5-5'/%3E%3C/svg%3E");
+	}
+
+	:root[data-theme="dark"] .ui-checkbox:indeterminate {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%230b1b2b' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 6h6'/%3E%3C/svg%3E");
+	}
+
+	.ui-checkbox:focus-visible {
+		outline: 2px solid var(--color-border-focus);
+		outline-offset: 2px;
+	}
+
+	.ui-checkbox:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
+	}
+
+	/* Horizontal scroll hint: a shadow on each edge with more content beyond it. The covers
+	   scroll with the content and hide the shadows at either end. */
+	.ui-scroll-shadow {
+		background:
+			linear-gradient(to right, var(--color-bg-card) 40%, transparent) left / 48px 100% no-repeat
+			local,
+			linear-gradient(to left, var(--color-bg-card) 40%, transparent) right / 48px 100% no-repeat
+			local,
+			linear-gradient(to right, rgba(15, 23, 42, 0.18), transparent) left / 16px 100% no-repeat
+			scroll,
+			linear-gradient(to left, rgba(15, 23, 42, 0.18), transparent) right / 16px 100% no-repeat
+			scroll;
+	}
+
+	:root[data-theme="dark"] .ui-scroll-shadow {
+		background:
+			linear-gradient(to right, var(--color-bg-card) 40%, transparent) left / 48px 100% no-repeat
+			local,
+			linear-gradient(to left, var(--color-bg-card) 40%, transparent) right / 48px 100% no-repeat
+			local,
+			linear-gradient(to right, rgba(0, 0, 0, 0.55), transparent) left / 16px 100% no-repeat scroll,
+			linear-gradient(to left, rgba(0, 0, 0, 0.55), transparent) right / 16px 100% no-repeat scroll;
+	}
+
+	.ui-menu {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-card);
+		box-shadow: var(--shadow-lg);
+		color: var(--color-fg-1);
+	}
+
+	.ui-page-header {
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		border-radius: var(--radius-lg);
+		background: var(--color-navy-900);
+		color: var(--color-fg-on-navy);
+		box-shadow: var(--shadow-sm);
+	}
+
+	.ui-icon-button {
+		gap: 0;
+	}
+
+	.ui-table-row[data-selected="true"],
+	.ui-table-row[aria-selected="true"] {
+		background: var(--color-info-bg);
+	}
+
+	.ui-table-row[data-selected="true"]:hover,
+	.ui-table-row[aria-selected="true"]:hover {
+		background: var(--color-info-bg);
+	}
+
+	.ui-segmented {
+		display: inline-flex;
+		width: fit-content;
+		max-width: 100%;
+		flex: 0 0 auto;
+		align-items: center;
+		overflow-x: auto;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		background: var(--color-bg-panel);
+		padding: 4px;
+	}
+
+	.ui-segmented-item {
+		border-radius: var(--radius-sm);
+		color: var(--color-fg-3);
+		font-weight: 600;
+		white-space: nowrap;
+		transition:
+			background-color var(--duration-fast) var(--ease-out),
+			color var(--duration-fast) var(--ease-out);
+	}
+
+	.ui-segmented-item:hover {
+		background: var(--color-bg-elevated);
+		color: var(--color-fg-1);
+	}
+
+	.ui-segmented-item[data-active="true"] {
+		background: var(--color-bg-card);
+		color: var(--color-fg-1);
+	}
+
+	:where(.ui-page-header, .bg-navy) .ui-segmented {
+		border-color: rgba(255, 255, 255, 0.15);
+		background: rgba(255, 255, 255, 0.1);
+	}
+
+	:where(.ui-page-header, .bg-navy) .ui-segmented-item {
+		color: var(--color-fg-on-navy-muted);
+	}
+
+	:where(.ui-page-header, .bg-navy) .ui-segmented-item:hover {
+		background: rgba(255, 255, 255, 0.1);
+		color: var(--color-fg-on-navy);
+	}
+
+	:where(.ui-page-header, .bg-navy) .ui-segmented-item[data-active="true"] {
+		background: var(--color-bone-50);
+		color: var(--color-navy-900);
+	}
+
+	.ui-metric-card {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-card);
+		box-shadow: var(--shadow-sm);
+		color: var(--color-fg-1);
+		padding: 18px 20px;
+	}
 }
 
 html,
@@ -248,6 +525,13 @@ body {
 	--color-info-bg: var(--color-info-bg);
 	--color-info-border: var(--color-info-border);
 	--color-overlay: var(--color-overlay);
+	--color-action: var(--color-action);
+	--color-action-hover: var(--color-action-hover);
+	--color-on-action: var(--color-fg-on-action);
+	--color-primary-hover: var(--color-navy-800);
+	--color-marketing: var(--color-bg-marketing);
+	--color-warm: var(--color-border-warm);
+	--color-accent-text: var(--color-accent-text);
 }
 
 :root[data-theme="dark"] .theme-app .brand-logo-light {
@@ -256,6 +540,16 @@ body {
 
 :root:not([data-theme="dark"]) .theme-app .brand-logo-dark {
 	display: none;
+}
+
+/* Keep browser autofill on theme instead of the default grey/yellow fill. */
+.theme-app input:-webkit-autofill,
+.theme-app input:-webkit-autofill:hover,
+.theme-app input:-webkit-autofill:focus {
+	-webkit-text-fill-color: var(--color-fg-1);
+	caret-color: var(--color-fg-1);
+	box-shadow: 0 0 0 1000px var(--color-bg-card) inset;
+	transition: background-color 9999s ease-out 0s;
 }
 
 @theme {

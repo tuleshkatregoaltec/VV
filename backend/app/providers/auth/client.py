@@ -1,15 +1,12 @@
 import logging
 from typing import Optional
-from urllib.parse import quote
 
-import httpx
 from supabase_auth import AdminUserAttributes, AsyncGoTrueClient
 from supabase_auth import User as AuthUser
 from supabase_auth.errors import AuthApiError
 
 from app.config import settings
 from app.providers.auth import AuthenticatedUser
-from app.providers.auth.authenticated_user import AuthStateUser
 
 logger = logging.getLogger(__name__)
 
@@ -73,18 +70,9 @@ async def update_user_profile_metadata(user_id: str, first_name: str, last_name:
 
 async def get_user_by_id(user_id: str) -> Optional[AuthenticatedUser]:
     try:
-        # The installed SDK discards banned_until/deleted_at; retain these trusted
-        # admin fields so reauthorization sees current suspension and deletion.
-        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
-            response = await client.get(
-                f"{auth_base_url}/admin/users/{quote(user_id, safe='')}", headers=_admin_headers
-            )
-            response.raise_for_status()
-        user = AuthStateUser.model_validate(response.json())
-        if user.id != user_id:
-            return None
-        return AuthenticatedUser(None, user)
-    except (ValueError, httpx.HTTPError):
+        user_response = await admin_client.admin.get_user_by_id(user_id)
+        return AuthenticatedUser(None, user_response.user)
+    except (ValueError, AuthApiError):
         return None
 
 

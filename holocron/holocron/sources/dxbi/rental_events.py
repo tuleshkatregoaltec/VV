@@ -22,6 +22,9 @@ _PROPERTY_TYPES = (
     "Shop",
     "Warehouse",
     "Land",
+    # A whole building let: "Jabal Ali Industrial First Building, No. 12". Last, so a building
+    # named "... Building" keeps its name when DXBI prints another type after it.
+    "Building",
 )
 _DATE_RANGE = re.compile(
     r"(?P<start>\d{1,2} [A-Za-z]{3}, \d{4})\s*-\s*"
@@ -242,7 +245,7 @@ def normalize_rental_row(
         "contract_term_months": contract_term_months,
         "annual_rent_aed": annual_rent_aed,
         "rent_normalization_version": 2,
-        "address_normalization_version": 5,
+        "address_normalization_version": 6,
         "purchase_price_aed": purchase_price_aed,
         "lease_start": lease_start,
         "lease_end": lease_end,

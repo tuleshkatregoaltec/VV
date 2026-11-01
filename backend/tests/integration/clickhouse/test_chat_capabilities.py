@@ -4,14 +4,20 @@ from app.analytics import charts, service
 from app.project.service import get_similar_projects
 
 
-async def test_chat_capabilities_execute_real_queries_with_existing_scope(warehouse):
+async def test_chat_capabilities_execute_real_queries_with_existing_scope(
+    warehouse, analytics_projection_tables
+):
     await warehouse.command("""
         CREATE TABLE ch_transactions (
             instance_date Date, area_name_en String, master_project_en String,
             project_name_en String, trans_group_en String, property_type_en String,
             property_usage_en String, actual_worth Float64, actual_area Float64,
             meter_sale_price Float64, rooms_en String, reg_type_en String,
-            procedure_area Float64
+            procedure_area Float64, district_name String,
+            -- Uniform layer columns the chat capabilities read, as Holocron derives them.
+            location_name String MATERIALIZED area_name_en,
+            property_type String MATERIALIZED if(property_type_en = 'Unit', 'Apartment', ''),
+            size_sqm Float64 MATERIALIZED procedure_area
         ) ENGINE = MergeTree ORDER BY (area_name_en, instance_date)
     """)
     today = date.today()
@@ -36,6 +42,7 @@ async def test_chat_capabilities_execute_real_queries_with_existing_scope(wareho
                     "1 B/R",
                     "Existing Properties",
                     100,
+                    area,  # canonical district (market layer) ranks the areas
                 ]
             ]
             * 10
@@ -56,6 +63,7 @@ async def test_chat_capabilities_execute_real_queries_with_existing_scope(wareho
             "1 B/R",
             "Existing Properties",
             100,
+            "Area A",
         ]
     )
     await warehouse.insert("ch_transactions", rows)

@@ -15,10 +15,46 @@ let {
 	children?: Snippet
 } = $props()
 
-// Handle ESC key
+let dialog: HTMLDivElement | undefined
+
+function focusableElements(node: HTMLDivElement) {
+	return Array.from(
+		node.querySelectorAll<HTMLElement>(
+			'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+		)
+	).filter((element) => element.getClientRects().length > 0)
+}
+
+function manageFocus(node: HTMLDivElement) {
+	const previous = document.activeElement
+	dialog = node
+	;(focusableElements(node)[0] ?? node).focus()
+	return {
+		destroy() {
+			dialog = undefined
+			if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+		}
+	}
+}
+
+// Keep keyboard navigation inside the open dialog.
 function handleKeydown(event: KeyboardEvent) {
 	if (event.key === 'Escape' && open) {
+		event.preventDefault()
 		onClose()
+	}
+	if (event.key === 'Tab' && open && dialog) {
+		const elements = focusableElements(dialog)
+		const first = elements[0] ?? dialog
+		const last = elements.at(-1) ?? dialog
+		if (
+			!dialog.contains(document.activeElement) ||
+			(event.shiftKey && document.activeElement === first) ||
+			(!event.shiftKey && document.activeElement === last)
+		) {
+			event.preventDefault()
+			;(event.shiftKey ? last : first).focus()
+		}
 	}
 }
 
@@ -31,14 +67,11 @@ function handleBackdropClick(event: MouseEvent) {
 
 // Prevent body scroll when modal is open
 $effect(() => {
-	if (open) {
-		document.body.style.overflow = 'hidden'
-	} else {
-		document.body.style.overflow = ''
-	}
-
+	if (!open) return
+	const previousOverflow = document.body.style.overflow
+	document.body.style.overflow = 'hidden'
 	return () => {
-		document.body.style.overflow = ''
+		document.body.style.overflow = previousOverflow
 	}
 })
 
@@ -58,21 +91,23 @@ const sizeClasses = {
 		role="presentation"
 	>
 		<div
-			class="bg-white rounded-lg border border-border shadow-xl w-full {sizeClasses[
+			class="bg-card rounded-lg border border-border shadow-xl w-full {sizeClasses[
 				size
 			]} max-h-[90vh] overflow-hidden animate-scale-in"
+			use:manageFocus
+			tabindex="-1"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="modal-title"
 		>
 			<!-- Header -->
 			<div
-				class="flex items-center justify-between px-6 py-4 border-b border-border bg-white"
+				class="flex items-center justify-between px-6 py-4 border-b border-border bg-card"
 			>
 				<h2 id="modal-title" class="text-2xl font-semibold text-fg-1">{title}</h2>
 				<button
 					onclick={onClose}
-					class="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+					class="p-2 rounded-lg hover:bg-panel transition-colors"
 					aria-label="Close modal"
 				>
 					<svg class="w-6 h-6 text-fg-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -7,8 +7,8 @@ import { test, expect } from '@playwright/test';
 test('dashboard loads and shows navigation', async ({ page }) => {
 	await page.goto('/dashboard');
 	await expect(page).toHaveURL(/\/dashboard/);
-	// Navbar should be present
-	await expect(page.locator('nav')).toBeVisible();
+	// Market sidebar should be present
+	await expect(page.getByRole('navigation', { name: 'Market sections' })).toBeVisible();
 });
 
 test('dashboard does not redirect to /auth', async ({ page }) => {

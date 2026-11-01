@@ -1,15 +1,6 @@
-from datetime import datetime, timezone
-
 from pydantic import BaseModel, Field
 from starlette.authentication import AuthCredentials, BaseUser
 from supabase_auth import User
-
-
-class AuthStateUser(User):
-    """Preserve GoTrue admin state omitted by the SDK's public User schema."""
-
-    banned_until: datetime | None = None
-    deleted_at: datetime | None = None
 
 
 class UserAppMetadata(BaseModel):
@@ -42,14 +33,7 @@ class AuthenticatedUser(BaseUser):
 
     @property
     def is_authenticated(self) -> bool:
-        if getattr(self._auth_user, "deleted_at", None) is not None:
-            return False
-        banned_until = getattr(self._auth_user, "banned_until", None)
-        if banned_until is None:
-            return True
-        if banned_until.tzinfo is None:
-            return False
-        return banned_until <= datetime.now(timezone.utc)
+        return True
 
     @property
     def token(self) -> str | None:

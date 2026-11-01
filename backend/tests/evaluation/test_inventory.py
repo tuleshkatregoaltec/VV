@@ -1,29 +1,33 @@
 from scripts.evaluation.inventory import build_inventory
 
 
-def test_mcp_registration_has_bounded_public_capabilities_and_no_static_graph_claim():
-    from app.chat import mcp
-
-    definitions = mcp.tool_definitions()
-    assert {tool.name for tool in definitions} == {
-        "bind_market_scope",
-        "query_market_metrics",
-        "get_listing_inventory",
-        "get_project_delivery_summary",
-        "compare_listing_age",
-        "compare_listing_rents",
-        "compose_market_report",
-    }
-    for tool in definitions:
-        assert tool.inputSchema["additionalProperties"] is False
-        assert tool.inputSchema["required"] == ["request"]
-        properties = tool.inputSchema["properties"]["request"]["properties"]
-        assert not {"user_id", "organization_id", "reference_date", "sql"} & properties.keys()
+def test_actual_chat_registration_links_to_public_capabilities_and_warehouse():
     inventory = build_inventory()
-    # MCP is dynamically scoped per turn; a static map must retain uncertainty.
-    assert "app.chat.mcp.market_mcp" in inventory["functions"]
-    assert "app.analytics.market_metrics.get_market_metrics" in inventory["functions"]
-    assert "app.listings.capabilities.compare_listing_rents" in inventory["functions"]
+    chat = next(agent for agent in inventory["agents"] if agent["id"] == "app.chat.agent.agent")
+    assert {tool["function"] for tool in chat["tools"]} == {
+        "app.chat.workflows.research_market",
+        "app.chat.workflows.analyze_pricing",
+        "app.chat.workflows.retrieve_personal_crm",
+        "app.chat.workflows.plan_followups",
+        "app.chat.workflows.prepare_action",
+    }
+    specialists = [
+        item for item in inventory["agents"] if item["id"].startswith("app.chat.workflows.")
+    ]
+    registered = {tool["function"] for item in specialists for tool in item["tools"]}
+    assert {
+        "app.chat.tools.query_market_metrics",
+        "app.chat.crm_tools.query_my_crm_records",
+        "app.chat.workflows.propose_crm_action",
+        "app.chat.tools.research_listing_shortlist",
+        "app.chat.tools.comparable_evidence",
+        "app.chat.tools.compare_stored_projects",
+    } <= registered
+    assert all("confirm" not in name for name in registered)
+    pulse = inventory["functions"]["app.analytics.queries.fetch_market_pulse"]
+    # Chat's market pulse reads the combined market layer, as the rest of chat does; the
+    # Analytics page reads the DXBI records.
+    assert pulse["sql_source_candidates"] == ["ch_transactions"]
 
 
 def test_declared_legacy_hbu_tools_are_not_assigned_to_selected_production_agents():
@@ -86,3 +90,12 @@ def test_direct_crm_model_calls_are_visible_outside_agent_instrumentation():
     assert functions["app.core.openrouter.create_openrouter_model"][
         "model_configuration_references"
     ] == ["settings.DEFAULT_CHAT_MODEL"]
+
+
+def test_interpolated_sql_source_is_unknown_instead_of_a_where_table(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "queries.py").write_text(
+        'from somewhere import SOURCE\nfrom app.clickhouse.client import query\nasync def fetch():\n    return await query(f"SELECT * FROM {SOURCE} WHERE active = 1")\n'
+    )
+    assert build_inventory(app)["functions"]["app.queries.fetch"]["sql_source_candidates"] == []

@@ -1,6 +1,5 @@
 import os
 import warnings
-from decimal import Decimal
 from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -70,24 +69,6 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str  # Bitwarden Secrets
     DEFAULT_CHAT_MODEL: str  # configMap
 
-    # Shared AI policy: explicit prices and budgets are required before provider use.
-    AI_PRICING_MODEL: str | None = None
-    AI_INPUT_USD_PER_MILLION: Decimal | None = Field(default=None, gt=0)
-    AI_OUTPUT_USD_PER_MILLION: Decimal | None = Field(default=None, gt=0)
-    AI_USER_DAILY_USD: Decimal | None = Field(default=None, gt=0)
-    AI_USER_MONTHLY_USD: Decimal | None = Field(default=None, gt=0)
-    AI_ORG_DAILY_USD: Decimal | None = Field(default=None, gt=0)
-    AI_ORG_MONTHLY_USD: Decimal | None = Field(default=None, gt=0)
-    AI_MAX_INPUT_TOKENS: int = Field(default=65536, ge=1024, le=262144)
-    AI_MAX_OUTPUT_TOKENS: int = Field(default=4096, ge=1, le=16384)
-    AI_REQUESTS_PER_MINUTE: int = Field(default=30, ge=1, le=1000)
-    AI_USER_CONCURRENCY: int = Field(default=2, ge=1, le=20)
-    AI_ORG_CONCURRENCY: int = Field(default=20, ge=1, le=100)
-    AI_MAX_CALLS_PER_EXECUTION: int = Field(default=12, ge=1, le=30)
-    AI_EXECUTION_TIMEOUT_SECONDS: int = Field(default=300, ge=10, le=600)
-    AI_PROVIDER_ALLOWLIST: list[str] = []
-    AI_TOPIC_POLICY: str = ""  # Empty until the product owner supplies approved policy.
-
     # Auth
     AUTH_URL: AnyUrl  # configMap
     AUTH_SERVICE_ROLE_KEY: str  # Bitwarden Secrets
@@ -118,6 +99,14 @@ class Settings(BaseSettings):
     CLICKHOUSE_PASSWORD: str  # Bitwarden Secrets
     CLICKHOUSE_DATABASE: str  # configMap
     CLICKHOUSE_SECURE: bool = False  # configMap
+
+    # CRM worker-local resource budgets; account for all workers/replicas when sizing.
+    CRM_RENTAL_BASE_ENABLED: bool = False
+    CRM_MAX_EXPENSIVE_REQUESTS: int = Field(default=2, ge=1, le=32)
+    CRM_MAX_EXPENSIVE_REQUESTS_PER_ORG: int = Field(default=2, ge=1, le=16)
+    CRM_MAX_CONCURRENT_QUERIES: int = Field(default=1, ge=1, le=8)
+    CRM_QUERY_MAX_MEMORY_BYTES: int = Field(default=3_000_000_000, ge=67_108_864)
+    CRM_QUERY_MAX_THREADS: int = Field(default=2, ge=1, le=16)
 
     # Stripe
     STRIPE_SECRET_KEY: str  # Bitwarden Secrets

@@ -1,5 +1,6 @@
 <script lang="ts">
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { toSqft } from '$lib/utils/units'
 
 function fmt(value: number | null | undefined, digits = 0) {
 	if (value === null || value === undefined || !Number.isFinite(value)) return '—'
@@ -54,7 +55,7 @@ const BTR_PROGRAM_LABELS = [
 	'Exit Cap Rate',
 	'Terminal Sale Value',
 	'Total Units',
-	'Total Leasable Area (sqm)',
+	'Total Leasable Area (sq ft)',
 	'Dev Spread (bps)'
 ]
 
@@ -75,7 +76,7 @@ const BTS_RETURN_LABELS = [
 ]
 
 const BTS_CAPITAL_LABELS = ['Peak Debt', 'Peak Equity', 'Debt as % of Cost']
-const BTS_PROGRAM_LABELS = ['Total Units', 'Sellable Area (sqm)', 'Costable BUA (sqm)']
+const BTS_PROGRAM_LABELS = ['Total Units', 'Sellable Area (sq ft)', 'Costable BUA (sq ft)']
 
 // ── BTS KPIs ──
 const btsKpiRows = $derived<SummaryRow[]>(
@@ -129,12 +130,20 @@ const btsKpiRows = $derived<SummaryRow[]>(
 				},
 				{
 					label: 'Break-even Sale Rate',
-					value: `AED ${fmt(outputs.returns.breakEvenSaleRateAedSqft)} /sqft`,
+					value: `AED ${fmt(outputs.returns.breakEvenSaleRateAedSqft)} /sq ft`,
 					color: XREF
 				},
 				{ label: 'Total Units', value: fmt(outputs.program.totalUnits), color: XREF },
-				{ label: 'Sellable Area (sqm)', value: fmt(outputs.area.sellableArea), color: XREF },
-				{ label: 'Costable BUA (sqm)', value: fmt(outputs.area.totalCostableBua), color: XREF }
+				{
+					label: 'Sellable Area (sq ft)',
+					value: fmt(toSqft(outputs.area.sellableArea)),
+					color: XREF
+				},
+				{
+					label: 'Costable BUA (sq ft)',
+					value: fmt(toSqft(outputs.area.totalCostableBua)),
+					color: XREF
+				}
 			]
 		: []
 )
@@ -205,7 +214,11 @@ const btrKpiRows = $derived<SummaryRow[]>(
 				},
 				{ label: 'Total Profit', value: `AED ${fmt(btr.returns.totalProfitAed)}`, color: XREF },
 				{ label: 'Total Units', value: fmt(btr.program.totalUnits), color: XREF },
-				{ label: 'Total Leasable Area (sqm)', value: fmt(btr.program.totalAreaSqm), color: XREF },
+				{
+					label: 'Total Leasable Area (sq ft)',
+					value: fmt(toSqft(btr.program.totalAreaSqm)),
+					color: XREF
+				},
 				{ label: 'Dev Spread (bps)', value: fmt(btr.exit.developmentSpreadBps), color: XREF }
 			]
 		: []

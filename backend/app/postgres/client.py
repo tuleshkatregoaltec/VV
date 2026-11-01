@@ -6,6 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.core.observability import instrument_postgres
+from app.postgres.actor_context import install_actor_context
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +26,13 @@ def get_postgres_engine() -> AsyncEngine:
         _engine = create_async_engine(
             database_url,
             echo=False,
+            hide_parameters=True,
             pool_pre_ping=True,
             pool_size=5,
             max_overflow=10,
         )
 
+        install_actor_context(_engine)
         instrument_postgres(_engine)
         _session_factory = async_sessionmaker(
             _engine,

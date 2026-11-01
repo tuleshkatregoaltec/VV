@@ -13,23 +13,7 @@ logger = logging.getLogger(__name__)
 
 class TokenUsageService:
     async def get_today_usage(self, db: AsyncSession, user_id: str) -> Optional[UserTokenUsage]:
-        from app.config import settings
-        from app.core.ai_policy import reserved_daily_tokens
-
-        today = datetime.now(timezone.utc).date()
-        legacy = await repository.get_usage(db, user_id, today)
-        accounted = await reserved_daily_tokens(user_id, today) if settings.AI_PRICING_MODEL else 0
-        if not accounted:
-            return legacy
-        # Existing PostgreSQL totals predate the shared provider ledger. Include
-        # both during the cutover; new calls must never also call record_usage.
-        return UserTokenUsage(
-            user_id=user_id,
-            date=today,
-            total_tokens=accounted + (legacy.total_tokens if legacy else 0),
-            prompt_tokens=legacy.prompt_tokens if legacy else 0,
-            completion_tokens=legacy.completion_tokens if legacy else 0,
-        )
+        return await repository.get_usage(db, user_id, datetime.now(timezone.utc).date())
 
     async def create_usage_record(
         self,
@@ -39,23 +23,7 @@ class TokenUsageService:
         completion_tokens: int,
         total_tokens: int,
     ) -> UserTokenUsage:
-        today = date.today()
-        now = datetime.now(timezone.utc)
-
-        usage = UserTokenUsage(
-            user_id=user_id,
-            date=today,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            created_at=now,
-            updated_at=now,
-        )
-
-        repository.save(db, usage)
-        await db.commit()
-        await db.refresh(usage)
-        return usage
+        return await self.record_usage(db, user_id, prompt_tokens, completion_tokens, total_tokens)
 
     async def update_usage_record(
         self,
@@ -65,15 +33,16 @@ class TokenUsageService:
         completion_tokens: int,
         total_tokens: int,
     ) -> UserTokenUsage:
-        usage_record.prompt_tokens += prompt_tokens
-        usage_record.completion_tokens += completion_tokens
-        usage_record.total_tokens += total_tokens
-        usage_record.updated_at = datetime.now(timezone.utc)
-
-        repository.save(db, usage_record)
+        usage = await repository.increment(
+            db,
+            usage_record.user_id,
+            usage_record.date,
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        )
         await db.commit()
-        await db.refresh(usage_record)
-        return usage_record
+        return usage
 
     async def record_usage(
         self,
@@ -83,24 +52,16 @@ class TokenUsageService:
         completion_tokens: int,
         total_tokens: int,
     ) -> UserTokenUsage:
-        from sqlalchemy import text
-
-        await db.execute(
-            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
-            {"key": f"token-usage:{user_id}:{datetime.now(timezone.utc).date()}"},
+        usage = await repository.increment(
+            db,
+            user_id,
+            datetime.now(timezone.utc).date(),
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
         )
-        existing = await repository.get_usage(db, user_id, datetime.now(timezone.utc).date())
-
-        if existing:
-            # Update existing record
-            return await self.update_usage_record(
-                db, existing, prompt_tokens, completion_tokens, total_tokens
-            )
-        else:
-            # Create new record
-            return await self.create_usage_record(
-                db, user_id, prompt_tokens, completion_tokens, total_tokens
-            )
+        await db.commit()
+        return usage
 
     async def update_user_limit(self, user_id: str, new_limit: int) -> None:
         await update_user_token_limit(user_id, new_limit)
@@ -108,24 +69,7 @@ class TokenUsageService:
     async def get_usage_records(
         self, db: AsyncSession, day: date, user_ids: list[str] | None = None
     ):
-        from app.config import settings
-        from app.core.ai_policy import reserved_token_records
-
-        legacy = await repository.get_usage_records(db, day, user_ids)
-        if not settings.AI_PRICING_MODEL:
-            return legacy
-        accounted = await reserved_token_records(day, user_ids)
-        by_user = {row.user_id: row for row in legacy}
-        for user_id, tokens in accounted.items():
-            old = by_user.get(user_id)
-            by_user[user_id] = UserTokenUsage(
-                user_id=user_id,
-                date=day,
-                total_tokens=tokens + (old.total_tokens if old else 0),
-                prompt_tokens=old.prompt_tokens if old else 0,
-                completion_tokens=old.completion_tokens if old else 0,
-            )
-        return list(by_user.values())
+        return await repository.get_usage_records(db, day, user_ids)
 
 
 token_usage_service = TokenUsageService()

@@ -66,16 +66,16 @@ async function handleManageSubscription() {
 	<svelte:fragment slot="side">
 		<div class="space-y-4 rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-5">
 			<div class="rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-4">
-				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Organization</p>
+				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-on-navy-muted">Organization</p>
 				<p class="mt-3 text-2xl font-semibold text-white">
 					{user?.organization_name || 'Workspace'}
 				</p>
-				<p class="mt-2 text-sm leading-6 text-slate-300">
+				<p class="mt-2 text-sm leading-6 text-on-navy-muted">
 					Role: {user?.is_owner ? 'Owner' : 'Member'}
 				</p>
 			</div>
 			<div
-				class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-4 text-sm leading-6 text-slate-200"
+				class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-4 text-sm leading-6 text-on-navy"
 			>
 				{#if user?.is_owner}
 					{getOwnerActionMessage()}
@@ -94,9 +94,9 @@ async function handleManageSubscription() {
 	{/if}
 
 	<div class="space-y-5">
-		<div class="rounded-lg border border-slate-200 bg-slate-50/80 p-6">
-			<p class="text-sm font-semibold text-slate-900">Current status</p>
-			<p class="mt-2 text-sm leading-6 text-slate-600">{getStatusMessage()}</p>
+		<div class="rounded-lg border border-border bg-panel p-6">
+			<p class="text-sm font-semibold text-fg-1">Current status</p>
+			<p class="mt-2 text-sm leading-6 text-fg-3">{getStatusMessage()}</p>
 		</div>
 
 		{#if user?.is_owner}
@@ -106,7 +106,7 @@ async function handleManageSubscription() {
 						type="button"
 						onclick={handleManageSubscription}
 						disabled={processingRenewal}
-						class="flex-1 rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
+						class="flex-1 rounded-md bg-action px-5 py-3 text-sm font-semibold text-on-action transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{processingRenewal ? 'Opening billing portal...' : 'Manage subscription'}
 					</button>
@@ -114,22 +114,22 @@ async function handleManageSubscription() {
 					<button
 						type="button"
 						onclick={() => goto(resolve('/setup'))}
-						class="flex-1 rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light"
+						class="flex-1 rounded-md bg-action px-5 py-3 text-sm font-semibold text-on-action transition hover:bg-action-hover"
 					>
 						Complete organization setup
 					</button>
 				{/if}
 				<a
 					href="mailto:contact@vitevue.com"
-					class="rounded-md border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+					class="rounded-md border border-strong px-5 py-3 text-center text-sm font-semibold text-fg-2 transition hover:bg-panel"
 				>
 					Contact support
 				</a>
 			</div>
 		{:else}
-			<div class="rounded-lg border border-navy-pale bg-navy-pale p-6">
-				<p class="text-sm font-semibold text-navy">Contact your organization owner</p>
-				<p class="mt-2 text-sm leading-6 text-primary-light">
+			<div class="rounded-lg border border-info-border bg-info-bg p-6">
+				<p class="text-sm font-semibold text-fg-1">Contact your organization owner</p>
+				<p class="mt-2 text-sm leading-6 text-info">
 					Only the organization owner can restore billing. Once the subscription is active again,
 					your normal access will return automatically.
 				</p>

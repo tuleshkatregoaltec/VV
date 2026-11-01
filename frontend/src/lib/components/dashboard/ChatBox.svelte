@@ -7,19 +7,11 @@ import { fade, fly } from 'svelte/transition'
 import { browser } from '$app/environment'
 import { chat, type MessageResponse } from '$lib/api/chat'
 import { artifactSortValue, type ChatArtifact, isChatArtifact } from '$lib/chat/artifacts'
+import { safeChatHref } from '$lib/chat/safeLinks'
+import ChatActionCard from '$lib/components/chat/ChatActionCard.svelte'
 import ChatArtifactBubble from '$lib/components/chat/ChatArtifactBubble.svelte'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 import { chatKeys, chatQueries } from '$lib/queries/chat'
-
-// Add target="_blank" rel="noopener noreferrer" to all links
-marked.use({
-	renderer: {
-		link({ href, title, text }: any) {
-			const titleAttr = title ? ` title="${title}"` : ''
-			return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`
-		}
-	}
-})
 
 const SANITIZE_CONFIG = {
 	ALLOWED_TAGS: [
@@ -41,7 +33,19 @@ const SANITIZE_CONFIG = {
 
 function renderMarkdown(content: string): string {
 	if (!browser) return content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-	return DOMPurify.sanitize(marked.parse(content) as string, SANITIZE_CONFIG)
+	const fragment = DOMPurify.sanitize(marked.parse(content) as string, {
+		...SANITIZE_CONFIG,
+		RETURN_DOM_FRAGMENT: true
+	})
+	for (const link of fragment.querySelectorAll('a')) {
+		const href = safeChatHref(link.getAttribute('href') ?? '', window.location.origin)
+		if (href) link.setAttribute('href', href)
+		else link.removeAttribute('href')
+		link.setAttribute('rel', 'noopener noreferrer')
+	}
+	const container = document.createElement('div')
+	container.append(fragment)
+	return container.innerHTML
 }
 
 let {
@@ -69,6 +73,7 @@ interface DisplayMessage {
 	content: string
 	toolCalls?: string[]
 	artifacts?: ChatArtifact[]
+	actionIds?: string[]
 }
 
 type ToolCallState = 'start' | 'done'
@@ -82,26 +87,16 @@ let textareaRef = $state<HTMLTextAreaElement>()
 let messagesEndRef = $state<HTMLDivElement>()
 let activeStreamConversationId: number | null = $state(null)
 let tokenLimitModalOpen = $state(false)
+let olderMessages = $state<MessageResponse[]>([])
+let loadingOlder = $state(false)
+let hasOlder = $state(true)
+let suppressScroll = false
+let latestLoadedMessages: MessageResponse[] = []
 let localMessageSequence = 0
 const queryClient = useQueryClient()
 const messagesQuery = createQuery(() => chatQueries.messages(conversationId))
 let loading = $derived(messagesQuery.isLoading)
-let persistedTurnNotice = $derived.by(() => {
-	if (activeStreamConversationId === conversationId) return null
-	const last = messagesQuery.data?.at(-1)
-	if (last?.role !== 'user') return null
-	const status = last.meta_data?.turn_status
-	if (status === 'cancelled')
-		return 'The last response was cancelled. Send a new message to continue.'
-	if (status === 'failed' || status === 'interrupted')
-		return 'The last response could not complete. Send a new message to try again.'
-	if (status === 'running')
-		return 'The last response has not completed. Reload the conversation to check its status.'
-	return null
-})
-let displayError = $derived(
-	error ?? (messagesQuery.isError ? 'Failed to load messages' : persistedTurnNotice)
-)
+let displayError = $derived(error ?? (messagesQuery.isError ? 'Failed to load messages' : null))
 const scrollSignal = $derived(
 	`${messages.length}:${messages.at(-1)?.content.length ?? 0}:${messages.at(-1)?.toolCalls?.length ?? 0}:${messages.at(-1)?.artifacts?.length ?? 0}:${isThinking}:${streamController ? 'streaming' : 'idle'}`
 )
@@ -112,7 +107,8 @@ function toDisplayMessages(loadedMessages: MessageResponse[]): DisplayMessage[] 
 		role: m.role,
 		content: m.content,
 		toolCalls: [],
-		artifacts: artifactsFromMessage(m)
+		artifacts: artifactsFromMessage(m),
+		actionIds: actionsFromMessage(m)
 	}))
 }
 
@@ -138,15 +134,26 @@ function messagesHaveSameVisibleContent(
 		return (
 			message.role === nextMessage.role &&
 			message.content === nextMessage.content &&
-			artifactSignature(message.artifacts) === artifactSignature(nextMessage.artifacts)
+			artifactSignature(message.artifacts) === artifactSignature(nextMessage.artifacts) &&
+			(message.actionIds ?? []).join(',') === (nextMessage.actionIds ?? []).join(',')
 		)
 	})
 }
 
 function preserveVisibleMessageIds(nextMessages: DisplayMessage[]): DisplayMessage[] {
-	return nextMessages.map((message, index) => {
-		const currentMessage = messages[index]
+	const reused = new Set<string>()
+	return nextMessages.map((message) => {
+		const currentMessage =
+			messages.find((current) => current.id === message.id) ??
+			messages.find(
+				(current) =>
+					!reused.has(current.id) &&
+					current.id.startsWith('local:') &&
+					current.role === message.role &&
+					current.content === message.content
+			)
 		if (currentMessage && currentMessage.role === message.role) {
+			reused.add(currentMessage.id)
 			return { ...message, id: currentMessage.id }
 		}
 		return message
@@ -156,6 +163,33 @@ function preserveVisibleMessageIds(nextMessages: DisplayMessage[]): DisplayMessa
 function replaceMessagesIfChanged(nextMessages: DisplayMessage[]) {
 	if (messagesHaveSameVisibleContent(messages, nextMessages)) return
 	messages = preserveVisibleMessageIds(nextMessages)
+}
+
+function actionsFromMessage(message: MessageResponse): string[] {
+	const metadata = message.meta_data as { actions?: unknown[] } | null | undefined
+	return (Array.isArray(metadata?.actions) ? metadata.actions : []).flatMap((action) =>
+		typeof action === 'object' && action !== null && 'id' in action && typeof action.id === 'string'
+			? [action.id]
+			: []
+	)
+}
+
+async function loadOlderMessages() {
+	const id = conversationId
+	const oldest = olderMessages[0] ?? messagesQuery.data?.[0]
+	if (!id || !oldest || loadingOlder) return
+	loadingOlder = true
+	try {
+		const older = await chat.getMessages(id, { before_id: oldest.id })
+		if (id !== conversationId) return
+		suppressScroll = true
+		olderMessages = [...older, ...olderMessages]
+		hasOlder = older.length === 100
+	} catch {
+		error = 'Could not load older messages. Please try again.'
+	} finally {
+		loadingOlder = false
+	}
 }
 
 function artifactsFromMessage(message: MessageResponse): ChatArtifact[] | undefined {
@@ -175,6 +209,34 @@ function mergeArtifact(artifacts: ChatArtifact[], artifact: ChatArtifact): ChatA
 
 function toolDisplayLabel(tool: string | undefined, state: ToolCallState, cached = false): string {
 	const labels: Record<string, { start: string; done: string }> = {
+		query_my_crm_records: {
+			start: 'Reading your CRM records',
+			done: 'Your CRM records ready'
+		},
+		get_database_coverage: {
+			start: 'Checking stored data coverage',
+			done: 'Stored data coverage ready'
+		},
+		search_database_locations: {
+			start: 'Finding stored locations',
+			done: 'Stored location matches ready'
+		},
+		get_project_profile: {
+			start: 'Reading stored project profile',
+			done: 'Stored project profile ready'
+		},
+		query_market_metrics: {
+			start: 'Querying stored market records',
+			done: 'Stored market metrics ready'
+		},
+		get_listing_inventory: {
+			start: 'Checking stored listing inventory',
+			done: 'Stored listing inventory ready'
+		},
+		get_project_delivery_summary: {
+			start: 'Checking registered project deliveries',
+			done: 'Registered project deliveries ready'
+		},
 		show_listings: {
 			start: 'Searching matching records',
 			done: 'Matched records ready'
@@ -242,6 +304,9 @@ $effect(() => {
 		}
 
 		messages = []
+		olderMessages = []
+		latestLoadedMessages = []
+		hasOlder = true
 		error = null
 
 		previousConversationId = conversationId
@@ -251,12 +316,23 @@ $effect(() => {
 $effect(() => {
 	const loadedMessages = messagesQuery.data
 	if (!conversationId || !loadedMessages || activeStreamConversationId === conversationId) return
-	replaceMessagesIfChanged(toDisplayMessages(loadedMessages))
+	// Keep the boundary messages when a refreshed newest page moves forward.
+	if (olderMessages.length > 0 && latestLoadedMessages !== loadedMessages) {
+		const knownIds = new Set([...olderMessages, ...loadedMessages].map((message) => message.id))
+		const retained = latestLoadedMessages.filter((message) => !knownIds.has(message.id))
+		if (retained.length > 0) olderMessages = [...olderMessages, ...retained]
+	}
+	latestLoadedMessages = loadedMessages
+	replaceMessagesIfChanged(toDisplayMessages([...olderMessages, ...loadedMessages]))
 })
 
 // Auto-scroll to bottom when messages change
 $effect(() => {
 	scrollSignal
+	if (suppressScroll) {
+		suppressScroll = false
+		return
+	}
 	if (messages.length > 0 && messagesEndRef) {
 		setTimeout(() => {
 			messagesEndRef?.scrollIntoView({ behavior: streamController ? 'auto' : 'smooth' })
@@ -288,7 +364,7 @@ async function refreshMessagesAfterStream(conversationIdToRefresh: number) {
 		const loadedMessages = await chat.getMessages(conversationIdToRefresh)
 		queryClient.setQueryData(chatKeys.messages(conversationIdToRefresh), loadedMessages)
 		if (conversationId === conversationIdToRefresh) {
-			replaceMessagesIfChanged(toDisplayMessages(loadedMessages))
+			replaceMessagesIfChanged(toDisplayMessages([...olderMessages, ...loadedMessages]))
 		}
 	} catch (err) {
 		console.error('Failed to refresh streamed messages:', err)
@@ -298,7 +374,6 @@ async function refreshMessagesAfterStream(conversationIdToRefresh: number) {
 async function handleSubmit() {
 	const text = inputValue.trim()
 	if (!text || !conversationId) return
-	error = null
 
 	if (streamController) streamController.close()
 
@@ -357,6 +432,12 @@ async function handleSubmit() {
 				isThinking = false
 				currentArtifacts = mergeArtifact(currentArtifacts, data.artifact)
 				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
+			} else if (data.type === 'action_proposed' && typeof data.action?.id === 'string') {
+				isThinking = false
+				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
+				const last = messages[messages.length - 1]
+				last.actionIds = [...new Set([...(last.actionIds ?? []), data.action.id])]
+				messages = [...messages]
 			} else if (data.type === 'done') {
 				isThinking = false
 				if (currentToolCalls.some((toolCall) => toolCall.endsWith('...'))) {
@@ -386,7 +467,7 @@ async function handleSubmit() {
 				if (data.error === 'token_limit_exceeded') {
 					tokenLimitModalOpen = true
 				} else {
-					error = `Error: ${data.error}`
+					error = 'The assistant could not complete this request. Please try again.'
 				}
 				streamController = null
 				activeStreamConversationId = null
@@ -416,7 +497,8 @@ function updateLastMessage(
 			role,
 			content,
 			toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined,
-			artifacts: nextArtifacts
+			artifacts: nextArtifacts,
+			actionIds: lastMsg.actionIds
 		}
 		messages = [...messages]
 	} else {
@@ -442,7 +524,6 @@ function autoResizeTextarea() {
 }
 
 function stopStreaming() {
-	error = 'Response cancelled. Send a new message to continue.'
 	streamController?.close()
 	streamController = null
 	activeStreamConversationId = null
@@ -450,10 +531,10 @@ function stopStreaming() {
 }
 </script>
 
-<div class="flex h-full min-h-0 flex-col bg-white">
+<div class="flex h-full min-h-0 flex-col bg-card">
 	{#if showHeader}
 		<div
-			class="flex items-start justify-between gap-4 border-b border-border bg-white px-5 py-4"
+			class="flex items-start justify-between gap-4 border-b border-border bg-card px-5 py-4"
 		>
 			<div>
 				<div class="flex items-center gap-2">
@@ -461,7 +542,7 @@ function stopStreaming() {
 					<h1 class="text-sm font-semibold text-fg-1">Vitevue AI</h1>
 				</div>
 				<p class="mt-1 text-xs text-fg-4">
-					Ask about transactions, yields, pricing, projects, and feasibility context.
+					Ask about market data or your own CRM records. Changes require your confirmation.
 				</p>
 			</div>
 			<div
@@ -476,12 +557,12 @@ function stopStreaming() {
 	{/if}
 
 	<!-- Messages -->
-	<div class="flex-1 space-y-3 overflow-y-auto bg-white p-5">
+	<div class="flex-1 space-y-3 overflow-y-auto bg-card p-5">
 		{#if loading}
 			<div class="flex h-full items-center justify-center">
 				<div class="text-center">
 					<div
-						class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-navy"
+						class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-border border-t-fg-1"
 					></div>
 					<p class="text-sm font-medium text-fg-3">Loading messages...</p>
 				</div>
@@ -516,7 +597,7 @@ function stopStreaming() {
 				<div class="flex h-full items-center justify-center">
 					<div class="text-center">
 						<div
-							class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-navy"
+							class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-border border-t-fg-1"
 						></div>
 						<p class="text-sm font-medium text-fg-3">Starting conversation...</p>
 					</div>
@@ -528,7 +609,7 @@ function stopStreaming() {
 				>
 					<div class="w-full max-w-2xl text-center">
 						<div
-							class="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-white"
+							class="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-card"
 							in:fly={{ y: -20, duration: 500, delay: 100, easing: cubicOut }}
 						>
 							<img src="/icon.svg" alt="" class="h-5 w-5" />
@@ -543,7 +624,7 @@ function stopStreaming() {
 							class="mx-auto mb-6 max-w-md text-sm leading-6 text-fg-3"
 							in:fly={{ y: 20, duration: 500, delay: 300, easing: cubicOut }}
 						>
-							Start with a market question, comp basket, pricing trend, or feasibility assumption.
+							Ask about your CRM leads, owner imports, follow-ups, or stored market data.
 						</p>
 						<div
 							class="mx-auto grid max-w-xl grid-cols-1 gap-2 text-[13px] sm:grid-cols-3"
@@ -552,28 +633,28 @@ function stopStreaming() {
 							<button
 								onclick={() =>
 									startConversationWithPrompt(
-										'What changed in Dubai Marina 2BR yields this quarter?'
+										'Summarize my CRM leads by status.'
 									)}
-								class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left leading-5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
-								<span class="mr-1 text-slate-400">→</span>
-								Dubai Marina 2BR yields
+								<span class="mr-1 text-fg-5">→</span>
+								My CRM pipeline
 							</button>
 							<button
 								onclick={() =>
-									startConversationWithPrompt('Compare Dubai Marina pricing against JBR.')}
-								class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left leading-5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+									startConversationWithPrompt('Which of my CRM leads have follow-ups due today or earlier?')}
+								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
-								<span class="mr-1 text-slate-400">→</span>
-								Compare to JBR
+								<span class="mr-1 text-fg-5">→</span>
+								My follow-ups due
 							</button>
 							<button
 								onclick={() =>
-									startConversationWithPrompt('Build a comp basket for Business Bay offices.')}
-								class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left leading-5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+									startConversationWithPrompt('What was the median annual rent for 2-bedroom apartments in Dubai Marina last month?')}
+								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
-								<span class="mr-1 text-slate-400">→</span>
-								Build a comp basket
+								<span class="mr-1 text-fg-5">→</span>
+								Dubai Marina 2BR rents
 							</button>
 						</div>
 					</div>
@@ -586,7 +667,7 @@ function stopStreaming() {
 			>
 				<div class="max-w-md text-center">
 					<div
-						class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-white"
+						class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-card"
 						in:fly={{ y: -20, duration: 500, easing: cubicOut }}
 					>
 						<img src="/icon.svg" alt="" class="h-5 w-5" />
@@ -600,6 +681,11 @@ function stopStreaming() {
 				</div>
 			</div>
 		{:else}
+			{#if hasOlder && (olderMessages.length > 0 || (messagesQuery.data?.length ?? 0) >= 100)}
+				<button type="button" class="ui-button px-3 py-2 text-xs" disabled={loadingOlder} onclick={loadOlderMessages}>
+					{loadingOlder ? 'Loading older messages…' : 'Load older messages'}
+				</button>
+			{/if}
 			{#each messages as msg, i (msg.id)}
 				<div
 					class="flex {msg.role === 'user' ? 'justify-end' : 'justify-start'}"
@@ -613,21 +699,21 @@ function stopStreaming() {
 							? 'bg-navy text-bone'
 							: msg.artifacts?.length
 								? 'bg-transparent text-fg-2'
-								: 'border border-slate-200 bg-slate-50 text-fg-2'}"
+								: 'border border-border bg-panel text-fg-2'}"
 					>
 						{#if isThinking && i === messages.length - 1 && msg.role === 'assistant' && !msg.content && !msg.toolCalls?.length && !msg.artifacts?.length}
-							<div class="flex items-center gap-2 text-slate-400">
+							<div class="flex items-center gap-2 text-fg-5">
 								<div class="flex gap-1 items-center">
 									<div
-										class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
+										class="w-1.5 h-1.5 bg-fg-5 rounded-full animate-bounce"
 										style="animation-delay: 0ms"
 									></div>
 									<div
-										class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
+										class="w-1.5 h-1.5 bg-fg-5 rounded-full animate-bounce"
 										style="animation-delay: 150ms"
 									></div>
 									<div
-										class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
+										class="w-1.5 h-1.5 bg-fg-5 rounded-full animate-bounce"
 										style="animation-delay: 300ms"
 									></div>
 								</div>
@@ -641,7 +727,7 @@ function stopStreaming() {
 								</div>
 									{#if msg.toolCalls && msg.toolCalls.length > 0}
 										<div
-											class="{msg.content || msg.artifacts?.length ? 'mb-3 border-b border-slate-200 pb-3' : ''} space-y-2 text-xs text-slate-600"
+											class="{msg.content || msg.artifacts?.length ? 'mb-3 border-b border-border pb-3' : ''} space-y-2 text-xs text-fg-3"
 										>
 											{#each msg.toolCalls as toolCall (toolCall)}
 												<div class="flex items-center gap-2">
@@ -665,9 +751,16 @@ function stopStreaming() {
 											{/each}
 										</div>
 									{/if}
+									{#if msg.actionIds?.length}
+										<div class="mb-3 space-y-3">
+											{#each msg.actionIds as actionId (actionId)}
+												<ChatActionCard {actionId} />
+											{/each}
+										</div>
+									{/if}
 									{#if msg.content}
 										<div
-											class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-primary-light [&_a]:underline [&_a:hover]:text-fg-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
+											class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-primary-light [&_a]:underline [&_a:hover]:text-fg-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-strong [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-fg-3 [&_blockquote]:my-2 [&_code]:bg-panel [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-panel [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
 								>
 									{@html renderMarkdown(msg.content)}
 								</div>
@@ -679,13 +772,13 @@ function stopStreaming() {
 								<div
 									class="mt-3 pt-3 border-t {msg.role === 'user'
 									? 'border-slate-700'
-									: 'border-slate-200'} text-xs space-y-2"
+									: 'border-border'} text-xs space-y-2"
 							>
 								{#each msg.toolCalls as toolCall (toolCall)}
 									<div
 										class="flex items-center gap-2 {msg.role === 'user'
 											? 'text-slate-300'
-											: 'text-slate-600'}"
+											: 'text-fg-3'}"
 									>
 										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path
@@ -708,7 +801,7 @@ function stopStreaming() {
 	</div>
 
 	<!-- Input Area -->
-	<div class="border-t border-slate-200 bg-white p-4">
+	<div class="border-t border-border bg-card p-4">
 		{#if displayError && messages.length > 0}
 			<div
 				class="mb-4 flex items-center gap-2 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-3 text-sm text-error"
@@ -739,7 +832,7 @@ function stopStreaming() {
 				placeholder={conversationId
 					? 'Ask anything about Dubai real estate...'
 					: 'Select or create a conversation first'}
-				class="min-h-11 w-full resize-none rounded-md border border-navy bg-white py-3 pl-4 pr-14 text-[13px] leading-5 text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-2 focus:ring-navy/10"
+				class="min-h-11 w-full resize-none rounded-md border border-focus bg-card py-3 pl-4 pr-14 text-[13px] leading-5 text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-2 focus:ring-navy/10"
 				rows="1"
 				readonly={!conversationId || streamController !== null}
 				style="max-height: 180px;"
@@ -766,7 +859,7 @@ function stopStreaming() {
 					class="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded transition-colors {inputValue.trim() &&
 					conversationId
 						? 'bg-navy text-bone hover:bg-primary-light'
-						: 'cursor-not-allowed bg-slate-200 text-slate-400'}"
+						: 'cursor-not-allowed bg-panel text-fg-5'}"
 					aria-label="Send message"
 				>
 					<svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">

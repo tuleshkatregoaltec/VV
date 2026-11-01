@@ -363,7 +363,9 @@ async function handleResendForgotPasswordOTP() {
 	sideTitle="One place for transactions, feasibility work, and commercial decisions."
 	sideCopy="Vitevue keeps market signals, project analysis, and commercial context in one workspace so teams can move with more confidence and less friction."
 	cardViewportFill={false}
-	panelClass="lg:h-[calc(100vh-2rem)] lg:max-h-[49rem]"
+	panelClass="lg:min-h-[min(calc(100vh-2rem),49rem)]"
+	sectionWidthClass="lg:max-w-xl xl:max-w-2xl lg:h-auto"
+	cardClass="lg:self-stretch"
 	headerClass="min-h-[7.25rem] sm:min-h-[6.5rem]"
 >
 	<svelte:fragment slot="side">
@@ -415,14 +417,14 @@ async function handleResendForgotPasswordOTP() {
 
 	<div class="flex flex-col gap-4">
 		{#if currentView === 'login' || currentView === 'signup'}
-			<div class="grid grid-cols-2 rounded-lg border border-border bg-white p-1">
+			<div class="grid grid-cols-2 rounded-lg border border-border bg-panel p-1">
 				<button
 					type="button"
 					onclick={() => setView('login')}
 					class="rounded-md border px-4 py-2.5 text-sm font-medium transition {currentView ===
 					'login'
-						? 'border-navy bg-navy text-on-navy shadow-xs'
-						: 'border-transparent text-fg-3 hover:border-strong hover:bg-slate-50 hover:text-fg-1'}"
+						? 'border-action bg-action text-on-action shadow-xs'
+						: 'border-transparent text-fg-3 hover:border-strong hover:bg-card hover:text-fg-1'}"
 				>
 					Sign in
 				</button>
@@ -431,8 +433,8 @@ async function handleResendForgotPasswordOTP() {
 					onclick={() => setView('signup')}
 					class="rounded-md border px-4 py-2.5 text-sm font-medium transition {currentView ===
 					'signup'
-						? 'border-navy bg-navy text-on-navy shadow-xs'
-						: 'border-transparent text-fg-3 hover:border-strong hover:bg-slate-50 hover:text-fg-1'}"
+						? 'border-action bg-action text-on-action shadow-xs'
+						: 'border-transparent text-fg-3 hover:border-strong hover:bg-card hover:text-fg-1'}"
 				>
 					Create account
 				</button>
@@ -458,7 +460,7 @@ async function handleResendForgotPasswordOTP() {
 		{/if}
 
 		{#if error}
-			<div class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg px-4 py-3 text-sm text-error">
+			<div class="rounded-lg border border-error-border bg-error-bg px-4 py-3 text-sm text-error">
 				{error}
 			</div>
 		{/if}
@@ -502,7 +504,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="submit"
 					disabled={loading}
-					class="w-full rounded-md bg-navy px-4 py-3.5 text-sm font-semibold text-on-navy transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+					class="w-full rounded-md bg-action px-4 py-3.5 text-sm font-semibold text-on-action transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Signing in...' : 'Sign in'}
 				</button>
@@ -510,7 +512,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="button"
 					onclick={() => setView('email-auth')}
-					class="w-full rounded-md border border-border bg-white px-4 py-3 text-sm font-medium text-fg-2 transition hover:border-[var(--color-navy-600)] hover:bg-slate-50 hover:text-navy"
+					class="w-full rounded-md border border-border bg-card px-4 py-3 text-sm font-medium text-fg-2 transition hover:border-strong hover:bg-panel hover:text-fg-1"
 				>
 					Sign in with email code instead
 				</button>
@@ -557,7 +559,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="submit"
 					disabled={loading}
-					class="w-full rounded-md bg-navy px-4 py-3.5 text-sm font-semibold text-on-navy transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+					class="w-full rounded-md bg-action px-4 py-3.5 text-sm font-semibold text-on-action transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Sending code...' : 'Send sign-in code'}
 				</button>
@@ -601,15 +603,15 @@ async function handleResendForgotPasswordOTP() {
 
 				<label
 					class="flex items-start gap-3 rounded-md border px-3 py-2.5 text-xs leading-5 text-fg-3 transition-colors {fieldErrors.terms
-						? 'border-[var(--color-error)] bg-error-bg'
-						: 'border-border bg-white'}"
+						? 'border-error-border bg-error-bg'
+						: 'border-border bg-card'}"
 				>
 					<input
 						type="checkbox"
 						id="terms"
 						bind:checked={termsAccepted}
 						onchange={() => (fieldErrors.terms = '')}
-						class="mt-0.5 h-4 w-4 rounded-sm border-strong accent-navy text-navy focus:ring-2 focus:ring-focus"
+						class="mt-0.5 h-4 w-4 rounded-sm border-strong accent-[var(--color-action)] focus:ring-2 focus:ring-focus"
 					/>
 					<span>
 						I agree to the
@@ -637,7 +639,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="submit"
 					disabled={loading}
-					class="w-full rounded-md bg-navy px-4 py-3.5 text-sm font-semibold text-on-navy transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+					class="w-full rounded-md bg-action px-4 py-3.5 text-sm font-semibold text-on-action transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Creating account...' : 'Create account'}
 				</button>
@@ -663,13 +665,13 @@ async function handleResendForgotPasswordOTP() {
 							? handleEmailAuthOTP
 							: handleForgotPasswordOTP}
 					disabled={loading || otpCode.length !== 6}
-					class="w-full rounded-md bg-navy px-4 py-3.5 text-sm font-semibold text-on-navy transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+					class="w-full rounded-md bg-action px-4 py-3.5 text-sm font-semibold text-on-action transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Verifying...' : 'Verify code'}
 				</button>
 
 				<div
-					class="rounded-md border border-border bg-slate-50 px-4 py-3 text-sm text-fg-3"
+					class="rounded-md border border-border bg-panel px-4 py-3 text-sm text-fg-3"
 				>
 					{#if resendCountdown > 0}
 						Resend code in {resendCountdown}s
@@ -678,7 +680,7 @@ async function handleResendForgotPasswordOTP() {
 							type="button"
 							onclick={handleResendOTP}
 							disabled={loading}
-							class="font-medium text-fg-1 transition hover:text-primary-light disabled:opacity-50"
+							class="font-medium text-fg-1 transition hover:text-fg-3 disabled:opacity-50"
 						>
 							Resend code
 						</button>
@@ -687,7 +689,7 @@ async function handleResendForgotPasswordOTP() {
 							type="button"
 							onclick={handleResendEmailAuthOTP}
 							disabled={loading}
-							class="font-medium text-fg-1 transition hover:text-primary-light disabled:opacity-50"
+							class="font-medium text-fg-1 transition hover:text-fg-3 disabled:opacity-50"
 						>
 							Resend code
 						</button>
@@ -696,7 +698,7 @@ async function handleResendForgotPasswordOTP() {
 							type="button"
 							onclick={handleResendForgotPasswordOTP}
 							disabled={loading}
-							class="font-medium text-fg-1 transition hover:text-primary-light disabled:opacity-50"
+							class="font-medium text-fg-1 transition hover:text-fg-3 disabled:opacity-50"
 						>
 							Resend code
 						</button>
@@ -724,7 +726,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="submit"
 					disabled={loading}
-					class="w-full rounded-md bg-navy px-4 py-3.5 text-sm font-semibold text-on-navy transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+					class="w-full rounded-md bg-action px-4 py-3.5 text-sm font-semibold text-on-action transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Sending reset email...' : 'Send reset email'}
 				</button>

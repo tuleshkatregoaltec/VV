@@ -15,7 +15,7 @@ export interface ChatArtifactBase {
 
 export interface ListingResultsArtifact extends ChatArtifactBase {
 	type: 'listing_results'
-	data?: (Omit<ListingListResponse, 'total'> & { total: number | null }) | null
+	data?: ListingListResponse | null
 }
 
 export interface MarketTrendArtifact extends ChatArtifactBase {

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
 from typing import Any
@@ -102,8 +101,7 @@ def _float_or_none(value: Any) -> float | None:
     if value in (None, ""):
         return None
     try:
-        number = float(value)
-        return number if math.isfinite(number) else None
+        return float(value)
     except (TypeError, ValueError):
         return None
 
@@ -230,7 +228,7 @@ def _card_from_row(row: Any) -> ListingCardResponse:
         title=title,
         reference=row.get("reference") or raw_property.get("reference"),
         property_type=property_type,
-        price_value=_float_or_none(price.get("value")),
+        price_value=_int_or_none(price.get("value")),
         price_currency=price.get("currency"),
         price_period=price.get("period"),
         size_value=_float_or_none(size.get("value")),
@@ -251,6 +249,8 @@ def _card_from_row(row: Any) -> ListingCardResponse:
         agent_image_url=agent.image_url if agent else None,
         broker_name=broker.name if broker else None,
         broker_logo_url=broker.logo_url if broker else None,
+        captured_at=_parse_datetime(row.get("snapshot_at"))
+        or _parse_datetime(row.get("scraped_at")),
         listed_date=listed_date,
         listing_age_days=_int_or_none(row.get("listing_age_days")),
         price_per_sqft_aed=price_per_sqft,

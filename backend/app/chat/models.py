@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, LiteralString, Optional
-from uuid import UUID
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, Text
@@ -43,6 +43,22 @@ class Message(SQLModel, table=True):
     conversation: Optional[Conversation] = Relationship(back_populates="messages")
 
 
+class ChatTurnLease(SQLModel, table=True):
+    """An expiring capacity lease whose token reservation survives process loss."""
+
+    __tablename__ = "chat_turn_leases"
+
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    user_id: str = Field(index=True)
+    organization_id: str = Field(index=True)
+    conversation_id: int = Field(index=True)
+    budget_day: date
+    reserved_tokens: int
+    status: str = "active"
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    finished_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+
+
 # Request/Response Schemas
 
 
@@ -55,10 +71,7 @@ class CreateConversationRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     """Request model for sending a message in a conversation"""
 
-    model_config = ConfigDict(extra="forbid")
-
-    message: str = Field(min_length=1, max_length=16000)
-    request_id: UUID | None = None
+    message: str = Field(min_length=1, max_length=8000)
 
 
 class UpdateConversationRequest(BaseModel):

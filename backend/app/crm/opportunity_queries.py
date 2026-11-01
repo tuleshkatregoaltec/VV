@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.clickhouse.client import query
+from crm_rental_sql import AREA_LEAD_CTE, LIVE_LEAD_CTE
+
+from app.clickhouse.client import ClientDisconnected, query, run_cancellable
+from app.crm.rental_base import lead_cte
 
 
 async def fetch_sales_inventory(parameters):
@@ -159,195 +162,7 @@ async def _query_with_legacy_rentals(
     return [*rows, *[{**row, "_legacy_identity": True} for row in legacy_rows]]
 
 
-_LEAD_CTE = """
-WITH coverage AS (
-    SELECT max(source_shard_date) AS data_complete_through
-    FROM dxbi_rental_events FINAL
-),
-latest_unit AS (
-    SELECT
-        c.event_key,
-        c.unit_candidate_key AS unit_candidate_key,
-        c.unit_cohort_key,
-        c.location_name,
-        if(
-            c.property_type IN ('Villa', 'Townhouse'),
-            '',
-            coalesce(nullIf(g.display_building_name, ''), c.building_name)
-        ) AS building_name,
-        coalesce(nullIf(g.display_project_name, ''), c.project_name) AS project_name,
-        coalesce(nullIf(g.display_area_name, ''), c.area_name) AS area_name,
-        c.building_name AS registry_building_name,
-        c.project_name AS registry_project_name,
-        c.area_name AS registry_area_name,
-        g.canonical_location_id,
-        coalesce(nullIf(g.match_status, ''), 'unmapped') AS geography_match_status,
-        coalesce(nullIf(g.coordinate_precision, ''), 'missing') AS coordinate_precision,
-        g.latitude,
-        g.longitude,
-        c.property_type,
-        c.bedrooms,
-        c.size_sqft,
-        c.contract_amount_aed,
-        c.contract_term_days,
-        c.contract_term_months,
-        c.annual_rent_aed,
-        c.rent_normalization_version,
-        c.address_normalization_version,
-        c.purchase_price_aed,
-        c.lease_start,
-        c.lease_end,
-        c.contract_state,
-        c.observed_contracts,
-        c.last_scraped_at,
-        c.loaded_at,
-        coalesce(nullIf(c.unit_number, ''), m.unit_number) AS unit_number,
-        m.identity_sale_date,
-        m.identity_sale_price,
-        m.last_purchase_date,
-        m.matched_sale_price,
-        m.latest_property_type,
-        m.latest_price_per_sqft_aed,
-        m.latest_capital_gain_pct,
-        m.latest_ltv_pct,
-        m.latest_seller_type,
-        m.latest_seller_transaction_count,
-        m.latest_market_status,
-        m.latest_detail_url,
-        m.matching_units,
-        m.match_status AS unit_match_status
-    FROM dxbi_rental_unit_candidates AS c FINAL
-    LEFT JOIN geo_crm_rental_hierarchy AS g
-        ON g.registry_area_name = c.area_name
-        AND g.registry_project_name = c.project_name
-        AND g.registry_building_name = c.building_name
-        AND g.source_grain = multiIf(
-            c.property_type IN ('Villa', 'Townhouse'), 'landed_phase',
-            c.building_name != '', 'building',
-            c.project_name != '', 'project',
-            'area'
-        )
-    LEFT JOIN dxbi_rental_sale_matches AS m FINAL
-        ON m.unit_candidate_key = c.unit_candidate_key
-),
-identified_unit AS (
-    SELECT
-        *,
-        if(
-            unit_match_status = 'unique' AND ifNull(unit_number, '') != '',
-            concat(
-                'unit:',
-                replaceRegexpAll(
-                    lowerUTF8(coalesce(nullIf(building_name, ''), nullIf(project_name, ''), location_name)),
-                    '[^a-z0-9]+',
-                    ''
-                ),
-                ':',
-                replaceRegexpAll(lowerUTF8(area_name), '[^a-z0-9]+', ''),
-                ':',
-                upperUTF8(unit_number)
-            ),
-            concat('candidate:', unit_candidate_key)
-        ) AS property_identity_key
-    FROM latest_unit
-),
-ranked_unit AS (
-    SELECT
-        *,
-        row_number() OVER (
-            PARTITION BY property_identity_key
-            ORDER BY lease_start DESC, lease_end DESC, last_scraped_at DESC, event_key DESC
-        ) AS identity_rank
-    FROM identified_unit
-),
-lead_evidence AS (
-    SELECT
-        r.*,
-        c.data_complete_through,
-        multiIf(
-            property_type IN ('Apartment', 'Villa'), 'residential',
-            property_type = 'Commercial', 'commercial',
-            'other'
-        ) AS asset_class,
-        multiIf(
-            property_type = 'Commercial'
-                AND latest_property_type IN (
-                    'Office',
-                    'Shop',
-                    'Warehouse',
-                    'Show Rooms',
-                    'Workshop',
-                    'Clinic',
-                    'Gymnasium',
-                    'Hotel'
-                ),
-            latest_property_type,
-            property_type != '',
-            property_type,
-            'Other'
-        ) AS property_subtype,
-        dateDiff('day', {as_of:Date}, lease_end) AS days_to_expiry,
-        multiIf(
-            unit_match_status != 'unique', 'unit_unresolved',
-            last_purchase_date >= lease_start
-                AND last_purchase_date < lease_end,
-                'sale_during_lease',
-            'stable_rental_history'
-        ) AS ownership_timing,
-        multiIf(
-            lease_end >= {as_of:Date}, 'upcoming',
-            unit_match_status != 'unique', 'unit_unresolved',
-            last_purchase_date >= lease_start
-                AND last_purchase_date < lease_end,
-                'ownership_review',
-            'unlet_signal'
-        ) AS lease_evidence_state,
-        multiIf(
-            lease_end < {as_of:Date}, 'expired',
-            lease_end <= addDays({as_of:Date}, 30), 'expiring_30',
-            lease_end <= addDays({as_of:Date}, 60), 'expiring_60',
-            'expiring_90'
-        ) AS lead_status,
-        if(
-            unit_match_status = 'unique',
-            'high',
-            if(purchase_price_aed > 0, 'medium', 'low')
-        )
-            AS match_confidence
-    FROM ranked_unit AS r
-    CROSS JOIN coverage AS c
-    WHERE
-        identity_rank = 1
-        AND
-        lease_end >= addDays({as_of:Date}, -{expired_days:Int32})
-        AND lease_end <= addDays({as_of:Date}, 90)
-        AND NOT (
-            unit_match_status = 'unique'
-            AND last_purchase_date >= lease_end
-        )
-),
-leads AS (
-    SELECT
-        *,
-        greatest(
-            0,
-            least(
-                100,
-                multiIf(
-                    lead_status = 'expired' AND lease_evidence_state = 'unlet_signal', 88,
-                    lead_status = 'expiring_30', 84,
-                    lead_status = 'expiring_60', 72,
-                    60
-                )
-                + if(unit_match_status = 'unique', 6, 0)
-                + if(contract_state = 'Renewed', 2, 0)
-                - if(ownership_timing = 'sale_during_lease', 25, 0)
-            )
-        ) AS raw_score,
-        if(raw_score >= 90, 'urgent', if(raw_score >= 75, 'high', 'medium')) AS priority
-    FROM lead_evidence
-)
-"""
+_LEAD_CTE = LIVE_LEAD_CTE
 
 
 def _where_clause(
@@ -360,9 +175,13 @@ def _where_clause(
     search: str | None,
     asset_class: str | None = None,
     property_type: str | None = None,
+    unlet_only: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     conditions = ["1 = 1"]
     params: dict[str, Any] = {}
+    if unlet_only:
+        # Vacant: the exact unit's lease ended, no later lease is registered and it was not sold.
+        conditions.append("lease_evidence_state = 'unlet_signal'")
     if status:
         conditions.append("lead_status = {status:String}")
         params["status"] = status
@@ -409,10 +228,10 @@ def _where_clause(
     return " AND ".join(conditions), params
 
 
-def _filter_metadata_sql(facet_where: str) -> str:
+def _filter_metadata_sql(facet_where: str, cte: str = _LEAD_CTE) -> str:
     """Return live lead facets so every dropdown option can produce a result."""
     return (
-        _LEAD_CTE
+        cte
         + f"""
         SELECT
             (SELECT count() FROM dxbi_rental_events FINAL) AS rows,
@@ -488,6 +307,7 @@ async def fetch_dashboard(
     search,
     status,
 ):
+    cte = await lead_cte(query)
     where, filter_params = _where_clause(
         status=status,
         priority=priority,
@@ -526,7 +346,7 @@ async def fetch_dashboard(
     dimension = VALID_BREAKDOWNS[breakdown]
 
     lead_sql = (
-        _LEAD_CTE
+        cte
         + f"""
         SELECT *
         FROM leads
@@ -536,7 +356,7 @@ async def fetch_dashboard(
         """
     )
     summary_sql = (
-        _LEAD_CTE
+        cte
         + f"""
         SELECT
             count() AS total,
@@ -565,7 +385,7 @@ async def fetch_dashboard(
         """
     )
     breakdown_sql = (
-        _LEAD_CTE
+        cte
         + f"""
         SELECT
             if({dimension} = '', 'Unresolved hierarchy', {dimension}) AS label,
@@ -587,7 +407,7 @@ async def fetch_dashboard(
         """
     )
     asset_breakdown_sql = (
-        _LEAD_CTE
+        cte
         + f"""
         SELECT
             asset_class,
@@ -606,7 +426,7 @@ async def fetch_dashboard(
             multiIf(asset_class = 'residential', 1, asset_class = 'commercial', 2, 3)
         """
     )
-    metadata_sql = _filter_metadata_sql(facet_where)
+    metadata_sql = _filter_metadata_sql(facet_where, cte)
     metadata_params = {
         **facet_filter_params,
         "as_of": anchor.isoformat(),
@@ -630,6 +450,175 @@ async def fetch_dashboard(
         query(metadata_sql, metadata_params),
     )
     return lead_rows, summary_rows, breakdown_rows, asset_rows, metadata_rows
+
+
+_AREA_LEAD_CTE = AREA_LEAD_CTE
+
+
+async def run_until_disconnected(is_disconnected, work):
+    """Run `work` with time-limited queries; None (queries stopped) if the caller went away."""
+    try:
+        return await run_cancellable(is_disconnected, work)
+    except ClientDisconnected:
+        return None
+
+
+async def fetch_renewal_leads(anchor, areas, forward_days, lookback_days, limit, offset, kind=None):
+    """Return one agent's lease-expiry leads: their areas, inside the forward/look-back windows.
+
+    Only leases tied to a known unit number become leads. `kind` narrows them to vacant units
+    (lease ended, no later lease registered) or to leases still running.
+    """
+    kind_condition = {
+        None: "",
+        "vacant": "AND lease_evidence_state = 'unlet_signal'",
+        "upcoming": "AND lease_end >= {as_of:Date}",
+    }[kind]
+    params = {
+        "as_of": anchor.isoformat(),
+        "expired_days": lookback_days,
+        "forward_days": forward_days,
+        "areas": list(areas),
+        "limit": limit,
+        "offset": offset,
+    }
+    # One query: window totals are computed over every match before LIMIT applies.
+    cte = await lead_cte(query, areas=True)
+    rows = await query(
+        cte
+        + """
+        SELECT
+            *,
+            count() OVER () AS _window_total,
+            countIf(lease_end = addDays({as_of:Date}, {forward_days:Int32})) OVER ()
+                AS _window_entered_today
+        FROM leads
+        WHERE
+            has({areas:Array(String)}, area_name)
+            AND lease_end <= addDays({as_of:Date}, {forward_days:Int32})
+            AND ifNull(unit_number, '') != ''
+            """
+        + kind_condition
+        + """
+        ORDER BY lease_end ASC, raw_score DESC, event_key
+        LIMIT {limit:Int32} OFFSET {offset:Int32}
+        """,
+        params,
+    )
+    # A page past the end has no rows to carry the totals; it reports zero.
+    counts = {
+        "total": rows[0]["_window_total"] if rows else 0,
+        "entered_today": rows[0]["_window_entered_today"] if rows else 0,
+    }
+    return rows, [counts]
+
+
+async def fetch_renewals(
+    anchor,
+    *,
+    status,
+    unlet_only,
+    expired_days,
+    area,
+    property_type,
+    project,
+    building,
+    limit,
+    offset,
+):
+    """Assets › Renewals: one page of leases with its total, plus the options for its filters.
+
+    Two queries instead of the dashboard's five. With an area picked, leases are narrowed to it
+    before the per-unit work (the same narrowing as the agent's renewal leads).
+    """
+    cte = await lead_cte(query, areas=bool(area))
+    where, filter_params = _where_clause(
+        status=status,
+        priority=None,
+        area=area,
+        project=project,
+        building=building,
+        search=None,
+        property_type=property_type,
+        unlet_only=unlet_only,
+    )
+    # The options list what the other filters allow, so picking one never empties its own list.
+    facet_where, facet_params = _where_clause(
+        status=status,
+        priority=None,
+        area=area,
+        project=None,
+        building=None,
+        search=None,
+        unlet_only=unlet_only,
+    )
+    base = {
+        "as_of": anchor.isoformat(),
+        "expired_days": expired_days,
+        "areas": [area] if area else [],
+    }
+    rows_sql = (
+        cte
+        + f"""
+        SELECT *, count() OVER () AS _window_total
+        FROM leads
+        WHERE {where}
+        ORDER BY raw_score DESC, lease_end ASC, annual_rent_aed DESC
+        LIMIT {{limit:Int32}} OFFSET {{offset:Int32}}
+        """
+    )
+    facets_sql = (
+        cte
+        + f"""
+        SELECT
+            arraySort(groupUniqArray(property_subtype)) AS property_types,
+            arraySort(
+                groupUniqArrayIf(project_name, project_name != '' AND {{filter_area:String}} != '')
+            ) AS projects,
+            arraySort(
+                groupUniqArrayIf(
+                    building_name,
+                    building_name != ''
+                    AND {{filter_project:String}} != ''
+                    AND project_name = {{filter_project:String}}
+                )
+            ) AS buildings
+        FROM leads
+        WHERE {facet_where}
+        """
+    )
+    rows, facets = await asyncio.gather(
+        query(rows_sql, {**base, **filter_params, "limit": limit, "offset": offset}),
+        query(
+            facets_sql,
+            {
+                **base,
+                **facet_params,
+                "filter_area": area or "",
+                "filter_project": project or "",
+            },
+        ),
+    )
+    total = rows[0]["_window_total"] if rows else 0
+    return rows, total, (facets[0] if facets else {})
+
+
+async def fetch_renewal_areas(anchor):
+    """Areas in the lease-expiry dataset, with their leases ending in the next 90 days."""
+    cte = await lead_cte(query)
+    return await query(
+        cte
+        + """
+        SELECT
+            area_name AS area,
+            countIf(lease_end >= {as_of:Date}) AS upcoming_90_days
+        FROM leads
+        WHERE area_name != ''
+        GROUP BY area_name
+        ORDER BY area_name
+        """,
+        {"as_of": anchor.isoformat(), "expired_days": 365},
+    )
 
 
 async def fetch_lead(parameters):
@@ -719,7 +708,7 @@ async def fetch_candidate_key(parameters):
 
 
 async def fetch_saved_leads(parameters):
-    return await _query_with_legacy_rentals(
+    rows = await _query_with_legacy_rentals(
         _LEAD_CTE
         + """
         SELECT
@@ -732,3 +721,7 @@ async def fetch_saved_leads(parameters):
         parameters,
         saved_candidates=True,
     )
+
+    # ClickHouse qualifies joined l.* columns when identified_unit has the same names.
+    # Keep the response contract identical to SELECT * FROM leads, including legacy flags.
+    return [{key.removeprefix("l."): value for key, value in row.items()} for row in rows]

@@ -158,8 +158,18 @@ class CrmTimelineEvent(BaseModel):
     capital_gain_pct: float | None = None
 
 
+class CrmRenewalOwner(BaseModel):
+    """A manual owner or one unambiguous, verified imported owner."""
+
+    name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    source: Literal["workspace", "owner_import"]
+
+
 class CrmLeadDetailResponse(BaseModel):
     lead: CrmLead
+    owner: CrmRenewalOwner | None = None
     timeline: list[CrmTimelineEvent]
     next_best_actions: list[str]
     agent_signals: list[str] = Field(default_factory=list)
@@ -216,6 +226,7 @@ class CrmLeadWorkspace(SQLModel, table=True):
     owner_name: str | None = None
     owner_email: str | None = None
     owner_phone: str | None = None
+    owner_source: str | None = None
     next_follow_up: date | None = None
     tags: list[str] = SQLField(
         default_factory=list,
@@ -370,3 +381,204 @@ class CrmPropertyReportResponse(BaseModel):
     agent_signals: list[str] = Field(default_factory=list)
     methodology: list[str] = Field(default_factory=list)
     generated_at: datetime
+
+
+RENEWAL_FORWARD_DAYS_DEFAULT = 60
+RENEWAL_LOOKBACK_DAYS_DEFAULT = 30
+# The lease-expiry dataset only covers 90 days ahead (see opportunity_queries._LEAD_CTE).
+RENEWAL_FORWARD_DAYS_MAX = 90
+RENEWAL_LOOKBACK_DAYS_MAX = 365
+
+
+class CrmAgentAreaPreference(SQLModel, table=True):
+    """One agent's renewal-lead areas and lease-expiry windows within an organization."""
+
+    __tablename__ = "crm_agent_area_preferences"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "organization_id",
+            name="uq_crm_agent_area_preference_owner",
+        ),
+    )
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    user_id: str = SQLField(index=True)
+    organization_id: str = SQLField(index=True)
+    areas: list[str] = SQLField(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    forward_days: int = SQLField(default=RENEWAL_FORWARD_DAYS_DEFAULT)
+    lookback_days: int = SQLField(default=RENEWAL_LOOKBACK_DAYS_DEFAULT)
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmLicensedBroker(SQLModel, table=True):
+    """One licensed real-estate broker from the regulator's public list (org-agnostic reference).
+
+    Phones are normalized like owner-sheet phones and emails are casefolded, so a sheet row can be
+    compared with them directly. The table is replaced as a whole by ``load_licensed_brokers``."""
+
+    __tablename__ = "crm_licensed_brokers"
+
+    broker_number: int = SQLField(primary_key=True)
+    name_key: str = SQLField(index=True)
+    phones: list[str] = SQLField(default_factory=list, sa_column=Column(JSON, nullable=False))
+    emails: list[str] = SQLField(default_factory=list, sa_column=Column(JSON, nullable=False))
+    card_expiry_date: date | None = SQLField(default=None)
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmCompanyListing(BaseModel):
+    """A listing the agency holds the mandate for, owned by one of its agents.
+
+    Matched first for buyers (sale) and tenants (rent): the agency knows it is available and can
+    earn both sides of the deal. Rent prices are yearly, like tenant budgets. Bedrooms use the
+    lead brief's numbers (0 = studio). Synthetic rows are test data and can be removed as a set.
+    """
+
+    id: int | None = None
+    organization_id: str
+    reference: str
+    agent_user_id: str | None = None
+    agent_name: str
+    agent_phone: str | None = None
+    mode: str
+    title: str
+    property_type: str
+    bedrooms: int | None = None
+    size_sqft: int | None = None
+    price_aed: int
+    area_name: str
+    building_name: str | None = None
+    unit_number: str | None = None
+    status: str = "active"
+    is_synthetic: bool = False
+    listed_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
+class CrmCompanyListingSource(SQLModel, table=True):
+    """The Property Finder broker selected for an organization's company inventory."""
+
+    __tablename__ = "crm_company_listing_sources"
+
+    organization_id: str = SQLField(
+        primary_key=True, foreign_key="organizations.id", ondelete="CASCADE"
+    )
+    broker_id: str
+    broker_name: str
+    selected_by_user_id: str
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmCompanyListingResponse(BaseModel):
+    """A company listing as Assets › Company listings shows it."""
+
+    reference: str
+    agent_name: str
+    agent_phone: str | None
+    mode: str
+    title: str
+    property_type: str
+    bedrooms: int | None
+    size_sqft: int | None
+    price_aed: int
+    area_name: str
+    building_name: str | None
+    unit_number: str | None
+    status: str
+    listed_at: datetime
+
+
+class CrmCompanyListingCompany(BaseModel):
+    broker_id: str
+    broker_name: str
+    listings: int
+    agents: int
+    last_scraped_at: datetime | None = None
+
+
+class CrmCompanyListingAgentInventory(BaseModel):
+    agent_id: str | None = None
+    agent_name: str
+    listings: int
+    # As published on the agent's Property Finder listings.
+    phone: str | None = None
+    email: str | None = None
+
+
+class CrmCompanyListingsResponse(BaseModel):
+    company: CrmCompanyListingCompany | None
+    matching_company: CrmCompanyListingCompany | None = None
+    companies: list[CrmCompanyListingCompany] = Field(default_factory=list)
+    agents: list[CrmCompanyListingAgentInventory] = Field(default_factory=list)
+    items: list[CrmCompanyListingResponse] = Field(default_factory=list)
+    total: int = 0
+    limit: int
+    offset: int
+
+
+class CrmCompanyListingSourceUpdate(BaseModel):
+    broker_id: str = Field(min_length=1, max_length=80)
+
+
+class CrmCompanyListingSourceResponse(BaseModel):
+    broker_id: str
+    broker_name: str
+
+
+class CrmAreaPreferencesUpdate(BaseModel):
+    areas: list[str] = Field(max_length=50)
+    forward_days: int = Field(
+        default=RENEWAL_FORWARD_DAYS_DEFAULT, ge=1, le=RENEWAL_FORWARD_DAYS_MAX
+    )
+    lookback_days: int = Field(
+        default=RENEWAL_LOOKBACK_DAYS_DEFAULT, ge=0, le=RENEWAL_LOOKBACK_DAYS_MAX
+    )
+
+
+class CrmAreaPreferencesResponse(CrmAreaPreferencesUpdate):
+    updated_at: datetime | None = None
+
+
+class CrmRenewalArea(BaseModel):
+    area: str
+    upcoming_90_days: int
+
+
+class CrmRenewalLead(BaseModel):
+    lead: CrmLead
+    owner: CrmRenewalOwner | None = None
+    # The agency's stored lead for this unit, once an agent has opened it in Leads.
+    lead_record_id: int | None = None
+
+
+class CrmRenewalLeadsResponse(BaseModel):
+    items: list[CrmRenewalLead]
+    total: int
+    limit: int
+    offset: int
+    # Leases whose expiry crossed into the forward window today.
+    entered_today: int
+    preferences: CrmAreaPreferencesResponse
+    as_of: date
+
+
+class CrmRenewalsResponse(BaseModel):
+    """Assets › Renewals: one page of the lease-expiry dataset and the options for its filters."""
+
+    leads: list[CrmLead]
+    total: int
+    limit: int
+    offset: int
+    property_types: list[str] = Field(default_factory=list)
+    # Listed once an area is picked.
+    projects: list[str] = Field(default_factory=list)
+    # Listed once a project is picked.
+    buildings: list[str] = Field(default_factory=list)
+    as_of: date

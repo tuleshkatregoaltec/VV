@@ -22,6 +22,7 @@ import httpx
 from holocron.contracts import RawFile, RawRelease
 from holocron.platform.execution import build_raw_release, new_run_id, utc_now
 from holocron.platform.http_download import normalize_external_url, validated_stream_get
+from holocron.platform.http_retry import provider_limiter, send
 from holocron.platform.metadata import safe_config_metadata
 from holocron.platform.raw_files import (
     build_raw_file_from_path,
@@ -150,14 +151,18 @@ class ReellySupplyApiClient:
         self._availability_base_url = availability_base_url.rstrip("/")
         self._allowed_document_hosts = tuple(allowed_document_hosts)
         self._auth_token: str | None = None
+        # One account and quota for every Reelly call in this process.
+        self.limiter = provider_limiter("reelly", min_interval_seconds=0.5)
 
     def authenticate(self, *, email: str, password: str) -> dict[str, Any]:
-        response = self._client.post(
+        response = send(
+            self._client,
+            "POST",
             f"{self._base_url}/auth/login0",
+            limiter=self.limiter,
             json={"email": email, "password": password},
             headers={"accept": "application/json", "content-type": "application/json"},
         )
-        response.raise_for_status()
         payload = _json_payload(response)
         if not isinstance(payload, dict):
             raise ValueError("Reelly authentication response must be a JSON object")
@@ -254,8 +259,14 @@ class ReellySupplyApiClient:
         *,
         params: Mapping[str, Any] | None = None,
     ) -> dict[str, Any] | list[Any]:
-        response = self._client.get(url, params=params, headers=self._authorized_headers())
-        response.raise_for_status()
+        response = send(
+            self._client,
+            "GET",
+            url,
+            limiter=self.limiter,
+            params=params,
+            headers=self._authorized_headers(),
+        )
         return _json_payload(response)
 
     def _authorized_headers(self) -> dict[str, str]:

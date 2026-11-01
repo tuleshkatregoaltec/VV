@@ -17,6 +17,18 @@ from app.analytics.queries import price_trends
 from app.clickhouse.client import query as ch_query
 from app.market.reference import SQM_TO_SQFT, area_search_text
 
+# Every area-based figure is per square foot. A request for a per-square-metre metric (the
+# model or an old saved chart) gets its per-square-foot counterpart, not a different metric.
+_SQM_METRICS = {
+    "avg_price_sqm": "avg_price_sqft",
+    "median_price_sqm": "median_price_sqft",
+    "median_rent_sqm": "median_rent_sqft",
+}
+
+
+def _per_sqft(metric: str) -> str:
+    return _SQM_METRICS.get(metric, metric)
+
 
 async def _resolve_transaction_area(area: str | None) -> str | None:
     if not area:
@@ -24,30 +36,30 @@ async def _resolve_transaction_area(area: str | None) -> str | None:
 
     search_text = area_search_text(area)
     sql = """
-    SELECT area_name_en
+    SELECT location_name
     FROM ch_transactions
-    WHERE area_name_en != ''
+    WHERE location_name != ''
       AND (
-        lower(area_name_en) = lower({area:String})
-        OR lower(area_name_en) = lower({search_text:String})
-        OR area_name_en ILIKE {pattern:String}
+        lower(location_name) = lower({area:String})
+        OR lower(location_name) = lower({search_text:String})
+        OR location_name ILIKE {pattern:String}
         OR lower(master_project_en) = lower({search_text:String})
         OR master_project_en ILIKE {pattern:String}
         OR project_name_en ILIKE {pattern:String}
       )
       AND trans_group_en = 'Sales'
       AND actual_worth > 0
-    GROUP BY area_name_en
+    GROUP BY location_name
     ORDER BY
-        (lower(area_name_en) = lower({area:String})) DESC,
-        (lower(area_name_en) = lower({search_text:String})) DESC,
+        (lower(location_name) = lower({area:String})) DESC,
+        (lower(location_name) = lower({search_text:String})) DESC,
         count() DESC
     LIMIT 1
     """
     rows = await ch_query(
         sql, {"area": area, "search_text": search_text, "pattern": f"%{search_text}%"}
     )
-    return rows[0]["area_name_en"] if rows else area
+    return rows[0]["location_name"] if rows else area
 
 
 async def _latest_transaction_date(
@@ -64,10 +76,10 @@ async def _latest_transaction_date(
         where_clauses.append("property_usage_en = {property_usage:String}")
         params["property_usage"] = property_usage
     if property_type:
-        where_clauses.append("property_type_en = {property_type:String}")
+        where_clauses.append("property_type = {property_type:String}")
         params["property_type"] = property_type
     if area:
-        where_clauses.append("area_name_en = {area_name:String}")
+        where_clauses.append("location_name = {area_name:String}")
         params["area_name"] = area
     if master_project:
         where_clauses.append("master_project_en = {master_project:String}")
@@ -113,10 +125,10 @@ async def _latest_rental_contract_date(
         where_clauses.append("property_usage_en = {property_usage:String}")
         params["property_usage"] = property_usage
     if property_type:
-        where_clauses.append("ejari_property_type_en = {property_type:String}")
+        where_clauses.append("property_type = {property_type:String}")
         params["property_type"] = property_type
     if area:
-        where_clauses.append("area_name_en = {area_name:String}")
+        where_clauses.append("location_name = {area_name:String}")
         params["area_name"] = area
     if master_project:
         where_clauses.append("master_project_en = {master_project:String}")
@@ -208,7 +220,7 @@ def _scope_clauses(scope: dict[str, str | None], params: dict[str, Any], prefix:
     if scope.get("area"):
         key = f"{prefix}_area"
         params[key] = scope["area"]
-        clauses.append(f"area_name_en = {{{key}:String}}")
+        clauses.append(f"location_name = {{{key}:String}}")
     if scope.get("master_project"):
         key = f"{prefix}_master_project"
         params[key] = scope["master_project"]
@@ -264,7 +276,7 @@ async def _latest_transaction_date_for_scopes(
         where_clauses.append("property_usage_en = {property_usage:String}")
         params["property_usage"] = property_usage
     if property_type:
-        where_clauses.append("property_type_en = {property_type:String}")
+        where_clauses.append("property_type = {property_type:String}")
         params["property_type"] = property_type
 
     scope_filter, _ = _scope_filter_and_label_expr(scopes, params, "scope")
@@ -310,7 +322,7 @@ async def _latest_rental_contract_date_for_scopes(
         where_clauses.append("property_usage_en = {property_usage:String}")
         params["property_usage"] = property_usage
     if property_type:
-        where_clauses.append("ejari_property_type_en = {property_type:String}")
+        where_clauses.append("property_type = {property_type:String}")
         params["property_type"] = property_type
 
     scope_filter, _ = _scope_filter_and_label_expr(scopes, params, "scope")
@@ -362,6 +374,7 @@ async def fetch_market_trend_rows(args: dict[str, Any]):
     start_date = end_date - timedelta(days=days)
 
     sql = price_trends(
+        source="ch_transactions",
         property_usage=property_usage,
         property_type=property_type,
         area_name=area,
@@ -394,7 +407,7 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
     days = _chart_days(args.get("days"))
     limit = clamp_int(args.get("limit"), default=8, min_value=1, max_value=20)
     group_by = str(args.get("group_by") or "area").lower()
-    metric = str(args.get("metric") or "transaction_count").lower()
+    metric = _per_sqft(str(args.get("metric") or "transaction_count").lower())
     sort_direction = _chart_sort_direction(args.get("sort_direction"))
     property_usage = _optional_chart_filter(args.get("property_usage")) or "Residential"
     property_type = _sales_property_type(args.get("property_type"))
@@ -412,8 +425,8 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
 
     group_exprs = {
         "time": None,
-        "area": "area_name_en",
-        "property_type": "property_type_en",
+        "area": "location_name",
+        "property_type": "property_type",
         "bedrooms": "rooms_en",
         "project": "project_name_en",
         "master_project": "master_project_en",
@@ -426,11 +439,9 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
         "transaction_count": "count()",
         "total_volume": "round(sum(actual_worth), 0)",
         "avg_price": "round(avg(actual_worth), 0)",
-        "median_price": "round(median(actual_worth), 0)",
-        "avg_price_sqm": "round(avg(meter_sale_price), 0)",
-        "median_price_sqm": "round(median(meter_sale_price), 0)",
+        "median_price": "round(medianExact(actual_worth), 0)",
         "avg_price_sqft": f"round(avg(meter_sale_price) / {SQM_TO_SQFT}, 0)",
-        "median_price_sqft": f"round(median(meter_sale_price) / {SQM_TO_SQFT}, 0)",
+        "median_price_sqft": f"round(medianExact(meter_sale_price) / {SQM_TO_SQFT}, 0)",
     }
     if metric not in metric_exprs:
         metric = "transaction_count"
@@ -484,18 +495,18 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
     where = [
         "trans_group_en = 'Sales'",
         "actual_worth > 0",
-        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage:
         where.append("property_usage_en = {property_usage:String}")
         params["property_usage"] = property_usage
     if property_type:
-        where.append("property_type_en = {property_type:String}")
+        where.append("property_type = {property_type:String}")
         params["property_type"] = property_type
     if is_multi_area and scope_filter:
         where.append(scope_filter)
     if not is_multi_area and area:
-        where.append("area_name_en = {area_name:String}")
+        where.append("location_name = {area_name:String}")
         params["area_name"] = area
     if not is_multi_area and master_project:
         where.append("master_project_en = {master_project:String}")
@@ -572,7 +583,7 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
     days = _chart_days(args.get("days"))
     limit = clamp_int(args.get("limit"), default=8, min_value=1, max_value=20)
     group_by = str(args.get("group_by") or "area").lower()
-    metric = str(args.get("metric") or "contract_count").lower()
+    metric = _per_sqft(str(args.get("metric") or "contract_count").lower())
     sort_direction = _chart_sort_direction(args.get("sort_direction"))
     property_usage = _optional_chart_filter(args.get("property_usage")) or "Residential"
     property_type = _rental_property_type(args.get("property_type"))
@@ -590,8 +601,8 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
 
     group_exprs = {
         "time": None,
-        "area": "area_name_en",
-        "property_type": "ejari_property_type_en",
+        "area": "location_name",
+        "property_type": "property_type",
         "project": "project_name_en",
         "master_project": "master_project_en",
         "tenant_type": "tenant_type_en",
@@ -603,9 +614,8 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
         "contract_count": "count()",
         "total_annual_value": "round(sum(annual_amount), 0)",
         "avg_rent": "round(avg(annual_amount), 0)",
-        "median_rent": "round(median(annual_amount), 0)",
-        "median_rent_sqm": "round(median(annual_amount / nullIf(actual_area, 0)), 0)",
-        "median_rent_sqft": f"round(median(annual_amount / nullIf(actual_area, 0)) / {SQM_TO_SQFT}, 0)",
+        "median_rent": "round(medianExact(annual_amount), 0)",
+        "median_rent_sqft": f"round(medianExact(annual_amount / nullIf(size_sqm, 0)) / {SQM_TO_SQFT}, 0)",
     }
     if metric not in metric_exprs:
         metric = "contract_count"
@@ -659,18 +669,18 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
     where = [
         "annual_amount > 0",
         "contract_start_date <= today()",
-        "contract_start_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(contract_start_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage:
         where.append("property_usage_en = {property_usage:String}")
         params["property_usage"] = property_usage
     if property_type:
-        where.append("ejari_property_type_en = {property_type:String}")
+        where.append("property_type = {property_type:String}")
         params["property_type"] = property_type
     if is_multi_area and scope_filter:
         where.append(scope_filter)
     if not is_multi_area and area:
-        where.append("area_name_en = {area_name:String}")
+        where.append("location_name = {area_name:String}")
         params["area_name"] = area
     if not is_multi_area and master_project:
         where.append("master_project_en = {master_project:String}")
@@ -881,16 +891,16 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
     sales_where = [
         "trans_group_en = 'Sales'",
         "actual_worth > 0",
-        "area_name_en != ''",
-        "lower(area_name_en) != 'unknown'",
-        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "location_name != ''",
+        "lower(location_name) != 'unknown'",
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     rental_where = [
         "annual_amount > 0",
-        "area_name_en != ''",
-        "lower(area_name_en) != 'unknown'",
+        "location_name != ''",
+        "lower(location_name) != 'unknown'",
         "contract_start_date <= today()",
-        "contract_start_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(contract_start_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     params: dict[str, Any] = {
         "start_date": start_date.isoformat(),
@@ -903,10 +913,10 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
         rental_where.append("property_usage_en = {property_usage:String}")
         params["property_usage"] = property_usage
     if sales_property_type:
-        sales_where.append("property_type_en = {sales_property_type:String}")
+        sales_where.append("property_type = {sales_property_type:String}")
         params["sales_property_type"] = sales_property_type
     if rental_property_type:
-        rental_where.append("ejari_property_type_en = {rental_property_type:String}")
+        rental_where.append("property_type = {rental_property_type:String}")
         params["rental_property_type"] = rental_property_type
 
     rows = await ch_query(
@@ -914,8 +924,8 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
         WITH
             sales AS (
                 SELECT
-                    area_name_en AS area,
-                    median(actual_worth) AS median_sale_price,
+                    location_name AS area,
+                    medianExact(actual_worth) AS median_sale_price,
                     count() AS sales_count
                 FROM ch_transactions
                 WHERE {" AND ".join(sales_where)}
@@ -924,8 +934,8 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
             ),
             rentals AS (
                 SELECT
-                    area_name_en AS area,
-                    median(annual_amount) AS median_annual_rent,
+                    location_name AS area,
+                    medianExact(annual_amount) AS median_annual_rent,
                     count() AS rental_count
                 FROM ch_rent_contracts
                 WHERE {" AND ".join(rental_where)}

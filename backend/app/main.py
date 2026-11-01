@@ -8,12 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 from honeybadger import contrib, honeybadger
 from pydantic import BaseModel
+from pydantic_ai import Agent
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.admin.router import router as admin_router
 from app.analytics.router import router as analytics_router
 from app.area.router import router as area_router
+from app.assistant_actions.router import router as assistant_actions_router
 from app.auth.router import router as auth_router
 from app.billing.router import router as billing_router
 from app.billing.webhooks import router as billing_webhooks
@@ -37,10 +39,12 @@ from app.transaction.router import router as transaction_router
 from app.upload.router import health_router
 from app.upload.router import router as upload_router
 
-logfire.configure(send_to_logfire=bool(settings.LOGFIRE_TOKEN))
+# Remote telemetry must cross our allowlist exporter; legacy Logfire defaults can
+# capture endpoint bodies and provider exceptions containing private CRM text.
+logfire.configure(send_to_logfire=False)
 observability_provider = configure_observability(settings)
 if observability_provider is None:
-    logfire.instrument_pydantic_ai(include_content=False)
+    Agent.instrument_all(False)
 logging.config.dictConfig(LOGGING_CONFIG)
 
 
@@ -65,9 +69,7 @@ app = FastAPI(
     lifespan=lifespan,
     generate_unique_id_function=custom_generate_unique_id,
 )
-if observability_provider is None:
-    logfire.instrument_fastapi(app)
-else:
+if observability_provider is not None:
     # Use one HTTP instrumentation path so every exported child has its parent.
     app.add_middleware(ObservabilityMiddleware)
 
@@ -90,6 +92,7 @@ app.include_router(auth_router, tags=["auth"])
 app.include_router(analytics_router, tags=["analytics"])
 app.include_router(area_router, tags=["areas"])
 app.include_router(chat_router, tags=["chat"])
+app.include_router(assistant_actions_router, tags=["assistant_actions"])
 app.include_router(crm_router, tags=["crm"])
 app.include_router(filters_router, tags=["filters"])
 app.include_router(listings_router, tags=["listings"])

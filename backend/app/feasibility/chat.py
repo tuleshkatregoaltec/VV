@@ -13,6 +13,7 @@ from app.feasibility.chat_agent import (
     WorkspaceUnitMixUpdate,
     workspace_chat_agent,
 )
+from app.feasibility.chat_units import price_per_sqm, to_workbook_units
 from app.feasibility.models import (
     FeasibilityChatRequest,
     FeasibilityPaymentPlan,
@@ -34,7 +35,7 @@ async def stream_chat_events(request: FeasibilityChatRequest) -> AsyncGenerator[
         ):
             yield chunk
     except Exception:
-        logger.error("Error in feasibility chat stream service")
+        logger.exception("Error in feasibility chat stream service")
         yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
 
 
@@ -49,18 +50,24 @@ _MUTATION_TOOLS = {
 }
 
 
+def _unit_mix_row(row: WorkspaceUnitMixUpdate | WorkspaceUnitMixReplacement) -> dict[str, Any]:
+    """The chat proposes sq ft and AED per sq ft; the workbook takes m² and AED per m²."""
+    return to_workbook_units(row.model_dump(exclude_none=True))
+
+
 def _extract_payload(part: ToolCallPart) -> Any:
     args = part.args_as_dict()
     if part.tool_name == "update_prices":
-        return args.get("prices", args)
+        prices = args.get("prices", args)
+        return {unit: price_per_sqm(value) for unit, value in prices.items()}
     if part.tool_name == "update_unit_mix":
         raw = args.get("unit_mix", args)
-        return [WorkspaceUnitMixUpdate(**row).model_dump(exclude_none=True) for row in raw]
+        return [_unit_mix_row(WorkspaceUnitMixUpdate(**row)) for row in raw]
     if part.tool_name == "replace_unit_mix":
         raw = args.get("unit_mix", args)
-        return [WorkspaceUnitMixReplacement(**row).model_dump(exclude_none=True) for row in raw]
+        return [_unit_mix_row(WorkspaceUnitMixReplacement(**row)) for row in raw]
     if part.tool_name == "update_assumptions":
-        return args.get("assumptions", args)
+        return to_workbook_units(args.get("assumptions", args))
     if part.tool_name == "update_payment_plan":
         raw = args.get("payment_plan", args)
         return FeasibilityPaymentPlan(**raw).model_dump()
@@ -103,7 +110,7 @@ async def stream_feasibility_response(
         try:
             history = ModelMessagesTypeAdapter.validate_json(history_json)
         except Exception:
-            logger.error("Failed to deserialize feasibility history_json")
+            logger.exception("Failed to deserialize feasibility history_json")
             yield f"data: {json.dumps({'type': 'warning', 'content': 'Session context reset — conversation history could not be restored.'})}\n\n"
 
     user_turns = [message for message in messages if message.get("role") == "user"]
@@ -135,6 +142,6 @@ async def stream_feasibility_response(
                                 yield f"data: {json.dumps({'type': 'show_research', 'tab': _RESEARCH_TOOLS[part.tool_name], 'data': payload}, default=str)}\n\n"
             new_messages_json = run.new_messages_json().decode()
             yield f"data: {json.dumps({'type': 'done', 'new_messages_json': new_messages_json})}\n\n"
-    except Exception:
-        logger.error("Error in feasibility chat stream")
-        yield f"data: {json.dumps({'type': 'error', 'error': 'AI response could not be completed'})}\n\n"
+    except Exception as exc:
+        logger.exception("Error in feasibility chat stream")
+        yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"

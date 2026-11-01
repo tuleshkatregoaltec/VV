@@ -1,0 +1,3124 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-31T09:09:59.560862+00:00",
+  "purpose": "Sanitized historical review evidence; not current security clearance or production validation.",
+  "snapshot": {
+    "base_commit": "1db8a0feaf0ae1b7e53a00e5397c45521a63d780",
+    "date": "2026-10-31",
+    "scope": "Complete source review snapshot, including pre-existing CRM, UI and import changes. Base commit does not identify uncommitted additions; containing review commit and source digests bind the handoff. Ignored secrets, local data, raw audits and generated build artifacts are excluded.",
+    "source_sha256": {
+      "backend/app/chat/agent.py": "d01faf27a1d02cd755c921568a032f2a4fe7ed847cd94309b5214ce0e1905372",
+      "backend/app/chat/workflows.py": "6014f0399828eec851b225997522c6afd73fbd4ace81232caff01d06e0a6638e",
+      "backend/app/chat/admission.py": "eb40a4a9cd3a37b4e756c3d58faddf39d22984cf69964ecb436f7e4fdfd96fe4",
+      "backend/app/chat/service.py": "19e3011246c20546a3eeb6d7892a255927c5c1d83ca890af1c061b8f51b69e25",
+      "backend/app/chat/security.py": "68889b32bc20611de7a892eaab20487c4c28fc61ad64f44cb018dc4a6563a124",
+      "backend/app/crm/assistant_repository.py": "501d4ccb45a558981820ba766ff5ef7f0a8c22a3cb9dcf607681f397f4dccac9",
+      "backend/app/assistant_actions/service.py": "b715cdf8dc73515004f233074e652b61fcdb3d9a2a896ffeecc18cbeaf3c4f55",
+      "backend/app/assistant_actions/adapters.py": "2a039931a5948b206dd1a150db25c4939f8d274133363dc278bebf3df8b46a9c",
+      "backend/migrations/versions/8a4c1e6b0d93_assistant_actions.py": "3cc5a52d6506e469001e542199f7ee911797c4c367237c5634ae449664f3e359",
+      "backend/migrations/versions/9b5d2f7a1e04_chat_admission.py": "189a4da7db68e96c030badd8e698aa84cf80a334a797142e8c204c0b2afa951d",
+      "backend/uv.lock": "9123618aa190689061a622e8cb7d7c53a8df38511ed8ba88190ca23c5ff0f198",
+      "frontend/bun.lock": "aa638d7030a9fbb5a67cee2e7b4ec116910731685daa4f47cedc0d56595acd3e"
+    },
+    "review_branch": "codex/ai-production-review-20261031"
+  },
+  "audit_sources": {
+    "bandit": {
+      "name": "vv-ai-architecture-bandit-final.json",
+      "sha256": "920ca013c1a9cb222898193bd395f05c2124aef6595babc91b4e70c2a46aafaa",
+      "modified_at_utc": "2026-10-31T06:20:19.979889+00:00"
+    },
+    "backend_dependencies": {
+      "name": "vv-ai-architecture-dependency-audit.json",
+      "sha256": "d4cb27684f3394c4af3713cc286c5ae71ee7f84a47a551362799b1b4677f2256",
+      "modified_at_utc": "2026-10-31T05:52:38.751814+00:00"
+    },
+    "frontend_dependencies": {
+      "name": "vv-ai-architecture-frontend-audit-after.json",
+      "sha256": "e274e6b608922a726cd425e917ee9d63e82635e8b05ab2441546275d4edd7e7b",
+      "modified_at_utc": "2026-10-31T05:56:14.569712+00:00"
+    }
+  },
+  "known_check_results": {
+    "source": "Prior implementation verification recorded in docs/ai-assistant-architecture.md, plus final publication-turn results reported by the coordinating reviewer; not independently rerun by the handoff author.",
+    "offline_backend": {
+      "passed": 1544,
+      "skipped": 0
+    },
+    "disposable_postgres": {
+      "passed": 74
+    },
+    "disposable_clickhouse": {
+      "passed": 103
+    },
+    "frontend_unit": {
+      "passed": 309
+    },
+    "mocked_browser": {
+      "passed": 10
+    },
+    "frontend_lint": "349 files passed",
+    "frontend_typecheck": "zero errors and warnings",
+    "frontend_build": "passed",
+    "backend_code_lint": "passed",
+    "independent_focused_review": {
+      "offline_passed": 114,
+      "postgres_passed": 35,
+      "clickhouse_passed": 25
+    },
+    "final_snapshot_check_all": {
+      "command": "just check-all",
+      "exit_code": 0,
+      "backend_passed": 1544,
+      "backend_skipped": 0,
+      "backend_seconds": 32.75,
+      "frontend_passed": 309,
+      "frontend_test_files": 30,
+      "backend_ruff_lint": "passed",
+      "reported_by": "coordinating reviewer"
+    },
+    "repository_backend_format": {
+      "status": "passed after canonical formatting",
+      "earlier_blocker": "Three baseline files required formatting; resolved during the publication turn.",
+      "formatted_files": [
+        "backend/scripts/crm/owner_recovery_experiment/cli.py",
+        "backend/scripts/crm/owner_recovery_experiment/namespace_delivery.py",
+        "backend/tests/unit/test_owner_recovery_handoff.py"
+      ]
+    },
+    "publication_frontend_biome": {
+      "files_checked": 349,
+      "fixes_applied": 0,
+      "warnings_present": true
+    },
+    "publication_whitespace_check": {
+      "command": "git diff --check",
+      "status": "passed globally after six whitespace-only cleanups"
+    },
+    "earlier_checkpoint_not_rerun_in_publication_turn": [
+      "disposable_postgres",
+      "disposable_clickhouse",
+      "mocked_browser",
+      "frontend_typecheck",
+      "frontend_build"
+    ],
+    "publication_secret_scan": {
+      "candidate_files": 539,
+      "credential_validation": "disabled; local scan only",
+      "result": "Coordinating reviewer reports no private credentials detected. Findings reviewed as migration IDs, manifest hashes, unchanged invalid-default denylist values, synthetic markers and pre-existing unchanged wire constants. Not proof of absence of secrets."
+    }
+  },
+  "bandit": {
+    "generated_at": "2026-10-31T06:20:19Z",
+    "scanned_files": 29,
+    "scanner_errors": 0,
+    "findings": [
+      {
+        "test_id": "B104",
+        "severity": "MEDIUM",
+        "confidence": "MEDIUM",
+        "file": "backend/app/main.py",
+        "line": 122,
+        "issue": "Possible binding to all interfaces."
+      },
+      {
+        "test_id": "B112",
+        "severity": "LOW",
+        "confidence": "HIGH",
+        "file": "backend/app/chat/service.py",
+        "line": 158,
+        "issue": "Try, Except, Continue detected."
+      }
+    ],
+    "disposition": "Two reviewed warnings remain: B104 network exposure depends on deployment; B112 intentionally drops inaccessible/failed follow-up handles. Not a zero-finding scan."
+  },
+  "dependency_audits": {
+    "backend": {
+      "advisory_entry_count": 293,
+      "affected_package_count": 35,
+      "distinct_reported_advisory_id_count": 200,
+      "entries": [
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "CVE-2026-111063",
+          "fixed_versions": [
+            "3.14.4"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-111063"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "CVE-2026-111064",
+          "fixed_versions": [
+            "3.14.4"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-111064"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "CVE-2026-111065",
+          "fixed_versions": [
+            "3.14.4"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-111065"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "CVE-2026-111066",
+          "fixed_versions": [
+            "3.14.4"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-111066"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "CVE-2026-111748",
+          "fixed_versions": [
+            "3.14.4"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-111748"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "CVE-2026-111749",
+          "fixed_versions": [
+            "3.14.4"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-111749"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "CVE-2026-111750",
+          "fixed_versions": [
+            "3.14.4"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-111750"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "GHSA-2g87-pp6c-29x5",
+          "fixed_versions": [
+            "3.14.4"
+          ],
+          "url": "https://osv.dev/vulnerability/GHSA-2g87-pp6c-29x5"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2094",
+          "fixed_versions": [
+            "3.13.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2094"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2095",
+          "fixed_versions": [
+            "3.13.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2095"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2096",
+          "fixed_versions": [
+            "3.13.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2096"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2097",
+          "fixed_versions": [
+            "3.13.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2097"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2098",
+          "fixed_versions": [
+            "3.13.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2098"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2099",
+          "fixed_versions": [
+            "3.13.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2099"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2100",
+          "fixed_versions": [
+            "3.13.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2100"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2101",
+          "fixed_versions": [
+            "3.13.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2101"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2102",
+          "fixed_versions": [
+            "3.13.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2102"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2103",
+          "fixed_versions": [
+            "3.13.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2103"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2104",
+          "fixed_versions": [
+            "3.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2104"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2105",
+          "fixed_versions": [
+            "3.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2105"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2106",
+          "fixed_versions": [
+            "3.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2106"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2107",
+          "fixed_versions": [
+            "3.14.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2107"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2108",
+          "fixed_versions": [
+            "3.14.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2108"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2109",
+          "fixed_versions": [
+            "3.14.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2109"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2110",
+          "fixed_versions": [
+            "3.14.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2110"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2111",
+          "fixed_versions": [
+            "3.14.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2111"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2112",
+          "fixed_versions": [
+            "3.14.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2112"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-2113",
+          "fixed_versions": [
+            "3.14.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2113"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-237",
+          "fixed_versions": [
+            "3.14.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-237"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-3545",
+          "fixed_versions": [
+            "3.14.3"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3545"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-3546",
+          "fixed_versions": [
+            "3.14.2"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3546"
+        },
+        {
+          "package": "aiohttp",
+          "version": "3.13.3",
+          "advisory_id": "PYSEC-2026-3547",
+          "fixed_versions": [
+            "3.14.2"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3547"
+        },
+        {
+          "package": "anyio",
+          "version": "4.11.0",
+          "advisory_id": "PYSEC-2026-4024",
+          "fixed_versions": [
+            "4.14.2"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4024"
+        },
+        {
+          "package": "anyio",
+          "version": "4.11.0",
+          "advisory_id": "PYSEC-2026-4025",
+          "fixed_versions": [
+            "4.14.2"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4025"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "CVE-2026-116672",
+          "fixed_versions": [
+            "1.9.1"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-116672"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "CVE-2026-96760",
+          "fixed_versions": [
+            "1.9.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-96760"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-188",
+          "fixed_versions": [
+            "1.6.12"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-188"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-2116",
+          "fixed_versions": [
+            "1.6.9"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2116"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-2117",
+          "fixed_versions": [
+            "1.6.9"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2117"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-2118",
+          "fixed_versions": [
+            "1.6.7"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2118"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-2119",
+          "fixed_versions": [
+            "1.6.10"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2119"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-25",
+          "fixed_versions": [
+            "1.6.11"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-25"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-287",
+          "fixed_versions": [
+            "1.6.9"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-287"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-4354",
+          "fixed_versions": [
+            "1.8.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4354"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-4355",
+          "fixed_versions": [
+            "1.9.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4355"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-4356",
+          "fixed_versions": [
+            "1.9.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4356"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-4357",
+          "fixed_versions": [
+            "1.9.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4357"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-4358",
+          "fixed_versions": [
+            "1.9.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4358"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-4359",
+          "fixed_versions": [
+            "1.9.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4359"
+        },
+        {
+          "package": "authlib",
+          "version": "1.6.6",
+          "advisory_id": "PYSEC-2026-4360",
+          "fixed_versions": [
+            "1.9.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4360"
+        },
+        {
+          "package": "certifi",
+          "version": "2025.10.5",
+          "advisory_id": "PYSEC-2026-4320",
+          "fixed_versions": [
+            "2026.10.18"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4320"
+        },
+        {
+          "package": "cryptography",
+          "version": "46.0.3",
+          "advisory_id": "GHSA-537c-gmf6-5ccf",
+          "fixed_versions": [
+            "48.0.1"
+          ],
+          "url": "https://osv.dev/vulnerability/GHSA-537c-gmf6-5ccf"
+        },
+        {
+          "package": "cryptography",
+          "version": "46.0.3",
+          "advisory_id": "PYSEC-2026-2141",
+          "fixed_versions": [
+            "46.0.5"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2141"
+        },
+        {
+          "package": "cryptography",
+          "version": "46.0.3",
+          "advisory_id": "PYSEC-2026-35",
+          "fixed_versions": [
+            "46.0.6"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-35"
+        },
+        {
+          "package": "cryptography",
+          "version": "46.0.3",
+          "advisory_id": "PYSEC-2026-3552",
+          "fixed_versions": [
+            "50.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3552"
+        },
+        {
+          "package": "cryptography",
+          "version": "46.0.3",
+          "advisory_id": "PYSEC-2026-3553",
+          "fixed_versions": [
+            "49.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3553"
+        },
+        {
+          "package": "cryptography",
+          "version": "46.0.3",
+          "advisory_id": "PYSEC-2026-3554",
+          "fixed_versions": [
+            "49.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3554"
+        },
+        {
+          "package": "cryptography",
+          "version": "46.0.3",
+          "advisory_id": "PYSEC-2026-36",
+          "fixed_versions": [
+            "46.0.7"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-36"
+        },
+        {
+          "package": "diskcache",
+          "version": "5.6.3",
+          "advisory_id": "PYSEC-2026-2447",
+          "fixed_versions": [],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2447"
+        },
+        {
+          "package": "dnspython",
+          "version": "2.8.0",
+          "advisory_id": "CVE-2026-114605",
+          "fixed_versions": [
+            "2.9.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-114605"
+        },
+        {
+          "package": "ecdsa",
+          "version": "0.19.1",
+          "advisory_id": "PYSEC-2026-1325",
+          "fixed_versions": [],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-1325"
+        },
+        {
+          "package": "ecdsa",
+          "version": "0.19.1",
+          "advisory_id": "PYSEC-2026-2467",
+          "fixed_versions": [
+            "0.19.2"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2467"
+        },
+        {
+          "package": "fastmcp",
+          "version": "2.14.1",
+          "advisory_id": "PYSEC-2026-2474",
+          "fixed_versions": [
+            "2.14.2"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2474"
+        },
+        {
+          "package": "fastmcp",
+          "version": "2.14.1",
+          "advisory_id": "PYSEC-2026-2475",
+          "fixed_versions": [
+            "3.2.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2475"
+        },
+        {
+          "package": "fastmcp",
+          "version": "2.14.1",
+          "advisory_id": "PYSEC-2026-2476",
+          "fixed_versions": [
+            "3.2.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2476"
+        },
+        {
+          "package": "filelock",
+          "version": "3.20.3",
+          "advisory_id": "CVE-2026-112909",
+          "fixed_versions": [
+            "4.2.1"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112909"
+        },
+        {
+          "package": "filelock",
+          "version": "3.20.3",
+          "advisory_id": "CVE-2026-112910",
+          "fixed_versions": [
+            "4.2.1"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112910"
+        },
+        {
+          "package": "fsspec",
+          "version": "2026.1.0",
+          "advisory_id": "PYSEC-2026-4217",
+          "fixed_versions": [
+            "2026.6.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4217"
+        },
+        {
+          "package": "h2",
+          "version": "4.3.0",
+          "advisory_id": "PYSEC-2026-3628",
+          "fixed_versions": [
+            "4.4.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3628"
+        },
+        {
+          "package": "hpack",
+          "version": "4.1.0",
+          "advisory_id": "PYSEC-2026-4053",
+          "fixed_versions": [
+            "4.2.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4053"
+        },
+        {
+          "package": "jaraco-context",
+          "version": "6.0.1",
+          "advisory_id": "CVE-2026-23949",
+          "fixed_versions": [
+            "6.1.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-23949"
+        },
+        {
+          "package": "lupa",
+          "version": "2.6",
+          "advisory_id": "PYSEC-2026-2613",
+          "fixed_versions": [],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2613"
+        },
+        {
+          "package": "mako",
+          "version": "1.3.10",
+          "advisory_id": "PYSEC-2026-2617",
+          "fixed_versions": [
+            "1.3.12"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2617"
+        },
+        {
+          "package": "mcp",
+          "version": "1.25.0",
+          "advisory_id": "CVE-2026-116684",
+          "fixed_versions": [
+            "1.30.0",
+            "2.2.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-116684"
+        },
+        {
+          "package": "mcp",
+          "version": "1.25.0",
+          "advisory_id": "CVE-2026-116685",
+          "fixed_versions": [
+            "1.30.0",
+            "2.2.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-116685"
+        },
+        {
+          "package": "mcp",
+          "version": "1.25.0",
+          "advisory_id": "CVE-2026-116686",
+          "fixed_versions": [
+            "1.30.0",
+            "2.2.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-116686"
+        },
+        {
+          "package": "mcp",
+          "version": "1.25.0",
+          "advisory_id": "CVE-2026-59951",
+          "fixed_versions": [
+            "1.30.0",
+            "2.2.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-59951"
+        },
+        {
+          "package": "mcp",
+          "version": "1.25.0",
+          "advisory_id": "PYSEC-2026-3481",
+          "fixed_versions": [
+            "1.27.2"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3481"
+        },
+        {
+          "package": "mcp",
+          "version": "1.25.0",
+          "advisory_id": "PYSEC-2026-3482",
+          "fixed_versions": [
+            "1.27.2"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3482"
+        },
+        {
+          "package": "mcp",
+          "version": "1.25.0",
+          "advisory_id": "PYSEC-2026-3483",
+          "fixed_versions": [
+            "1.28.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3483"
+        },
+        {
+          "package": "multidict",
+          "version": "6.7.0",
+          "advisory_id": "PYSEC-2026-4244",
+          "fixed_versions": [
+            "6.9.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4244"
+        },
+        {
+          "package": "opentelemetry-api",
+          "version": "1.39.1",
+          "advisory_id": "CVE-2026-114603",
+          "fixed_versions": [
+            "1.45.1"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-114603"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112390",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112390"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112391",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112391"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112393",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112393"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112395",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112395"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112399",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112399"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112400",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112400"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112401",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112401"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112404",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112404"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112406",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112406"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112891",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112891"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112892",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112892"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112893",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112893"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112894",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112894"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112895",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112895"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112897",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112897"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112899",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112899"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-112900",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-112900"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-96638",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-96638"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-96640",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-96640"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "CVE-2026-96778",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-96778"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "GHSA-78g4-xqwv-q3g8",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/GHSA-78g4-xqwv-q3g8"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-2253",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2253"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-2254",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2254"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-2255",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2255"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-2256",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2256"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-2257",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2257"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-3451",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3451"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-3452",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3452"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-3453",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3453"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-3454",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3454"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-3493",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3493"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-3494",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3494"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-3495",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3495"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-3496",
+          "fixed_versions": [
+            "12.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3496"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4326",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4326"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4327",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4327"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4328",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4328"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4329",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4329"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4330",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4330"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4331",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4331"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4332",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4332"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4333",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4333"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4334",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4334"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4335",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4335"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4336",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4336"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4337",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4337"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4338",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4338"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4339",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4339"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4340",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4340"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4341",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4341"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4342",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4342"
+        },
+        {
+          "package": "pillow",
+          "version": "12.2.0",
+          "advisory_id": "PYSEC-2026-4343",
+          "fixed_versions": [
+            "13.0.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4343"
+        },
+        {
+          "package": "protobuf",
+          "version": "6.33.4",
+          "advisory_id": "PYSEC-2026-1805",
+          "fixed_versions": [
+            "5.29.6",
+            "6.33.5"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-1805"
+        },
+        {
+          "package": "pyasn1",
+          "version": "0.6.1",
+          "advisory_id": "CVE-2026-119194",
+          "fixed_versions": [
+            "0.6.5"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-119194"
+        },
+        {
+          "package": "pyasn1",
+          "version": "0.6.1",
+          "advisory_id": "CVE-2026-119195",
+          "fixed_versions": [
+            "0.6.5"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-119195"
+        },
+        {
+          "package": "pyasn1",
+          "version": "0.6.1",
+          "advisory_id": "CVE-2026-119196",
+          "fixed_versions": [
+            "0.6.5"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-119196"
+        },
+        {
+          "package": "pyasn1",
+          "version": "0.6.1",
+          "advisory_id": "CVE-2026-119197",
+          "fixed_versions": [
+            "0.6.5"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-119197"
+        },
+        {
+          "package": "pyasn1",
+          "version": "0.6.1",
+          "advisory_id": "PYSEC-2026-1810",
+          "fixed_versions": [
+            "0.6.2"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-1810"
+        },
+        {
+          "package": "pyasn1",
+          "version": "0.6.1",
+          "advisory_id": "PYSEC-2026-2263",
+          "fixed_versions": [
+            "0.6.3"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2263"
+        },
+        {
+          "package": "pyasn1",
+          "version": "0.6.1",
+          "advisory_id": "PYSEC-2026-3455",
+          "fixed_versions": [
+            "0.6.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3455"
+        },
+        {
+          "package": "pyasn1",
+          "version": "0.6.1",
+          "advisory_id": "PYSEC-2026-3456",
+          "fixed_versions": [
+            "0.6.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3456"
+        },
+        {
+          "package": "pyasn1",
+          "version": "0.6.1",
+          "advisory_id": "PYSEC-2026-3457",
+          "fixed_versions": [
+            "0.6.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3457"
+        },
+        {
+          "package": "pydantic-ai",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-2976",
+          "fixed_versions": [
+            "1.56.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2976"
+        },
+        {
+          "package": "pydantic-ai",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-2979",
+          "fixed_versions": [
+            "1.51.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2979"
+        },
+        {
+          "package": "pydantic-ai",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-4274",
+          "fixed_versions": [
+            "1.107.4",
+            "2.27.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4274"
+        },
+        {
+          "package": "pydantic-ai",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-4275",
+          "fixed_versions": [
+            "1.107.6",
+            "2.44.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4275"
+        },
+        {
+          "package": "pydantic-ai",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-4278",
+          "fixed_versions": [
+            "1.107.4",
+            "2.28.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4278"
+        },
+        {
+          "package": "pydantic-ai",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-4279",
+          "fixed_versions": [
+            "1.107.5",
+            "2.30.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4279"
+        },
+        {
+          "package": "pydantic-ai-slim",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-2980",
+          "fixed_versions": [
+            "1.56.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2980"
+        },
+        {
+          "package": "pydantic-ai-slim",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-2983",
+          "fixed_versions": [
+            "1.51.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2983"
+        },
+        {
+          "package": "pydantic-ai-slim",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-4283",
+          "fixed_versions": [
+            "1.107.4",
+            "2.27.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4283"
+        },
+        {
+          "package": "pydantic-ai-slim",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-4284",
+          "fixed_versions": [
+            "1.107.6",
+            "2.44.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4284"
+        },
+        {
+          "package": "pydantic-ai-slim",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-4287",
+          "fixed_versions": [
+            "1.107.4",
+            "2.28.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4287"
+        },
+        {
+          "package": "pydantic-ai-slim",
+          "version": "1.38.0",
+          "advisory_id": "PYSEC-2026-4288",
+          "fixed_versions": [
+            "1.107.5",
+            "2.30.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4288"
+        },
+        {
+          "package": "pydantic-settings",
+          "version": "2.12.0",
+          "advisory_id": "CVE-2026-58203",
+          "fixed_versions": [
+            "2.14.2"
+          ],
+          "url": "https://osv.dev/vulnerability/CVE-2026-58203"
+        },
+        {
+          "package": "pygments",
+          "version": "2.19.2",
+          "advisory_id": "PYSEC-2026-2987",
+          "fixed_versions": [
+            "2.20.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2987"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "GHSA-pxh4-856f-4h89",
+          "fixed_versions": [
+            "2.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/GHSA-pxh4-856f-4h89"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2025-183",
+          "fixed_versions": [],
+          "url": "https://osv.dev/vulnerability/PYSEC-2025-183"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-120",
+          "fixed_versions": [
+            "2.12.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-120"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-175",
+          "fixed_versions": [
+            "2.13.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-175"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-176",
+          "fixed_versions": [
+            "2.12.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-176"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-176",
+          "fixed_versions": [
+            "2.13.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-176"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-177",
+          "fixed_versions": [
+            "2.13.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-177"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-178",
+          "fixed_versions": [
+            "2.13.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-178"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-179",
+          "fixed_versions": [
+            "2.13.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-179"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-4140",
+          "fixed_versions": [
+            "2.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4140"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-4141",
+          "fixed_versions": [
+            "2.15.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4141"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-4144",
+          "fixed_versions": [
+            "2.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4144"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-4145",
+          "fixed_versions": [
+            "2.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4145"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-4147",
+          "fixed_versions": [
+            "2.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4147"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-4148",
+          "fixed_versions": [
+            "2.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4148"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-4149",
+          "fixed_versions": [
+            "2.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4149"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-4152",
+          "fixed_versions": [
+            "2.14.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4152"
+        },
+        {
+          "package": "pyjwt",
+          "version": "2.10.1",
+          "advisory_id": "PYSEC-2026-4183",
+          "fixed_versions": [
+            "2.15.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4183"
+        },
+        {
+          "package": "pytest",
+          "version": "9.0.1",
+          "advisory_id": "PYSEC-2026-1845",
+          "fixed_versions": [
+            "9.0.3"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-1845"
+        },
+        {
+          "package": "python-dotenv",
+          "version": "1.2.1",
+          "advisory_id": "PYSEC-2026-2270",
+          "fixed_versions": [
+            "1.2.2"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2270"
+        },
+        {
+          "package": "python-jose",
+          "version": "3.5.0",
+          "advisory_id": "PYSEC-2026-4298",
+          "fixed_versions": [],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4298"
+        },
+        {
+          "package": "python-multipart",
+          "version": "0.0.20",
+          "advisory_id": "PYSEC-2026-1852",
+          "fixed_versions": [
+            "0.0.22"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-1852"
+        },
+        {
+          "package": "python-multipart",
+          "version": "0.0.20",
+          "advisory_id": "PYSEC-2026-3036",
+          "fixed_versions": [
+            "0.0.30"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3036"
+        },
+        {
+          "package": "python-multipart",
+          "version": "0.0.20",
+          "advisory_id": "PYSEC-2026-3037",
+          "fixed_versions": [
+            "0.0.30"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3037"
+        },
+        {
+          "package": "python-multipart",
+          "version": "0.0.20",
+          "advisory_id": "PYSEC-2026-3038",
+          "fixed_versions": [
+            "0.0.26"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3038"
+        },
+        {
+          "package": "python-multipart",
+          "version": "0.0.20",
+          "advisory_id": "PYSEC-2026-3039",
+          "fixed_versions": [
+            "0.0.27"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3039"
+        },
+        {
+          "package": "python-multipart",
+          "version": "0.0.20",
+          "advisory_id": "PYSEC-2026-3040",
+          "fixed_versions": [
+            "0.0.31"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3040"
+        },
+        {
+          "package": "requests",
+          "version": "2.32.5",
+          "advisory_id": "PYSEC-2026-2275",
+          "fixed_versions": [
+            "2.33.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2275"
+        },
+        {
+          "package": "soupsieve",
+          "version": "2.8",
+          "advisory_id": "PYSEC-2026-3071",
+          "fixed_versions": [
+            "2.8.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3071"
+        },
+        {
+          "package": "soupsieve",
+          "version": "2.8",
+          "advisory_id": "PYSEC-2026-3072",
+          "fixed_versions": [
+            "2.8.4"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-3072"
+        },
+        {
+          "package": "soupsieve",
+          "version": "2.8",
+          "advisory_id": "PYSEC-2026-4170",
+          "fixed_versions": [
+            "2.9.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4170"
+        },
+        {
+          "package": "soupsieve",
+          "version": "2.8",
+          "advisory_id": "PYSEC-2026-4171",
+          "fixed_versions": [
+            "2.9.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4171"
+        },
+        {
+          "package": "starlette",
+          "version": "0.49.1",
+          "advisory_id": "PYSEC-2026-161",
+          "fixed_versions": [
+            "1.0.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-161"
+        },
+        {
+          "package": "starlette",
+          "version": "0.49.1",
+          "advisory_id": "PYSEC-2026-2280",
+          "fixed_versions": [
+            "1.1.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2280"
+        },
+        {
+          "package": "starlette",
+          "version": "0.49.1",
+          "advisory_id": "PYSEC-2026-2281",
+          "fixed_versions": [
+            "1.1.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-2281"
+        },
+        {
+          "package": "starlette",
+          "version": "0.49.1",
+          "advisory_id": "PYSEC-2026-248",
+          "fixed_versions": [
+            "1.3.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-248"
+        },
+        {
+          "package": "starlette",
+          "version": "0.49.1",
+          "advisory_id": "PYSEC-2026-249",
+          "fixed_versions": [
+            "1.3.1"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-249"
+        },
+        {
+          "package": "urllib3",
+          "version": "2.5.0",
+          "advisory_id": "PYSEC-2026-141",
+          "fixed_versions": [
+            "2.7.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-141"
+        },
+        {
+          "package": "urllib3",
+          "version": "2.5.0",
+          "advisory_id": "PYSEC-2026-1994",
+          "fixed_versions": [
+            "2.6.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-1994"
+        },
+        {
+          "package": "urllib3",
+          "version": "2.5.0",
+          "advisory_id": "PYSEC-2026-1996",
+          "fixed_versions": [
+            "2.6.3"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-1996"
+        },
+        {
+          "package": "urllib3",
+          "version": "2.5.0",
+          "advisory_id": "PYSEC-2026-1998",
+          "fixed_versions": [
+            "2.6.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-1998"
+        },
+        {
+          "package": "urllib3",
+          "version": "2.5.0",
+          "advisory_id": "PYSEC-2026-4175",
+          "fixed_versions": [
+            "2.8.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4175"
+        },
+        {
+          "package": "urllib3",
+          "version": "2.5.0",
+          "advisory_id": "PYSEC-2026-4177",
+          "fixed_versions": [
+            "2.8.0"
+          ],
+          "url": "https://osv.dev/vulnerability/PYSEC-2026-4177"
+        }
+      ]
+    },
+    "frontend": {
+      "advisory_entry_count": 130,
+      "affected_package_count": 30,
+      "distinct_reported_advisory_id_count": 127,
+      "entries": [
+        {
+          "package": "@hey-api/openapi-ts",
+          "version": null,
+          "advisory_id": "GHSA-hhx9-57xq-r5rw",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "@hey-api/openapi-ts's `buildClientParams` template: prototype chain substitution via unknown `$<slot>___proto__` key",
+          "url": "https://github.com/advisories/GHSA-hhx9-57xq-r5rw"
+        },
+        {
+          "package": "@sveltejs/adapter-vercel",
+          "version": null,
+          "advisory_id": "GHSA-9pq4-5hcf-288c",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Cache poisoning in @sveltejs/adapter-vercel",
+          "url": "https://github.com/advisories/GHSA-9pq4-5hcf-288c"
+        },
+        {
+          "package": "@sveltejs/kit",
+          "version": null,
+          "advisory_id": "GHSA-27mw-82g8-phjj",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "SvelteKit : XSS via untrusted cache-control header in prerendered page",
+          "url": "https://github.com/advisories/GHSA-27mw-82g8-phjj"
+        },
+        {
+          "package": "@sveltejs/kit",
+          "version": null,
+          "advisory_id": "GHSA-29g2-3rmr-qm68",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "SvelteKit: ReDoS (O(n^2)) in content negotiation — unauthenticated DoS via the Accept header",
+          "url": "https://github.com/advisories/GHSA-29g2-3rmr-qm68"
+        },
+        {
+          "package": "@sveltejs/kit",
+          "version": null,
+          "advisory_id": "GHSA-2crg-3p73-43xp",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "@sveltejs/adapter-node has a BODY_SIZE_LIMIT bypass",
+          "url": "https://github.com/advisories/GHSA-2crg-3p73-43xp"
+        },
+        {
+          "package": "@sveltejs/kit",
+          "version": null,
+          "advisory_id": "GHSA-3f6h-2hrp-w5wx",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "@sveltejs/kit: Unvalidated redirect in handle hook causes Denial-of-Service",
+          "url": "https://github.com/advisories/GHSA-3f6h-2hrp-w5wx"
+        },
+        {
+          "package": "@sveltejs/kit",
+          "version": null,
+          "advisory_id": "GHSA-866w-xmhq-wj7x",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "SvelteKit: Prototype pollution in file input deletion path in remote-function forms",
+          "url": "https://github.com/advisories/GHSA-866w-xmhq-wj7x"
+        },
+        {
+          "package": "@sveltejs/kit",
+          "version": null,
+          "advisory_id": "GHSA-hgv7-v322-mmgr",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "@sveltejs/kit: `query.batch` cross-talk",
+          "url": "https://github.com/advisories/GHSA-hgv7-v322-mmgr"
+        },
+        {
+          "package": "@sveltejs/kit",
+          "version": null,
+          "advisory_id": "GHSA-j62c-4x62-9r35",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "SvelteKit is vulnerable to denial of service and possible SSRF when using prerendering",
+          "url": "https://github.com/advisories/GHSA-j62c-4x62-9r35"
+        },
+        {
+          "package": "@sveltejs/kit",
+          "version": null,
+          "advisory_id": "GHSA-pfhg-q3qv-9q6r",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "SvelteKit: URL redirection to untrusted site via enhanced form submission",
+          "url": "https://github.com/advisories/GHSA-pfhg-q3qv-9q6r"
+        },
+        {
+          "package": "@sveltejs/kit",
+          "version": null,
+          "advisory_id": "GHSA-wqjv-9729-c5q2",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "SvelteKit: Big remote form function payloads can cause Node process to crash",
+          "url": "https://github.com/advisories/GHSA-wqjv-9729-c5q2"
+        },
+        {
+          "package": "@vitest/mocker",
+          "version": null,
+          "advisory_id": "GHSA-82fw-gwwq-j7x9",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Vitest: Path Traversal / Arbitrary File Read via @vitest/mocker Redirect Mock",
+          "url": "https://github.com/advisories/GHSA-82fw-gwwq-j7x9"
+        },
+        {
+          "package": "@vitest/mocker",
+          "version": null,
+          "advisory_id": "GHSA-qxg6-89mg-rqv8",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Vitest: Code injection via unauthenticated manual mock registration",
+          "url": "https://github.com/advisories/GHSA-qxg6-89mg-rqv8"
+        },
+        {
+          "package": "brace-expansion",
+          "version": null,
+          "advisory_id": "GHSA-3jxr-9vmj-r5cp",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups",
+          "url": "https://github.com/advisories/GHSA-3jxr-9vmj-r5cp"
+        },
+        {
+          "package": "brace-expansion",
+          "version": null,
+          "advisory_id": "GHSA-6j4f-fj2g-mc7p",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "brace-expansion: DoS via uncontrolled recursion in parseCommaParts causing stack exhaustion",
+          "url": "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p"
+        },
+        {
+          "package": "brace-expansion",
+          "version": null,
+          "advisory_id": "GHSA-f886-m6hf-6m8v",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+          "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v"
+        },
+        {
+          "package": "brace-expansion",
+          "version": null,
+          "advisory_id": "GHSA-mh99-v99m-4gvg",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash",
+          "url": "https://github.com/advisories/GHSA-mh99-v99m-4gvg"
+        },
+        {
+          "package": "brace-expansion",
+          "version": null,
+          "advisory_id": "GHSA-q2hr-2g5m-vwhr",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service",
+          "url": "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr"
+        },
+        {
+          "package": "brace-expansion",
+          "version": null,
+          "advisory_id": "GHSA-qhr7-859c-m2p7",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "brace-expansion: DoS via uncontrolled recursion on nested brace groups causing stack exhaustion",
+          "url": "https://github.com/advisories/GHSA-qhr7-859c-m2p7"
+        },
+        {
+          "package": "brace-expansion",
+          "version": null,
+          "advisory_id": "GHSA-rgw5-rvv9-x895",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation",
+          "url": "https://github.com/advisories/GHSA-rgw5-rvv9-x895"
+        },
+        {
+          "package": "cookie",
+          "version": null,
+          "advisory_id": "GHSA-pxg6-pf52-xh8x",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "cookie accepts cookie name, path, and domain with out of bounds characters",
+          "url": "https://github.com/advisories/GHSA-pxg6-pf52-xh8x"
+        },
+        {
+          "package": "deepmerge",
+          "version": null,
+          "advisory_id": "GHSA-gcqx-w48m-w2h4",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "deepmerge mergeObject() allows prototype poisoning of returned objects",
+          "url": "https://github.com/advisories/GHSA-gcqx-w48m-w2h4"
+        },
+        {
+          "package": "defu",
+          "version": null,
+          "advisory_id": "GHSA-737v-mqg7-c878",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "defu: Prototype pollution via `__proto__` key in defaults argument",
+          "url": "https://github.com/advisories/GHSA-737v-mqg7-c878"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-33hq-fvwr-56pm",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "devalue affected by CPU and memory amplification from sparse arrays",
+          "url": "https://github.com/advisories/GHSA-33hq-fvwr-56pm"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-4q55-j62x-fr9h",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "devalue: Malformed null-prototype object keys bypass __proto__ rejection via property-key coercion",
+          "url": "https://github.com/advisories/GHSA-4q55-j62x-fr9h"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-8qm3-746x-r74r",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "devalue `uneval`ed code can create objects with polluted prototypes when `eval`ed",
+          "url": "https://github.com/advisories/GHSA-8qm3-746x-r74r"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-9rgm-9g3h-6x36",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Svelte devalue: DoS via malformed input",
+          "url": "https://github.com/advisories/GHSA-9rgm-9g3h-6x36"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-cfw5-2vxh-hr84",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "devalue has prototype pollution in devalue.parse and devalue.unflatten",
+          "url": "https://github.com/advisories/GHSA-cfw5-2vxh-hr84"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-g2pg-6438-jwpf",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "devalue vulnerable to denial of service due to memory/CPU exhaustion in devalue.parse",
+          "url": "https://github.com/advisories/GHSA-g2pg-6438-jwpf"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-hx4r-w6wj-j8fg",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "devalue: Residual sparse-array CPU amplification in uneval",
+          "url": "https://github.com/advisories/GHSA-hx4r-w6wj-j8fg"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-j22f-vq7h-c4qm",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "devalue: `stringify`/`uneval` serialize shared memory",
+          "url": "https://github.com/advisories/GHSA-j22f-vq7h-c4qm"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-mcm9-63f2-9j32",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "devalue: Repeated primitive strings cause quadratic expansion in uneval",
+          "url": "https://github.com/advisories/GHSA-mcm9-63f2-9j32"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-mwv9-gp5h-frr4",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "Sveltejs devalue's `devalue.parse` and `devalue.unflatten` emit objects with `__proto__` own properties",
+          "url": "https://github.com/advisories/GHSA-mwv9-gp5h-frr4"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-r9w8-h9r3-54w4",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "devalue: Custom ArrayBuffer revivers can bypass typed-array allocation validation",
+          "url": "https://github.com/advisories/GHSA-r9w8-h9r3-54w4"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-vw5p-8cq8-m7mv",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Devalue is vulnerable to denial of service due to memory exhaustion in devalue.parse",
+          "url": "https://github.com/advisories/GHSA-vw5p-8cq8-m7mv"
+        },
+        {
+          "package": "devalue",
+          "version": null,
+          "advisory_id": "GHSA-wf3x-273g-mvxv",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "devalue: Sparse arrays emitted by uneval cause eager allocation when evaluated",
+          "url": "https://github.com/advisories/GHSA-wf3x-273g-mvxv"
+        },
+        {
+          "package": "fflate",
+          "version": null,
+          "advisory_id": "GHSA-px8p-9vwx-vf98",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "fflate unzipSync can enter an infinite loop when parsing malformed ZIP64 archives",
+          "url": "https://github.com/advisories/GHSA-px8p-9vwx-vf98"
+        },
+        {
+          "package": "glob",
+          "version": null,
+          "advisory_id": "GHSA-3g3m-2fjr-6pw4",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Glob: AbortSignal cancellation bypass allows post-timeout filesystem traversal",
+          "url": "https://github.com/advisories/GHSA-3g3m-2fjr-6pw4"
+        },
+        {
+          "package": "glob",
+          "version": null,
+          "advisory_id": "GHSA-5j98-mcp5-4vw2",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "glob CLI: Command injection via -c/--cmd executes matches with shell:true",
+          "url": "https://github.com/advisories/GHSA-5j98-mcp5-4vw2"
+        },
+        {
+          "package": "js-yaml",
+          "version": null,
+          "advisory_id": "GHSA-2883-xcg3-v3hh",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources",
+          "url": "https://github.com/advisories/GHSA-2883-xcg3-v3hh"
+        },
+        {
+          "package": "js-yaml",
+          "version": null,
+          "advisory_id": "GHSA-52cp-r559-cp3m",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "js-yaml: YAML merge-key chains can force quadratic CPU consumption",
+          "url": "https://github.com/advisories/GHSA-52cp-r559-cp3m"
+        },
+        {
+          "package": "js-yaml",
+          "version": null,
+          "advisory_id": "GHSA-5p4m-2wfm-xmqj",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) — CVE-2026-59870 fix not backported",
+          "url": "https://github.com/advisories/GHSA-5p4m-2wfm-xmqj"
+        },
+        {
+          "package": "js-yaml",
+          "version": null,
+          "advisory_id": "GHSA-h67p-54hq-rp68",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases",
+          "url": "https://github.com/advisories/GHSA-h67p-54hq-rp68"
+        },
+        {
+          "package": "maplibre-gl",
+          "version": null,
+          "advisory_id": "GHSA-jrc7-96c5-q579",
+          "fixed_versions": null,
+          "severity": "critical",
+          "title": "MapLibre GL JS: XSS Sanitizer Bypass in DOM.sanitize() via Live NamedNodeMap Removal Skip",
+          "url": "https://github.com/advisories/GHSA-jrc7-96c5-q579"
+        },
+        {
+          "package": "minimatch",
+          "version": null,
+          "advisory_id": "GHSA-23c5-xmqv-rm74",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "minimatch ReDoS: nested *() extglobs generate catastrophically backtracking regular expressions",
+          "url": "https://github.com/advisories/GHSA-23c5-xmqv-rm74"
+        },
+        {
+          "package": "minimatch",
+          "version": null,
+          "advisory_id": "GHSA-3ppc-4f35-3m26",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "minimatch has a ReDoS via repeated wildcards with non-matching literal in pattern",
+          "url": "https://github.com/advisories/GHSA-3ppc-4f35-3m26"
+        },
+        {
+          "package": "minimatch",
+          "version": null,
+          "advisory_id": "GHSA-7r86-cg39-jmmj",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "minimatch has ReDoS: matchOne() combinatorial backtracking via multiple non-adjacent GLOBSTAR segments",
+          "url": "https://github.com/advisories/GHSA-7r86-cg39-jmmj"
+        },
+        {
+          "package": "minimatch",
+          "version": null,
+          "advisory_id": "GHSA-g3hv-75wg-m249",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "minimatch has potential denial of service via globparts amplification",
+          "url": "https://github.com/advisories/GHSA-g3hv-75wg-m249"
+        },
+        {
+          "package": "nanoid",
+          "version": null,
+          "advisory_id": "GHSA-28wg-ghj8-5hjv",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "nanoid: non-secure generators can loop indefinitely with negative size",
+          "url": "https://github.com/advisories/GHSA-28wg-ghj8-5hjv"
+        },
+        {
+          "package": "nanoid",
+          "version": null,
+          "advisory_id": "GHSA-2v37-7h3g-55p8",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "nanoid: custom generators can loop indefinitely when size is zero",
+          "url": "https://github.com/advisories/GHSA-2v37-7h3g-55p8"
+        },
+        {
+          "package": "nanoid",
+          "version": null,
+          "advisory_id": "GHSA-xwg4-73v4-xw9w",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "nanoid: Integer Overflow or Wraparound",
+          "url": "https://github.com/advisories/GHSA-xwg4-73v4-xw9w"
+        },
+        {
+          "package": "picomatch",
+          "version": null,
+          "advisory_id": "GHSA-3v7f-55p6-f55p",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Picomatch: Method Injection in POSIX Character Classes causes incorrect Glob Matching",
+          "url": "https://github.com/advisories/GHSA-3v7f-55p6-f55p"
+        },
+        {
+          "package": "picomatch",
+          "version": null,
+          "advisory_id": "GHSA-c2c7-rcm5-vvqj",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Picomatch has a ReDoS vulnerability via extglob quantifiers",
+          "url": "https://github.com/advisories/GHSA-c2c7-rcm5-vvqj"
+        },
+        {
+          "package": "postcss",
+          "version": null,
+          "advisory_id": "GHSA-6g55-p6wh-862q",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappingURL in CSS comments",
+          "url": "https://github.com/advisories/GHSA-6g55-p6wh-862q"
+        },
+        {
+          "package": "postcss",
+          "version": null,
+          "advisory_id": "GHSA-fxqj-rqcc-2cmp",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+          "url": "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp"
+        },
+        {
+          "package": "postcss",
+          "version": null,
+          "advisory_id": "GHSA-qx2v-qp2m-jg93",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+          "url": "https://github.com/advisories/GHSA-qx2v-qp2m-jg93"
+        },
+        {
+          "package": "postcss",
+          "version": null,
+          "advisory_id": "GHSA-r28c-9q8g-f849",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure",
+          "url": "https://github.com/advisories/GHSA-r28c-9q8g-f849"
+        },
+        {
+          "package": "preact",
+          "version": null,
+          "advisory_id": "GHSA-36hm-qxxp-pg3m",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Preact has JSON VNode Injection issue",
+          "url": "https://github.com/advisories/GHSA-36hm-qxxp-pg3m"
+        },
+        {
+          "package": "protocol-buffers-schema",
+          "version": null,
+          "advisory_id": "GHSA-j452-xhg8-qg39",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Mafintosh's protocol-buffers-schema is vulnerable to prototype pollution",
+          "url": "https://github.com/advisories/GHSA-j452-xhg8-qg39"
+        },
+        {
+          "package": "rollup",
+          "version": null,
+          "advisory_id": "GHSA-mw96-cpmx-2vgc",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Rollup 4 has Arbitrary File Write via Path Traversal",
+          "url": "https://github.com/advisories/GHSA-mw96-cpmx-2vgc"
+        },
+        {
+          "package": "sharp",
+          "version": null,
+          "advisory_id": "GHSA-f88m-g3jw-g9cj",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "sharp inherited vulnerabilities in libvips: CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591",
+          "url": "https://github.com/advisories/GHSA-f88m-g3jw-g9cj"
+        },
+        {
+          "package": "sharp",
+          "version": null,
+          "advisory_id": "GHSA-rgj7-g3m4-5g8c",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "sharp: Vulnerabilities in libheif: GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545",
+          "url": "https://github.com/advisories/GHSA-rgj7-g3m4-5g8c"
+        },
+        {
+          "package": "sharp",
+          "version": null,
+          "advisory_id": "GHSA-wq5f-xc86-pv6w",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "sharp : Vulnerability in librsvg dependency CVE-2026-96889",
+          "url": "https://github.com/advisories/GHSA-wq5f-xc86-pv6w"
+        },
+        {
+          "package": "source-map-js",
+          "version": null,
+          "advisory_id": "GHSA-68fv-2mgg-jv7q",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "source-map-js allows event-loop denial of service through indexed source-map section offsets",
+          "url": "https://github.com/advisories/GHSA-68fv-2mgg-jv7q"
+        },
+        {
+          "package": "svelte",
+          "version": null,
+          "advisory_id": "GHSA-crpf-4hrx-3jrp",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Svelte SSR attribute spreading includes inherited properties from prototype chain",
+          "url": "https://github.com/advisories/GHSA-crpf-4hrx-3jrp"
+        },
+        {
+          "package": "svelte",
+          "version": null,
+          "advisory_id": "GHSA-f7gr-6p89-r883",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Svelte affected by cross-site scripting via spread attributes in Svelte SSR",
+          "url": "https://github.com/advisories/GHSA-f7gr-6p89-r883"
+        },
+        {
+          "package": "svelte",
+          "version": null,
+          "advisory_id": "GHSA-h7h7-mm68-gmrc",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Svelte affected by XSS in SSR `<option>` element",
+          "url": "https://github.com/advisories/GHSA-h7h7-mm68-gmrc"
+        },
+        {
+          "package": "svelte",
+          "version": null,
+          "advisory_id": "GHSA-m56q-vw4c-c2cp",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Svelte SSR does not validate dynamic element tag names in `<svelte:element>`",
+          "url": "https://github.com/advisories/GHSA-m56q-vw4c-c2cp"
+        },
+        {
+          "package": "svelte",
+          "version": null,
+          "advisory_id": "GHSA-phwv-c562-gvmh",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Svelte vulnerable to XSS during SSR with contenteditable `bind:innerText` and `bind:textContent`",
+          "url": "https://github.com/advisories/GHSA-phwv-c562-gvmh"
+        },
+        {
+          "package": "svelte",
+          "version": null,
+          "advisory_id": "GHSA-pr6f-5x2q-rwfp",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Svelte SSR vulnerable to cross-site scripting via spread attributes",
+          "url": "https://github.com/advisories/GHSA-pr6f-5x2q-rwfp"
+        },
+        {
+          "package": "svelte",
+          "version": null,
+          "advisory_id": "GHSA-rcqx-6q8c-2c42",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Svelte Vulnerable to XSS via DOM Clobbering of Internal Framework State",
+          "url": "https://github.com/advisories/GHSA-rcqx-6q8c-2c42"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-23hp-3jrh-7fpw",
+          "fixed_versions": null,
+          "severity": "critical",
+          "title": "node-tar: Decompression/parse DoS via unlimited input",
+          "url": "https://github.com/advisories/GHSA-23hp-3jrh-7fpw"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-34x7-hfp2-rc4v",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "node-tar Vulnerable to Arbitrary File Creation/Overwrite via Hardlink Path Traversal",
+          "url": "https://github.com/advisories/GHSA-34x7-hfp2-rc4v"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-83g3-92jg-28cx",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Arbitrary File Read/Write via Hardlink Target Escape Through Symlink Chain in node-tar Extraction",
+          "url": "https://github.com/advisories/GHSA-83g3-92jg-28cx"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-8qq5-rm4j-mr97",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "node-tar is Vulnerable to Arbitrary File Overwrite and Symlink Poisoning via Insufficient Path Sanitization",
+          "url": "https://github.com/advisories/GHSA-8qq5-rm4j-mr97"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-8x88-c5mf-7j5w",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "node-tar: Negative tar entry size causes infinite loop in archive replace",
+          "url": "https://github.com/advisories/GHSA-8x88-c5mf-7j5w"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-9ppj-qmqm-q256",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "node-tar Symlink Path Traversal via Drive-Relative Linkpath",
+          "url": "https://github.com/advisories/GHSA-9ppj-qmqm-q256"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-gvwx-54wh-qm9j",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "node-tar: Uncaught Exception DoS via NUL byte in PAX path/linkpath records",
+          "url": "https://github.com/advisories/GHSA-gvwx-54wh-qm9j"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-qffp-2rhf-9h96",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "tar has Hardlink Path Traversal via Drive-Relative Linkpath",
+          "url": "https://github.com/advisories/GHSA-qffp-2rhf-9h96"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-r292-9mhp-454m",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "node-tar: Uncontrolled recursion in mapHas/filesFilter allows uncatchable stack-overflow DoS via crafted long-path tar with member selection",
+          "url": "https://github.com/advisories/GHSA-r292-9mhp-454m"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-r6q2-hw4h-h46w",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Race Condition in node-tar Path Reservations via Unicode Ligature Collisions on macOS APFS",
+          "url": "https://github.com/advisories/GHSA-r6q2-hw4h-h46w"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-vmf3-w455-68vh",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "node-tar applies PAX size override to intermediary GNU long-name/long-link headers, causing tar parser interpretation differential (file smuggling)",
+          "url": "https://github.com/advisories/GHSA-vmf3-w455-68vh"
+        },
+        {
+          "package": "tar",
+          "version": null,
+          "advisory_id": "GHSA-w8wr-v893-vjvp",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "node-tar: Process crash via PAX numeric path type confusion",
+          "url": "https://github.com/advisories/GHSA-w8wr-v893-vjvp"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-2gqq-gqf2-x968",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "undici vulnerable to response truncation via oversized chunked responses in the dump interceptor",
+          "url": "https://github.com/advisories/GHSA-2gqq-gqf2-x968"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-2jfj-6hjv-fm6j",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici vulnerable to cross-user cookie disclosure via Set-Cookie caching in shared caches",
+          "url": "https://github.com/advisories/GHSA-2jfj-6hjv-fm6j"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-2m5v-pch6-74hx",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "undici vulnerable to TLS certificate validation bypass via dropped tls options in Agent",
+          "url": "https://github.com/advisories/GHSA-2m5v-pch6-74hx"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-2mjp-6q6p-2qxm",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Undici has an HTTP Request/Response Smuggling issue",
+          "url": "https://github.com/advisories/GHSA-2mjp-6q6p-2qxm"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-35p6-xmwp-9g52",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "undici vulnerable to HTTP response queue poisoning via keep-alive socket reuse",
+          "url": "https://github.com/advisories/GHSA-35p6-xmwp-9g52"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-4992-7rv2-5pvq",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Undici has CRLF Injection in undici via `upgrade` option",
+          "url": "https://github.com/advisories/GHSA-4992-7rv2-5pvq"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-4cwx-7wf7-3272",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "undici vulnerable to cross-user information disclosure and parse-time crash via degenerate private cache directives",
+          "url": "https://github.com/advisories/GHSA-4cwx-7wf7-3272"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-4qv8-2p9j-2685",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici vulnerable to Denial of Service via unbounded memory in the EventSource parser",
+          "url": "https://github.com/advisories/GHSA-4qv8-2p9j-2685"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-4w7w-5xrc-9h26",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "undici vulnerable to cache poisoning and cross-user disclosure via cross-origin redirects",
+          "url": "https://github.com/advisories/GHSA-4w7w-5xrc-9h26"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-8436-99hf-9mmv",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "undici vulnerable to caching and replay of unsafe HTTP method responses",
+          "url": "https://github.com/advisories/GHSA-8436-99hf-9mmv"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-8xcm-r25x-g524",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici vulnerable to downstream response desynchronization via retry interceptor",
+          "url": "https://github.com/advisories/GHSA-8xcm-r25x-g524"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-9fm3-97px-rjf6",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici WebSocket client vulnerable to Denial of Service via unbounded automatic PONG buffering",
+          "url": "https://github.com/advisories/GHSA-9fm3-97px-rjf6"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-f269-vfmq-vjvj",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Undici: Malicious WebSocket 64-bit length overflows parser and crashes the client",
+          "url": "https://github.com/advisories/GHSA-f269-vfmq-vjvj"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-g8m3-5g58-fq7m",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "undici vulnerable to Set-Cookie SameSite attribute downgrade via permissive substring matching",
+          "url": "https://github.com/advisories/GHSA-g8m3-5g58-fq7m"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-g9mf-h72j-4rw9",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Undici has an unbounded decompression chain in HTTP responses on Node.js Fetch API via Content-Encoding leads to resource exhaustion",
+          "url": "https://github.com/advisories/GHSA-g9mf-h72j-4rw9"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-jr45-8vmc-qm54",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici vulnerable to cross-user information disclosure via whitespace around equals in Cache-Control directives",
+          "url": "https://github.com/advisories/GHSA-jr45-8vmc-qm54"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-m8rv-5g2x-5cg5",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici vulnerable to CRLF Injection via blob-like body 'type' property",
+          "url": "https://github.com/advisories/GHSA-m8rv-5g2x-5cg5"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-p88m-4jfj-68fv",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici vulnerable to HTTP header injection via Set-Cookie percent-decoding",
+          "url": "https://github.com/advisories/GHSA-p88m-4jfj-68fv"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-pmjh-fq2x-6v4x",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici vulnerable to Denial of Service via orphaned RetryHandler response body",
+          "url": "https://github.com/advisories/GHSA-pmjh-fq2x-6v4x"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-pr7r-676h-xcf6",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici vulnerable to cross-user information disclosure via shared cache whitespace bypass",
+          "url": "https://github.com/advisories/GHSA-pr7r-676h-xcf6"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-qrxm-fqhp-jwvm",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "undici vulnerable to Denial of Service via TLS 1.2 certificate-changing renegotiation",
+          "url": "https://github.com/advisories/GHSA-qrxm-fqhp-jwvm"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-r53p-7pc4-xj5r",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "undici vulnerable to downstream response splitting via retry interceptor",
+          "url": "https://github.com/advisories/GHSA-r53p-7pc4-xj5r"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-rfgv-xxqx-mfg5",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "undici vulnerable to Denial of Service via unrequested WebSocket subprotocol",
+          "url": "https://github.com/advisories/GHSA-rfgv-xxqx-mfg5"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-rx4f-c7p8-82vq",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici vulnerable to Denial of Service via WebSocketStream unclean close",
+          "url": "https://github.com/advisories/GHSA-rx4f-c7p8-82vq"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-v3r7-h72x-cjcm",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields",
+          "url": "https://github.com/advisories/GHSA-v3r7-h72x-cjcm"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-v9p9-hfj2-hcw8",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Undici has Unhandled Exception in WebSocket Client Due to Invalid server_max_window_bits Validation",
+          "url": "https://github.com/advisories/GHSA-v9p9-hfj2-hcw8"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-vrm6-8vpv-qv8q",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Undici has Unbounded Memory Consumption in WebSocket permessage-deflate Decompression",
+          "url": "https://github.com/advisories/GHSA-vrm6-8vpv-qv8q"
+        },
+        {
+          "package": "undici",
+          "version": null,
+          "advisory_id": "GHSA-vxpw-j846-p89q",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "undici WebSocket client vulnerable to denial of service via fragment count bypass",
+          "url": "https://github.com/advisories/GHSA-vxpw-j846-p89q"
+        },
+        {
+          "package": "vite",
+          "version": null,
+          "advisory_id": "GHSA-4w7w-66w2-5vf9",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling",
+          "url": "https://github.com/advisories/GHSA-4w7w-66w2-5vf9"
+        },
+        {
+          "package": "vite",
+          "version": null,
+          "advisory_id": "GHSA-587h-7wmj-h5pm",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "launch-editor: `fs.existsSync()` existence check can be bypassed on Windows",
+          "url": "https://github.com/advisories/GHSA-587h-7wmj-h5pm"
+        },
+        {
+          "package": "vite",
+          "version": null,
+          "advisory_id": "GHSA-698v-4r3x-3vcv",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "launch-editor: escapeCmdArgs() omits % escaping on Windows",
+          "url": "https://github.com/advisories/GHSA-698v-4r3x-3vcv"
+        },
+        {
+          "package": "vite",
+          "version": null,
+          "advisory_id": "GHSA-9jrq-w75r-8gcw",
+          "fixed_versions": null,
+          "severity": "low",
+          "title": "Vite: Cross origin script execution through Vite custom middleware",
+          "url": "https://github.com/advisories/GHSA-9jrq-w75r-8gcw"
+        },
+        {
+          "package": "vite",
+          "version": null,
+          "advisory_id": "GHSA-fx2h-pf6j-xcff",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "vite: `server.fs.deny` bypass on Windows alternate paths",
+          "url": "https://github.com/advisories/GHSA-fx2h-pf6j-xcff"
+        },
+        {
+          "package": "vite",
+          "version": null,
+          "advisory_id": "GHSA-p9ff-h696-f583",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Vite Vulnerable to Arbitrary File Read via Vite Dev Server WebSocket",
+          "url": "https://github.com/advisories/GHSA-p9ff-h696-f583"
+        },
+        {
+          "package": "vite",
+          "version": null,
+          "advisory_id": "GHSA-r825-w8mm-5pxw",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "launch-editor: Editor CLI flag misinterpretation causing arbitrary command execution for some editors",
+          "url": "https://github.com/advisories/GHSA-r825-w8mm-5pxw"
+        },
+        {
+          "package": "vite",
+          "version": null,
+          "advisory_id": "GHSA-rq7h-c2jc-7f22",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Vite: Files outside `server.fs.allow` could be served when project paths match system paths on non-Windows machine",
+          "url": "https://github.com/advisories/GHSA-rq7h-c2jc-7f22"
+        },
+        {
+          "package": "vite",
+          "version": null,
+          "advisory_id": "GHSA-v2wj-q39q-566r",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Vite: `server.fs.deny` bypassed with queries",
+          "url": "https://github.com/advisories/GHSA-v2wj-q39q-566r"
+        },
+        {
+          "package": "vite",
+          "version": null,
+          "advisory_id": "GHSA-v6wh-96g9-6wx3",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows",
+          "url": "https://github.com/advisories/GHSA-v6wh-96g9-6wx3"
+        },
+        {
+          "package": "vitest",
+          "version": null,
+          "advisory_id": "GHSA-5xrq-8626-4rwp",
+          "fixed_versions": null,
+          "severity": "critical",
+          "title": "When Vitest UI server is listening, arbitrary file can be read and executed",
+          "url": "https://github.com/advisories/GHSA-5xrq-8626-4rwp"
+        },
+        {
+          "package": "vitest",
+          "version": null,
+          "advisory_id": "GHSA-82fw-gwwq-j7x9",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "Vitest: Path Traversal / Arbitrary File Read via @vitest/mocker Redirect Mock",
+          "url": "https://github.com/advisories/GHSA-82fw-gwwq-j7x9"
+        },
+        {
+          "package": "ws",
+          "version": null,
+          "advisory_id": "GHSA-58qx-3vcg-4xpx",
+          "fixed_versions": null,
+          "severity": "moderate",
+          "title": "ws: Uninitialized memory disclosure",
+          "url": "https://github.com/advisories/GHSA-58qx-3vcg-4xpx"
+        },
+        {
+          "package": "ws",
+          "version": null,
+          "advisory_id": "GHSA-96hv-2xvq-fx4p",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "ws: Memory exhaustion DoS from tiny fragments and data chunks",
+          "url": "https://github.com/advisories/GHSA-96hv-2xvq-fx4p"
+        },
+        {
+          "package": "xlsx",
+          "version": null,
+          "advisory_id": "GHSA-4r6h-8v6p-xvw6",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Prototype Pollution in sheetJS",
+          "url": "https://github.com/advisories/GHSA-4r6h-8v6p-xvw6"
+        },
+        {
+          "package": "xlsx",
+          "version": null,
+          "advisory_id": "GHSA-5pgg-2g8v-p4x9",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "SheetJS Regular Expression Denial of Service (ReDoS)",
+          "url": "https://github.com/advisories/GHSA-5pgg-2g8v-p4x9"
+        },
+        {
+          "package": "zod",
+          "version": null,
+          "advisory_id": "GHSA-mrhx-c7xc-m3w5",
+          "fixed_versions": null,
+          "severity": "high",
+          "title": "Zod can exhaust memory while validating oversized constrained collections",
+          "url": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5"
+        }
+      ]
+    },
+    "interpretation": "Counts are audit entries, not unique CVEs. Exact duplicate records are removed from entries; identifiers/aliases across packages may describe the same vulnerability. Backend report omits severity/title; frontend report omits installed versions and explicit fixed versions (null means not supplied). Frontend snapshot is after DOMPurify 3.4.17. No applicability or reachability adjudication is implied. Refresh audits after remediation."
+  },
+  "not_verified": [
+    "Live four-model comparison: expired credential; no winner or configured production-model change.",
+    "Application/production database migration or deployment.",
+    "Provider connectors, sends, calendar invitations or publication.",
+    "Production identity/SSO, privacy/procurement approval, tenant load, edge SSE/disconnect behavior, backups/restore and operational rollback.",
+    "Penetration testing, ASVS compliance or security certification."
+  ],
+  "updated_at_utc": "2026-10-31T09:12:33.920628+00:00"
+}

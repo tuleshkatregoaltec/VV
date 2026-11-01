@@ -11,7 +11,7 @@ import type {
 	RadarBuildingPin
 } from '$lib/api/projects'
 import { colorTheme } from '$lib/stores/preferences.svelte'
-import { SQM_TO_SQFT } from '$lib/utils/units'
+import { toSqft } from '$lib/utils/units'
 
 const LIGHT_MAP_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json'
 const DARK_MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
@@ -204,7 +204,7 @@ function areaRadius(area: ProjectRadarArea) {
 }
 
 function areaMetricValue(area: ProjectRadarArea, layer: ZoneHeatmapLayer) {
-	if (layer === 'avg_price_sqft') return (area.avg_sale_price_sqm ?? 0) / SQM_TO_SQFT
+	if (layer === 'avg_price_sqft') return area.avg_sale_price_sqft ?? 0
 	if (layer === 'rental_yield') return area.gross_yield_pct ?? 0
 	return (area.sales_transaction_count ?? 0) + (area.rental_contract_count ?? 0)
 }
@@ -212,7 +212,7 @@ function areaMetricValue(area: ProjectRadarArea, layer: ZoneHeatmapLayer) {
 function areaMetricLabel(area: ProjectRadarArea, layer: ZoneHeatmapLayer) {
 	const value = areaMetricValue(area, layer)
 	if (layer === 'avg_price_sqft')
-		return value > 0 ? `AED ${Math.round(value).toLocaleString()} / sqft` : '~'
+		return value > 0 ? `AED ${Math.round(value).toLocaleString()} / sq ft` : '~'
 	if (layer === 'rental_yield') return value > 0 ? `${value.toFixed(1)}% gross yield` : '~'
 	return `${(area.sales_transaction_count ?? 0).toLocaleString()} sales · ${(area.rental_contract_count ?? 0).toLocaleString()} leases`
 }
@@ -289,7 +289,6 @@ function projectFeature(project: ProjectRadarProject): GeoJSON.Feature {
 			sales_transaction_count: project.sales_transaction_count,
 			rental_contract_count: project.rental_contract_count,
 			gross_yield_pct: project.gross_yield_pct ?? 0,
-			coordinate_source: coordinateSourceLabel(radarProject),
 			detail_point_count: radarProject.detail_point_count ?? 0,
 			building_point_count: radarProject.building_point_count ?? 0,
 			land_point_count: radarProject.land_point_count ?? 0,
@@ -349,7 +348,7 @@ function areaFeature(
 			pipeline_units: area.pipeline_units,
 			sales_transaction_count: area.sales_transaction_count,
 			rental_contract_count: area.rental_contract_count,
-			avg_sale_price_sqft: (area.avg_sale_price_sqm ?? 0) / SQM_TO_SQFT,
+			avg_sale_price_sqft: area.avg_sale_price_sqft ?? 0,
 			gross_yield_pct: area.gross_yield_pct ?? 0,
 			heat_metric_value: metricValue,
 			heat_metric_label: areaMetricLabel(area, layer),
@@ -388,16 +387,16 @@ function towerPopupHtml(props: Record<string, unknown>) {
 		)} · median rent ${formatAedCompact(Number(props.median_annual_rent || 0))}</div>` +
 		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${Number(
 			props.listing_inventory_count || 0
-		).toLocaleString()} PF listings · ${Number(
-			props.matched_source_signatures || 0
-		).toLocaleString()} matched address signatures</div>` +
+		).toLocaleString()} listings</div>` +
 		`</div>`
 	)
 }
 
-function formatSqmCompact(value: number) {
-	if (!Number.isFinite(value) || value <= 0) return '~'
-	return value >= 1000 ? `${(value / 1000).toFixed(1)}k sqm` : `${Math.round(value)} sqm`
+// DDA plot areas arrive in m²; the map shows square feet like every other page.
+function formatSqftCompact(valueSqm: number) {
+	const sqft = toSqft(valueSqm)
+	if (!Number.isFinite(sqft) || sqft <= 0) return '~'
+	return sqft >= 1000 ? `${(sqft / 1000).toFixed(1)}k sq ft` : `${Math.round(sqft)} sq ft`
 }
 
 function escapeHtml(value: unknown) {
@@ -407,14 +406,6 @@ function escapeHtml(value: unknown) {
 		.replaceAll('>', '&gt;')
 		.replaceAll('"', '&quot;')
 		.replaceAll("'", '&#39;')
-}
-
-function coordinateSourceLabel(project: RadarProjectPin) {
-	if (project.coordinate_source === 'dld_mashrooi') return 'DLD Mashrooi'
-	if (project.coordinate_source === 'pf_reelly_consensus') return 'PF + Reelly coordinate consensus'
-	if (project.coordinate_source === 'pf_location_hierarchy') return 'PF location hierarchy'
-	if (project.coordinate_source === 'reelly_catalogue') return 'Reelly project catalogue'
-	return 'DLD building centroid'
 }
 
 function detailPointLabel(pin: RadarGeoPin) {
@@ -444,11 +435,11 @@ function ddaParcelPopupHtml(props: Record<string, unknown>) {
 		valuationMin > 0 && valuationMax > 0
 			? `${formatAedCompact(valuationMin)} - ${formatAedCompact(valuationMax)}`
 			: '~'
-	const rateLabel = rateMin > 0 && rateMax > 0 ? `AED ${rateMin}-${rateMax} / sqft` : '~'
+	const rateLabel = rateMin > 0 && rateMax > 0 ? `AED ${rateMin}-${rateMax} / sq ft` : '~'
 	return (
 		`<div style="min-width:210px;font-size:12px;line-height:1.55;">` +
 		`<div style="font-weight:700;color:var(--color-map-popup-fg);">Plot ${plotNumber}</div>` +
-		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqmCompact(areaSqm)} · ${communityName}</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqftCompact(areaSqm)} · ${communityName}</div>` +
 		`<div style="margin-top:7px;font-weight:700;color:var(--color-map-popup-fg);">${escapeHtml(developmentLabel)}</div>` +
 		(developmentNote
 			? `<div style="color:var(--color-map-popup-muted);margin-top:2px;">${developmentNote}</div>`
@@ -462,7 +453,7 @@ function ddaParcelPopupHtml(props: Record<string, unknown>) {
 		`<div style="margin-top:8px;border-top:1px solid color-mix(in srgb,var(--color-map-popup-muted) 20%,transparent);padding-top:7px;">` +
 		`<div style="color:var(--color-map-popup-muted);">Indicative valuation</div>` +
 		`<div style="font-weight:700;color:var(--color-map-popup-fg);font-size:13px;">${valuationLabel}</div>` +
-		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqmCompact(maxGfaSqm)} max GFA · ${rateLabel}</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqftCompact(maxGfaSqm)} max GFA · ${rateLabel}</div>` +
 		`</div>` +
 		`</div>`
 	)
@@ -564,7 +555,8 @@ onMount(() => {
 	})
 
 	// Add navigation controls
-	map.addControl(new maplibregl.NavigationControl(), 'top-right')
+	// Top-left: the radar page's info panel occupies the right edge.
+	map.addControl(new maplibregl.NavigationControl(), 'top-left')
 
 	map.on('load', () => {
 		syncRadarLayers()
@@ -813,7 +805,7 @@ function bindRadarHandlers() {
 					`<div style="font-weight:700;color:var(--color-map-popup-fg);">${escapeHtml(props.project_name)}</div>` +
 					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${escapeHtml(props.area_name)} · ${escapeHtml(props.official_status)}</div>` +
 					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">Risk ${escapeHtml(props.risk)}</div>` +
-					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${escapeHtml(props.coordinate_source)} · ${Number(
+					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${Number(
 						props.building_point_count || 0
 					).toLocaleString()} buildings · ${Number(
 						props.land_point_count || 0

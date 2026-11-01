@@ -1,6 +1,5 @@
 """Analytics schemas for API responses"""
 
-import math
 from datetime import date
 from typing import Literal, Optional
 
@@ -96,7 +95,8 @@ class MarketTrendPoint(BaseModel):
     date: date
     transaction_count: int
     avg_price: float
-    avg_price_sqm: float
+    # None when no sale in the period has a size (whole buildings, for example).
+    avg_price_sqft: Optional[float] = None
 
 
 class MarketTrendResponse(BaseModel):
@@ -105,7 +105,7 @@ class MarketTrendResponse(BaseModel):
     data: list[MarketTrendPoint]
     total_transactions: int
     avg_price_change_pct: Optional[float] = None
-    avg_price_sqm_change_pct: Optional[float] = None
+    avg_price_sqft_change_pct: Optional[float] = None
 
 
 # =============================================================================
@@ -114,9 +114,32 @@ class MarketTrendResponse(BaseModel):
 
 
 class ProjectMeta(BaseModel):
-    """Metadata from ch_projects + ch_developers"""
+    """A scope's metadata. ``field_sources`` names each filled field's source: "dxbi_buildings"
+    (DXBInteract's building list), "dld_units" (DLD's unit register), "buildings" (its
+    buildings' counts added up), "dld_projects" (DLD's project register), "dld_land_plots"
+    (DLD's land register, villa plots),
+    "unit_numbers" (our own count: the distinct unit numbers in the records and DLD's register),
+    "units_traded" (no register count: the distinct units traded, ``units_at_least``) or
+    "projects_rollup" (a master: its projects' counts added up)."""
 
     project_name: str
+    scope_level: Optional[Literal["project", "building", "master", "market"]] = None
+    master_name: Optional[str] = Field(default=None, description="The scope's master project")
+    parent_project: Optional[str] = Field(default=None, description="A building's project")
+    building_id: Optional[str] = None
+    units_source: Optional[str] = None
+    units_at_least: bool = Field(
+        default=False,
+        description="No register count covers the units that traded: no_of_units is those "
+        "units (at least)",
+    )
+    units_traded: Optional[int] = Field(
+        default=None, description="Distinct units with a recorded sale or lease"
+    )
+    no_of_projects: Optional[int] = Field(default=None, description="A master's projects")
+    projects_with_units: Optional[int] = Field(
+        default=None, description="A master's projects with a register unit count"
+    )
     area_name: Optional[str] = None
     developer_name: Optional[str] = None
     developer_names: list[str] = Field(default_factory=list)
@@ -125,13 +148,14 @@ class ProjectMeta(BaseModel):
     percent_completed: Optional[float] = None
     no_of_units: Optional[int] = None
     no_of_buildings: Optional[int] = None
+    field_sources: dict[str, str] = Field(default_factory=dict)
 
 
 class ProjectSalesSummary(BaseModel):
     transaction_count: int
     total_volume: float
     avg_price: float
-    avg_price_sqm: float
+    avg_price_sqft: float
     median_price: float
 
 
@@ -139,7 +163,7 @@ class ProjectRentalSummary(BaseModel):
     contract_count: int
     total_annual_value: float
     median_annual_rent: float
-    median_rent_sqm: float
+    median_rent_sqft: float
 
 
 class RoomAnalytics(BaseModel):
@@ -148,10 +172,10 @@ class RoomAnalytics(BaseModel):
     rooms: str
     sale_count: int
     avg_sale_price: float
-    avg_sale_price_sqm: float
+    avg_sale_price_sqft: float
     rental_count: int
     median_annual_rent: float
-    median_rent_sqm: float
+    median_rent_sqft: float
     gross_yield_pct: Optional[float] = None
 
 
@@ -163,15 +187,16 @@ class ProjectConfigurationRow(BaseModel):
     sales_last_12m: int
     avg_sale_price: float
     median_sale_price: float
-    avg_sale_price_sqm: float
-    avg_unit_size_sqm: float
+    avg_sale_price_sqft: float
+    avg_unit_size_sqft: float = Field(
+        description="Median observed DXBI sale size (sq ft), across all recorded dates"
+    )
     rental_count: int
     median_annual_rent: float
-    median_rent_sqm: float
+    median_rent_sqft: float
     gross_yield_pct: Optional[float] = None
     price_change_yoy_pct: Optional[float] = None
     sales_momentum_pct: Optional[float] = None
-    absorption_rate_pct: Optional[float] = None
     price_p25: float
     price_p50: float
     price_p75: float
@@ -195,12 +220,40 @@ class AnalyticsUnitComposition(BaseModel):
     rooms: str
     count: int
     pct_of_total: float
-    avg_unit_size_sqm: float = 0.0
+    avg_unit_size_sqft: float = Field(
+        default=0.0, description="Median registered unit size (sq ft)"
+    )
+
+
+class BuildingStock(BaseModel):
+    """One building of a project, with its registered units."""
+
+    building_id: str
+    name: str
+    sales: int = 0
+    leases: int = 0
+    units: Optional[int] = None
+    units_source: Optional[str] = None
+    units_at_least: bool = False
+
+
+class UsageCount(BaseModel):
+    """A scope's records of one usage."""
+
+    sales: int = 0
+    leases: int = 0
 
 
 class ProjectAnalyticsResponse(BaseModel):
     """Full analytics response for a single project"""
 
+    usage: str = Field(
+        default="Residential",
+        description="Usage the figures cover: Residential or Commercial (resolved from 'auto')",
+    )
+    usage_counts: dict[str, UsageCount] = Field(
+        default_factory=dict, description="The scope's sales and leases per usage"
+    )
     project: Optional[ProjectMeta] = None
     sales: ProjectSalesSummary
     rentals: ProjectRentalSummary
@@ -210,13 +263,20 @@ class ProjectAnalyticsResponse(BaseModel):
     by_reg_type: list[RegTypeBreakdown]
     unit_composition: list[AnalyticsUnitComposition]
     configuration_analysis: list[ProjectConfigurationRow]
+    buildings: list[BuildingStock] = Field(
+        default_factory=list, description="A project's buildings with their units"
+    )
+    recent_periods_end: Optional[date] = Field(
+        default=None,
+        description="Last day of the recent 90-day and 12-month windows: the newest recorded sale",
+    )
 
 
 class ProjectTrendPoint(BaseModel):
     date: date
     transaction_count: int
     avg_price: float
-    avg_price_sqm: float
+    avg_price_sqft: float
 
 
 class ProjectTrendsResponse(BaseModel):
@@ -226,7 +286,7 @@ class ProjectTrendsResponse(BaseModel):
 class ProjectForecastPoint(BaseModel):
     date: date
     avg_price: float
-    avg_price_sqm: float
+    avg_price_sqft: float
     series: Literal["historical", "forecast"]
 
 
@@ -245,6 +305,11 @@ class ProjectPipelinePoint(BaseModel):
 
 
 class ProjectPipelineResponse(BaseModel):
+    reference_date: Optional[date] = None
+    overdue_units: int = Field(
+        default=0, description="Uncompleted units with an elapsed planned end date"
+    )
+    undated_units: int = Field(default=0, description="Uncompleted units without a delivery date")
     area_name: Optional[str] = None
     developer_name: Optional[str] = None
     data: list[ProjectPipelinePoint]
@@ -260,12 +325,14 @@ class PriceDistributionBucket(BaseModel):
     log_mean_price: float = 0.0
     log_std_price: float = 0.0
     p05_price: float = 0.0
+    p16_price: float = 0.0  # with p84, the middle 68% of sales ("68% of sales between")
     p25_price: float = 0.0
     p50_price: float = 0.0
     p75_price: float = 0.0
+    p84_price: float = 0.0
     p95_price: float = 0.0
-    mean_price_sqm: float
-    std_price_sqm: float
+    mean_price_sqft: float
+    std_price_sqft: float
 
 
 class ProjectPriceDistributionResponse(BaseModel):
@@ -276,8 +343,13 @@ class ProjectPriceDistributionResponse(BaseModel):
 
 
 class ProjectSearchItem(BaseModel):
+    scope_kind: str = "Location"
     name: str
-    filter_type: str  # "master" | "virtual_master" | "project"
+    filter_type: str  # "master" | "virtual_master" | "project" | "building"
+    building: str = ""  # A building result: the building's name (``name`` is the same)
+    building_id: str = ""  # A building result: the id to select it by
+    project: str = ""  # A building result: its project
+    master: str = ""  # A project or building result: its master project
 
 
 class ProjectSearchResponse(BaseModel):
@@ -305,17 +377,16 @@ MarketMetricName = Literal[
     "median_aed",
     "p25_aed",
     "p75_aed",
-    "mean_aed_per_sqm",
-    "median_aed_per_sqm",
-    "weighted_aed_per_sqm",
     "mean_aed_per_sqft",
     "median_aed_per_sqft",
     "weighted_aed_per_sqft",
     "total_contract_aed",
     "median_contract_aed",
 ]
+# area = official DLD district; community = evidence-placed community (canonical geography).
 MarketMetricGroup = Literal[
     "area",
+    "community",
     "master_project",
     "project",
     "building",
@@ -326,7 +397,9 @@ MarketMetricGroup = Literal[
     "registration",
     "contract_version",
 ]
-MarketPropertyType = Literal["apartment", "hotel_apartment", "villa", "office", "shop", "land"]
+MarketPropertyType = Literal[
+    "apartment", "hotel_apartment", "villa", "townhouse", "office", "shop", "land"
+]
 MarketBedrooms = Literal["studio", "1", "2", "3", "4", "5", "6", "7"]
 
 
@@ -371,7 +444,9 @@ class MarketMetricsRequest(BaseModel):
     )
     building: Optional[str] = Field(default=None, max_length=160)
     project: Optional[str] = Field(default=None, max_length=160)
-    property_type: Optional[MarketPropertyType] = None
+    property_type: Optional[MarketPropertyType] = Field(
+        default=None, description="villa includes townhouses; townhouse is townhouses only"
+    )
     usage: Optional[Literal["residential", "commercial"]] = None
     bedrooms: Optional[list[MarketBedrooms]] = Field(default=None, max_length=8)
     registration: Optional[Literal["off_plan", "ready"]] = Field(
@@ -383,28 +458,17 @@ class MarketMetricsRequest(BaseModel):
     min_term_days: Optional[int] = Field(default=None, ge=1, description="Rentals only")
     max_term_days: Optional[int] = Field(default=None, ge=1, description="Rentals only")
     min_value_aed: Optional[float] = Field(
-        default=None, ge=0, allow_inf_nan=False, description="Sale price or annual rent lower bound"
+        default=None, ge=0, description="Sale price or annual rent, inclusive"
     )
     max_value_aed: Optional[float] = Field(
-        default=None, gt=0, allow_inf_nan=False, description="Sale price or annual rent upper bound"
+        default=None, gt=0, description="Sale price or annual rent, exclusive"
     )
-    min_value_inclusive: bool = True
-    max_value_inclusive: bool = False
     group_by: Optional[MarketMetricGroup] = None
     price_bands: Optional[list[float]] = Field(
         default=None,
         min_length=1,
         max_length=12,
-        description="Ascending AED cutoffs for price_band; default upper bounds are exclusive.",
-    )
-    price_band_upper_inclusive: Optional[list[bool]] = Field(
-        default=None,
-        min_length=1,
-        max_length=12,
-        description=(
-            "One flag per price_bands boundary: true puts equality in the lower band; "
-            "false puts it in the upper band. Omitted means all false."
-        ),
+        description="Ascending AED boundaries for group_by=price_band: [b0,b1) ... [bn,inf)",
     )
     sort_by: MarketMetricName = "count"
     limit: int = Field(default=20, ge=1, le=200)
@@ -429,20 +493,10 @@ class MarketMetricsRequest(BaseModel):
                 raise ValueError("land is not a rental property type")
         if self.group_by == "price_band":
             bands = self.price_bands or []
-            if (
-                not bands
-                or bands != sorted(set(bands))
-                or any(not math.isfinite(value) for value in bands)
-            ):
-                raise ValueError("price_band grouping needs finite strictly ascending price_bands")
-            if self.price_band_upper_inclusive is not None and len(
-                self.price_band_upper_inclusive
-            ) != len(bands):
-                raise ValueError("price_band_upper_inclusive must match price_bands length")
-        elif self.price_bands or self.price_band_upper_inclusive is not None:
-            raise ValueError(
-                "price_bands and price_band_upper_inclusive require group_by=price_band"
-            )
+            if not bands or bands != sorted(set(bands)):
+                raise ValueError("price_band grouping needs strictly ascending price_bands")
+        elif self.price_bands:
+            raise ValueError("price_bands require group_by=price_band")
         if self.sort_by not in {"count", *self.metrics}:
             raise ValueError("sort_by must be count or one of the requested metrics")
         return self
@@ -459,6 +513,8 @@ class MarketMetricRow(BaseModel):
     count: Optional[int] = None
     share_of_count: Optional[float] = None
     values: dict[str, Optional[float]] = Field(default_factory=dict)
+    # Month rows: evidence for the month's days (see MarketCoverage).
+    coverage: Optional[Literal["verified", "partial", "unverified"]] = None
 
 
 class MarketResolvedPeriod(BaseModel):
@@ -470,18 +526,43 @@ class MarketResolvedPeriod(BaseModel):
     timezone: str
 
 
+class MarketCoverageRange(BaseModel):
+    start: date
+    end: date
+    status: Literal["verified", "partial", "unverified"]
+
+
 class MarketCoverage(BaseModel):
-    status: Literal["complete", "partial", "unavailable"]
+    """Load evidence for the period's days, from the served release's coverage record.
+
+    verified: the source window holding the day was read to the end of its result set (or
+    the archive it came from is attested), so a day without records is a true zero.
+    partial: the load covering the day stopped inside its window. unverified: no load
+    evidence; records may exist but absence proves nothing. complete = every day verified;
+    unavailable = no evidence and no records.
+    """
+
+    status: Literal["complete", "partial", "unverified", "unavailable"]
     data_from: Optional[date] = None
     data_to: Optional[date] = None
     covered_from: Optional[date] = None
     covered_to: Optional[date] = None
+    verified_days: int = 0
+    partial_days: int = 0
+    unverified_days: int = 0
+    ranges: list[MarketCoverageRange] = Field(default_factory=list)
+    evidence_loaded_at: Optional[str] = None
     note: str
 
 
 class MarketLocationMatch(BaseModel):
+    """Raw source names of matched rows and the canonical place the crosswalk gave them."""
+
     area: str
     master_project: str
+    district: str = ""
+    community: str = ""
+    method: str = ""
     records: int
 
 
@@ -500,5 +581,6 @@ class MarketMetricsResponse(BaseModel):
     change_pct: dict[str, Optional[float]] = Field(default_factory=dict)
     matched_locations: list[MarketLocationMatch] = Field(default_factory=list)
     sources: dict[str, int] = Field(default_factory=dict)
+    release_id: Optional[str] = None
     release_built_at: Optional[str] = None
     limitations: list[str] = Field(default_factory=list)

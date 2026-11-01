@@ -1,4 +1,5 @@
 <script lang="ts">
+import ThemeToggle from '$lib/components/preferences/ThemeToggle.svelte'
 import AuthStepBadge from './AuthStepBadge.svelte'
 
 export let title: string
@@ -23,7 +24,7 @@ export let bodyClass = ''
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 </svelte:head>
 
-<div class="theme-app min-h-screen overflow-x-hidden bg-[var(--color-bg-marketing)] px-4 py-4 text-fg-1 sm:px-6 lg:px-8">
+<div class="theme-app min-h-screen overflow-x-hidden bg-marketing px-4 py-4 text-fg-1 sm:px-6 lg:px-8">
 	<div
 		class={`mx-auto flex ${cardViewportFill ? 'min-h-[calc(100vh-2rem)]' : ''} max-w-7xl items-stretch gap-4`}
 	>
@@ -65,7 +66,7 @@ export let bodyClass = ''
 				class={`flex h-full w-full justify-center ${cardViewportFill ? 'items-stretch' : 'items-start'} ${sectionWidthClass}`}
 			>
 				<div
-					class={`flex w-full ${contentWidthClass} ${cardViewportFill ? 'min-h-[calc(100vh-2rem)]' : ''} ${panelClass} flex-col rounded-lg border border-[var(--color-border-warm)] bg-white p-5 shadow-sm sm:p-6 lg:p-8 ${cardClass}`}
+					class={`flex w-full ${contentWidthClass} ${cardViewportFill ? 'min-h-[calc(100vh-2rem)]' : ''} ${panelClass} flex-col rounded-lg border border-warm bg-card p-5 shadow-sm sm:p-6 lg:p-8 ${cardClass}`}
 				>
 				<div class="flex h-full flex-col gap-4">
 					<div class="flex flex-wrap items-center justify-between gap-4">
@@ -87,9 +88,12 @@ export let bodyClass = ''
 								{eyebrow}
 							</p>
 						</div>
-						{#if step}
-							<AuthStepBadge {step} total={totalSteps} label={stepLabel} />
-						{/if}
+						<div class="flex items-center gap-3 self-start">
+							{#if step}
+								<AuthStepBadge {step} total={totalSteps} label={stepLabel} />
+							{/if}
+							<ThemeToggle />
+						</div>
 					</div>
 
 					<slot name="account" />

@@ -25,6 +25,7 @@ from holocron.platform.bronze import (
 )
 from holocron.platform.clickhouse import quote_clickhouse_identifier, sql_string
 from holocron.platform.clickhouse_schema import ensure_schema
+from holocron.platform.load_windows import record_load_windows, window_evidence
 from holocron.platform.manifests import manifest_s3_key
 from holocron.platform.raw_files import (
     download_manifest_file,
@@ -194,6 +195,16 @@ def load_open_data_release_to_clickhouse(
             rows=table_rows,
             column_names=load_column_names,
         )
+    # Evidence for coverage: which date windows this load replaced, and whether pagination
+    # reached the end of each. Recorded only after the rows are stored.
+    record_load_windows(
+        clickhouse,
+        bronze_table=table_name,
+        date_field=configured_replace_date_column or replace_date_column or "date_window",
+        windows=window_evidence(page_rows, raw_rows),
+        run_id=run_id,
+        manifest_key=raw_manifest_key,
+    )
 
     return bronze_load_result(
         source=actual_source,

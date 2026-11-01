@@ -1,11 +1,13 @@
 import json
 import logging
+from contextlib import aclosing
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.chat.events import with_heartbeat
 from app.chat.models import (
     ConversationListResponse,
     ConversationResponse,
@@ -116,7 +118,8 @@ async def delete_conversation_endpoint(
 async def get_conversation_messages_endpoint(
     conversation_id: int,
     context: AuthContext = Depends(require_active_subscription),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=100),
+    before_id: int | None = Query(default=None, ge=1),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get messages for a conversation"""
@@ -133,6 +136,7 @@ async def get_conversation_messages_endpoint(
         user_id=context.user.id,
         organization_id=context.organization.id,
         limit=limit,
+        before_id=before_id,
     )
     return [MessageResponse.model_validate(m) for m in messages]
 
@@ -152,18 +156,21 @@ async def send_message(
 
     async def event_stream():
         try:
-            async for chunk in stream_chat_response(
-                db=db,
-                conversation_id=conversation_id,
-                user_message=request.message,
-                user_id=context.user.id,
-                organization_id=context.organization.id,
-                request_id=str(request.request_id) if request.request_id else None,
-                daily_token_limit=context.user.daily_token_limit,
-            ):
-                yield chunk
+            async with aclosing(
+                with_heartbeat(
+                    stream_chat_response(
+                        db=db,
+                        conversation_id=conversation_id,
+                        user_message=request.message,
+                        user_id=context.user.id,
+                        organization_id=context.organization.id,
+                    )
+                )
+            ) as stream:
+                async for chunk in stream:
+                    yield chunk
         except Exception as e:
-            logger.warning("Chat endpoint failed (%s)", type(e).__name__)
+            logger.error("Chat endpoint failed (%s)", type(e).__name__)
             yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
 
     return StreamingResponse(

@@ -50,6 +50,7 @@ from app.feasibility.research import (
     resolve_market_area,
 )
 from app.feasibility.service import get_plot_details_or_404
+from app.market.units import per_sqm
 from app.plots.evidence import get_land_sale_evidence
 from app.plots.models import Usage
 from app.plots.service import get_plot_details as fetch_plot_details
@@ -128,7 +129,7 @@ async def generate_hbu_study(
                 area_name=area_detail_result.area_name,
                 rental_contract_count_12m=area_detail_result.rental_contract_count_12m,
                 median_annual_rent=area_detail_result.median_annual_rent,
-                avg_rent_price_sqm_12m=area_detail_result.avg_rent_price_sqm_12m,
+                avg_rent_price_sqm_12m=per_sqm(area_detail_result.avg_rent_price_sqft_12m),
                 gross_yield_pct=area_detail_result.gross_yield_pct,
                 top_developers=area_detail_result.top_developers,
                 top_master_projects=area_detail_result.top_master_projects,
@@ -155,7 +156,9 @@ async def generate_hbu_study(
                     no_of_units=row.no_of_units,
                     rental_contract_count_12m=snapshot.rental_contract_count_12m if snapshot else 0,
                     median_annual_rent=snapshot.median_annual_rent if snapshot else None,
-                    avg_rent_price_sqm_12m=snapshot.avg_rent_price_sqm_12m if snapshot else None,
+                    avg_rent_price_sqm_12m=per_sqm(snapshot.avg_rent_price_sqft_12m)
+                    if snapshot
+                    else None,
                     gross_yield_pct=snapshot.gross_yield_pct if snapshot else None,
                     rationale=list(row.rationale),
                 )
@@ -413,11 +416,9 @@ async def generate_seeded_study(request: GenerateStudyRequest) -> GenerateStudyR
         )
     except HTTPException:
         raise
-    except Exception:
-        logger.error("Feasibility generation failed")
-        raise HTTPException(
-            status_code=500, detail="AI study generation could not be completed"
-        ) from None
+    except Exception as e:
+        logger.exception("generate_hbu_study failed for plot %s: %s", request.plot_number, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
     plot = await get_plot_details_or_404(request.plot_number)
     return GenerateStudyResponse(
         plot_data=plot,

@@ -6,6 +6,7 @@ from typing import Callable
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.params import Depends as DependsParam
+from pydantic import BaseModel
 
 from app.config import settings
 from app.core.cache import RedisCache
@@ -26,10 +27,14 @@ def _build_cache_key(prefix: str, signature: inspect.Signature, *args, **kwargs)
 
     cacheable_arguments = {}
     for name, parameter in signature.parameters.items():
-        if name in ignored_names or _is_dependency_parameter(parameter):
+        if name in ignored_names:
             continue
 
         value = bound_arguments.arguments.get(name, inspect.Parameter.empty)
+        # Dependencies are skipped (auth context, sessions) unless they resolve to a request model,
+        # such as the filters a dependency gathers from query parameters: those shape the response.
+        if _is_dependency_parameter(parameter) and not isinstance(value, BaseModel):
+            continue
         if value is inspect.Parameter.empty or value is None:
             continue
 

@@ -44,7 +44,7 @@ const sourceLabel = $derived.by(() => {
 	href={article.url}
 	target="_blank"
 	rel="noopener noreferrer"
-	class="group flex gap-4 p-5 bg-white border border-border rounded-lg no-underline text-inherit hover:border-slate-300 transition-colors duration-200"
+	class="group flex gap-4 p-5 bg-card border border-border rounded-lg no-underline text-inherit hover:border-strong transition-colors duration-200"
 >
 	{#if showImage}
 		<img
@@ -55,21 +55,21 @@ const sourceLabel = $derived.by(() => {
 			width="144"
 			height="96"
 			onerror={handleImageError}
-			class="w-36 h-24 object-cover rounded border border-slate-100 flex-shrink-0"
+			class="w-36 h-24 object-cover rounded border border-border flex-shrink-0"
 		/>
 	{:else}
 		<div
 			aria-hidden="true"
-			class="w-36 h-24 rounded border border-slate-100 bg-slate-50 flex-shrink-0 flex items-center justify-center text-xs font-semibold text-slate-500"
+			class="w-36 h-24 rounded border border-border bg-app flex-shrink-0 flex items-center justify-center px-2 text-xs font-semibold text-fg-4"
 		>
-			{sourceLabel ?? 'News'}
+			<span class="truncate">{sourceLabel ?? 'News'}</span>
 		</div>
 	{/if}
 	<div class="flex flex-col gap-2 flex-1">
-		<div class="flex items-center gap-2 text-xs text-slate-500">
+		<div class="flex items-center gap-2 text-xs text-fg-4">
 			{#if sourceLabel}
-				<span class="font-semibold text-slate-600">{sourceLabel}</span>
-				<span class="text-slate-400">•</span>
+				<span class="font-semibold text-fg-3">{sourceLabel}</span>
+				<span class="text-fg-5">•</span>
 			{/if}
 			<time>{relativeTime}</time>
 		</div>

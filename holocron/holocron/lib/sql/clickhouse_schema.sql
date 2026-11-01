@@ -265,6 +265,7 @@ FROM (
 
 CREATE TABLE IF NOT EXISTS dxbi_sales_unit_events (
     sale_key           String,
+    dld_transaction_number String DEFAULT '',
     transaction_date   Date,
     unit_number        String,
     building_name      String DEFAULT '',
@@ -292,6 +293,72 @@ CREATE TABLE IF NOT EXISTS dxbi_sales_unit_events (
     loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
 ) ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY (building_key, bedrooms, size_key, transaction_date, sale_key);
+
+-- DXBI's areas (A), sub-areas (U) and master communities (M), from the location list its search
+-- box loads. name_key matches the area a DXBI row prints (location_key of canonical_area_name);
+-- lineage is the location and the areas above it, the Location choices a row belongs to.
+CREATE TABLE IF NOT EXISTS dxbi_locations (
+    location_id   UInt32,
+    name          String,
+    display_name  String DEFAULT '',
+    slug          String DEFAULT '',
+    flag          LowCardinality(String) DEFAULT '',
+    parent_id     UInt32 DEFAULT 0,
+    name_key      String DEFAULT '',
+    lineage       Array(String),
+    source_run_id String DEFAULT '',
+    loaded_at     DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY location_id;
+
+-- Every place in DXBI's location list with the keys a stored sale or lease of that path carries,
+-- and the building, project and area DXBI gives it (holocron.sources.dxbi.places): the
+-- Transactions pages' Building and Project labels.
+CREATE TABLE IF NOT EXISTS dxbi_places (
+    location_id    UInt32,
+    flag           LowCardinality(String),
+    path           String,
+    path_key       String,
+    building_key   String,
+    area_key       String,
+    match_rank     UInt8,
+    building_label String DEFAULT '',
+    project_label  String DEFAULT '',
+    area_label     String DEFAULT '',
+    source_run_id  String DEFAULT '',
+    loaded_at      DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = MergeTree
+ORDER BY (building_key, area_key, location_id);
+
+-- The sales DXBI's search returns for each location over a window (scripts/dxbi_location_sweep.py):
+-- how DXBI's area pages group sales, which can differ from the area printed on a row.
+CREATE TABLE IF NOT EXISTS dxbi_location_members (
+    location_id      UInt32,
+    location_name    String,
+    sale_key         String,
+    transaction_date Date,
+    building_key     String DEFAULT '',
+    area_key         String DEFAULT '',
+    window_start     Date,
+    window_end       Date,
+    source_run_id    String DEFAULT '',
+    loaded_at        DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (location_id, sale_key);
+
+-- The leases DXBI's search returns for each location over a window (scripts/dxbi_location_sweep.py
+-- --report rentals), by the lease's contract_key in dxbi_rental_events.
+CREATE TABLE IF NOT EXISTS dxbi_location_lease_members (
+    location_id      UInt32,
+    location_name    String,
+    contract_key     String,
+    lease_start      Date,
+    window_start     Date,
+    window_end       Date,
+    source_run_id    String DEFAULT '',
+    loaded_at        DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (location_id, contract_key);
 
 CREATE TABLE IF NOT EXISTS dxbi_rental_sale_matches (
     unit_candidate_key             String,
@@ -1446,6 +1513,47 @@ ORDER BY (source_system, source_key, candidate_rank);
 -- Reelly serving tables read by the backend and by the view below. Their producer is not in
 -- this repository (F02); the definitions mirror the live warehouse so a fresh warehouse can
 -- apply this schema and serve the product once the producer is restored.
+-- Typed fields the backend supply queries read, parsed by the Reelly bronze loader from the
+-- project payload (field names as backend app/supply/mapping.py reads them).
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS project_name String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS developer_name String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS sale_status LowCardinality(String) DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS region String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS area_name String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS units_in_sale UInt32 DEFAULT 0;
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS completion_date String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS completion_time String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS min_price_aed Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS max_price_aed Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS readiness_progress Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS latitude Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS longitude Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS website_url String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS overview String DEFAULT '';
+
+-- Payment plan steps per project (Reelly "Payment_plans"), replaced per project on each load.
+CREATE TABLE IF NOT EXISTS reelly_project_payment_plans_bronze (
+    payment_plan_key     String,
+    run_id               String,
+    scraped_at           String DEFAULT '',
+    project_key          String DEFAULT '',
+    project_id           String DEFAULT '',
+    payment_plan_index   UInt32 DEFAULT 0,
+    payment_step_index   UInt32 DEFAULT 0,
+    payment_step_id      String DEFAULT '',
+    payment_plan_id      String DEFAULT '',
+    name                 String DEFAULT '',
+    order_index          UInt32 DEFAULT 0,
+    percent_of_payment   Nullable(Float64),
+    payment_time         String DEFAULT '',
+    created_at           String DEFAULT '',
+    source_system        LowCardinality(String) DEFAULT 'reelly',
+    source_file          String DEFAULT '',
+    source_row_index     UInt64 DEFAULT 0,
+    raw_manifest_s3_key  String DEFAULT ''
+) ENGINE = MergeTree
+ORDER BY (run_id, payment_plan_key);
+
 CREATE TABLE IF NOT EXISTS silver_reelly_projects (
     project_key          String,
     project_id           String DEFAULT '',
@@ -1748,7 +1856,7 @@ WHERE s.source_key IS NULL;
 
 CREATE TABLE IF NOT EXISTS market_sale_matches (
     dxbi_sale_key String,
-    dld_transaction_number String,
+    dld_transaction_number String,  -- DLD sale line id (transforms.DLD_SALES_BASE.line_id)
     day_gap Int16,
     size_gap Float64,
     has_dld_candidate UInt8,
@@ -1922,6 +2030,117 @@ CREATE TABLE IF NOT EXISTS market_rental_events (
 ENGINE = MergeTree()
 ORDER BY (contract_start_date, contract_id);
 
+-- Every canonical market table carries the release that built it: each reader query can
+-- report which release answered it, and staging/previous tables stay identifiable.
+ALTER TABLE market_sale_matches ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_matches ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+
+-- Canonical geography (see market.transforms): official DLD district and, where evidence
+-- supports it, community, with the method that placed the row. Raw names stay unchanged.
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS district_id UInt32 DEFAULT 0;
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS district_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS community_key LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS community_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS geo_resolution LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS geo_method LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS district_id UInt32 DEFAULT 0;
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS district_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS community_key LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS community_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS geo_resolution LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS geo_method LowCardinality(String) DEFAULT '';
+
+-- Uniform DXBI-primary layer (holocron.market.transforms, decision 2026-10-06). One vocabulary
+-- and one column per concept for both tables: property_type (transforms.PROPERTY_TYPES),
+-- size_sqm (DXBI's size where it is primary, else DLD's), location_name (DXBI's community name
+-- where known, else the canonical community, else the official district). filled_from_dld /
+-- dld_disagrees list the uniform columns where DLD filled an empty DXBI value or held a
+-- different one on a DXBI-primary row: audit only, never shown in the product.
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS property_type LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS size_sqm Float64 DEFAULT 0;
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS location_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS filled_from_dld Array(LowCardinality(String)) DEFAULT [];
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS dld_disagrees Array(LowCardinality(String)) DEFAULT [];
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS property_type LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS size_sqm Float64 DEFAULT 0;
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS location_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS filled_from_dld Array(LowCardinality(String)) DEFAULT [];
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS dld_disagrees Array(LowCardinality(String)) DEFAULT [];
+-- DLD's registration date on sales with a DLD record (instance_date carries DXBI's date where
+-- DXBI is primary); release validation compares per-day completeness on it.
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS dld_instance_date Nullable(DateTime) DEFAULT NULL;
+-- Inside the DXBI period an unpaired DXBI record and an unpaired DLD record with the same price
+-- (sales, within 30 days) or start and contract amount (rentals) are paired loosely so the DLD
+-- one is not served beside the DXBI one (it becomes dld_probable_duplicate).
+ALTER TABLE market_sale_matches ADD COLUMN IF NOT EXISTS loose_dld_key String DEFAULT '';
+ALTER TABLE market_rental_matches ADD COLUMN IF NOT EXISTS loose_dld_rent_key UInt64 DEFAULT 0;
+
+-- Source-specific name evidence behind those columns, rebuilt with each sales release.
+-- kind: district | community | project | label (see market.transforms).
+CREATE TABLE IF NOT EXISTS market_geo_crosswalk (
+    kind LowCardinality(String),
+    source_key String,
+    district_id UInt32,
+    district_name String,
+    community_key String,
+    community_name String,
+    evidence_rows UInt64,
+    evidence_share Float64,
+    built_at DateTime64(3, UTC),
+    release_id LowCardinality(String) DEFAULT ''
+)
+ENGINE = MergeTree()
+ORDER BY (kind, source_key);
+
+-- Durable publication record, one version per state change (latest updated_at wins).
+-- state: building | rejected | failed | publishing | published | superseded | rolled_back
+CREATE TABLE IF NOT EXISTS market_release_ledger (
+    release_id String,
+    dataset LowCardinality(String),
+    state LowCardinality(String),
+    owner String,
+    started_at DateTime64(3, UTC),
+    updated_at DateTime64(3, UTC),
+    served_rows UInt64,
+    previous_release_id String,
+    depends_on_json String,
+    inputs_json String,
+    checks_json String,
+    detail String
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (dataset, release_id);
+
+-- Day ranges each release can vouch for, from source_load_windows (JSON, see market.release).
+ALTER TABLE market_release_ledger ADD COLUMN IF NOT EXISTS coverage_json String DEFAULT '{}';
+
+-- One row per date window a bronze load replaced: the evidence that a day was loaded in
+-- full. status: complete (pagination reached the end of the window), partial (the load
+-- stopped inside the window), attested (an operator-recorded archive, e.g. Dubai Pulse).
+-- The latest window covering a day decides its status.
+CREATE TABLE IF NOT EXISTS source_load_windows (
+    bronze_table LowCardinality(String),
+    date_field LowCardinality(String),
+    window_start Date,
+    window_end Date,
+    status LowCardinality(String),
+    rows UInt64,
+    run_id String,
+    manifest_key String,
+    evidence String,
+    loaded_at DateTime64(3, UTC) DEFAULT now64(3)
+)
+ENGINE = MergeTree()
+ORDER BY (bronze_table, date_field, window_start, loaded_at);
+-- Rows of the window this load read (first_row..end_row of total_rows), so a load that
+-- resumed mid-window proves coverage only when it continues an unbroken chain. -1: unknown
+-- (loads recorded before these columns, and attested archives).
+ALTER TABLE source_load_windows ADD COLUMN IF NOT EXISTS first_row Int64 DEFAULT -1;
+ALTER TABLE source_load_windows ADD COLUMN IF NOT EXISTS end_row Int64 DEFAULT -1;
+ALTER TABLE source_load_windows ADD COLUMN IF NOT EXISTS total_rows Int64 DEFAULT -1;
+
 -- One row per DXBI evidence run loaded by Holocron (replaces the Mac .loaded marker files).
 -- Raw files are archived to object storage first (manifest_key); loader accounting is kept
 -- here so rows dropped at load are measurable afterwards.
@@ -1942,3 +2161,360 @@ CREATE TABLE IF NOT EXISTS dxbi_evidence_load_ledger (
 )
 ENGINE = MergeTree()
 ORDER BY (report, run_name, loaded_at);
+
+-- Bayut full-collection snapshots (holocron.sources.bayut_listings.bronze). Acquisition is
+-- manual and gated on access/licensing (D1); loading never fetches from Bayut.
+CREATE TABLE IF NOT EXISTS bayut_listings_bronze (
+    snapshot_id   String,
+    listing_id    String,
+    purpose       LowCardinality(String),
+    property_type LowCardinality(String),
+    title         String,
+    listing_url   String,
+    price_aed     Nullable(Float64),
+    size_sqft     Nullable(Float64),
+    search_path   String,
+    root_name     String,
+    observed_at   String,
+    raw_json      String,
+    loaded_at     DateTime64(3, UTC) DEFAULT now64(3)
+)
+ENGINE = MergeTree()
+ORDER BY (snapshot_id, listing_id);
+
+-- status: published (coverage certified) | partial (kept for inspection, never served).
+CREATE TABLE IF NOT EXISTS bayut_listing_snapshots (
+    snapshot_id     String,
+    status          LowCardinality(String),
+    coverage_status LowCardinality(String),
+    listing_count   UInt64,
+    summary_json    String,
+    export_sha256   String,
+    loaded_at       DateTime64(3, UTC) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY snapshot_id;
+-- Snapshots are ordered by when the crawl observed them, never by load time: reloading an
+-- older export must not make it the current inventory. Rows loaded before this column
+-- existed fall back to their load time.
+ALTER TABLE bayut_listing_snapshots ADD COLUMN IF NOT EXISTS collected_at DateTime64(3, 'UTC') DEFAULT loaded_at;
+
+-- The inventory is the latest certified snapshot; a partial crawl never replaces it.
+CREATE OR REPLACE VIEW bayut_listings_current AS
+SELECT b.*
+FROM bayut_listings_bronze AS b
+WHERE b.snapshot_id = (
+    SELECT argMax(snapshot_id, (collected_at, snapshot_id)) FROM bayut_listing_snapshots FINAL
+    WHERE status = 'published'
+);
+
+-- Listings in the previous certified snapshot that the latest certified one no longer has.
+CREATE OR REPLACE VIEW bayut_listing_withdrawals AS
+WITH published AS (
+    SELECT snapshot_id, collected_at FROM bayut_listing_snapshots FINAL
+    WHERE status = 'published' ORDER BY collected_at DESC, snapshot_id DESC LIMIT 2
+)
+SELECT b.*
+FROM bayut_listings_bronze AS b
+WHERE b.snapshot_id = (
+      SELECT snapshot_id FROM published ORDER BY collected_at ASC, snapshot_id ASC LIMIT 1)
+  AND (SELECT count() FROM published) = 2
+  AND b.listing_id NOT IN (
+      SELECT listing_id FROM bayut_listings_bronze
+      WHERE snapshot_id = (
+          SELECT snapshot_id FROM published ORDER BY collected_at DESC, snapshot_id DESC LIMIT 1)
+  );
+
+-- Preserve verified registration identifiers when available; do not merge distinct identities.
+ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS dld_transaction_number String DEFAULT '';
+
+-- One complete profile per DXBI sale / lease (holocron.market.dxbi_profile): the location chain
+-- Area -> Master Project -> Project -> Building -> Unit, type, bedrooms and completion status,
+-- each with its source (dxbi | dld_pair | dld_evidence | building | own_building | place_name |
+-- project | web_verified | dxbi_community | pf_community | area_is_master | area | area_map |
+-- dxbi_sale | dld_unit | dld_unit_ref | not_applicable | none).
+CREATE TABLE IF NOT EXISTS dxbi_sale_profile (
+    sale_key String,
+    transaction_date Date,
+    area_name String,
+    area_source LowCardinality(String),
+    master_project String,
+    master_project_source LowCardinality(String),
+    project_name String,
+    project_source LowCardinality(String),
+    building_name String,
+    building_source LowCardinality(String),
+    unit_number String,
+    unit_source LowCardinality(String),
+    property_type LowCardinality(String),
+    bedrooms LowCardinality(String),
+    bedrooms_source LowCardinality(String),
+    completion_status LowCardinality(String),
+    completion_source LowCardinality(String),
+    dld_link LowCardinality(String),
+    dld_transaction_key String,
+    size_sqft Float64,
+    size_source LowCardinality(String),
+    location String,
+    latitude Nullable(Float64),
+    longitude Nullable(Float64),
+    map_url String,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY sale_key;
+
+CREATE TABLE IF NOT EXISTS dxbi_rental_profile (
+    contract_key String,
+    lease_start Date,
+    area_name String,
+    area_source LowCardinality(String),
+    master_project String,
+    master_project_source LowCardinality(String),
+    project_name String,
+    project_source LowCardinality(String),
+    building_name String,
+    building_source LowCardinality(String),
+    dld_building_ref String,
+    floor String,
+    unit_number String,
+    unit_source LowCardinality(String),
+    property_type LowCardinality(String),
+    property_type_source LowCardinality(String),
+    bedrooms LowCardinality(String),
+    bedrooms_source LowCardinality(String),
+    completion_status LowCardinality(String),
+    completion_source LowCardinality(String),
+    dld_link LowCardinality(String),
+    size_sqft Float64,
+    size_source LowCardinality(String),
+    location String,
+    latitude Nullable(Float64),
+    longitude Nullable(Float64),
+    map_url String,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY contract_key;
+
+-- Profile tables built before the size, location and map columns.
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS dld_transaction_key String DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS dld_building_ref String DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS floor String DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS property_type_source LowCardinality(String) DEFAULT '';
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS size_sqft Float64 DEFAULT 0;
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS size_source LowCardinality(String) DEFAULT '';
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS location String DEFAULT '';
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS latitude Nullable(Float64);
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS longitude Nullable(Float64);
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS map_url String DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS size_sqft Float64 DEFAULT 0;
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS size_source LowCardinality(String) DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS location String DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS latitude Nullable(Float64);
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS longitude Nullable(Float64);
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS map_url String DEFAULT '';
+
+-- The Analytics master -> project -> building hierarchy (holocron.market.analytics_hierarchy),
+-- built from the DXBI profiles before the listed tables, which carry its keys.
+-- Every spelling of a project seen (letters and digits, lower case) -> its project.
+CREATE TABLE IF NOT EXISTS analytics_project_keys (
+    raw_key String,
+    project_key String,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY raw_key;
+
+-- Every master spelling seen -> the canonical master.
+CREATE TABLE IF NOT EXISTS analytics_master_keys (
+    raw_key String,
+    master_key String,
+    master_name String,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY raw_key;
+
+CREATE TABLE IF NOT EXISTS analytics_projects (
+    project_key String,
+    project_name String,
+    scope_kind LowCardinality(String),
+    master_key String,
+    master_name String,
+    master_source LowCardinality(String),
+    area_name String,
+    sales UInt32,
+    leases UInt32,
+    spellings Array(String),
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY project_key;
+
+-- A project DLD's unit register holds under another name (or, for units DLD files under no
+-- project, as one DLD building), found by its records' unit numbers and floor areas.
+CREATE TABLE IF NOT EXISTS analytics_project_dld_keys (
+    project_key String,
+    dld_group String,
+    dld_name String,
+    matched UInt32,
+    unit_numbers UInt32,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY project_key;
+
+-- A DXBI building name in its DXBI community (and, for a name several projects share, its
+-- project) -> the building it is.
+CREATE TABLE IF NOT EXISTS analytics_building_keys (
+    name_key String,
+    community_key String,
+    project_key String,
+    building_id String,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY (name_key, community_key, project_key);
+
+CREATE TABLE IF NOT EXISTS analytics_buildings (
+    building_id String,
+    building_name String,
+    community String,
+    project_key String,
+    project_name String,
+    master_key String,
+    master_name String,
+    project_share Float64,
+    records UInt32,
+    sales UInt32,
+    leases UInt32,
+    dld_building String,
+    -- Buildings matching that DLD building: more than one (Shoreline's towers all match the one
+    -- DLD files under the project, or two towers DLD registers as one) and its count is none's.
+    dld_claims UInt32 DEFAULT 0,
+    -- Its project is named like it (Spring Oasis): its records re-file there whatever the share.
+    named_project UInt8 DEFAULT 0,
+    -- A name that names no project ("Tower A"), shared by sister projects' towers.
+    generic_name UInt8 DEFAULT 0,
+    spellings Array(String),
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY building_id;
+
+-- Registered units per project and per building, each count naming its source (DXBI's building
+-- list first, then DLD's registers); a count below the units that traded there is no count, and
+-- units stays 0 beside units_traded. units_at_least is kept for older rows and is 0.
+CREATE TABLE IF NOT EXISTS analytics_unit_stock (
+    scope_level LowCardinality(String),
+    scope_id String,
+    units UInt32,
+    units_source LowCardinality(String),
+    units_at_least UInt8,
+    units_traded UInt32,
+    buildings UInt32,
+    mix_rooms Array(String),
+    mix_units Array(UInt32),
+    mix_median_sqft Array(Float64),
+    mix_source LowCardinality(String),
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY (scope_level, scope_id);
+
+-- Every DXBI sale and lease the Transactions pages list, once each (the identity rules of
+-- backend/app/transaction/queries.py), with DXBI's own values and its profile's DLD-sourced
+-- area, master project and project (holocron.market.dxbi_profile). The Analytics pages read
+-- these: built after each profile build, not re-derived per request.
+CREATE TABLE IF NOT EXISTS dxbi_sales_listed (
+    sale_key String,
+    transaction_date Date,
+    unit_number String,
+    building_name String,
+    project_name String,
+    area_name String,
+    property_type LowCardinality(String),
+    bedrooms LowCardinality(String),
+    market_status LowCardinality(String),
+    size_sqft Float64,
+    sale_amount_aed UInt64,
+    price_per_sqft_aed Nullable(Float64),
+    profile_area String,
+    profile_master String,
+    profile_project String,
+    profile_project_source LowCardinality(String),
+    profile_bedrooms LowCardinality(String),
+    profile_status LowCardinality(String),
+    profile_size Float64,
+    scope_key String DEFAULT '',
+    scope_name String DEFAULT '',
+    scope_kind LowCardinality(String) DEFAULT '',
+    master_key String DEFAULT '',
+    master_name String DEFAULT '',
+    building_id String DEFAULT '',
+    building_display String DEFAULT '',
+    stray UInt8 DEFAULT 0,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY (master_key, scope_key, transaction_date);
+
+CREATE TABLE IF NOT EXISTS dxbi_leases_listed (
+    contract_key String,
+    lease_start Date,
+    lease_end Date,
+    unit_number String,
+    building_name String,
+    project_name String,
+    area_name String,
+    property_type LowCardinality(String),
+    bedrooms LowCardinality(String),
+    size_sqft Float64,
+    annual_rent_aed UInt64,
+    contract_amount_aed UInt64,
+    contract_term_months Float32,
+    contract_state LowCardinality(String),
+    profile_area String,
+    profile_master String,
+    profile_project String,
+    profile_project_source LowCardinality(String),
+    profile_bedrooms LowCardinality(String),
+    profile_size Float64,
+    scope_key String DEFAULT '',
+    scope_name String DEFAULT '',
+    scope_kind LowCardinality(String) DEFAULT '',
+    master_key String DEFAULT '',
+    master_name String DEFAULT '',
+    building_id String DEFAULT '',
+    building_display String DEFAULT '',
+    stray UInt8 DEFAULT 0,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY (master_key, scope_key, lease_start);
+
+-- Listed tables built before the Analytics hierarchy (holocron.market.analytics_hierarchy).
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS scope_key String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS scope_name String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS scope_kind LowCardinality(String) DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS master_key String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS master_name String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS building_id String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS building_display String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS stray UInt8 DEFAULT 0;
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS scope_key String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS scope_name String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS scope_kind LowCardinality(String) DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS master_key String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS master_name String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS building_id String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS building_display String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS stray UInt8 DEFAULT 0;
+
+
+-- crm_rental_ranked_base is a downstream immutable MergeTree, built only by
+-- assets/crm_rentals.py from the canonical crm-rental-sql package. Its explicit
+-- CREATE ... AS ranking preserves source types; the validated revision and schema
+-- hash travel in its table COMMENT through EXCHANGE. Schema setup must not build
+-- this asset or mark an empty placeholder ready. Source pipelines remain manual.

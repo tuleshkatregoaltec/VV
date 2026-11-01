@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 from typing import Any
+
+import pytest
 
 from holocron.market import transforms
 from holocron.market.checks import CHECKS, MarketCheck, evaluate
@@ -21,19 +24,20 @@ def test_canonical_tables_keep_every_legacy_serving_column() -> None:
 
 def test_insert_column_lists_match_table_definitions_exactly() -> None:
     # INSERT ... (columns) SELECT maps by position; an unlisted table column would be filled
-    # with a default and a stray one would fail the build.
+    # with a default and a stray one would fail the build. release_id is the one deliberate
+    # default: the release sets it on each staging table, so no statement can mislabel rows.
     schema = _schema()
-    assert list(transforms.SALE_COLUMNS) == schema["market_sale_events"]
-    assert list(transforms.RENTAL_COLUMNS) == schema["market_rental_events"]
+    tail = [*transforms.GEO_COLUMNS, *transforms.UNIFORM_COLUMNS]
+    sales_tail = [*tail, *transforms.SALE_AUDIT_COLUMNS]
+    assert [*transforms.SALE_COLUMNS, "release_id", *sales_tail] == schema["market_sale_events"]
+    assert [*transforms.RENTAL_COLUMNS, "release_id", *tail] == schema["market_rental_events"]
 
 
 def test_label_drift_is_normalised_in_the_serving_layer() -> None:
     # Open data says "Mortgage"/"Renewed", Pulse says "Mortgages"/"Renew"; the backend filters
     # one spelling, so both must map to it before serving.
     assert "if(d.group_en = 'Mortgage', 'Mortgages', d.group_en)" in transforms._SALE_EVENTS_DLD_SQL
-    assert (
-        "if(d.version_en = 'Renew', 'Renewed', d.version_en)" in transforms._RENTAL_EVENTS_DLD_SQL
-    )
+    assert "d.version_en = 'Renew', 'Renewed', d.version_en)" in transforms._RENTAL_EVENTS_DLD_SQL
 
 
 def test_rental_pairing_is_one_to_one_without_fan_out() -> None:
@@ -50,11 +54,63 @@ def test_rental_pairing_is_one_to_one_without_fan_out() -> None:
     assert sql.count("NOT IN (SELECT") == 2
 
 
-def test_unpaired_dxbi_rows_are_served_only_without_a_dld_candidate() -> None:
-    # Serving an unpaired DXBI row that DLD already holds would double count it.
-    for sql in (transforms._SALE_EVENTS_DXBI_SQL, transforms._RENTAL_EVENTS_DXBI_SQL):
-        assert "if(m.has_dld_candidate = 1, 'dxbi_probable_duplicate', 'dxbi_only')" in sql
-        assert "toUInt8(m.has_dld_candidate = 0)" in sql
+def test_property_type_vocabulary_is_one_closed_list() -> None:
+    # Every uniform value the mapping can produce is in the published list filters offer, and
+    # no source word maps to two types.
+    assert [*transforms._TYPE_WORDS, "Other"] == list(transforms.PROPERTY_TYPES)
+    words = [word for group in transforms._TYPE_WORDS.values() for word in group]
+    assert len(words) == len(set(words))
+
+
+def test_sizes_no_home_can_have_are_not_served() -> None:
+    # DXBI's 11 sq ft placeholder and ~9 m^2 hotel-room listings put price per area at 4-40x the
+    # building's. A floor keyed on a type name the vocabulary no longer has would stop applying.
+    assert set(transforms.MIN_HOME_SQFT) <= set(transforms.PROPERTY_TYPES)
+    sources_per_statement = {
+        transforms._SALE_EVENTS_DLD_SQL: 2,  # DXBI's size, else DLD's: each must be real
+        transforms._SALE_EVENTS_DXBI_SQL: 1,
+        transforms._RENTAL_EVENTS_DLD_SQL: 2,
+        transforms._RENTAL_EVENTS_DXBI_SQL: 1,
+    }
+    for sql, sources in sources_per_statement.items():
+        served_size = sql.split(" AS _size_sqm")[0].rsplit("\n", 1)[-1]
+        assert served_size.count("transform(") == sources
+        # The price per area divides by the served size, so a dropped size drops it too.
+        assert "/ nullIf(_size_sqm, 0)" in sql
+
+
+@pytest.mark.skipif(
+    os.environ.get("HOLOCRON_CLICKHOUSE_INTEGRATION") != "1",
+    reason="set HOLOCRON_CLICKHOUSE_INTEGRATION=1 with local ClickHouse",
+)
+def test_a_hotel_apartment_either_source_names_stays_one() -> None:
+    """DXBI calls most hotel apartments "Apartment" where DLD's sub-type names them (3,379 of DLD's
+    3,617 hotel-apartment sales in 2025 were served as Apartment). They trade at other prices, so
+    the specific type wins whichever source takes precedence; otherwise precedence holds."""
+    from tests.test_market_release import _client
+
+    def served(primary: str, fallback: str) -> str:
+        sql = f"SELECT {transforms._prefer(repr(primary), repr(fallback))}"
+        return _client("default").query(sql).result_rows[0][0]
+
+    assert served("Apartment", "Hotel Apartment") == "Hotel Apartment"
+    assert served("Hotel Apartment", "Apartment") == "Hotel Apartment"
+    assert served("Villa", "Townhouse") == "Villa"
+    assert served("Apartment", "Office") == "Apartment"
+    assert served("Commercial", "Office") == "Office"
+    assert served("", "Apartment") == "Apartment"
+
+
+def test_a_dxbi_lease_takes_the_registry_area_its_own_text_names() -> None:
+    # DXBI writes "District 7, Jumeirah Park, Al Thanyah Fifth": the community it shows is not a
+    # DLD area, the registry area at the end is. 83.7% of DXBI-only leases flagged as outside
+    # DLD's areas name a DLD area there; it must win over the learned community mapping.
+    assert transforms._RENTAL_DLD_AREA.startswith("multiIf(rp.dld_area != '', rp.dld_area,")
+    place = transforms._registry_place("x")
+    assert place == "trimBoth(arrayElement(splitByChar(',', x.location_name), -1))"
+    # Pairing and the DXBI-only rows resolve areas the same way.
+    assert "AS rp ON" in transforms._RENTAL_MATCH_INPUTS
+    assert "AS rp ON" in transforms._RENTAL_EVENTS_DXBI_SQL
 
 
 class _Result:

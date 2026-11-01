@@ -24,13 +24,13 @@ ps:
 	docker compose -f docker-compose.dev.yml ps
 
 dev-backend:
-	set -a && source .env && set +a && cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+	set -a && source .env.dev && set +a && cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 dev-frontend:
-	set -a && source .env && set +a && cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173
+	set -a && source .env.dev && set +a && cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173
 
 dev-app:
-	set -a && source .env && set +a && \
+	set -a && source .env.dev && set +a && \
 		for port in 8000 5173; do \
 			pid=$(lsof -t -nP -iTCP:$port -sTCP:LISTEN 2>/dev/null | head -n 1); \
 			if [ -n "$pid" ]; then \
@@ -98,8 +98,8 @@ check-all:
 	just test-backend
 	just test-frontend
 
-test-e2e:
-	set -a && source .env.dev && set +a && cd e2e && bun run test
+test-e2e *args:
+	set -a && source .env.dev && set +a && cd e2e && bun run test "$@"
 
 test-guards:
 	set -a && source .env.dev && set +a && cd e2e && bun run test:guards
@@ -144,6 +144,10 @@ test-evaluation *args:
 ai-evaluate *args:
 	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation run {{args}}
 
+# Preview by default; --live compares models using synthetic tools, never live records/actions.
+ai-model-trial *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation.model_trial {{args}}
+
 # Local trace assessment and comparison; never call models or export evidence.
 ai-assess *args:
 	cd backend && uv run python -m scripts.evaluation assess {{args}}
@@ -155,9 +159,29 @@ ai-compare *args:
 ai-export *args:
 	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation export {{args}}
 
-# Prepare sanitized behavioral splits and check promotion evidence without paid training.
-ai-prepare *args:
-	cd backend && uv run python -m scripts.evaluation prepare {{args}}
+# Read-only proposals from retained DXBI report evidence; no warehouse writes.
+audit-dxbi-name-repairs *args:
+	set -a && source .env.dev && set +a && PYTHONPATH=holocron uv run --project holocron python holocron/scripts/audit_dxbi_name_repairs.py {{args}}
 
-ai-promote *args:
-	cd backend && uv run python -m scripts.evaluation promote {{args}}
+# Read-only controlled comparison of the one explicitly authorized owner workbook.
+compare-owner-import *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.crm.compare_owner_import "$@"
+
+# Evaluate a reproducible 20-file owner sample against read-only DXBI evidence.
+evaluate-owner-corpus *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.crm.evaluate_owner_corpus "$@"
+
+# Offline owner-recovery experiment handoff; no live importer writes.
+owner-recovery *args:
+	cd backend && uv run python -m scripts.crm.owner_recovery_experiment.cli "$@"
+
+# Export only the fixed experiment's unresolved rows, including original columns.
+export-unresolved-owner-rows *args:
+	cd backend && uv run python -m scripts.crm.export_unresolved_owner_rows "$@"
+# Run one resource-bounded import at a time, separate from the HTTP process.
+crm-import-worker *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m app.crm.import_worker {{args}}
+
+# Sample-only enterprise preview; no backend, credentials or service startup required.
+demo-assistant:
+	cd frontend && bun run dev -- --host 127.0.0.1 --port 5173

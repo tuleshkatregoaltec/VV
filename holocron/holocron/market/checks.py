@@ -7,10 +7,16 @@ this layer; a failing check means the data moved outside what has been observed 
 
 from __future__ import annotations
 
+import math
 import operator
 from dataclasses import dataclass
 
-from holocron.market.transforms import DLD_RENTS_BASE, DLD_SALES_BASE, DXBI_SALES_BASE
+from holocron.market.transforms import (
+    DLD_RENTS_BASE,
+    DLD_SALES_BASE,
+    DXBI_SALES_BASE,
+    PROPERTY_TYPES,
+)
 from holocron.contracts import ClickHouseQuery
 
 _OPS = {"==": operator.eq, "<=": operator.le, ">=": operator.ge}
@@ -28,6 +34,9 @@ class MarketCheck:
     # signals (DXBI lag, coverage, match rate) stay as post-publication asset checks: a
     # lagging DXBI feed must not freeze fresh DLD data.
     blocking: bool = True
+    # Measures DXBI evidence: with no DXBI input loaded at all the ratio has nothing to
+    # measure and is recorded as not applicable. Unmeasurable with DXBI input, it fails.
+    needs_dxbi: bool = False
 
 
 def evaluate(clickhouse: ClickHouseQuery, check: MarketCheck) -> tuple[bool, float]:
@@ -37,6 +46,24 @@ def evaluate(clickhouse: ClickHouseQuery, check: MarketCheck) -> tuple[bool, flo
         return False, float("nan")
     value = float(raw)
     return _OPS[check.op](value, check.threshold), value
+
+
+_DXBI_INPUT = {
+    "market_sale_events": "dxbi_sales_unit_events",
+    "market_rental_events": "dxbi_rental_events",
+}
+
+
+def dxbi_input_rows(clickhouse: ClickHouseQuery, asset: str) -> int:
+    return int(clickhouse.query(f"SELECT count() FROM {_DXBI_INPUT[asset]}").result_rows[0][0])
+
+
+def outcome(clickhouse: ClickHouseQuery, check: MarketCheck) -> tuple[str, float]:
+    """passed / failed / not_applicable for a published-table check."""
+    passed, value = evaluate(clickhouse, check)
+    if math.isnan(value) and check.needs_dxbi and not dxbi_input_rows(clickhouse, check.asset):
+        return "not_applicable", value
+    return ("passed" if passed else "failed"), value
 
 
 _SALES = "market_sale_events"
@@ -57,12 +84,57 @@ SELECT min(dxbi / dld) FROM (
 
 
 def _off_vocabulary_share(table: str) -> str:
+    # No DXBI-only rows means nothing off-vocabulary is served: 0, not an unmeasurable 0/0.
     return f"""
-SELECT countIf(area_name_en NOT IN (
+SELECT if(count() = 0, 0, countIf(area_name_en NOT IN (
            SELECT DISTINCT area_name_en FROM {table} WHERE source_system != 'dxbi'))
-       / count()
+       / count())
 FROM {table}
 WHERE match_status = 'dxbi_only'"""
+
+
+def _uniform_vocabulary(table: str) -> str:
+    """Served rows whose uniform type or bedroom label is outside the published vocabulary."""
+    types = ", ".join(f"'{name}'" for name in PROPERTY_TYPES)
+    return (
+        f"SELECT countIf(property_type NOT IN ({types}, ''))"
+        " + countIf(NOT match(rooms_en, '^([0-9]+ B/R|Studio)?$'))"
+        f" FROM {table} WHERE is_served = 1"
+    )
+
+
+def _uniform_checks(prefix: str, table: str, matches: str, loose_key: str, empty: str) -> tuple:
+    return (
+        MarketCheck(
+            name=f"{prefix}_uniform_vocabulary",
+            asset=table,
+            description="Served rows use one property-type list and one bedroom label format.",
+            sql=_uniform_vocabulary(table),
+            op="==",
+            threshold=0,
+        ),
+        MarketCheck(
+            name=f"{prefix}_loose_pairs_hide_one_dld_row_each",
+            asset=table,
+            # A DLD row hidden as dld_probable_duplicate must be standing in for exactly one
+            # served DXBI record; otherwise a hidden row is a silently dropped record.
+            description="Every DLD row hidden in the DXBI period has exactly one served DXBI partner.",
+            sql=f"SELECT abs((SELECT countIf(match_status = 'dld_probable_duplicate') FROM {table})"
+            f" - (SELECT uniqExact({loose_key}) FROM {matches} WHERE {loose_key} != {empty}))"
+            f" + (SELECT countIf({loose_key} != {empty}) - uniqExact({loose_key})"
+            f"    FROM {matches} WHERE {loose_key} != {empty})",
+            op="==",
+            threshold=0,
+        ),
+    )
+
+
+def _geo_vocabulary(table: str) -> str:
+    return (
+        f"SELECT countIf(geo_resolution NOT IN ('community', 'district', 'unresolved'))"
+        " + countIf(geo_method NOT IN ('pulse_master', 'project_evidence', 'district_name',"
+        f" 'label_evidence', 'unresolved')) FROM {table}"
+    )
 
 
 CHECKS: tuple[MarketCheck, ...] = (
@@ -104,6 +176,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op=">=",
         threshold=0.80,
         blocking=False,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_dxbi_monthly_coverage_min",
@@ -113,6 +186,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op=">=",
         threshold=0.80,
         blocking=False,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_probable_duplicate_share",
@@ -123,6 +197,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op="<=",
         threshold=0.15,
         blocking=False,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_dxbi_only_share",
@@ -132,6 +207,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         f" FROM {_SALES}",
         op="<=",
         threshold=0.08,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_label_vocabulary",
@@ -149,6 +225,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         sql=_off_vocabulary_share(_SALES),
         op="<=",
         threshold=0.25,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_offplan_status_missing_share",
@@ -167,6 +244,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         " WHERE dld_transaction_number != ''",
         op=">=",
         threshold=0.95,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_dxbi_lag_days",
@@ -179,7 +257,36 @@ CHECKS: tuple[MarketCheck, ...] = (
         op="<=",
         threshold=7,
         blocking=False,
+        needs_dxbi=True,
     ),
+    MarketCheck(
+        name="sale_geo_crosswalk_keys_unique",
+        asset=_SALES,
+        description="Each name key has one crosswalk entry per kind (no conflicting placements).",
+        sql="SELECT count() - uniqExact((kind, source_key)) FROM market_geo_crosswalk",
+        op="==",
+        threshold=0,
+    ),
+    MarketCheck(
+        name="sale_geo_vocabulary",
+        asset=_SALES,
+        description="Geography resolution and method labels use one vocabulary.",
+        sql=_geo_vocabulary(_SALES),
+        op="==",
+        threshold=0,
+    ),
+    MarketCheck(
+        name="sale_geo_unresolved_share_open_data",
+        asset=_SALES,
+        # 0.012 measured on the 2026-10-03 local copy (open data has no area_id and a second
+        # area vocabulary); a jump means the crosswalk evidence regressed.
+        description="Served open-data sales placed in no district or community.",
+        sql=f"SELECT countIf(geo_resolution = 'unresolved') / count() FROM {_SALES}"
+        " WHERE is_served = 1 AND source_system = 'dld_open_data' AND trans_group_en = 'Sales'",
+        op="<=",
+        threshold=0.03,
+    ),
+    *_uniform_checks("sale", _SALES, "market_sale_matches", "loose_dld_key", "''"),
     # --- rentals -----------------------------------------------------------------------
     MarketCheck(
         name="rental_served_rows_unique",
@@ -221,6 +328,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op=">=",
         threshold=0.60,
         blocking=False,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="rental_probable_duplicate_share",
@@ -232,6 +340,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op="<=",
         threshold=0.40,
         blocking=False,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="rental_pair_size_agreement",
@@ -241,6 +350,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         " WHERE dld_rent_key != 0",
         op=">=",
         threshold=0.80,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="rental_dxbi_only_share",
@@ -250,6 +360,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         f" FROM {_RENTALS}",
         op="<=",
         threshold=0.05,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="rental_dxbi_only_area_off_vocabulary_share",
@@ -258,6 +369,26 @@ CHECKS: tuple[MarketCheck, ...] = (
         sql=_off_vocabulary_share(_RENTALS),
         op="<=",
         threshold=0.25,
+        needs_dxbi=True,
+    ),
+    MarketCheck(
+        name="rental_geo_vocabulary",
+        asset=_RENTALS,
+        description="Geography resolution and method labels use one vocabulary.",
+        sql=_geo_vocabulary(_RENTALS),
+        op="==",
+        threshold=0,
+    ),
+    MarketCheck(
+        name="rental_geo_unresolved_share_dld",
+        asset=_RENTALS,
+        # Every DLD rent row carries an official district (0.000 measured); unresolved rows
+        # mean the served crosswalk is missing or stale.
+        description="Served DLD rent rows placed in no district.",
+        sql=f"SELECT countIf(geo_resolution = 'unresolved') / count() FROM {_RENTALS}"
+        " WHERE is_served = 1 AND source_system != 'dxbi'",
+        op="<=",
+        threshold=0.01,
     ),
     MarketCheck(
         name="rental_version_vocabulary",
@@ -281,5 +412,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op="<=",
         threshold=7,
         blocking=False,
+        needs_dxbi=True,
     ),
+    *_uniform_checks("rental", _RENTALS, "market_rental_matches", "loose_dld_rent_key", "0"),
 )
