@@ -51,13 +51,17 @@ measurements below explicitly identify synthetic fixtures and current checks.
 
 ## Evidence
 
-- Full backend fast suite with dummy credentials and sockets blocked: **1,466
+- Full backend fast suite with dummy credentials and sockets blocked: **1,473
   passed**, no skipped tests.
 - Full disposable PostgreSQL suite: **98 passed**, no skips. This includes real
   authorization-database reads before first-mutation audit attribution.
 - Full disposable ClickHouse suite: **105 passed**, no skips; 75 full-column
   equivalence cases plus the exact-area collision refusal/fallback regression.
   Selected-area reads were 8,192 versus 25,041 in the seeded fixture.
+- Import stream follow-up: seven real-SDK wrapper regressions pass for short
+  network chunks, corrupt/truncated/oversized objects and response cleanup; all
+  25 durable-job PostgreSQL tests passed again. Reads consume at most the saved
+  size plus one byte before checksum/size validation.
 - Frontend: **327 unit tests**, **15 mocked browser guards**, type check with zero
   errors/warnings, lint and production build passed. Browser guards include two
   identity transitions, 230 renewal rows and both queued upload/navigation flows.

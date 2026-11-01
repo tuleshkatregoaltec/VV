@@ -37,13 +37,21 @@ async def read_input(job: CrmImportJob) -> bytes:
         raise InvalidImportInput("Invalid input size")
     async with client.client() as s3:
         response = await s3.get_object(Bucket=client.bucket_name, Key=job.input_object_key)
-        async with response["Body"] as body:
+        body = response["Body"]
+        async with body:
             if response.get("ContentLength", 0) > limit:
                 raise InvalidImportInput("Input object exceeds its size limit")
-            data = await body.read(limit + 1)
+            data = bytearray()
+            # The context yields the raw HTTP response; use the SDK wrapper so
+            # reads stay bounded, and allow short network chunks before EOF.
+            while len(data) <= job.input_size_bytes:
+                chunk = await body.read(min(1024 * 1024, job.input_size_bytes + 1 - len(data)))
+                if not chunk:
+                    break
+                data.extend(chunk)
     if len(data) != job.input_size_bytes or hashlib.sha256(data).hexdigest() != job.input_sha256:
         raise InvalidImportInput("Input object does not match its saved checksum and size")
-    return data
+    return bytes(data)
 
 
 async def _heartbeat(factory, job_id: str, token: str, lease_seconds: int):

@@ -54,6 +54,9 @@ class Storage:
         data = self.objects[Key]
 
         class Body:
+            def __init__(self):
+                self.stream = io.BytesIO(data)
+
             async def __aenter__(self):
                 return self
 
@@ -61,7 +64,7 @@ class Storage:
                 pass
 
             async def read(self, limit):
-                return data[:limit]
+                return self.stream.read(limit)
 
         return {"ContentLength": len(data), "Body": Body()}
 
