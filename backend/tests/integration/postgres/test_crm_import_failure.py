@@ -22,7 +22,7 @@ async def test_warehouse_failure_is_recorded_after_session_rollback(pg_session, 
     monkeypatch.setattr(imports, "delete_drop_log", AsyncMock())
     org = str(uuid4())
     with pytest.raises(HTTPException) as error:
-        await imports.process_contact_import(
+        await imports._execute_contact_import(
             pg_session,
             upload=UploadFile(
                 file=io.BytesIO(b"NameEn,BuildingNameEn,UnitNumber\nExample,Tower,101\n"),

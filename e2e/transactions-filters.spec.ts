@@ -93,7 +93,7 @@ for (const kind of ['sales', 'rentals'] as const) {
             : route.continue());
         await page.goto(`/transactions/${kind}`);
         await expect(page.getByRole('button', { name: 'Property Type', exact: true })).toBeDisabled();
-        await expect(page.getByRole('alert')).toContainText('Error loading filters', { timeout: 20000 });
+        await expect(page.getByRole('alert')).toContainText('Filters could not be loaded', { timeout: 20000 });
         failing = false;
         await page.getByRole('button', { name: 'Retry filters', exact: true }).click();
         await ready(page);

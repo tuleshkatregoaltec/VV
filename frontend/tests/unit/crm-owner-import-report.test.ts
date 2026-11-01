@@ -268,7 +268,7 @@ describe('failureReasons', () => {
 			['unmatched', 104],
 			['insufficient_property_data', 1]
 		])
-		expect(reasons[0].label).toBe('Needs review')
+		expect(reasons[0].label).toBe('Unmatched')
 		expect(reasons[0].fix).toBeTruthy()
 	})
 
@@ -288,12 +288,17 @@ describe('ownership assessment language', () => {
 		})
 		expect(counts.byStatus.former_owner).toBe(1)
 		expect(counts.byStatus.unverified_former_owner).toBe(2)
-		expect(STATUS_INFO.unverified_former_owner.label).toBe('Seller claim needs review')
-		expect(STATUS_HELP.unverified_former_owner.todo).toContain('Do not treat a seller label alone')
+		expect(STATUS_INFO.unverified_former_owner.label).toBe('Seller to check')
+		expect(STATUS_HELP.unverified_former_owner.how).toContain('no recorded sale supports it')
 	})
 
-	it('describes sale matching without promising independent named-person verification', () => {
-		expect(STATUS_INFO.verified_current_owner.label).toBe('Transaction-matched current buyer')
-		expect(STATUS_HELP.verified_current_owner.todo).toContain('does not independently verify')
+	it('names each status with a short, distinct label and no schema or legal wording', () => {
+		const labels = Object.values(STATUS_INFO).map((s) => s.label)
+		expect(new Set(labels).size).toBe(labels.length)
+		expect(STATUS_INFO.verified_current_owner.label).toBe('Current owner')
+		expect(STATUS_INFO.unit_linked_unverified.label).toBe('Property found, owner unknown')
+		expect(STATUS_INFO.registry_not_observed.label).toBe('No sale found')
+		for (const s of Object.values(STATUS_INFO))
+			expect(`${s.label} ${s.meaning}`).not.toMatch(/dxbi|score|probability|verif/i)
 	})
 })

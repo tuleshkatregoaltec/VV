@@ -56,7 +56,7 @@ function showAll() {
 			data-dropdown-initial-focus="true"
 		>
 			<div class="flex items-center justify-between border-b border-border px-3 py-2">
-				<span class="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-fg-4">Show Columns</span>
+				<span class="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-fg-4">Show columns</span>
 				<button
 					type="button"
 					onclick={showAll}

@@ -184,7 +184,7 @@ async function handleExport(format: TransactionExportFormat) {
 
 {#if facetOptionsQuery.isError}
 	<div role="alert" class="mb-4 rounded-lg border border-error bg-error-bg p-4 text-sm text-error">
-		<p>Error loading filters. Filter options are unavailable. Clear selections or retry.</p>
+		<p>Filters could not be loaded.</p>
 		<button type="button" class="ui-button mt-2" disabled={facetOptionsQuery.isFetching} onclick={() => facetOptionsQuery.refetch()}>Retry filters</button>
 	</div>
 {/if}
@@ -199,16 +199,12 @@ async function handleExport(format: TransactionExportFormat) {
     onReset={() => { resetFilters(); timeframe.current = 'Last Month' }}
 />
 
-<div class="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-fg-3">
-    <span>Sales records</span>
+<div class="flex flex-wrap items-center justify-end gap-2 px-1 text-xs text-fg-3">
     <span aria-live="polite">{#if transactionsQuery.isPlaceholderData}Updating matching transactions…{:else}{formatCount(totalRecords)} matching transactions{/if}</span>
 </div>
 
 <DataPanel
 	title="Sales records"
-	description={selectedTransactionIds.size > 0
-		? `Exporting ${selectedTransactionIds.size} selected rows as Excel or CSV.`
-		: 'Export the filtered rows as Excel or CSV, up to 50,000 rows.'}
 	exportActions={[
 		{
 			label: 'Excel',

@@ -5,6 +5,7 @@ import { aed, fmt, fullDate } from '../../format'
 import {
 	clampOffset,
 	explainMatch,
+	fieldLabel,
 	MATCH_FILTERS,
 	type MatchFilterId,
 	matchedSaleLine,
@@ -143,16 +144,16 @@ const usable = (value: string | undefined) =>
 										{#each reasons as t, n (n)}<div>{t}</div>{:else}<span class="sub">—</span>{/each}
 										{#each warnings as t, n (n)}<div class="warn">{t}</div>{/each}
 									{:else}
-										{explainMatch(r.reason || '') || '—'}
+										{r.reason || '—'}
 									{/if}
 									<details class="sub">
-										<summary>Ownership and source details</summary>
-										<div>{STATUS_INFO[r.status].label}. Evidence score {r.confidence}/100; this is not a probability or identity verification.</div>
-										{#if r.latestSaleDate}<div>Latest registered sale: {fullDate(r.latestSaleDate)}{r.latestSalePrice ? ` · ${aed(r.latestSalePrice)}` : ''}</div>{/if}
+										<summary>Details</summary>
+										<div>{STATUS_INFO[r.status].label}</div>
+										{#if r.latestSaleDate}<div>Latest sale: {fullDate(r.latestSaleDate)}{r.latestSalePrice ? ` · ${aed(r.latestSalePrice)}` : ''}</div>{/if}
 										{#each Object.entries(r.propertyDetails).filter(([key, value]) => key.startsWith('source_') && usable(value)) as [key, value] (key)}
-											<div>{key.replace('source_', '').replaceAll('_', ' ')}: {value}</div>
+											<div>{fieldLabel(key.replace('source_', ''))}: {value}</div>
 										{/each}
-										{#if r.propertyDetails.matched_sale_date}<div>Matched acquisition: {fullDate(r.propertyDetails.matched_sale_date)}</div>{/if}
+										{#if r.propertyDetails.matched_sale_date}<div>Matched sale: {fullDate(r.propertyDetails.matched_sale_date)}</div>{/if}
 									</details>
 								</div></td>
 							</tr>

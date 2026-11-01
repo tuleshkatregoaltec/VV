@@ -55,7 +55,7 @@ async function submit(e: SubmitEvent) {
 
 {#if owner.data}
 	{@const o = owner.data}
-	<Panel kicker="Add record" title={o.name} sub="Prior deal with this owner, from your agency's file">
+	<Panel kicker="Add record" title={o.name}>
 		<form class="form" onsubmit={submit}>
 			<div class="fld">
 				<span class="fl" id="ar-kind">Deal type</span>
@@ -88,9 +88,6 @@ async function submit(e: SubmitEvent) {
 			<div class="fld">
 				<label for="ar-ref">{refLabel} · required</label>
 				<input id="ar-ref" required placeholder="DLD or Ejari number, or the Form A number" bind:value={reference} />
-			</div>
-			<div class="small muted">
-				A deal, a tenancy or a signed listing agreement counts. Leads and call logs do not.
 			</div>
 			<div class="form-actions">
 				<button type="submit" class="btn" disabled={saving}>Add record</button>

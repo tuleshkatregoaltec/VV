@@ -44,7 +44,7 @@ const avgPrice = $derived(
 	<div>
 		<TrendChart
 			data={data.trends}
-			title="Price per sq.ft Over Time"
+			title="Price per sq ft over time"
 			metric="avg_sqft"
 			height={450}
 		/>
@@ -54,21 +54,21 @@ const avgPrice = $derived(
 	<div class="rounded-xl border border-border bg-slate-50 p-4">
 		<div class="grid grid-cols-2 gap-4 text-sm">
 			<div>
-				<p class="text-fg-4">Time Period</p>
+				<p class="text-fg-4">Time period</p>
 				<p class="font-semibold text-fg-1">Last {data.timeframe_days} days</p>
 			</div>
 			<div>
-				<p class="text-fg-4">Data Points</p>
+				<p class="text-fg-4">Data points</p>
 				<p class="font-semibold text-fg-1">{data.trends.length} days</p>
 			</div>
 			<div>
-				<p class="text-fg-4">Total Transactions</p>
+				<p class="text-fg-4">Total transactions</p>
 				<p class="font-semibold text-fg-1">
 					{data.summary.transaction_count.toLocaleString()}
 				</p>
 			</div>
 			<div>
-				<p class="text-fg-4">Total Volume</p>
+				<p class="text-fg-4">Total volume</p>
 				<p class="font-semibold text-fg-1">{formatCurrency(data.summary.total_volume)}</p>
 			</div>
 		</div>

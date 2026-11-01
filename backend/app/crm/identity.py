@@ -98,10 +98,11 @@ class ParsedContact:
 
     @property
     def has_valid_contact(self) -> bool:
-        return bool(
-            _normalize_phone(self.phone_primary)
-            or _normalize_phone(self.phone_alternate)
-            or _normalize_email(self.email_primary)
+        return has_usable_contact(
+            self.phone_primary,
+            self.phone_alternate,
+            self.email_primary,
+            self.evidence.get("broker_contact"),
         )
 
     @property
@@ -514,6 +515,36 @@ def _normalize_phone(value: Any) -> str | None:
 def _normalize_email(value: Any) -> str | None:
     email = _text(value).lower()
     return email if email and _EMAIL.match(email) else None
+
+
+def usable_channels(
+    phone_primary: Any,
+    phone_alternate: Any,
+    email_primary: Any,
+    broker_contact: Any = None,
+) -> tuple[list[str], list[str]]:
+    """The (phones, emails) of a row that can reach its owner: valid, normalized, and not marked
+    as a licensed broker's in ``evidence["broker_contact"]`` (a broker's number is not the owner's)."""
+    marked = broker_contact if isinstance(broker_contact, dict) else {}
+    if marked.get("is_broker"):
+        return [], []  # the whole row is a broker's
+    broker_phones = set(marked.get("phones") or ())
+    broker_emails = set(marked.get("emails") or ())
+    phones = [
+        phone
+        for value in (phone_primary, phone_alternate)
+        if (phone := _normalize_phone(value)) and phone not in broker_phones
+    ]
+    email = _normalize_email(email_primary)
+    emails = [email] if email and email not in broker_emails else []
+    return phones, emails
+
+
+def has_usable_contact(
+    phone_primary: Any, phone_alternate: Any, email_primary: Any, broker_contact: Any = None
+) -> bool:
+    phones, emails = usable_channels(phone_primary, phone_alternate, email_primary, broker_contact)
+    return bool(phones or emails)
 
 
 def _claim_property_key(claim: CrmPropertyContactClaim) -> str:

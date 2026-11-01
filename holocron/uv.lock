@@ -351,6 +351,11 @@ wheels = [
 ]
 
 [[package]]
+name = "crm-rental-sql"
+version = "0.1.0"
+source = { directory = "packages/crm-rental-sql" }
+
+[[package]]
 name = "dagster"
 version = "1.13.3"
 source = { registry = "https://pypi.org/simple" }
@@ -706,6 +711,7 @@ dependencies = [
     { name = "2captcha-python" },
     { name = "boto3" },
     { name = "clickhouse-connect" },
+    { name = "crm-rental-sql" },
     { name = "dagster" },
     { name = "dagster-postgres" },
     { name = "dagster-webserver" },
@@ -739,6 +745,7 @@ requires-dist = [
     { name = "2captcha-python", specifier = ">=2.0.6" },
     { name = "boto3", specifier = ">=1.43.5" },
     { name = "clickhouse-connect", specifier = ">=0.15.1" },
+    { name = "crm-rental-sql", directory = "packages/crm-rental-sql" },
     { name = "dagster", specifier = ">=1.13.3" },
     { name = "dagster-postgres", specifier = ">=0.29.3" },
     { name = "dagster-webserver", specifier = ">=1.13.3" },

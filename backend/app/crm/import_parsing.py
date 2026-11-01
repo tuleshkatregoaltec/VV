@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import hashlib
 import io
 import re
@@ -30,6 +29,7 @@ from app.crm.import_models import (
     CrmSheetMapping,
 )
 from app.crm.import_normalization import location_evidence, positive_decimal
+from app.crm.import_safety import MAX_IMPORT_COLUMNS, csv_rows, validate_xlsx
 
 _MAX_ROWS = 500_000
 
@@ -424,6 +424,8 @@ def _populated_xlsx_rows(workbook, sheet) -> list[int]:
             if action != "end" or element.tag != ns + "row":
                 continue
             if any(node.text for node in element.iter() if node.tag in {ns + "v", ns + "t"}):
+                if len(rows) >= _MAX_ROWS + 15:
+                    raise ValueError(f"Import exceeds the {_MAX_ROWS:,}-row limit")
                 rows.append(int(element.attrib["r"]))
             element.clear()
             if parent is not None:
@@ -432,10 +434,13 @@ def _populated_xlsx_rows(workbook, sheet) -> list[int]:
 
 
 def _inspect_xlsx(data: bytes, filename: str) -> list[SheetProfile]:
+    validate_xlsx(data)
     workbook = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     profiles: list[SheetProfile] = []
     try:
         for sheet in workbook.worksheets:
+            if (sheet.max_column or 0) > MAX_IMPORT_COLUMNS:
+                raise ValueError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
             initial_rows = list(
                 sheet.iter_rows(
                     min_row=1,
@@ -480,8 +485,7 @@ def _inspect_xlsx(data: bytes, filename: str) -> list[SheetProfile]:
 
 
 def _csv_rows(data: bytes) -> list[list[str]]:
-    text = data.decode("utf-8-sig")
-    return list(csv.reader(io.StringIO(text)))
+    return csv_rows(data, max_rows=_MAX_ROWS + 15)
 
 
 def _inspect_csv(data: bytes, filename: str) -> list[SheetProfile]:
@@ -1086,6 +1090,7 @@ def _parse_xlsx(
     profiles: list[SheetProfile],
     dropped: list[dict[str, Any]] | None = None,
 ) -> tuple[list[ParsedContact], int]:
+    validate_xlsx(data)
     workbook = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     candidates: list[ParsedContact] = []
     total_rows = 0

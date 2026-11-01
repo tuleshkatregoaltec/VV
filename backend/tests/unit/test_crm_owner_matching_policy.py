@@ -9,6 +9,7 @@ import pytest
 from fastapi import UploadFile
 
 from app.crm import imports, owner_queries
+from app.crm.brokers import BrokerIndex
 from app.crm.identity import ParsedContact
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.owner_assessment import capture_owner_evidence, match_owner_evidence
@@ -558,6 +559,7 @@ async def test_actual_upload_parser_shared_matcher_and_persistence_learn_new_she
     monkeypatch.setattr(imports, "save_drop_log", AsyncMock(return_value=True))
     monkeypatch.setattr(imports, "_import_response", AsyncMock(return_value="saved"))
     monkeypatch.setattr(imports, "_invalidate_owner_summary_cache", MagicMock())
+    monkeypatch.setattr(imports, "load_broker_index", AsyncMock(return_value=BrokerIndex()))
     monkeypatch.setattr(owner_queries, "fetch_registry_places", AsyncMock(return_value=[]))
     monkeypatch.setattr(owner_queries, "fetch_canonical_building_keys", AsyncMock(return_value=[]))
     targets = [
@@ -571,6 +573,14 @@ async def test_actual_upload_parser_shared_matcher_and_persistence_learn_new_she
         owner_queries, "fetch_property_identity_candidates", AsyncMock(return_value=[])
     )
     monkeypatch.setattr(owner_queries, "fetch_unit_sales", AsyncMock(return_value=targets))
+    # The property-first matcher runs too, on an empty warehouse: no place, so no confirmed owner.
+    for name in (
+        "fetch_place_hierarchy",
+        "fetch_matcher_places",
+        "fetch_matcher_events",
+        "fetch_matcher_registry",
+    ):
+        monkeypatch.setattr(owner_queries, name, AsyncMock(return_value=[]))
     lines = [
         "NameEn,BuildingNameEn,Project,AreaNameEn,UnitNumber,PropertyTypeEn,TransactionDate,ProcedureValue,ProcedurePartyTypeNameEn,ProcedureNameEn,Size"
     ]
@@ -581,7 +591,7 @@ async def test_actual_upload_parser_shared_matcher_and_persistence_learn_new_she
     lines.append(
         "History,Alpha Tower,Alpha,Business Bay,101,Apartment,2024-02-01,500000,Buyer,Mortgage Registration,100"
     )
-    result = await imports.process_contact_import(
+    result = await imports._execute_contact_import(
         db,
         upload=UploadFile(
             file=io.BytesIO(("\n".join(lines)).encode()), filename="never-seen-before.csv"

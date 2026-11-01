@@ -7,6 +7,7 @@
  * no deals or listings on a lead) rather than invented. Writes the backend can't store throw
  * a 501 so the screen shows an error instead of a fake success.
  */
+
 import { me as authMe } from '$lib/api/auth'
 import { ApiError, client } from '$lib/api/client'
 import type {
@@ -37,8 +38,11 @@ import type {
 	InboundMatchResponse
 } from '$lib/api/generated/hey-api/types.gen'
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
+import { currentUser } from '$lib/stores/user.svelte'
 import { groupOf, LEAD_TYPES, ownerPropertyKind, SOURCE_OPTIONS } from '../config'
-import { aed, fmt, fullDate, plural, short } from '../format'
+import { aed, fmt, plural, short } from '../format'
+import { crmScopeKey, onCrmIdentityChange } from '../identity.svelte'
+import { IMPORT_STATUS } from '../importStatus'
 import {
 	type ClaimStatus,
 	importCounts,
@@ -110,8 +114,19 @@ import type {
 } from './types'
 
 const CRM = '/api/v1/crm'
-/** Largest page the list endpoints serve; filters and tab counts run over this page. */
+/** Largest page the list endpoints serve; the UI labels incomplete loaded-row views. */
 const LIST_LIMIT = 500
+const readsInFlight = new Map<string, Promise<unknown>>()
+function sharedRead<T>(url: string): Promise<T> {
+	const key = JSON.stringify([crmScopeKey(), url])
+	const existing = readsInFlight.get(key)
+	if (existing) return existing as Promise<T>
+	const request = client.get<T>(url).finally(() => {
+		if (readsInFlight.get(key) === request) readsInFlight.delete(key)
+	})
+	readsInFlight.set(key, request)
+	return request
+}
 /** Off-plan buyers are marked with this enquiry tag. */
 const OFF_PLAN_TAG = 'off-plan'
 /** Source of the leads Vitevue supplies from lease data (backend VITEVUE_LEASE_SOURCE). */
@@ -149,11 +164,26 @@ const received = (iso: string) => {
 /* ── signed-in user ── */
 
 let mePromise: Promise<AuthMeResponse> | null = null
-const whoAmI = () =>
-	(mePromise ??= authMe().catch((e) => {
-		mePromise = null
-		throw e
-	}))
+function whoAmI(): Promise<AuthMeResponse> {
+	if (currentUser.data) return Promise.resolve(currentUser.data)
+	if (!mePromise) {
+		mePromise = authMe().catch((e) => {
+			mePromise = null
+			throw e
+		})
+	}
+	return mePromise
+}
+
+export function clearCrmReadRequests(): void {
+	readsInFlight.clear()
+	renewalLeadsInFlight = null
+}
+
+onCrmIdentityChange(() => {
+	mePromise = null
+	clearCrmReadRequests()
+})
 
 const fullName = (u: AuthMeResponse) => `${u.first_name} ${u.last_name}`.trim() || u.email
 
@@ -403,7 +433,7 @@ function leadDetail(e: InboundEnquiryResponse, u: AuthMeResponse): LeadDetail {
 }
 
 const getEnquiry = (id: number) =>
-	client.get<InboundEnquiryResponse>(`${CRM}/inbound/enquiries/${id}`)
+	sharedRead<InboundEnquiryResponse>(`${CRM}/inbound/enquiries/${id}`)
 const patchEnquiry = (id: number, body: InboundEnquiryUpdate) =>
 	client.patch<InboundEnquiryResponse>(`${CRM}/inbound/enquiries/${id}`, body)
 const addEnquiryNote = (id: number, body: string) =>
@@ -426,7 +456,7 @@ const isVilla = (propertyType: unknown) => /villa|townhouse/i.test(String(proper
 
 export async function listLeads(p: LeadListParams): Promise<LeadListResponse> {
 	const [res, u, leaseResult] = await Promise.all([
-		client.get<InboundEnquiryListResponse>(
+		sharedRead<InboundEnquiryListResponse>(
 			client.withQuery(`${CRM}/inbound/enquiries`, { search: p.q || undefined, limit: LIST_LIMIT })
 		),
 		whoAmI(),
@@ -501,6 +531,8 @@ export async function listLeads(p: LeadListParams): Promise<LeadListResponse> {
 		counts,
 		new_count: open.filter(({ row }) => row.stage === 'new').length,
 		areas: [...new Set(all.map(({ row }) => row.area).filter(Boolean))].sort(),
+		limited:
+			res.total > res.enquiries.length || Boolean(leases && leases.total > leases.items.length),
 		vitevue_unavailable: leaseResult === 'failed'
 	}
 }
@@ -655,9 +687,12 @@ const matchKey = (m: InboundMatchResponse) => `m${m.id}`
 
 async function loadMatches(id: number): Promise<InboundMatchesResponse> {
 	const res = await client.get<InboundMatchesResponse>(`${CRM}/inbound/enquiries/${id}/matches`)
-	if (Object.values(res.lanes).some((rows) => rows.length)) return res
-	// Matches are computed on request; a lead nobody has matched yet gets one run.
-	return client.post<InboundMatchesResponse>(`${CRM}/inbound/enquiries/${id}/matches/refresh`)
+	return res
+}
+
+export async function refreshLeadMatches(id: number): Promise<Written<null>> {
+	await client.post<InboundMatchesResponse>(`${CRM}/inbound/enquiries/${id}/matches/refresh`)
+	return done(null)
 }
 
 export async function leadMatches(id: number): Promise<LeadMatches> {
@@ -791,8 +826,8 @@ const ownerPropertyChip = (p: CrmOwnerProperty): Chip =>
 		? {
 				label:
 					p.ownership_status === 'former_owner'
-						? 'Unverified former owner'
-						: 'Unverified current candidate',
+						? 'Unmatched former owner'
+						: 'Unmatched current owner',
 				tone: 'amber'
 			}
 		: OWNERSHIP[p.ownership_status]
@@ -822,7 +857,7 @@ function ownerRow(p: CrmOwnerProfile, ws: CrmOwnerWorkspaceSummary | undefined):
 		tag: properties.some(unverifiedOwnerAssociation)
 			? properties.every(unverifiedOwnerAssociation)
 				? ownerPropertyChip(properties[0]).label
-				: 'Includes unverified properties'
+				: 'Includes unmatched properties'
 			: OWNERSHIP[p.highest_ownership_status].label,
 		market_update_due: false,
 		mine: Boolean(ws),
@@ -840,7 +875,7 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 	const transactions = [
 		p.imported_transaction_date && {
 			when: p.imported_transaction_date,
-			what: 'On the agency file',
+			what: 'Agency file',
 			aed: p.imported_transaction_price_aed ?? null
 		},
 		p.registry_sale_date && {
@@ -949,10 +984,7 @@ function ownerImportSources(
 		.sort((a, b) => (a.date ?? '9999').localeCompare(b.date ?? '9999'))
 }
 
-const ownerWorkspaces = () => client.get<CrmOwnerWorkspaceSummary[]>(`${CRM}/owner-workspaces`)
-
-/** Tabs whose count covers only the page of 500 in view (none since the backend filters them). */
-const PAGE_ONLY_TABS: OwnerTab[] = []
+const ownerWorkspaces = () => sharedRead<CrmOwnerWorkspaceSummary[]>(`${CRM}/owner-workspaces`)
 
 /** The tabs the backend filters for the whole file, and the query for each. */
 const SERVER_TABS = {
@@ -966,10 +998,9 @@ type ServerTab = keyof typeof SERVER_TABS
 const isServerTab = (t: OwnerTab): t is ServerTab => t in SERVER_TABS
 
 /**
- * One page (500) of the owner file. All, Just sold (every former owner), 3+ units and Next event
- * (lease ends within 90 days) come from the backend for the whole file, so their counts and rows
- * are complete. My contacts counts the whole workspace list; its rows, Update due and the source,
- * area, bedrooms and type filters work on the page in view.
+ * One page of the owner file. Supported tabs are filtered before paging by the backend.
+ * Source, area, bedrooms, type, units and legacy workspace tabs apply to the loaded page;
+ * pageFiltered keeps the UI from presenting those rows as a complete file-wide result.
  */
 export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse> {
 	const registry = (tab: ServerTab, limit: number, offset: number) =>
@@ -987,22 +1018,12 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 			})
 		)
 	const current: ServerTab = isServerTab(p.tab) ? p.tab : 'all'
-	const others = (Object.keys(SERVER_TABS) as ServerTab[]).filter((t) => t !== current)
-	// The page in view, plus each other server tab's total (one row each) for its count.
+	// Only the visible page is needed; the current UI does not display cross-tab totals.
 	const limit = p.limit ?? LIST_LIMIT
-	const [res, ws, ...otherTotals] = await Promise.all([
-		registry(current, limit, p.offset ?? 0),
-		ownerWorkspaces(),
-		...others.map((t) => registry(t, 1, 0))
-	])
-	const totals = Object.fromEntries([
-		[current, res.total],
-		...others.map((t, i) => [t, otherTotals[i].total])
-	]) as Record<ServerTab, number>
+	const [res, ws] = await Promise.all([registry(current, limit, p.offset ?? 0), ownerWorkspaces()])
 	const byKey = new Map(ws.map((w) => [w.owner_key, w]))
 	const all = res.owners.map((o) => ({ o, row: ownerRow(o, byKey.get(o.owner_key)) }))
 	// Source, area, bedrooms, type and units are filtered here, on this page only.
-	const pageOnlyFilter = Boolean(p.source || p.area || p.beds || p.ptype || p.units)
 
 	const matching = all.filter(({ o, row }) => {
 		const props = o.properties ?? []
@@ -1046,28 +1067,16 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 			),
 		update: ({ row }) => row.market_update_due
 	}
-	const counts = Object.fromEntries(
-		(Object.keys(TABS) as OwnerTab[]).map((t) => [t, matching.filter(TABS[t]).length])
-	) as Record<OwnerTab, number>
-	// With no page-only filter, the server tabs cover the whole file (or the whole search result),
-	// and My contacts is the whole workspace list when nothing narrows it.
-	if (!pageOnlyFilter) {
-		Object.assign(counts, totals)
-		if (!p.q) counts.mine = ws.length
-	}
 	// A server tab's rows already come filtered from the backend.
 	const items = (isServerTab(p.tab) ? matching : matching.filter(TABS[p.tab])).map(({ row }) => row)
 
 	return {
 		source_audit: res.source_audit,
 		items,
-		counts,
-		total: items.length,
-		unit_total: items.reduce((n, r) => n + r.units.length, 0),
-		with_event_90: matching.filter(({ o }) => inEvent(o)).length,
-		on_file: totals.all,
+		pageFiltered: Boolean(
+			p.source || p.area || p.beds || p.ptype || p.units || !isServerTab(p.tab)
+		),
 		page: { offset: p.offset ?? 0, limit, total: res.total, loaded: res.owners.length },
-		pageOnlyTabs: PAGE_ONLY_TABS,
 		areas: [
 			...new Set(
 				all.flatMap(({ o }) => (o.properties ?? []).map((x) => x.area_name)).filter(Boolean)
@@ -1099,7 +1108,7 @@ export async function getOwner(id: string): Promise<OwnerDetail> {
 	const [o, ws, imports] = await Promise.all([
 		client.get<CrmOwnerProfile>(`${CRM}/owners/${encodeURIComponent(id)}`),
 		ownerWorkspaces(),
-		client.get<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
+		sharedRead<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
 	])
 	const w = ws.find((x) => x.owner_key === id)
 	return {
@@ -1149,15 +1158,6 @@ export async function addOwnerNote(id: string, note: string): Promise<Written<Ow
 
 /* ── imports ── */
 
-const IMPORT_STATUS: Record<
-	InboundImportResponse['status'],
-	{ status: string; tone: Chip['tone'] }
-> = {
-	processing: { status: 'Processing', tone: 'amber' },
-	completed: { status: 'Imported', tone: 'green' },
-	failed: { status: 'Failed', tone: 'red' }
-}
-
 function importRow(
 	kind: 'Owners' | 'Leads',
 	r: InboundImportResponse | CrmContactImportResponse
@@ -1171,14 +1171,16 @@ function importRow(
 		areas: '—',
 		at: stamp(r.created_at),
 		created: r.created_at,
-		...IMPORT_STATUS[r.status]
+		jobStatus: r.status,
+		status: r.status === 'completed' ? 'Imported' : IMPORT_STATUS[r.status].label,
+		tone: IMPORT_STATUS[r.status].tone
 	}
 }
 
 export async function listImports(): Promise<ImportRequest[]> {
 	const [leads, owners] = await Promise.all([
 		client.get<InboundImportResponse[]>(`${CRM}/inbound/imports`),
-		client.get<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
+		sharedRead<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
 	])
 	return [...leads.map((r) => importRow('Leads', r)), ...owners.map((r) => importRow('Owners', r))]
 		.sort((a, b) => b.created.localeCompare(a.created))
@@ -1412,9 +1414,8 @@ function ownerImportResult(
 }
 
 /**
- * Upload an owners file. The backend reads, matches and saves it before it answers. When the
- * same file was uploaded before, it returns that import instead; the list taken first tells
- * the two apart. A failed import reads as one generic line; the server keeps the details.
+ * Queue an owners file. A reused file returns its existing job or completed import;
+ * the list taken first distinguishes that replay from a newly accepted upload.
  */
 export async function importOwnerFile(
 	file: File,
@@ -1422,7 +1423,7 @@ export async function importOwnerFile(
 ): Promise<Written<OwnerImportResult>> {
 	const problem = ownerFileProblem(file)
 	if (problem) throw new ApiError(problem, 400)
-	const before = await client.get<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
+	const before = await sharedRead<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
 	const known = new Set(before.map((r) => r.id))
 	const fd = new FormData()
 	fd.append('file', file)
@@ -1440,7 +1441,7 @@ export async function importOwnerFile(
 
 /** The organization's owner files, newest first. */
 export async function listOwnerImports(): Promise<OwnerImport[]> {
-	const rows = await client.get<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
+	const rows = await sharedRead<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
 	return [...rows]
 		.sort((a, b) => b.created_at.localeCompare(a.created_at))
 		.map((r) => ({
@@ -1456,7 +1457,7 @@ export async function listOwnerImports(): Promise<OwnerImport[]> {
 
 /** Owner files with counts, sheet mappings and checks, newest first (dashboard and report). */
 export async function listOwnerImportDetails(): Promise<OwnerImportDetail[]> {
-	const rows = await client.get<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
+	const rows = await sharedRead<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
 	return [...rows]
 		.sort((a, b) => b.created_at.localeCompare(a.created_at))
 		.map((r) => {
@@ -1663,7 +1664,7 @@ function marketListing(l: ListingCardResponse): MarketListing | null {
 		value_from_comparables_aed: Math.round(value),
 		discount_pct: discount,
 		discount_chip: discountChip(discount),
-		portal: l.broker_name || 'Market listing',
+		portal: l.broker_name ? `Property Finder · ${l.broker_name}` : 'Property Finder',
 		days_listed: l.listing_age_days ?? 0,
 		// Not tracked by the listings feed.
 		price_cuts: 0,
@@ -1755,11 +1756,13 @@ export async function listRenewals(
 			property_type: p.property_type || undefined,
 			project: p.project || undefined,
 			building: p.building || undefined,
-			limit: p.limit
+			limit: p.limit,
+			offset: p.offset ?? 0
 		}),
 		{ signal }
 	)
 	return {
+		offset: p.offset ?? 0,
 		items: res.leads.map((l) => renewal(l, null)),
 		total: res.total,
 		property_types: res.property_types ?? [],
@@ -1852,14 +1855,18 @@ const RENEWAL_LEADS_LIMIT = 500
  * strip, or a save refreshing every CRM query) share one request.
  */
 let renewalLeadsInFlight: Promise<CrmRenewalLeadsResponse> | null = null
-const renewalLeads = () =>
-	(renewalLeadsInFlight ??= client
+const renewalLeads = () => {
+	if (renewalLeadsInFlight) return renewalLeadsInFlight
+	const request = client
 		.get<CrmRenewalLeadsResponse>(
 			client.withQuery(`${CRM}/renewal-leads`, { limit: RENEWAL_LEADS_LIMIT })
 		)
 		.finally(() => {
-			renewalLeadsInFlight = null
-		}))
+			if (renewalLeadsInFlight === request) renewalLeadsInFlight = null
+		})
+	renewalLeadsInFlight = request
+	return request
+}
 
 export async function feedSummary(): Promise<FeedSummary> {
 	const res = await renewalLeads()
@@ -2052,7 +2059,7 @@ function inboxItem(e: InboundEnquiryResponse, u: AuthMeResponse): InboxItem {
  */
 export async function listInbox(filter: InboxFilter): Promise<InboxResponse> {
 	const get = (q: Record<string, string>) =>
-		client.get<InboundEnquiryListResponse>(
+		sharedRead<InboundEnquiryListResponse>(
 			client.withQuery(`${CRM}/inbound/enquiries`, { ...q, limit: LIST_LIMIT })
 		)
 	const [inbox, unqualified, disqualified, u] = await Promise.all([
@@ -2075,6 +2082,7 @@ export async function listInbox(filter: InboxFilter): Promise<InboxResponse> {
 		dismissed
 	}
 	return {
+		limited: [inbox, unqualified, disqualified].some((page) => page.total > page.enquiries.length),
 		items: lists[filter],
 		counts: {
 			all: lists.all.length,
@@ -2118,13 +2126,14 @@ export async function search(q: string): Promise<SearchResults> {
 
 /** Matches › clients: open leads split by what they look for. */
 export async function matchClients(): Promise<MatchClients> {
-	const { items } = await listLeads({})
+	const { items, limited } = await listLeads({})
 	const client = (lead: LeadRow): MatchClient => ({
 		lead,
 		line: [lead.summary.line, lead.summary.sub].filter(Boolean).join(' · '),
 		pursued: 0
 	})
 	return {
+		limited,
 		ready: items.filter((l) => groupOf(l.lead_type) === 'bt' && !l.off_plan).map(client),
 		offplan: items.filter((l) => l.lead_type === 'buyer' && l.off_plan).map(client),
 		sell: items.filter((l) => groupOf(l.lead_type) === 'sl').map(client)

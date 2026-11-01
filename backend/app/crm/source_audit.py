@@ -22,7 +22,8 @@ from pydantic import (
 )
 from sqlalchemy.exc import IntegrityError
 
-from app.crm import import_repository
+from app.core.async_work import run_in_thread
+from app.crm import import_jobs, import_repository
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactImportResponse,
@@ -311,16 +312,40 @@ def source_claims(payload, *, import_id, list_id, organization_id, now):
 
 async def process_source_audit_import(db, *, upload: UploadFile, name, user_id, organization_id):
     data = await upload.read(MAX_SOURCE_AUDIT_BYTES + 1)
+    if not data:
+        raise HTTPException(status_code=400, detail="File is empty, so nothing was imported.")
+    if len(data) > MAX_SOURCE_AUDIT_BYTES:
+        raise HTTPException(status_code=413, detail="The source audit exceeds 100 MB")
+    record = await import_jobs.enqueue(
+        db,
+        kind="source_only",
+        data=data,
+        filename=Path(upload.filename or "source-audit.json").name,
+        name=name,
+        user_id=user_id,
+        organization_id=organization_id,
+    )
+    return await _response(db, record)
+
+
+async def _execute_source_audit_import(
+    db, *, upload: UploadFile, name, user_id, organization_id, _record=None, _commit=None
+):
+    data = await upload.read(MAX_SOURCE_AUDIT_BYTES + 1)
     if len(data) > MAX_SOURCE_AUDIT_BYTES:
         raise HTTPException(status_code=413, detail="The source audit exceeds 100 MB")
     try:
-        payload = SourceAuditPayload.model_validate_json(data)
+        payload = await run_in_thread(SourceAuditPayload.model_validate_json, data)
     except ValidationError as exc:
         raise HTTPException(
             status_code=422, detail="Invalid source audit: " + str(exc).splitlines()[0]
         ) from exc
     digest = hashlib.sha256(data).hexdigest()
-    existing = await import_repository.find_import_by_digest(db, organization_id, digest)
+    existing = (
+        await import_repository.find_import_by_digest(db, organization_id, digest)
+        if _record is None
+        else None
+    )
     if existing:
         return await _response(db, existing)
     now = datetime.now(timezone.utc)
@@ -353,6 +378,10 @@ async def process_source_audit_import(db, *, upload: UploadFile, name, user_id, 
         },
         summary=summary.model_dump(mode="json"),
     )
+    if _record is not None:
+        for field in ("name", "original_filename", "mapping", "summary", "completed_at", "status"):
+            setattr(_record, field, getattr(record, field))
+        record = _record
     try:
         db.add(record)
         await db.flush()
@@ -381,8 +410,14 @@ async def process_source_audit_import(db, *, upload: UploadFile, name, user_id, 
                 await db.flush()
                 batch = []
         db.add_all(batch)
-        await db.commit()
+        if _commit is not None:
+            await _commit()
+        else:
+            await db.commit()
     except IntegrityError:
+        if _record is not None:
+            await db.rollback()
+            raise
         await db.rollback()
         existing = await import_repository.find_import_by_digest(db, organization_id, digest)
         if existing:

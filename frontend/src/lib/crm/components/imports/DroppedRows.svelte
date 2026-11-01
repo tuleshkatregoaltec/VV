@@ -136,14 +136,7 @@ const reasons = Object.keys(DROP_REASON_INFO) as DropReason[]
 												<dt>What happened</dt>
 												<dd>{detail.what}</dd>
 												<dt>When</dt>
-												<dd>
-													{DROP_STAGE_LABEL[detail.stage]}
-													<span class="sub">
-														{detail.stage === 'before_match'
-															? '— while reading the file; this row was never checked against sales records.'
-															: '— Sales records were checked first, then the row was dropped.'}
-													</span>
-												</dd>
+												<dd>{DROP_STAGE_LABEL[detail.stage]}</dd>
 												<dt>Rule</dt>
 												<dd>{detail.rule}</dd>
 												<dt>To keep it</dt>

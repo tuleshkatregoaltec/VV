@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.async_work import run_in_thread
 from app.crm import owner_queries, owner_repository
 from app.crm.identity import (
     _OWNERSHIP_PRIORITY,
@@ -20,6 +21,8 @@ from app.crm.identity import (
     _normalize_phone,
     _normalize_unit,
     _usable_project_name,
+    has_usable_contact,
+    usable_channels,
 )
 from app.crm.import_context import property_details
 from app.crm.import_models import (
@@ -193,10 +196,11 @@ def _assessed_list_summary(
             and _source_contact_ready(
                 row.get("event_assessed_status", row["assessed_status"]), row.get("party_role")
             )
-            and bool(
-                _normalize_phone(row.get("phone_primary"))
-                or _normalize_phone(row.get("phone_alternate"))
-                or _normalize_email(row.get("email_primary"))
+            and has_usable_contact(
+                row.get("phone_primary"),
+                row.get("phone_alternate"),
+                row.get("email_primary"),
+                row.get("broker_contact"),
             )
             for row in best
         ),
@@ -585,19 +589,18 @@ def _assessed_profiles(
             )
         )
         best = max(events, key=lambda row: (row["confidence_score"], row["id"]))
-        phones = list(
-            dict.fromkeys(
-                phone
-                for row in events
-                for field in ("phone_primary", "phone_alternate")
-                if (phone := _normalize_phone(row.get(field)))
+        # a licensed broker's number or address is not the owner's: never a channel to reach them
+        channels = [
+            usable_channels(
+                row.get("phone_primary"),
+                row.get("phone_alternate"),
+                row.get("email_primary"),
+                row.get("broker_contact"),
             )
-        )
-        emails = list(
-            dict.fromkeys(
-                email for row in events if (email := _normalize_email(row.get("email_primary")))
-            )
-        )
+            for row in events
+        ]
+        phones = list(dict.fromkeys(phone for found, _ in channels for phone in found))
+        emails = list(dict.fromkeys(email for _, found in channels for email in found))
         profile = CrmOwnerProfile(
             owner_key=read_keys[canonical],
             contact_name=best["contact_name"],
@@ -641,7 +644,7 @@ async def _profiles_for_snapshot(snapshot: OwnerAssessmentSnapshot) -> dict[str,
     async with _owner_profiles_lock:
         if _owner_profiles_cache and _owner_profiles_cache[0] is snapshot:
             return _owner_profiles_cache[1]
-        profiles = await asyncio.to_thread(_build_snapshot_profiles, snapshot)
+        profiles = await run_in_thread(_build_snapshot_profiles, snapshot)
         _owner_profiles_cache = (snapshot, profiles)
         return profiles
 
@@ -847,7 +850,7 @@ async def get_owner_registry(
         profiles = list(full_profiles.values())
     else:
         rows = [row for row in snapshot.rows if row["list_id"] == list_id]
-        profiles = await asyncio.to_thread(
+        profiles = await run_in_thread(
             _assessed_profiles, rows, identity_rows=snapshot.rows, snapshot=snapshot
         )
     full_by_key = {profile.owner_key: profile for profile in full_profiles.values()}

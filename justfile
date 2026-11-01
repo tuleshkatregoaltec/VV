@@ -178,3 +178,6 @@ owner-recovery *args:
 # Export only the fixed experiment's unresolved rows, including original columns.
 export-unresolved-owner-rows *args:
 	cd backend && uv run python -m scripts.crm.export_unresolved_owner_rows "$@"
+# Run one resource-bounded import at a time, separate from the HTTP process.
+crm-import-worker *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m app.crm.import_worker {{args}}

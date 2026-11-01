@@ -106,6 +106,7 @@ async function open(l: LeadRow) {
 	if (!l.lease) return
 	const leaseId = l.lease.id
 	const r = await write({
+		domain: 'leads',
 		call: () => crm.leads.openVitevue(leaseId),
 		success: `${l.lease.unit} is now a lead`
 	})
@@ -125,7 +126,9 @@ const typeLine = (l: LeadRow) =>
 		.join(' · ')
 </script>
 
-<svelte:head><title>Leads · CRM Beta</title></svelte:head>
+<svelte:head><title>Leads · CRM</title></svelte:head>
+
+{#if leads.data?.limited}<p class="small muted">Showing the first 500 stored leads and up to 500 lease leads. Filters and counts apply to loaded rows.</p>{/if}
 
 <PageHeader
 	title="Leads"
@@ -154,14 +157,14 @@ const typeLine = (l: LeadRow) =>
 	</span>
 	{#if feed.data && !feed.data.areas.length}
 		<span class="sep">·</span>
-		<span class="muted">Pick your areas to get renewal leads in the Inbox</span>
+		<span class="muted">No areas selected</span>
 	{:else if feed.data}
 		<span class="sep">·</span>
 		<b>{feed.data.areas.join(', ')}</b>
 		<span class="sep">·</span>
 		<span><b class="num">{fmt(feed.data.window_total)}</b> units</span>
 		<span class="sep">·</span>
-		<span><b class="num">{fmt(feed.data.on_file)}</b> with a known owner</span>
+		<span><b class="num">{fmt(feed.data.on_file)}</b> with a known owner in the loaded lease leads</span>
 		<span class="sep">·</span>
 		<span><b class="num">{fmt(feed.data.entered_today)}</b> entered the inbox today</span>
 	{:else if feed.isError}
@@ -251,22 +254,11 @@ const typeLine = (l: LeadRow) =>
 			value={group}
 			onselect={pickGroup}
 		/>
-		<span class="muted small">
-			{boardStages.map((s) => s.label).join(' → ')}
-			{#if LEAD_GROUPS[group].proposal}
-				<span
-					class="chip outline"
-					title="Seller and landlord stages were not named on the 6 Oct call. This is a proposal."
-				>
-					Proposal
-				</span>
-			{/if}
-		</span>
 	</div>
 {/if}
 
 {#if leads.data?.vitevue_unavailable}
-	<ErrorLine bar message="Vitevue lease leads could not load. Your agency's own leads are listed." onretry={() => leads.refetch()} />
+	<ErrorLine bar message="Lease leads could not load." onretry={() => leads.refetch()} />
 {/if}
 {#if leads.isError && leads.data}
 	<ErrorLine bar message={errorText(leads.error)} onretry={() => leads.refetch()} />
@@ -364,7 +356,7 @@ const typeLine = (l: LeadRow) =>
 											>
 										</Empty>
 									{:else}
-										<Empty text="No leads yet. Enquiries land in the Inbox first.">
+										<Empty text="No leads yet.">
 											<button type="button" class="btn sm" onclick={() => panel.open({ kind: 'new-lead' })}>
 												New lead
 											</button>

@@ -1,6 +1,7 @@
 import json
 from datetime import date
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -16,6 +17,7 @@ from fastapi import (
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription
+from app.crm.execution import expensive_crm
 from app.crm.import_models import (
     CrmContactImportPreview,
     CrmContactImportRename,
@@ -121,8 +123,34 @@ from app.crm.workspaces import (
     update_lead_workspace,
 )
 from app.postgres import get_db_session
+from app.postgres.actor_context import apply_actor_context, transaction_actor
 
-router = APIRouter(prefix="/api/v1/crm", tags=["crm"])
+
+async def _crm_actor(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    with transaction_actor(
+        actor_id=str(context.user.id),
+        organization_id=str(context.organization.id),
+        request_id=uuid4().hex,
+    ):
+        # Authorization can already have opened this same session's transaction.
+        await apply_actor_context(db)
+        yield
+
+
+async def _expensive_crm(context: AuthContext = Depends(require_active_subscription)):
+    async with expensive_crm(str(context.organization.id)):
+        yield
+
+
+# Every CRM entry can compose assessments or warehouse operations, including aliases.
+router = APIRouter(
+    prefix="/api/v1/crm",
+    tags=["crm"],
+    dependencies=[Depends(_crm_actor), Depends(_expensive_crm)],
+)
 
 
 def _auth_ids(auth: AuthContext) -> tuple[str, str]:
@@ -271,7 +299,11 @@ async def crm_update_inbound_match(
     )
 
 
-@router.post("/inbound/imports", response_model=InboundImportResponse, status_code=201)
+@router.post(
+    "/inbound/imports",
+    response_model=InboundImportResponse,
+    status_code=202,
+)
 async def crm_inbound_import(
     file: UploadFile = File(...),
     name: str = Form(default="", max_length=200),
@@ -297,7 +329,10 @@ async def crm_inbound_import(
     )
 
 
-@router.post("/inbound/imports/preview", response_model=InboundImportPreviewResponse)
+@router.post(
+    "/inbound/imports/preview",
+    response_model=InboundImportPreviewResponse,
+)
 async def crm_preview_inbound_import(
     file: UploadFile = File(...),
     campaign_context: str = Form(default="", max_length=4_000),
@@ -330,7 +365,7 @@ async def crm_delete_inbound_import(
 @router.post(
     "/contact-imports",
     response_model=CrmContactImportResponse,
-    status_code=201,
+    status_code=202,
 )
 async def crm_contact_import(
     file: UploadFile = File(...),
@@ -357,7 +392,10 @@ async def crm_contact_import(
     )
 
 
-@router.post("/contact-imports/preview", response_model=CrmContactImportPreview)
+@router.post(
+    "/contact-imports/preview",
+    response_model=CrmContactImportPreview,
+)
 async def crm_contact_import_preview(
     file: UploadFile = File(...),
     context: AuthContext = Depends(require_active_subscription),
@@ -371,7 +409,7 @@ async def crm_contact_import_preview(
 @router.post(
     "/contact-imports/source-only",
     response_model=CrmContactImportResponse,
-    status_code=201,
+    status_code=202,
 )
 async def crm_source_only_import(
     file: UploadFile = File(...),
@@ -527,7 +565,7 @@ async def crm_contact_list(
     ),
     match_outcome: list[str] | None = Query(
         default=None,
-        description="Keep rows with one of these match outcomes (for example `lender`).",
+        description="Keep rows with one of these match outcomes (for example `lender` or `broker`).",
     ),
     search: str | None = Query(default=None, max_length=160),
     limit: int = Query(default=100, ge=1, le=500),
@@ -703,10 +741,7 @@ async def crm_owner_history(
     )
 
 
-@router.get(
-    "/owners/{owner_key}",
-    response_model=CrmOwnerProfile,
-)
+@router.get("/owners/{owner_key}", response_model=CrmOwnerProfile)
 async def crm_owner_profile(
     owner_key: str,
     context: AuthContext = Depends(require_active_subscription),
@@ -723,6 +758,7 @@ async def crm_owner_profile(
 
 @router.get("/dashboard", response_model=CrmDashboardResponse)
 async def crm_dashboard(
+    request: Request,
     status: str | None = Query(
         default=None, pattern="^(expired|expiring_30|expiring_60|expiring_90)$"
     ),
@@ -741,20 +777,23 @@ async def crm_dashboard(
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Return actionable lease-expiry leads and location summaries."""
-    return await get_dashboard(
-        status=status,
-        priority=priority,
-        asset_class=asset_class,
-        property_type=property_type,
-        area=area,
-        project=project,
-        building=building,
-        search=search,
-        breakdown=breakdown,
-        expired_days=expired_days,
-        limit=limit,
-        offset=offset,
-        as_of=as_of,
+    return await _until_disconnect(
+        request,
+        get_dashboard(
+            status=status,
+            priority=priority,
+            asset_class=asset_class,
+            property_type=property_type,
+            area=area,
+            project=project,
+            building=building,
+            search=search,
+            breakdown=breakdown,
+            expired_days=expired_days,
+            limit=limit,
+            offset=offset,
+            as_of=as_of,
+        ),
     )
 
 
@@ -877,6 +916,7 @@ async def crm_open_renewal_lead(
 
 @router.get("/leads/{lead_id}", response_model=CrmLeadDetailResponse)
 async def crm_lead_detail(
+    request: Request,
     lead_id: str,
     as_of: date | None = Query(default=None),
     context: AuthContext = Depends(require_active_subscription),
@@ -884,8 +924,11 @@ async def crm_lead_detail(
 ):
     """Return the evidence timeline and recommended action for one lead."""
     user_id, organization_id = _auth_ids(context)
-    return await get_renewal_detail(
-        db, lead_id=lead_id, as_of=as_of, user_id=user_id, organization_id=organization_id
+    return await _until_disconnect(
+        request,
+        get_renewal_detail(
+            db, lead_id=lead_id, as_of=as_of, user_id=user_id, organization_id=organization_id
+        ),
     )
 
 
@@ -907,14 +950,18 @@ async def crm_lead_contacts(
     )
 
 
-@router.get("/leads/{lead_id}/report", response_model=CrmPropertyReportResponse)
+@router.get(
+    "/leads/{lead_id}/report",
+    response_model=CrmPropertyReportResponse,
+)
 async def crm_property_report(
+    request: Request,
     lead_id: str,
     as_of: date | None = Query(default=None),
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Build a one-year property report with sales, rentals, and indicative analysis."""
-    return await get_property_report(lead_id, as_of=as_of)
+    return await _until_disconnect(request, get_property_report(lead_id, as_of=as_of))
 
 
 @router.get("/workspaces", response_model=list[CrmWorkspaceSummary])
@@ -931,7 +978,10 @@ async def crm_workspaces(
     )
 
 
-@router.get("/workspaces/{lead_id}", response_model=CrmWorkspaceResponse)
+@router.get(
+    "/workspaces/{lead_id}",
+    response_model=CrmWorkspaceResponse,
+)
 async def crm_lead_workspace(
     lead_id: str,
     context: AuthContext = Depends(require_active_subscription),
@@ -1000,7 +1050,10 @@ async def crm_delete_note(
     return Response(status_code=204)
 
 
-@router.get("/saved-leads", response_model=list[CrmSavedLeadResponse])
+@router.get(
+    "/saved-leads",
+    response_model=list[CrmSavedLeadResponse],
+)
 async def crm_saved_leads(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),

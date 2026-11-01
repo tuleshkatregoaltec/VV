@@ -24,21 +24,23 @@ interface Item {
 	countLabel?: string
 }
 
-/** Group CRM workflows by purpose, following the Market sidebar hierarchy. */
+/**
+ * v2 sidebar (6 Oct): Agent · Home, Leads, Inbox, Matches, Owners, Deals, Calendar, Assistant; Assets
+ * stays until the founders decide (open question 3). Manager · Manager view (8 Oct) opens the lead
+ * handout setting the Inbox depends on; the rest of Manager view is out of this build.
+ * Counts: new leads, inbox waiting for me, open deals, today's events.
+ */
 const groups = $derived<{ label: string; items: Item[] }[]>([
 	{
-		label: 'CRM',
-		items: [{ href: '/crm', label: 'Home', icon: House, count: null }]
-	},
-	{
-		label: 'Leads and contacts',
+		label: 'Agent',
 		items: [
+			{ href: '/crm', label: 'Home', icon: House, count: null },
 			{
 				href: '/crm/leads',
 				label: 'Leads',
 				icon: User,
 				count: counts?.new_leads ?? null,
-				countLabel: 'new'
+				countLabel: counts?.limited ? 'new in loaded leads' : 'new'
 			},
 			{
 				href: '/crm/inbox',
@@ -48,41 +50,31 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 				countLabel: 'open'
 			},
 			{ href: '/crm/matches', label: 'Matches', icon: CircleDot, count: null },
-			{ href: '/crm/owners', label: 'Owners', icon: Building2, count: null }
-		]
-	},
-	{
-		label: 'Deals and properties',
-		items: [
+			{ href: '/crm/owners', label: 'Owners', icon: Building2, count: null },
 			{
 				href: '/crm/deals',
-				label: 'Deals',
+				label: 'Deals · coming soon',
 				icon: FileText,
 				count: counts?.open_deals ?? null,
 				countLabel: 'open'
 			},
-			{ href: '/crm/assets', label: 'Assets', icon: LayoutGrid, count: null }
-		]
-	},
-	{
-		label: 'Tools',
-		items: [
 			{
 				href: '/crm/calendar',
-				label: 'Calendar',
+				label: 'Calendar · coming soon',
 				icon: CalendarDays,
 				count: counts?.events_today ?? null,
 				countLabel: 'today'
 			},
-			{ href: '/crm/assistant', label: 'Assistant', icon: Send, count: null }
+			{ href: '/crm/assistant', label: 'Assistant · coming soon', icon: Send, count: null },
+			{ href: '/crm/assets', label: 'Assets', icon: LayoutGrid, count: null }
 		]
 	},
 	{
-		label: 'Management',
+		label: 'Manager',
 		items: [
 			{
 				href: '/crm/settings',
-				label: 'Manager view',
+				label: 'Manager view · coming soon',
 				icon: ChartNoAxesColumn,
 				count: counts?.waiting ?? null,
 				countLabel: 'waiting to assign'
@@ -107,7 +99,7 @@ const path = $derived(page.url.pathname.replace(/\/$/, ''))
 					class="nav-i"
 					href={it.href}
 					title={it.label}
-					aria-current={path === it.href || (it.href !== '/crm' && path.startsWith(`${it.href}/`)) ? 'page' : undefined}
+					aria-current={path === it.href ? 'page' : undefined}
 					onclick={() => (chrome.sbOpen = false)}
 				>
 					<it.icon size={16} aria-hidden="true" />

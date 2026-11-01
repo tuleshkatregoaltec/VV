@@ -62,6 +62,7 @@ async function submit(e: SubmitEvent) {
 	}
 	saving = true
 	const r = await write({
+		domain: 'leads',
 		call: () =>
 			crm.leads.create({
 				name: name.trim(),

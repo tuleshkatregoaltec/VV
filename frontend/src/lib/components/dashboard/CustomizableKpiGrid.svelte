@@ -6,7 +6,6 @@ import {
 	BarChart3,
 	Building2,
 	Check,
-	Clock3,
 	Columns3,
 	GripVertical,
 	Home,
@@ -40,6 +39,7 @@ type KpiCard = {
 	value: string
 	subtitle: string
 	trend?: { value: string; direction: 'up' | 'down' }
+	isDefault?: boolean
 	loading?: boolean
 }
 
@@ -47,6 +47,7 @@ type CardDefinition = {
 	id: CardId
 	title: string
 	description: string
+	isDefault?: boolean
 }
 
 type DateRange = {
@@ -75,27 +76,32 @@ const CARD_CATALOG: CardDefinition[] = [
 	{
 		id: 'mtd-transactions',
 		title: 'Latest month transactions',
-		description: 'Count and AED value for the latest month available in market data.'
+		description: 'Count and AED value for the latest month available.',
+		isDefault: true
 	},
 	{
 		id: 'avg-price-sqft',
 		title: 'Avg price/sq ft',
-		description: 'Dubai-wide residential sale price converted to square feet.'
+		description: 'Dubai-wide residential sale price converted to square feet.',
+		isDefault: true
 	},
 	{
 		id: 'completed-units-ytd',
 		title: 'Completed units YTD',
-		description: 'Completed unit movement through the latest available data month.'
+		description: 'Completed unit movement through the latest available data month.',
+		isDefault: true
 	},
 	{
 		id: 'active-offplan-projects',
 		title: 'Active off-plan projects',
-		description: 'Active and upcoming project count from the supply catalogue.'
+		description: 'Active and upcoming project count from the supply catalogue.',
+		isDefault: true
 	},
 	{
 		id: 'gross-yield',
 		title: 'Residential gross yield',
-		description: 'Median registered rent divided by median sale price.'
+		description: 'Median registered rent divided by median sale price.',
+		isDefault: true
 	},
 	{
 		id: 'avg-sale-price',
@@ -269,7 +275,7 @@ let selectedCardIds = $state<CardId[]>(loadCardIds())
 const marketTrendQuery = createQuery(() => analyticsQueries.marketTrend(365))
 const latestSalesTransactionQuery = createQuery(() => ({
 	queryKey: ['dashboard', 'latest-sales-transaction', 'Residential'] as const,
-	// The last 90 days: an unbounded request de-duplicates all DXBI history for one date.
+	// The last 90 days: an unbounded request de-duplicates the full history for one date.
 	queryFn: () =>
 		transactions.sales({ property_usage: 'Residential', limit: 1, timeframe_days: 90 }),
 	staleTime: 30 * 60 * 1000
@@ -357,7 +363,8 @@ function buildCard(id: CardId): KpiCard {
 	const definition = cardDefinition(id)
 	const base = {
 		id,
-		title: definition.title
+		title: definition.title,
+		isDefault: definition.isDefault
 	}
 
 	if (id === 'mtd-transactions') {
@@ -391,7 +398,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatWhole(pipelineCompletedUnitsYtd()),
-			subtitle: 'Market delivery curve · YTD',
+			subtitle: 'Year to date',
 			loading: latestSalesTransactionQuery.isPending || pipelineQuery.isPending
 		}
 	}
@@ -400,7 +407,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatWhole(activeProjectsQuery.data?.total),
-			subtitle: 'Active and upcoming projects',
+			subtitle: '',
 			loading: activeProjectsQuery.isPending
 		}
 	}
@@ -409,7 +416,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatPct(grossYieldPct()) ?? '—',
-			subtitle: 'Latest 12m rent/sale evidence',
+			subtitle: 'Trailing 12 months',
 			loading:
 				latestSalesTransactionQuery.isPending ||
 				(Boolean(rentalTrailingYearRange) && annualRentQuery.isPending) ||
@@ -421,7 +428,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatCurrencyCompact(monthlySalesQuery.data?.summary.avg_price),
-			subtitle: 'Residential average sale ticket',
+			subtitle: '',
 			trend: trendFromPct(marketTrendQuery.data?.avg_price_change_pct),
 			loading:
 				latestSalesTransactionQuery.isPending ||
@@ -444,7 +451,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatWhole(pipelineForwardUnits()),
-			subtitle: 'Forward delivery pipeline',
+			subtitle: '',
 			loading: activeProjectsQuery.isPending
 		}
 	}
@@ -452,7 +459,7 @@ function buildCard(id: CardId): KpiCard {
 	return {
 		...base,
 		value: formatCurrencyCompact(annualRentQuery.data?.summary.avg_annual_rent),
-		subtitle: 'Registered residential contracts · trailing 12 months',
+		subtitle: 'Trailing 12 months',
 		loading:
 			latestSalesTransactionQuery.isPending ||
 			(Boolean(rentalTrailingYearRange) && annualRentQuery.isPending)
@@ -615,7 +622,6 @@ function resetCards() {
 <section class="mb-3">
 	<div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
-			<p class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Market KPIs</p>
 			<h2 class="mt-1 text-base font-semibold text-fg-1">Key metrics</h2>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
@@ -658,7 +664,7 @@ function resetCards() {
 							Card library
 						</p>
 						<h3 class="mt-1 text-sm font-semibold text-fg-1">
-							{paletteDropActive ? 'Release to remove' : 'Drag cards into the dashboard'}
+							{paletteDropActive ? 'Release to remove' : 'Drag cards to add'}
 						</h3>
 					</div>
 					<span class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
@@ -690,6 +696,13 @@ function resetCards() {
 							<div class="min-w-0 flex-1">
 								<div class="flex items-center gap-2">
 									<p class="truncate text-sm font-semibold text-fg-1">{card.title}</p>
+									{#if card.isDefault}
+										<span
+											class="rounded-sm border border-border bg-card px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-fg-4"
+										>
+											DLD
+										</span>
+									{/if}
 								</div>
 								<p class="mt-1 line-clamp-2 text-xs leading-4 text-fg-4">{card.description}</p>
 							</div>
@@ -796,8 +809,4 @@ function resetCards() {
 		</div>
 	</div>
 
-	<div class="mt-2 flex items-center gap-1.5 text-xs text-fg-4">
-		<Clock3 size={13} strokeWidth={1.8} />
-		<span>Card selection is saved on this device.</span>
-	</div>
 </section>

@@ -11,7 +11,7 @@ type ExportAction = {
 
 let {
 	title = 'Dataset',
-	description = 'Visible columns and selected rows update this view.',
+	description = '',
 	columns = [],
 	data = [],
 	emptyMessage = 'No data available',
@@ -174,7 +174,7 @@ function getRenderKey(row: any, index: number): string {
 			<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">
 				{title}
 			</p>
-			<p class="mt-1 text-sm text-fg-3">{description}</p>
+			{#if description}<p class="mt-1 text-sm text-fg-3">{description}</p>{/if}
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			{#if selectable && selectedIds.size > 0}

@@ -11,24 +11,18 @@ import InfoTip from '$lib/crm/components/ui/InfoTip.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import QueryView from '$lib/crm/components/ui/QueryView.svelte'
 import { fmt, plural } from '$lib/crm/format'
+import { importIsActive, IMPORT_STATUS as STATUS } from '$lib/crm/importStatus'
 import { crmQueries } from '$lib/crm/queries'
 import { panel } from '$lib/crm/stores/panel.svelte'
 
 /**
- * Owner files, laid out like the mock's "Owner file and import requests" card: one row per file
- * with what it held, how many of its distinct units were confirmed with a sale, when it was
- * imported and its status. ⚠ marks a failed import or a sheet whose mapping dropped rows or left
- * them without a property. The org-wide ownership summary sits below the files.
+ * Owner files: one row per file with what it held, how many of its distinct units were mapped to
+ * a sale, when it was imported and its status. ⚠ marks a failed import or a sheet whose mapping
+ * dropped rows or left them without a property. The org-wide ownership summary sits below.
  */
 const imports = createQuery(() => crmQueries.ownerImportDetails())
 
-const STATUS = {
-	completed: { label: 'Completed', tone: 'green' },
-	processing: { label: 'Processing', tone: 'amber' },
-	failed: { label: 'Failed', tone: 'red' }
-} as const
-
-/** "Completed · 30,312 kept · 62 dropped", like the mock's "Approved · 198 added · 16 duplicates merged". */
+/** "Completed · 30,312 kept · 62 dropped". */
 function statusText(i: OwnerImportDetail) {
 	if (i.status !== 'completed') return STATUS[i.status].label
 	const c = i.counts
@@ -42,9 +36,9 @@ function statusText(i: OwnerImportDetail) {
 		.join(' · ')
 }
 
-/** The header's facts: files, rows and units confirmed across completed files. */
+/** The header's facts: files, rows and units mapped across completed files. */
 function facts(list: OwnerImportDetail[] | undefined) {
-	if (!list?.length) return 'Upload an owner file to check it against sales'
+	if (!list?.length) return ''
 	const done = list.filter((i) => i.status === 'completed')
 	const rows = done.reduce((t, i) => t + i.counts.rows, 0)
 	const matched = done.flatMap((i) => (i.counts.ownerMatch ? [i.counts.ownerMatch.headline] : []))
@@ -53,8 +47,7 @@ function facts(list: OwnerImportDetail[] | undefined) {
 	return [
 		plural(list.length, 'file'),
 		`${fmt(rows)} rows`,
-		total ? `${fmt(units)} of ${fmt(total)} units confirmed with a sale` : '',
-		'checked against sales records'
+		total ? `${fmt(units)} of ${fmt(total)} units mapped` : ''
 	]
 		.filter(Boolean)
 		.join(' · ')
@@ -70,7 +63,7 @@ const problems = (i: OwnerImportDetail) => [
 const upload = () => panel.open({ kind: 'new-import', ownersOnly: true })
 </script>
 
-<svelte:head><title>Owner imports · CRM Beta</title></svelte:head>
+<svelte:head><title>Owner imports · CRM</title></svelte:head>
 
 <PageHeader title="Owner imports" facts={facts(imports.data)}>
 	{#snippet right()}
@@ -81,16 +74,13 @@ const upload = () => panel.open({ kind: 'new-import', ownersOnly: true })
 
 <section class="card" aria-labelledby="files-h">
 	<div class="ch">
-		<h2 id="files-h">
-			Owner files
-			<span class="facts">Vitevue does not provide or sell owner data · each file stays in your workspace</span>
-		</h2>
+		<h2 id="files-h">Owner files</h2>
 		<button type="button" class="btn ghost sm" onclick={upload}>Import a file</button>
 	</div>
 	<QueryView query={imports} rows={6}>
 		{#snippet children(list)}
 			{#if !list.length}
-				<Empty text="No owner files imported yet. Upload a CSV or XLSX of owners to check it against sales." />
+				<Empty text="No owner files imported yet." />
 			{:else}
 				<div class="tblwrap">
 					<table class="tbl">
@@ -98,7 +88,7 @@ const upload = () => panel.open({ kind: 'new-import', ownersOnly: true })
 							<tr>
 								<th>File</th>
 								<th>What</th>
-								<th>Units confirmed</th>
+								<th>Units mapped</th>
 								<th>Imported</th>
 								<th>Status</th>
 							</tr>
@@ -115,7 +105,7 @@ const upload = () => panel.open({ kind: 'new-import', ownersOnly: true })
 									<td data-label="What" class="nowrap">
 										Owners{i.status === 'completed' ? ` · ${fmt(i.counts.rows)} rows` : ''}
 									</td>
-									<td data-label="Units confirmed" class="nowrap">
+									<td data-label="Units mapped" class="nowrap">
 										{#if i.status !== 'completed'}
 											<span class="sub">—</span>
 										{:else if i.counts.ownerMatch}
@@ -153,7 +143,7 @@ const upload = () => panel.open({ kind: 'new-import', ownersOnly: true })
 
 <section class="sec org" aria-label="Ownership across all imports">
 	<h3>Ownership across all imports</h3>
-	<OwnerImportSummary processing={imports.data?.some((i) => i.status === 'processing')} />
+	<OwnerImportSummary processing={imports.data?.some((i) => importIsActive(i.status))} />
 </section>
 
 <style>

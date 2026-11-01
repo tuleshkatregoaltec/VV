@@ -22,6 +22,7 @@ import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
 import Tabs from '$lib/crm/components/ui/Tabs.svelte'
 import { OWNER_PTYPE_OPTIONS, OWNER_SOURCES, stageOf } from '$lib/crm/config'
 import { fmt } from '$lib/crm/format'
+import { importIsActive } from '$lib/crm/importStatus'
 import { crmQueries } from '$lib/crm/queries'
 import { openOwner, panel } from '$lib/crm/stores/panel.svelte'
 import { clearOwnerFilters, ui } from '$lib/crm/stores/ui.svelte'
@@ -82,7 +83,9 @@ const loading = $derived(owners.isPlaceholderData)
 const pageText = $derived(
 	o
 		? o.page.total
-			? `Showing ${fmt(o.page.offset + 1)}–${fmt(o.page.offset + o.page.loaded)} of ${fmt(o.page.total)} owners`
+			? o.pageFiltered
+				? `${fmt(o.items.length)} matching owners on this page · ${fmt(o.page.total)} before page filters`
+				: `Showing ${fmt(o.page.offset + 1)}–${fmt(o.page.offset + o.page.loaded)} of ${fmt(o.page.total)} owners`
 			: 'No owners'
 		: ''
 )
@@ -94,9 +97,8 @@ function goPage(next: number) {
 const filtered = $derived(
 	Boolean(ui.ownerQ || ui.ownerSource || ui.ownerArea || ui.ownerPtype || ui.ownerTransactionMatch)
 )
-const waiting = $derived(imports.data?.filter((r) => r.status === 'Waiting').length ?? 0)
+const waiting = $derived(imports.data?.filter((r) => importIsActive(r.jobStatus)).length ?? 0)
 
-/** v2 tabs (6 Oct, 11:20): All · 3+ units · Next event ≤ 90 days · Just sold · Update due (My contacts removed). */
 const tabs = $derived(
 	(
 		[
@@ -105,13 +107,9 @@ const tabs = $derived(
 			['event', 'Next event ≤ 90 days'],
 			...(o?.source_audit?.mode === 'source_transaction_matched'
 				? []
-				: [['review', o?.source_audit ? 'Unverified candidates' : 'Needs review']])
+				: [['review', o?.source_audit ? 'Candidates' : 'Needs review']])
 		] as [OwnerTab, string][]
-	).map(([id, label]) => ({
-		id,
-		label,
-		hint: o && o.page.total > o.page.limit && o.pageOnlyTabs.includes(id) ? 'this page' : undefined
-	}))
+	).map(([id, label]) => ({ id, label }))
 )
 
 /** "29 current · 40 in total": the list counts only the properties in its view. */
@@ -122,11 +120,11 @@ function unitCount(x: OwnerRow) {
 }
 
 const facts = $derived(
-	o ? `${listId ? 'Selected import' : 'Agency file'} · ${fmt(o.on_file)} people` : ''
+	o ? `${listId ? 'Selected import · ' : ''}${fmt(o.page.total)} owners in this view` : ''
 )
 </script>
 
-<svelte:head><title>Owners · CRM Beta</title></svelte:head>
+<svelte:head><title>Owners · CRM</title></svelte:head>
 
 <PageHeader title="Owners" {facts}>
 	{#snippet right()}
@@ -143,15 +141,9 @@ const facts = $derived(
 
 <Tabs label="Owners" items={tabs} value={ui.ownerTab} onselect={(t) => (ui.ownerTab = t)} />
 
-{#if ui.ownerTab === 'review'}
-	{#if o?.source_audit?.mode === 'source_only'}
-		<div class="notice" role="status">These are unverified source-based candidates. Transaction matching was not run. The workbook audit separately identifies {fmt(o.source_audit.review_reference_count ?? 0)} references needing review; this tab does not represent additional manual review cases.</div>
-	{:else}
-		<div class="notice" role="status">Review people with unresolved claims or properties. Open a person, inspect the original source and transaction evidence, then record a review note. A note does not change the assessment.</div>
-	{/if}
-{/if}
-{#if listId}<p class="small muted">Showing people from the selected import. <a href="/crm/owners?scope=needs_review">{o?.source_audit ? 'All unverified candidates' : 'Review all imports'}</a></p>{/if}
+{#if listId}<p class="small muted"><a href="/crm/owners?scope=needs_review">{o?.source_audit ? 'All candidates' : 'All imports'}</a></p>{/if}
 
+<p class="small muted">Source, type and area filters apply to this page only.</p>
 <div class="filters">
 	<label class="search">
 		<Search size={15} />
@@ -226,7 +218,7 @@ const facts = $derived(
 							<td>
 								<button type="button" class="rowlink" onclick={() => openOwner(x.id)}>{x.name}</button>
 								{#if x.tag}<Chip>{x.tag}</Chip>{/if}
-								{#if x.developer_side_seller}<div class="sub">{x.relationship_role === 'organization' ? 'Developer' : 'Developer-side seller'} · not a former owner</div>{:else if x.relationship_role === 'possible_intermediary'}<div class="sub">Possible intermediary · unverified</div>{:else if x.relationship_role === 'organization'}<div class="sub">Organization in source · role unverified</div>{/if}
+								{#if x.developer_side_seller}<div class="sub">{x.relationship_role === 'organization' ? 'Developer' : 'Developer-side seller'}</div>{:else if x.relationship_role === 'possible_intermediary'}<div class="sub">Possible intermediary</div>{:else if x.relationship_role === 'organization'}<div class="sub">Organization</div>{/if}
 								{#if x.lead}
 									<div class="sub">
 										Lead · {stageOf(x.lead.stage).label}{x.lead.id === null ? ` · ${x.lead.agent}` : ''}
@@ -285,9 +277,7 @@ const facts = $derived(
 		</div>
 		{#if o.page.total > o.page.limit}
 			<div class="pager">
-				<span class="small muted">
-					{pageText} · the source, type and area filters cover this page
-				</span>
+				<span class="small muted">{pageText}</span>
 				<button
 					type="button"
 					class="btn ghost sm"
@@ -319,7 +309,7 @@ const facts = $derived(
 	<div class="ch">
 		<h2 id="imports-h">
 			Owner file and import requests
-			<span class="facts">Vitevue does not provide or sell owner data · {waiting} waiting for the admin</span>
+			<span class="facts">{waiting} waiting</span>
 		</h2>
 		<button type="button" class="btn ghost sm" onclick={() => panel.open({ kind: 'new-import', ownersOnly: true })}>
 			Import a file
@@ -335,7 +325,7 @@ const facts = $derived(
 							{#each list as r (r.id)}
 								<tr>
 									<td class="nm mono">{r.file}</td>
-									<td data-label="What">{r.kind} · {fmt(r.rows)} rows</td>
+									<td data-label="What">{r.kind}{r.jobStatus === 'completed' ? ` · ${fmt(r.rows)} rows` : ''}</td>
 									<td class="sub" data-label="Areas">{r.areas}</td>
 									<td class="sub" data-label="Sent">{r.who} · {r.at}</td>
 									<td data-label="Status"><Chip tone={r.tone}>{r.status}</Chip></td>
@@ -345,7 +335,7 @@ const facts = $derived(
 					</table>
 				</div>
 			{:else}
-				<Empty text="No import requests. Send a CSV of owners or leads for the admin to approve." />
+				<Empty text="No import requests." />
 			{/if}
 		{/snippet}
 	</QueryView>

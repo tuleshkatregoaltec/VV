@@ -423,6 +423,15 @@ def test_aura_plot_preregistration_column_is_used_as_the_villa_identifier():
 @pytest.mark.asyncio
 async def test_delete_import_removes_published_records_and_the_import(monkeypatch):
     monkeypatch.setattr("app.crm.imports.delete_drop_log", AsyncMock())
+    input_lookup = AsyncMock(return_value="private-input")
+
+    async def remove_committed_input(key):
+        assert key == "private-input"
+        assert db.commit.await_count == 1  # Never orphan a still-committed import on rollback.
+
+    cleanup = AsyncMock(side_effect=remove_committed_input)
+    monkeypatch.setattr("app.crm.imports.import_jobs.delete_input_for_import", input_lookup)
+    monkeypatch.setattr("app.crm.imports.import_jobs.remove_input", cleanup)
     record = MagicMock()
     record.mapping = {}
     lookup = MagicMock()
@@ -437,6 +446,8 @@ async def test_delete_import_removes_published_records_and_the_import(monkeypatc
     )
 
     assert db.exec.await_count == 3
+    input_lookup.assert_awaited_once_with(db, record)
+    cleanup.assert_awaited_once_with("private-input")
     db.delete.assert_awaited_once_with(record)
     db.commit.assert_awaited_once()
 

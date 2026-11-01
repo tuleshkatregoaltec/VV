@@ -42,7 +42,7 @@ const value = (x: DealRow) =>
 	x.deal_type === 'rent' ? `${fmt(x.value_aed)}/yr` : short(x.value_aed)
 </script>
 
-<svelte:head><title>Deals · CRM Beta</title></svelte:head>
+<svelte:head><title>Deals · CRM</title></svelte:head>
 
 <PageHeader
 	title="Deals"
@@ -95,7 +95,7 @@ const value = (x: DealRow) =>
 							</tr>
 						{:else}
 							<tr><td colspan="7">
-								<Empty text="No open deals. Move a qualified lead to a deal.">
+								<Empty text="No open deals.">
 									<button type="button" class="btn sm" onclick={() => panel.open({ kind: 'new-deal' })}>＋ Deal</button>
 								</Empty>
 							</td></tr>
@@ -123,7 +123,7 @@ const value = (x: DealRow) =>
 								</td>
 							</tr>
 						{:else}
-							<tr><td colspan="4"><Empty text="Every deal has its documents." /></td></tr>
+							<tr><td colspan="4"><Empty text="No missing documents." /></td></tr>
 						{/each}
 					</tbody>
 				</table>

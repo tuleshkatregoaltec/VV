@@ -312,8 +312,7 @@ $effect(() => {
 	<div class="grid min-h-[240px] place-items-center rounded-md border border-dashed border-border bg-panel p-5 text-center">
 		<div>
 			<p class="text-sm font-semibold text-fg-1">No chart data</p>
-			<p class="mt-1 text-xs leading-5 text-fg-4">Try a broader filter or a longer lookback window.</p>
-		</div>
+					</div>
 	</div>
 {:else}
 	<div class="grid gap-3">

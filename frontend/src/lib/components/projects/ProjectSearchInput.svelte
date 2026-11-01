@@ -112,7 +112,7 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 				oninput={handleInput}
 				onfocus={handleFocus}
 				onblur={handleBlur}
-				placeholder="Search projects, areas, developers..."
+				placeholder="Search projects, areas, developers"
 				class="w-full rounded-md bg-transparent px-4 py-3 pr-10 text-sm text-fg-1 outline-none placeholder-fg-5"
 			/>
 			<div class="absolute right-3 top-1/2 -translate-y-1/2">

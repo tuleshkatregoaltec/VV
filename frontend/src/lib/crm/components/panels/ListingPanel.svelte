@@ -128,7 +128,7 @@ function relist(x: ListingDetail) {
 			<Kv k="Days live" v={x.status === 'live' ? x.days_live : '—'} />
 			<Kv k="Owner" v={x.owner} />
 			<Kv k="Listing agent" v={x.agent} />
-			<Kv k="Latest comparables" v={x.comparables_note} o="Vitevue transactions" wide />
+			<Kv k="Latest comparables" v={x.comparables_note} wide />
 		</div>
 
 		<section class="sec">
@@ -203,7 +203,6 @@ function relist(x: ListingDetail) {
 				{:else}
 					<div class="small muted">No open leads.</div>
 				{/if}
-				<div class="small muted">{x.agent}'s leads: how many and their stage, not names or details.</div>
 			</section>
 		{:else}
 			<section class="sec">
@@ -268,8 +267,6 @@ function relist(x: ListingDetail) {
 				{/if}
 			{:else if x.status === 'expired' && mine}
 				<button type="button" class="btn ghost" onclick={() => relist(x)}>Relist</button>
-			{:else if !mine}
-				<span class="small muted">Ask {x.agent} before sharing it.</span>
 			{/if}
 		{/snippet}
 	</Panel>

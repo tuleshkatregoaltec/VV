@@ -254,7 +254,7 @@ for (const endpoint of ['trends', 'price-distribution', 'pipeline']) {
                 ? page
                       .locator('section')
                       .filter({
-                          has: page.getByText('Recorded pricing trend', {
+                          has: page.getByText('Price Trend', {
                               exact: true,
                           }),
                       })
@@ -377,7 +377,8 @@ test('supply does not present unsupported bedroom estimates as recorded counts',
         path: path.join(evidence, 'supply-area.png'),
         fullPage: false,
     });
-    await expect(pipeline).toContainText('all bedroom types');
+    // No per-bedroom figures are shown for supply, and no caption explains it.
+    await expect(pipeline.getByRole('button', { name: /^\d+ ?BR$/ })).toHaveCount(0);
 });
 
 test('summary failure is explicit', async ({ page }) => {

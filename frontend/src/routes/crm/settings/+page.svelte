@@ -41,21 +41,16 @@ function onkeydown(e: KeyboardEvent, i: number) {
 }
 </script>
 
-<svelte:head><title>Manager view · CRM Beta</title></svelte:head>
+<svelte:head><title>Manager view · CRM</title></svelte:head>
 
-<PageHeader
-	title="Manager view"
-	facts={handout.data
-		? `Lead handout: ${handout.data.options.find((o) => o.id === handout.data?.mode)?.label.toLowerCase()} · default not decided`
-		: ''}
-/>
+<PageHeader title="Manager view" />
 
 {#if handout.data}
 	{@const h = handout.data}
 	<div class="setgrid">
 		<section class="card" aria-labelledby="ho-h">
 			<div class="ch">
-				<h2 id="ho-h">Lead handout <span class="facts">how a waiting enquiry gets an agent</span></h2>
+				<h2 id="ho-h">Lead handout</h2>
 			</div>
 			<div class="cb">
 				<div class="radios" role="radiogroup" aria-labelledby="ho-h">
@@ -94,16 +89,14 @@ function onkeydown(e: KeyboardEvent, i: number) {
 
 		<section class="card" aria-labelledby="st-h">
 			<div class="ch">
-				<h2 id="st-h">Lead stages <span class="facts">per lead type · read only</span></h2>
+				<h2 id="st-h">Lead stages</h2>
 			</div>
 			<div class="list">
 				{#each h.stages as s (s.types)}
 					<div class="li">
 						<span></span>
 						<span><div class="t">{s.types}</div><div class="d">{s.stages.join(' → ')}</div></span>
-						{#if s.proposal}
-							<span class="chip outline" title="Seller and landlord stage names were not set on the 6 Oct call.">Proposal</span>
-						{:else}<span></span>{/if}
+						<span></span>
 					</div>
 				{/each}
 			</div>

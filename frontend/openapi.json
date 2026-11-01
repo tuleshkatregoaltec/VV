@@ -1614,27 +1614,10 @@
 						"required": false,
 						"schema": {
 							"type": "integer",
-							"maximum": 100,
+							"maximum": 500,
 							"minimum": 1,
 							"default": 100,
 							"title": "Limit"
-						}
-					},
-					{
-						"name": "before_id",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "integer",
-									"minimum": 1
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "Before Id"
 						}
 					}
 				],
@@ -1696,277 +1679,6 @@
 				"responses": {
 					"200": {
 						"description": "Successful Response"
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/assistant/actions/proposals": {
-			"post": {
-				"tags": ["assistant_actions", "Assistant actions"],
-				"summary": "Propose Action",
-				"operationId": "assistant_actions-propose_action",
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/ActionProposalRequest"
-							}
-						}
-					}
-				},
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ActionProposalResponse"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			},
-			"get": {
-				"tags": ["assistant_actions", "Assistant actions"],
-				"summary": "List Actions",
-				"operationId": "assistant_actions-list_actions",
-				"parameters": [
-					{
-						"name": "conversation_id",
-						"in": "query",
-						"required": true,
-						"schema": {
-							"type": "integer",
-							"exclusiveMinimum": 0,
-							"title": "Conversation Id"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "array",
-									"items": {
-										"$ref": "#/components/schemas/ActionProposalResponse"
-									},
-									"title": "Response Assistant Actions-List Actions"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/assistant/actions/reminders": {
-			"get": {
-				"tags": ["assistant_actions", "Assistant actions"],
-				"summary": "List Reminders",
-				"operationId": "assistant_actions-list_reminders",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"items": {
-										"$ref": "#/components/schemas/ReminderResponse"
-									},
-									"type": "array",
-									"title": "Response Assistant Actions-List Reminders"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/assistant/actions/viewings": {
-			"get": {
-				"tags": ["assistant_actions", "Assistant actions"],
-				"summary": "List Viewings",
-				"operationId": "assistant_actions-list_viewings",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"items": {
-										"$ref": "#/components/schemas/ViewingResponse"
-									},
-									"type": "array",
-									"title": "Response Assistant Actions-List Viewings"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/assistant/actions/listing-drafts": {
-			"get": {
-				"tags": ["assistant_actions", "Assistant actions"],
-				"summary": "List Listing Drafts",
-				"operationId": "assistant_actions-list_listing_drafts",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"items": {
-										"$ref": "#/components/schemas/ListingDraftResponse"
-									},
-									"type": "array",
-									"title": "Response Assistant Actions-List Listing Drafts"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/assistant/actions/{action_id}": {
-			"get": {
-				"tags": ["assistant_actions", "Assistant actions"],
-				"summary": "Get Action",
-				"operationId": "assistant_actions-get_action",
-				"parameters": [
-					{
-						"name": "action_id",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Action Id"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ActionProposalResponse"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/assistant/actions/{action_id}/confirm": {
-			"post": {
-				"tags": ["assistant_actions", "Assistant actions"],
-				"summary": "Confirm Action",
-				"operationId": "assistant_actions-confirm_action",
-				"parameters": [
-					{
-						"name": "action_id",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Action Id"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ActionProposalResponse"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/assistant/actions/{action_id}/cancel": {
-			"post": {
-				"tags": ["assistant_actions", "Assistant actions"],
-				"summary": "Cancel Action",
-				"operationId": "assistant_actions-cancel_action",
-				"parameters": [
-					{
-						"name": "action_id",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Action Id"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ActionProposalResponse"
-								}
-							}
-						}
 					},
 					"422": {
 						"description": "Validation Error",
@@ -2508,7 +2220,7 @@
 					"required": true
 				},
 				"responses": {
-					"201": {
+					"202": {
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
@@ -2643,7 +2355,7 @@
 					"required": true
 				},
 				"responses": {
-					"201": {
+					"202": {
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
@@ -2723,7 +2435,7 @@
 					"required": true
 				},
 				"responses": {
-					"201": {
+					"202": {
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
@@ -3103,10 +2815,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Keep rows with one of these match outcomes (for example `lender`).",
+							"description": "Keep rows with one of these match outcomes (for example `lender` or `broker`).",
 							"title": "Match Outcome"
 						},
-						"description": "Keep rows with one of these match outcomes (for example `lender`)."
+						"description": "Keep rows with one of these match outcomes (for example `lender` or `broker`)."
 					},
 					{
 						"name": "search",
@@ -10514,175 +10226,6 @@
 				"title": "AcceptInviteResponse",
 				"description": "Response for accepting invitation"
 			},
-			"ActionKind": {
-				"type": "string",
-				"enum": [
-					"create_lead",
-					"update_lead",
-					"assign_lead",
-					"delete_lead",
-					"add_note",
-					"create_reminder",
-					"update_reminder",
-					"delete_reminder",
-					"schedule_viewing",
-					"cancel_viewing",
-					"create_listing_draft",
-					"update_listing_draft",
-					"send_message",
-					"publish_listing",
-					"book_external_viewing"
-				],
-				"title": "ActionKind"
-			},
-			"ActionProposalRequest": {
-				"properties": {
-					"kind": {
-						"$ref": "#/components/schemas/ActionKind"
-					},
-					"conversation_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Conversation Id"
-					},
-					"payload": {
-						"anyOf": [
-							{
-								"$ref": "#/components/schemas/CreateLead"
-							},
-							{
-								"$ref": "#/components/schemas/UpdateLead"
-							},
-							{
-								"$ref": "#/components/schemas/AssignLead"
-							},
-							{
-								"$ref": "#/components/schemas/LeadTarget"
-							},
-							{
-								"$ref": "#/components/schemas/AddNote"
-							},
-							{
-								"$ref": "#/components/schemas/CreateReminder"
-							},
-							{
-								"$ref": "#/components/schemas/UpdateReminder"
-							},
-							{
-								"$ref": "#/components/schemas/DeleteReminder"
-							},
-							{
-								"$ref": "#/components/schemas/ScheduleViewing"
-							},
-							{
-								"$ref": "#/components/schemas/CancelViewing"
-							},
-							{
-								"$ref": "#/components/schemas/CreateListingDraft"
-							},
-							{
-								"$ref": "#/components/schemas/UpdateListingDraft"
-							},
-							{
-								"$ref": "#/components/schemas/SendMessage"
-							},
-							{
-								"$ref": "#/components/schemas/PublishListing"
-							}
-						],
-						"title": "Payload"
-					},
-					"idempotency_key": {
-						"type": "string",
-						"maxLength": 128,
-						"minLength": 8,
-						"pattern": "^[A-Za-z0-9_-]+$",
-						"title": "Idempotency Key"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["kind", "conversation_id", "payload", "idempotency_key"],
-				"title": "ActionProposalRequest"
-			},
-			"ActionProposalResponse": {
-				"properties": {
-					"id": {
-						"type": "string",
-						"title": "Id"
-					},
-					"kind": {
-						"$ref": "#/components/schemas/ActionKind"
-					},
-					"status": {
-						"type": "string",
-						"enum": [
-							"awaiting_confirmation",
-							"succeeded",
-							"cancelled",
-							"expired",
-							"failed",
-							"not_connected",
-							"queued",
-							"unknown"
-						],
-						"title": "Status"
-					},
-					"title": {
-						"type": "string",
-						"title": "Title"
-					},
-					"preview": {
-						"additionalProperties": true,
-						"type": "object",
-						"title": "Preview"
-					},
-					"created_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Created At"
-					},
-					"expires_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Expires At"
-					},
-					"result": {
-						"anyOf": [
-							{
-								"additionalProperties": true,
-								"type": "object"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Result"
-					}
-				},
-				"type": "object",
-				"required": ["id", "kind", "status", "title", "preview", "created_at", "expires_at"],
-				"title": "ActionProposalResponse"
-			},
-			"AddNote": {
-				"properties": {
-					"lead_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Lead Id"
-					},
-					"body": {
-						"type": "string",
-						"maxLength": 4000,
-						"minLength": 1,
-						"title": "Body"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["lead_id", "body"],
-				"title": "AddNote"
-			},
 			"AnalyticsResponse": {
 				"properties": {
 					"timeframe_days": {
@@ -11360,25 +10903,6 @@
 				],
 				"title": "AreaProjectSnapshot"
 			},
-			"AssignLead": {
-				"properties": {
-					"lead_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Lead Id"
-					},
-					"assignee_id": {
-						"type": "string",
-						"maxLength": 128,
-						"minLength": 1,
-						"title": "Assignee Id"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["lead_id", "assignee_id"],
-				"title": "AssignLead"
-			},
 			"AuthMeResponse": {
 				"properties": {
 					"id": {
@@ -11808,19 +11332,6 @@
 				"title": "BuildingUnitType",
 				"description": "Bedroom/type breakdown for a specific building"
 			},
-			"CancelViewing": {
-				"properties": {
-					"viewing_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Viewing Id"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["viewing_id"],
-				"title": "CancelViewing"
-			},
 			"CheckoutSessionRequest": {
 				"properties": {
 					"organization_id": {
@@ -12213,125 +11724,6 @@
 				"type": "object",
 				"title": "CreateConversationRequest",
 				"description": "Request model for creating a new conversation"
-			},
-			"CreateLead": {
-				"properties": {
-					"full_name": {
-						"type": "string",
-						"maxLength": 200,
-						"minLength": 1,
-						"title": "Full Name"
-					},
-					"phone": {
-						"anyOf": [
-							{
-								"type": "string",
-								"maxLength": 80
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Phone"
-					},
-					"email": {
-						"anyOf": [
-							{
-								"type": "string",
-								"maxLength": 320
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Email"
-					},
-					"intent": {
-						"type": "string",
-						"enum": ["unknown", "buy", "rent", "sell", "let"],
-						"title": "Intent",
-						"default": "unknown"
-					},
-					"notes": {
-						"anyOf": [
-							{
-								"type": "string",
-								"maxLength": 4000
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Notes"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["full_name"],
-				"title": "CreateLead"
-			},
-			"CreateListingDraft": {
-				"properties": {
-					"title": {
-						"type": "string",
-						"maxLength": 200,
-						"minLength": 1,
-						"title": "Title"
-					},
-					"description": {
-						"type": "string",
-						"maxLength": 8000,
-						"minLength": 1,
-						"title": "Description"
-					},
-					"price_aed": {
-						"type": "integer",
-						"maximum": 100000000000.0,
-						"exclusiveMinimum": 0.0,
-						"title": "Price Aed"
-					},
-					"location": {
-						"type": "string",
-						"maxLength": 500,
-						"minLength": 1,
-						"title": "Location"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["title", "description", "price_aed", "location"],
-				"title": "CreateListingDraft"
-			},
-			"CreateReminder": {
-				"properties": {
-					"title": {
-						"type": "string",
-						"maxLength": 200,
-						"minLength": 1,
-						"title": "Title"
-					},
-					"due_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Due At"
-					},
-					"lead_id": {
-						"anyOf": [
-							{
-								"type": "integer",
-								"exclusiveMinimum": 0.0
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Lead Id"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["title", "due_at"],
-				"title": "CreateReminder"
 			},
 			"CreateUserRequest": {
 				"properties": {
@@ -12910,7 +12302,7 @@
 					},
 					"status": {
 						"type": "string",
-						"enum": ["processing", "completed", "failed"],
+						"enum": ["queued", "processing", "retry_wait", "completed", "failed"],
 						"title": "Status"
 					},
 					"summary": {
@@ -14727,6 +14119,28 @@
 				"title": "CrmOwnerHistorySummary",
 				"description": "Source rows and evidence associations, not a legal ownership guarantee."
 			},
+			"CrmOwnerMatchSales": {
+				"properties": {
+					"transactions": {
+						"type": "integer",
+						"title": "Transactions",
+						"default": 0
+					},
+					"registry": {
+						"type": "integer",
+						"title": "Registry",
+						"default": 0
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"title": "CrmOwnerMatchSales",
+				"description": "Distinct sales that confirmed rows are tied to, by where the sale came from."
+			},
 			"CrmOwnerMatchSummary": {
 				"properties": {
 					"version": {
@@ -14746,6 +14160,16 @@
 					"rows_without_unit": {
 						"type": "integer",
 						"title": "Rows Without Unit"
+					},
+					"review_reasons": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Review Reasons"
+					},
+					"sales_matched": {
+						"$ref": "#/components/schemas/CrmOwnerMatchSales"
 					}
 				},
 				"type": "object",
@@ -17328,19 +16752,6 @@
 				],
 				"title": "DDAPlotFeature",
 				"description": "DDA GIS plot polygon for map overlay."
-			},
-			"DeleteReminder": {
-				"properties": {
-					"reminder_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Reminder Id"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["reminder_id"],
-				"title": "DeleteReminder"
 			},
 			"DeliveryGroupRow": {
 				"properties": {
@@ -20142,7 +19553,7 @@
 					},
 					"status": {
 						"type": "string",
-						"enum": ["processing", "completed", "failed"],
+						"enum": ["queued", "processing", "retry_wait", "completed", "failed"],
 						"title": "Status"
 					},
 					"summary": {
@@ -20855,19 +20266,6 @@
 				],
 				"title": "LandSaleEvidence"
 			},
-			"LeadTarget": {
-				"properties": {
-					"lead_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Lead Id"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["lead_id"],
-				"title": "LeadTarget"
-			},
 			"ListingAnalyticsResponse": {
 				"properties": {
 					"total": {
@@ -21248,18 +20646,6 @@
 							}
 						],
 						"title": "Broker Logo Url"
-					},
-					"captured_at": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Captured At"
 					},
 					"listed_date": {
 						"anyOf": [
@@ -21679,18 +21065,6 @@
 						],
 						"title": "Broker Logo Url"
 					},
-					"captured_at": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Captured At"
-					},
 					"listed_date": {
 						"anyOf": [
 							{
@@ -22021,39 +21395,6 @@
 				"type": "object",
 				"required": ["listing_id", "listing_mode", "asset_class", "title"],
 				"title": "ListingDetailResponse"
-			},
-			"ListingDraftResponse": {
-				"properties": {
-					"id": {
-						"type": "integer",
-						"title": "Id"
-					},
-					"title": {
-						"type": "string",
-						"title": "Title"
-					},
-					"description": {
-						"type": "string",
-						"title": "Description"
-					},
-					"price_aed": {
-						"type": "integer",
-						"title": "Price Aed"
-					},
-					"location": {
-						"type": "string",
-						"title": "Location"
-					},
-					"publication": {
-						"type": "string",
-						"const": "draft_only",
-						"title": "Publication",
-						"default": "draft_only"
-					}
-				},
-				"type": "object",
-				"required": ["id", "title", "description", "price_aed", "location"],
-				"title": "ListingDraftResponse"
 			},
 			"ListingFiltersResponse": {
 				"properties": {
@@ -26838,19 +26179,6 @@
 				"required": ["property_type", "count", "avg_price", "pct_of_total"],
 				"title": "PropertyTypeBreakdown"
 			},
-			"PublishListing": {
-				"properties": {
-					"listing_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Listing Id"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["listing_id"],
-				"title": "PublishListing"
-			},
 			"RadarBuildingPin": {
 				"properties": {
 					"location_id": {
@@ -26998,37 +26326,6 @@
 				"type": "object",
 				"required": ["reg_type", "count", "avg_price", "pct_of_total"],
 				"title": "RegTypeBreakdown"
-			},
-			"ReminderResponse": {
-				"properties": {
-					"id": {
-						"type": "integer",
-						"title": "Id"
-					},
-					"lead_id": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Lead Id"
-					},
-					"title": {
-						"type": "string",
-						"title": "Title"
-					},
-					"due_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Due At"
-					}
-				},
-				"type": "object",
-				"required": ["id", "lead_id", "title", "due_at"],
-				"title": "ReminderResponse"
 			},
 			"RentalAnalyticsResponse": {
 				"properties": {
@@ -27655,71 +26952,10 @@
 				"title": "RoomAnalytics",
 				"description": "Combined sales + rental + yield metrics per bedroom count"
 			},
-			"ScheduleViewing": {
-				"properties": {
-					"lead_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Lead Id"
-					},
-					"title": {
-						"type": "string",
-						"maxLength": 200,
-						"minLength": 1,
-						"title": "Title"
-					},
-					"starts_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Starts At"
-					},
-					"ends_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Ends At"
-					},
-					"location": {
-						"type": "string",
-						"maxLength": 500,
-						"minLength": 1,
-						"title": "Location"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["lead_id", "title", "starts_at", "ends_at", "location"],
-				"title": "ScheduleViewing"
-			},
-			"SendMessage": {
-				"properties": {
-					"lead_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Lead Id"
-					},
-					"channel": {
-						"type": "string",
-						"enum": ["email", "sms", "whatsapp"],
-						"title": "Channel"
-					},
-					"body": {
-						"type": "string",
-						"maxLength": 4000,
-						"minLength": 1,
-						"title": "Body"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["lead_id", "channel", "body"],
-				"title": "SendMessage"
-			},
 			"SendMessageRequest": {
 				"properties": {
 					"message": {
 						"type": "string",
-						"maxLength": 8000,
-						"minLength": 1,
 						"title": "Message"
 					}
 				},
@@ -29368,119 +28604,6 @@
 				"title": "UpdateConversationRequest",
 				"description": "Request model for updating a conversation"
 			},
-			"UpdateLead": {
-				"properties": {
-					"lead_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Lead Id"
-					},
-					"status": {
-						"anyOf": [
-							{
-								"type": "string",
-								"enum": [
-									"new",
-									"needs_review",
-									"assigned",
-									"attempted",
-									"contacted",
-									"qualified",
-									"viewing",
-									"valuation",
-									"signed",
-									"active",
-									"won",
-									"nurture",
-									"closed_lost",
-									"disqualified"
-								]
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Status"
-					},
-					"intent": {
-						"anyOf": [
-							{
-								"type": "string",
-								"enum": ["unknown", "buy", "rent", "sell", "let"]
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Intent"
-					},
-					"next_follow_up": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Next Follow Up"
-					},
-					"lost_reason": {
-						"anyOf": [
-							{
-								"type": "string",
-								"maxLength": 500
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Lost Reason"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["lead_id"],
-				"title": "UpdateLead"
-			},
-			"UpdateListingDraft": {
-				"properties": {
-					"title": {
-						"type": "string",
-						"maxLength": 200,
-						"minLength": 1,
-						"title": "Title"
-					},
-					"description": {
-						"type": "string",
-						"maxLength": 8000,
-						"minLength": 1,
-						"title": "Description"
-					},
-					"price_aed": {
-						"type": "integer",
-						"maximum": 100000000000.0,
-						"exclusiveMinimum": 0.0,
-						"title": "Price Aed"
-					},
-					"location": {
-						"type": "string",
-						"maxLength": 500,
-						"minLength": 1,
-						"title": "Location"
-					},
-					"listing_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Listing Id"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["title", "description", "price_aed", "location", "listing_id"],
-				"title": "UpdateListingDraft"
-			},
 			"UpdateOrgRequest": {
 				"properties": {
 					"max_users": {
@@ -29535,30 +28658,6 @@
 				"type": "object",
 				"required": ["success", "first_name", "last_name"],
 				"title": "UpdateProfileResponse"
-			},
-			"UpdateReminder": {
-				"properties": {
-					"reminder_id": {
-						"type": "integer",
-						"exclusiveMinimum": 0.0,
-						"title": "Reminder Id"
-					},
-					"title": {
-						"type": "string",
-						"maxLength": 200,
-						"minLength": 1,
-						"title": "Title"
-					},
-					"due_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Due At"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["reminder_id", "title", "due_at"],
-				"title": "UpdateReminder"
 			},
 			"UpdateSubscriptionRequest": {
 				"properties": {
@@ -29855,49 +28954,6 @@
 				"type": "object",
 				"required": ["loc", "msg", "type"],
 				"title": "ValidationError"
-			},
-			"ViewingResponse": {
-				"properties": {
-					"id": {
-						"type": "integer",
-						"title": "Id"
-					},
-					"lead_id": {
-						"type": "integer",
-						"title": "Lead Id"
-					},
-					"title": {
-						"type": "string",
-						"title": "Title"
-					},
-					"location": {
-						"type": "string",
-						"title": "Location"
-					},
-					"status": {
-						"type": "string",
-						"title": "Status"
-					},
-					"starts_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Starts At"
-					},
-					"ends_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Ends At"
-					},
-					"delivery": {
-						"type": "string",
-						"const": "internal_only",
-						"title": "Delivery",
-						"default": "internal_only"
-					}
-				},
-				"type": "object",
-				"required": ["id", "lead_id", "title", "location", "status", "starts_at", "ends_at"],
-				"title": "ViewingResponse"
 			},
 			"WebhookStatusResponse": {
 				"properties": {

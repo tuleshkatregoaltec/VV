@@ -51,7 +51,7 @@ const total = $derived(
 	</label>
 
 	{#if text.trim().length < 2}
-		<Empty text={text ? 'Type at least two letters.' : 'Leads, deals, listings, owners and units.'} />
+		<Empty text={text ? 'Type at least two letters.' : 'Type to search.'} />
 	{:else if results.isError}
 		<ErrorLine message={errorText(results.error)} onretry={() => results.refetch()} />
 	{:else if !r}

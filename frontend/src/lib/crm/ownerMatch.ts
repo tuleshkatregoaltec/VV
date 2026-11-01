@@ -37,7 +37,7 @@ export function matchLines(c: OwnerUnitCheck): MatchLine[] {
 		...(!fileUnit || !dldUnit
 			? {
 					result: 'none' as const,
-					note: dldUnit ? 'No unit in the file' : 'No recorded sale found for this unit'
+					note: dldUnit ? 'No unit in the file' : 'No sale found'
 				}
 			: unitKey(fileUnit) === unitKey(dldUnit)
 				? { result: 'match' as const, note: 'Same unit' }
@@ -56,24 +56,21 @@ export function matchLines(c: OwnerUnitCheck): MatchLine[] {
 		...(!Number.isFinite(days)
 			? {
 					result: 'none' as const,
-					note: c.imported.date ? 'No recorded sale to compare' : 'No date in the file'
+					note: c.imported.date ? 'No sale to compare' : 'No date in the file'
 				}
 			: nearbyDate
 				? {
 						result: 'match' as const,
-						note:
-							days === 0
-								? 'Same date'
-								: `Dates within ${DATE_WINDOW_DAYS} days; see ownership assessment`
+						note: days === 0 ? 'Same date' : `Within ${DATE_WINDOW_DAYS} days`
 					}
 				: days > 0
 					? {
 							result: 'differs' as const,
-							note: `Latest recorded sale is ${days.toLocaleString('en-US')} days after the file's date; see ownership assessment`
+							note: `Sale ${days.toLocaleString('en-US')} days later`
 						}
 					: {
 							result: 'info' as const,
-							note: `The file's date is ${Math.abs(days).toLocaleString('en-US')} days after the latest recorded sale`
+							note: `File ${Math.abs(days).toLocaleString('en-US')} days later`
 						})
 	})
 
@@ -88,7 +85,7 @@ export function matchLines(c: OwnerUnitCheck): MatchLine[] {
 		...(gap === null
 			? {
 					result: 'none' as const,
-					note: fileAed ? 'No recorded price to compare' : 'No price in the file'
+					note: fileAed ? 'No sale price' : 'No price in the file'
 				}
 			: gap <= PRICE_TOLERANCE
 				? { result: 'match' as const, note: `Within ${PRICE_TOLERANCE * 100}%` }
@@ -110,10 +107,10 @@ export function matchLines(c: OwnerUnitCheck): MatchLine[] {
 		...(!fileType || !dldType
 			? { result: 'none' as const, note: 'Property type unavailable' }
 			: genericApartment
-				? { result: 'match' as const, note: 'Compatible: Unit / Apartment' }
+				? { result: 'match' as const, note: 'Same property kind' }
 				: fileKind !== 'unspecified' && fileKind === registryKind
 					? { result: 'match' as const, note: 'Same property kind' }
-					: { result: 'info' as const, note: 'Different descriptions; see ownership assessment' })
+					: { result: 'info' as const, note: 'Different description' })
 	})
 
 	// Keep the source role visible without independently deciding current/former ownership.
@@ -125,8 +122,8 @@ export function matchLines(c: OwnerUnitCheck): MatchLine[] {
 		...(!role
 			? { result: 'none' as const, note: 'No role in the file' }
 			: /seller/i.test(role)
-				? { result: 'info' as const, note: 'Source says Seller; role retained for review' }
-				: { result: 'info' as const, note: 'Source says Buyer; see ownership assessment' })
+				? { result: 'info' as const, note: 'Seller' }
+				: { result: 'info' as const, note: 'Buyer' })
 	})
 
 	return lines

@@ -1183,7 +1183,7 @@ onMount(() => {
 				</div>
 			</div>
 
-			<!-- Metadata strip: a project's details where a source holds them (sources named below). -->
+			<!-- Metadata strip: a project's details where a source holds them -->
 			{#if hasProjectDetails}
 			<div class="mt-4 flex flex-wrap gap-4 border-t border-border pt-4">
 				<div class="min-w-[150px] max-w-[260px]">
@@ -1201,8 +1201,6 @@ onMount(() => {
 						<p class="mt-1 text-[11px] text-fg-4">
 							{fmtNumber(summary.project.projects_with_units ?? 0)} of {fmtNumber(summary.project.no_of_projects)} projects counted
 						</p>
-					{:else if summary.project?.units_at_least}
-						<p class="mt-1 text-[11px] text-fg-4">No register count; units traded</p>
 					{/if}
 				</div>
 				<div class="min-w-[160px]">
@@ -1251,10 +1249,6 @@ onMount(() => {
 				{/if}
 			</div>
 			{/if}
-            <p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
-                Transactions · {summary.usage === 'Commercial' ? 'Commercial' : 'Residential'} properties. Summary cards and usage counts: {summaryDays ? `last ${summaryDays} days, including today (Dubai time)` : 'all recorded dates'}. Sales use sale dates; rentals use lease start dates.
-                {#if !hasProjectDetails}Registered unit stock and delivery forecasts are unavailable for this selection.{/if}
-            </p>
 		</section>
 
 		<!-- ── A project's buildings ─────────────────────────────────── -->
@@ -1262,7 +1256,6 @@ onMount(() => {
 			<section class="rounded-lg border border-border bg-card p-5" data-testid="analytics-buildings">
 				<div class="flex items-baseline justify-between gap-3">
 					<h3 class="text-sm font-semibold text-fg-1">Buildings</h3>
-					<p class="text-xs text-fg-4">Select a building for its own analytics</p>
 				</div>
 				<div class="mt-3 overflow-x-auto">
 					<table class="w-full text-sm">
@@ -1325,7 +1318,6 @@ onMount(() => {
 				<p class="mt-2.5 break-words text-3xl font-semibold text-info">
 					{fmtPct(summary.overall_gross_yield_pct)}
 				</p>
-				<p class="mt-1.5 text-sm text-info">median rent ÷ secondary median sale</p>
 			</div>
 		</section>
 
@@ -1339,10 +1331,9 @@ onMount(() => {
 						</p>
 						<h3 class="mt-1 text-base font-semibold text-fg-1">
 							{shouldShowTrendForecast()
-								? 'Recorded pricing with delivery-aware forecast'
-								: 'Recorded pricing trend'}
+								? 'Pricing trend and forecast'
+								: 'Pricing trend'}
 						</h3>
-						<p class="mt-1 text-xs text-fg-4">365-day lookback</p>
 					</div>
 					<div class="inline-flex rounded-lg border border-border bg-panel p-0.5">
 						<button
@@ -1398,14 +1389,12 @@ onMount(() => {
 				<h3 class="mt-1 text-base font-semibold text-fg-1">
 					Off-plan vs secondary sales
 				</h3>
-				<p class="mt-1 text-xs text-fg-4">All recorded dates</p>
 				<div class="mt-4 rounded-lg border border-border bg-panel p-4">
 					<div class="flex items-end justify-between gap-4">
 						<div>
 							<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Total sales</p>
 							<p class="mt-1 text-3xl font-semibold text-fg-1">{fmtNumber(marketSplit.total)}</p>
 						</div>
-						<p class="text-xs text-fg-4">transaction count</p>
 					</div>
 					<div class="mt-4 h-[220px]">
 						{#if marketSplit.total > 0}
@@ -1497,8 +1486,6 @@ onMount(() => {
 			</div>
 
 			{#if configMode === 'sales'}
-                <p class="mt-4 text-xs text-fg-4">Sales, prices and sizes cover all recorded dates. Recent periods end on the newest recorded sale{#if summary.recent_periods_end}, {new Date(summary.recent_periods_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })},{/if} for every segment. Low-sample configurations remain visible.</p>
-                <p class="mt-1 text-xs text-fg-4">Momentum compares consecutive 90-day counts using their average as the denominator (minimum 20 sales in each). Price change compares consecutive 12-month periods (minimum 3 sales in each).</p>
 				<div class="ui-scroll-shadow mt-4 overflow-x-auto">
 					<table class="min-w-[640px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
@@ -1632,8 +1619,6 @@ onMount(() => {
 				</div>
 			</div>
 
-			<p class="mt-2 text-xs text-fg-4">All recorded dates</p>
-
 			<!-- Room tabs -->
 			{#if distroRoomList.length > 0}
 				<div class="ui-segmented mt-3">
@@ -1716,19 +1701,15 @@ onMount(() => {
 			</div>
 
 			{#if pipeline}
-				<p class="mt-2 text-xs text-fg-3">
-					Completed stock uses recorded completion dates. Scheduled deliveries are planned.
-					{#if pipeline.reference_date}As of {pipeline.reference_date}.{/if}
-				</p>
+				{#if pipeline.reference_date}
+					<p class="mt-2 text-xs text-fg-3">As of {pipeline.reference_date}</p>
+				{/if}
 				{#if pipeline.overdue_units || pipeline.undated_units}
 					<p class="mt-1 text-xs text-fg-3">
-						Excluded from the dated stock projection: {fmtNumber(pipeline.overdue_units)} overdue units
-						and {fmtNumber(pipeline.undated_units)} units without a delivery date.
+						Excludes {fmtNumber(pipeline.overdue_units)} overdue and {fmtNumber(pipeline.undated_units)} undated units.
 					</p>
 				{/if}
 			{/if}
-
-			<p class="mt-2 text-xs text-fg-3">Supply is shown for all bedroom types in this area.</p>
 
 			<div class="mt-4 h-[340px]">
 				{#if pipelineQuery.isError}

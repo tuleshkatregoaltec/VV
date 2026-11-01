@@ -22,16 +22,13 @@ async function copy(fields: { label: string; value: string | null }[]) {
 	const text = fields.map((f) => `${f.label}: ${f.value ?? 'Missing'}`).join('\n')
 	try {
 		await navigator.clipboard.writeText(text)
-		toast.show('Fields copied — paste into the Dubai Brokers app')
+		toast.show('Fields copied')
 	} catch {
 		toast.show('The browser blocked the copy — select the fields instead', { tone: 'error' })
 	}
 }
 </script>
 
-{#if deal.deal_type === 'sale'}
-	<div class="notice">Filled from this deal — copy into DLD's Dubai Brokers app.</div>
-{/if}
 
 <div class="list boxed">
 	{#each deal.forms as f (f.code)}

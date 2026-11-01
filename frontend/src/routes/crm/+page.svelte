@@ -26,16 +26,13 @@ const selected = $derived(ui.weekDay || home.data?.date || '')
 const facts = $derived.by(() => {
 	const h = home.data
 	if (!h) return ''
-	return [
-		fullDate(h.date),
-		`${plural(h.facts.events_today, 'event')} today`,
-		`${h.facts.conveyancing} deals in conveyancing`,
-		`${h.facts.permits_under_14} permits or Form A under 14 days`
-	].join(' · ')
+	return [fullDate(h.date), `${plural(h.facts.events_today, 'event')} today`].join(' · ')
 })
 </script>
 
-<svelte:head><title>Home · CRM Beta</title></svelte:head>
+<svelte:head><title>Home · CRM</title></svelte:head>
+
+{#if home.data?.limited}<p class="small muted">Lead counts and summaries cover the first 500 stored enquiries.</p>{/if}
 
 <PageHeader title="Home" {facts} />
 
@@ -46,7 +43,7 @@ const facts = $derived.by(() => {
 		<a class="kpi" href="/crm/calendar">
 			<span class="lbl">Viewings this week</span>
 			<span class="v">{c.viewings_week.count}</span>
-			<span class="n">{c.viewings_week.next ?? 'none left this week'}</span>
+			<span class="n">{c.viewings_week.next ?? 'None left'}</span>
 		</a>
 		<a
 			class={['kpi', c.expiring_14.count && 'amber']}
@@ -122,7 +119,7 @@ const facts = $derived.by(() => {
 				{#each h.new_leads as l (l.id)}
 					<LeadItem lead={l} bar />
 				{:else}
-					<Empty text="No new leads. New enquiries land in the Inbox first.">
+					<Empty text="No new leads.">
 						<button type="button" class="btn ghost sm" onclick={() => panel.open({ kind: 'new-lead' })}>＋ Lead</button>
 					</Empty>
 				{/each}
@@ -149,7 +146,7 @@ const facts = $derived.by(() => {
 							<Chip>Open</Chip>
 						</button>
 					{:else}
-						<Empty text="No gaps. Every record is current." />
+						<Empty text="No gaps." />
 					{/each}
 				{:else}
 					{#each h.file_leads as l (l.id)}
@@ -165,9 +162,7 @@ const facts = $derived.by(() => {
 							</span>
 						</button>
 					{:else}
-						<Empty
-							text="No owner-file leads waiting. Owners on your agency's file arrive here at 30, 60 and 90 days to lease end."
-						/>
+						<Empty text="No owner-file leads." />
 					{/each}
 				{/if}
 			</div>

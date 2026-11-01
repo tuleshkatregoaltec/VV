@@ -126,8 +126,7 @@ $effect(() => {
 	<div class="grid min-h-[240px] place-items-center rounded-md border border-dashed border-border bg-panel p-5 text-center">
 		<div>
 			<p class="text-sm font-semibold text-fg-1">No trend data</p>
-			<p class="mt-1 text-xs leading-5 text-fg-4">Try a broader area or a longer lookback window.</p>
-		</div>
+					</div>
 	</div>
 {:else}
 	<div class="grid gap-3">
@@ -164,8 +163,8 @@ $effect(() => {
 			{#if periodLabel()}
 				<span class="font-semibold text-fg-2">Period:</span>
 				{periodLabel()}
+				<span class="mx-1 text-fg-5">/</span>
 			{/if}
-			{#if periodLabel()}<span class="mx-1 text-fg-5">/</span>{/if}
 			Latest average price:
 			<span class="font-semibold text-fg-1">{formatMoney(points[points.length - 1]?.avg_price)}</span>
 		</div>
