@@ -5,6 +5,7 @@ import { afterNavigate } from '$app/navigation'
 import { page } from '$app/state'
 import '$lib/crm/crm.css'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
+import AssistantWidget from '$lib/crm/assistant/components/AssistantWidget.svelte'
 import Drawer from '$lib/crm/components/shell/Drawer.svelte'
 import Sidebar from '$lib/crm/components/shell/Sidebar.svelte'
 import Toast from '$lib/crm/components/shell/Toast.svelte'
@@ -25,6 +26,8 @@ afterNavigate(({ to }) => {
 
 /** Home and Inbox fit one screen on a laptop (no page scroll, v2). */
 const fit = $derived(/^\/crm(\/inbox)?\/?$/.test(page.url.pathname))
+/** The floating assistant is on every CRM page but the full Assistant page. */
+const assistantPage = $derived(page.url.pathname.startsWith('/crm/assistant'))
 </script>
 
 <svelte:head>
@@ -43,5 +46,6 @@ const fit = $derived(/^\/crm(\/inbox)?\/?$/.test(page.url.pathname))
 		</div>
 		<Drawer />
 		<Toast />
+		{#if !assistantPage}<AssistantWidget />{/if}
 	</div>
 </AppFrame>

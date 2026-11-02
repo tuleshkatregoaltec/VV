@@ -6,11 +6,15 @@
 let {
 	open,
 	ondelete,
-	oncancel
+	oncancel,
+	title = 'Delete conversation?',
+	confirmText = 'Delete'
 }: {
 	open: boolean
 	ondelete: () => void
 	oncancel: () => void
+	title?: string
+	confirmText?: string
 } = $props()
 
 function onkeydown(event: KeyboardEvent) {
@@ -29,11 +33,11 @@ function onkeydown(event: KeyboardEvent) {
 		}}
 	>
 		<div class="delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-title">
-			<h3 id="delete-title">Delete conversation?</h3>
+			<h3 id="delete-title">{title}</h3>
 			<p>This removes the conversation. Changes you already confirmed stay on the leads.</p>
 			<div class="actions">
 				<button type="button" class="btn ghost" onclick={oncancel}>Cancel</button>
-				<button type="button" class="btn danger" onclick={ondelete}>Delete</button>
+				<button type="button" class="btn danger" onclick={ondelete}>{confirmText}</button>
 			</div>
 		</div>
 	</div>
