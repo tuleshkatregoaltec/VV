@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -8,6 +8,7 @@ from app.core.dependencies import AuthContext, require_active_subscription, requ
 from app.crm.assistant.actions import cancel_action, confirm_action
 from app.crm.assistant.deps import AssistantDeps
 from app.crm.assistant.models import (
+    ActionEdits,
     AssistantActionResult,
     AssistantConversationListResponse,
     AssistantConversationResponse,
@@ -146,11 +147,15 @@ async def send_assistant_message(
 @router.post("/actions/{action_id}/confirm", response_model=AssistantActionResult)
 async def confirm_assistant_action(
     action_id: str,
+    edits: ActionEdits | None = Body(default=None, embed=True),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Run a change the assistant proposed, after re-checking it belongs to the signed-in user."""
-    return await confirm_action(AssistantDeps.from_auth(context, db), action_id=action_id)
+    """Run a change the assistant proposed, after re-checking it belongs to the signed-in user.
+    An email card can send the agent's edited subject and message as `edits`."""
+    return await confirm_action(
+        AssistantDeps.from_auth(context, db), action_id=action_id, edits=edits
+    )
 
 
 @router.post("/actions/{action_id}/cancel", response_model=AssistantActionResult)

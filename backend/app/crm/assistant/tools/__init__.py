@@ -3,6 +3,12 @@
 from collections.abc import Callable
 
 from app.crm.assistant.tools.calendar import list_calendar_events, propose_calendar_event
+from app.crm.assistant.tools.email import (
+    email_overview,
+    lead_email_thread,
+    list_email_templates,
+    propose_send_email,
+)
 from app.crm.assistant.tools.leads import (
     get_lead,
     lead_pipeline_summary,
@@ -30,5 +36,11 @@ SECTION_TOOLS: dict[str, list[Callable]] = {
     "calendar": [
         list_calendar_events,
         propose_calendar_event,
+    ],
+    "email": [
+        email_overview,
+        lead_email_thread,
+        list_email_templates,
+        propose_send_email,
     ],
 }

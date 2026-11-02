@@ -38,8 +38,12 @@ export const assistant = {
 			body: { message }
 		}),
 
-	confirmAction: (actionId: string) =>
-		client.post<AssistantActionResult>(`${BASE}/actions/${actionId}/confirm`, {}),
+	/** `edits` sends the agent's edited email instead of the proposed one. */
+	confirmAction: (actionId: string, edits?: { subject: string; body: string }) =>
+		client.post<AssistantActionResult>(
+			`${BASE}/actions/${actionId}/confirm`,
+			edits ? { edits } : {}
+		),
 
 	cancelAction: (actionId: string) =>
 		client.post<AssistantActionResult>(`${BASE}/actions/${actionId}/cancel`, {})

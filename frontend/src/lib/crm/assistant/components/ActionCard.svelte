@@ -1,4 +1,6 @@
 <script lang="ts">
+import EmailBody from '$lib/crm/components/ui/EmailBody.svelte'
+import { fillTokens } from '$lib/crm/email'
 import { refreshCrm } from '$lib/crm/write'
 import { createActionCard } from '../actionCard.svelte'
 import { assistant } from '../api'
@@ -6,7 +8,8 @@ import type { ProposedAction } from '../stream'
 
 /**
  * One proposed change: what it does (before → after) and Confirm / Cancel. Share drafts open
- * WhatsApp or email after Confirm; a copied summary needs no confirmation.
+ * WhatsApp or email after Confirm; a copied summary needs no confirmation. An email card sends
+ * through the Email connector when the agent clicks Send email.
  */
 let { action }: { action: ProposedAction } = $props()
 
@@ -26,7 +29,9 @@ const LABELS: Record<string, string> = {
 	draft: 'Message',
 	shared_with: 'Share with',
 	event: 'Event',
-	when: 'When'
+	when: 'When',
+	subject: 'Subject',
+	message: 'Message'
 }
 const STATE_CHIP: Record<string, { label: string; tone: string }> = {
 	confirmed: { label: 'Confirmed', tone: 'green' },
@@ -34,24 +39,37 @@ const STATE_CHIP: Record<string, { label: string; tone: string }> = {
 	expired: { label: 'Expired', tone: 'amber' }
 }
 
-const show = (value: unknown) =>
-	value === null || value === undefined || value === '' ? '—' : String(value).replaceAll('_', ' ')
+// Free text (a note, an email) shows exactly as written; codes like follow_up read as words.
+const TEXT_KEYS = new Set(['note', 'draft', 'subject', 'message', 'event'])
+const show = (value: unknown, key = '') => {
+	if (value === null || value === undefined || value === '') return '—'
+	return TEXT_KEYS.has(key) ? String(value) : String(value).replaceAll('_', ' ')
+}
 
 const rows = $derived(
 	Object.keys({ ...(action.before ?? {}), ...(action.after ?? {}) }).map((key) => ({
 		label: LABELS[key] ?? key,
-		before: action.before && key in action.before ? show(action.before[key]) : null,
-		after: show(action.after?.[key])
+		before: action.before && key in action.before ? show(action.before[key], key) : null,
+		after: show(action.after?.[key], key)
 	}))
 )
 
+// An email card shows the email as the lead will get it, like the Email page's compose preview.
+const isEmail = action.action_type === 'email_send'
+const recipient = String(action.after?.to ?? '')
+// {{email}} stays as written: addresses are never shown in the chat.
+const fill = (text: unknown) =>
+	fillTokens(String(text ?? ''), { name: recipient, email: '{{email}}' })
+
 const isDraft = action.channel === 'whatsapp' || action.channel === 'email'
 const confirmText =
-	action.channel === 'whatsapp'
-		? 'Open WhatsApp draft'
-		: action.channel === 'email'
-			? 'Open email draft'
-			: 'Confirm'
+	action.action_type === 'email_send'
+		? 'Send email'
+		: action.channel === 'whatsapp'
+			? 'Open WhatsApp draft'
+			: action.channel === 'email'
+				? 'Open email draft'
+				: 'Confirm'
 
 let copied = $state(false)
 
@@ -65,10 +83,24 @@ async function copy() {
 	}
 }
 
+// The agent can edit an email on its card; Send email then sends their version.
+const draftSubject = String(action.after?.subject ?? '')
+const draftBody = String(action.after?.message ?? '')
+let editing = $state(false)
+let subject = $state(draftSubject)
+let body = $state(draftBody)
+const edited = $derived(subject.trim() !== draftSubject || body.trim() !== draftBody)
+const emailReady = $derived(Boolean(subject.trim() && body.trim()))
+
 async function confirm() {
 	// Open the tab inside the click so the browser does not block it; fill it when the link arrives.
 	const tab = isDraft ? window.open('', '_blank') : null
-	await card.confirm()
+	if (isEmail && edited) {
+		editing = false
+		await card.confirm({ subject: subject.trim(), body: body.trim() })
+	} else {
+		await card.confirm()
+	}
 	const href = card.result?.href
 	if (tab && href) tab.location.href = href
 	else tab?.close()
@@ -87,10 +119,40 @@ async function confirm() {
 				</button>
 			</div>
 		{:else}
-			{#if rows.length}
+			{#if isEmail}
+				<div class="row"><span class="lbl">To:</span> <strong>{recipient}</strong></div>
+				{#if editing && card.canAct}
+					<label class="lbl" for="em-subject-{action.action_id}">Subject</label>
+					<input
+						id="em-subject-{action.action_id}"
+						class="em-input"
+						maxlength="300"
+						autocomplete="off"
+						bind:value={subject}
+					/>
+					<label class="lbl" for="em-body-{action.action_id}">Message</label>
+					<textarea
+						id="em-body-{action.action_id}"
+						class="em-input"
+						rows="10"
+						maxlength="20000"
+						bind:value={body}
+					></textarea>
+					<span class="hint">
+						{'{{first_name}}'} and {'{{name}}'} are filled in with the lead’s name. A blank line
+						starts a new paragraph.
+					</span>
+				{:else}
+					<div class="lbl">Preview for {recipient}{#if edited}<span class="tag">Edited</span>{/if}</div>
+					<div class="email-preview">
+						<b>{fill(subject)}</b>
+						<EmailBody text={fill(body)} />
+					</div>
+				{/if}
+			{:else if rows.length}
 				<dl>
 					{#each rows as row (row.label)}
-						<div class="row">
+						<div class={['row', row.label === 'Message' && 'long']}>
 							<dt>{row.label}:</dt>
 							<dd>
 								{#if row.before !== null}<span class="before">{row.before}</span> → {/if}<strong
@@ -107,11 +169,21 @@ async function confirm() {
 					<button
 						type="button"
 						class="btn sm"
-						disabled={card.state === 'working'}
+						disabled={card.state === 'working' || (isEmail && !emailReady)}
 						onclick={confirm}
 					>
 						{card.state === 'working' ? 'Working…' : confirmText}
 					</button>
+					{#if isEmail}
+						<button
+							type="button"
+							class="btn ghost sm"
+							disabled={card.state === 'working' || (editing && !emailReady)}
+							onclick={() => (editing = !editing)}
+						>
+							{editing ? 'Preview' : 'Edit'}
+						</button>
+					{/if}
 					<button
 						type="button"
 						class="btn ghost sm"
@@ -124,7 +196,11 @@ async function confirm() {
 				{#if card.error}<p class="err" role="alert">{card.error}</p>{/if}
 			{:else if STATE_CHIP[card.state]}
 				<div class="buttons">
-					<span class="chip {STATE_CHIP[card.state].tone}">{STATE_CHIP[card.state].label}</span>
+					<span class="chip {STATE_CHIP[card.state].tone}"
+						>{isEmail && card.state === 'confirmed'
+							? 'Sent successfully'
+							: STATE_CHIP[card.state].label}</span
+					>
 					{#if card.result?.href}
 						<a class="btn ghost sm" href={card.result.href} target="_blank" rel="noopener noreferrer"
 							>Open draft again</a
@@ -161,6 +237,56 @@ async function confirm() {
 	dd {
 		margin: 0;
 		overflow-wrap: anywhere;
+	}
+	.lbl {
+		color: var(--text2);
+		font-size: 13px;
+	}
+	.em-input {
+		width: 100%;
+		margin: 2px 0 6px;
+		font: inherit;
+		font-size: 13.5px;
+	}
+	textarea.em-input {
+		resize: vertical;
+		min-height: 160px;
+	}
+	.hint {
+		display: block;
+		color: var(--text2);
+		font-size: 12px;
+		margin-bottom: 8px;
+	}
+	.tag {
+		margin-left: 6px;
+		font-size: 11.5px;
+		padding: 1px 6px;
+		border-radius: 999px;
+		background: var(--sunk);
+		color: var(--text2);
+	}
+	.email-preview {
+		border: 1px solid var(--sep);
+		border-radius: 8px;
+		background: var(--card-2);
+		padding: 10px 12px;
+		display: grid;
+		gap: 6px;
+		font-size: 13.5px;
+		max-height: 320px;
+		overflow-y: auto;
+		margin: 4px 0 2px;
+	}
+	/* A message keeps its paragraphs and sits under its label. */
+	.row.long {
+		flex-direction: column;
+		gap: 2px;
+	}
+	.row.long dd {
+		white-space: pre-wrap;
+		max-height: 220px;
+		overflow-y: auto;
 	}
 	.before {
 		color: var(--text2);

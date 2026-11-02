@@ -9,11 +9,12 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
-from app.crm import calendar_service, inbound_repository
+from app.crm import brevo, calendar_service, email_pipeline, inbound_repository
 from app.crm.assistant import repository
 from app.crm.assistant.deps import AssistantDeps
-from app.crm.assistant.models import AssistantActionResult, CrmAssistantAction
+from app.crm.assistant.models import ActionEdits, AssistantActionResult, CrmAssistantAction
 from app.crm.assistant.scope import load_lead, org_member
+from app.crm.email_models import EmailSendCreate
 from app.crm.inbound import add_inbound_note, get_inbound_enquiry, update_inbound_enquiry
 from app.crm.inbound_models import CrmInboundActivity, InboundEnquiryUpdate
 
@@ -98,10 +99,15 @@ async def _pending_action(deps: AssistantDeps, action_id: str) -> CrmAssistantAc
     return action
 
 
-async def confirm_action(deps: AssistantDeps, *, action_id: str) -> AssistantActionResult:
+async def confirm_action(
+    deps: AssistantDeps, *, action_id: str, edits: ActionEdits | None = None
+) -> AssistantActionResult:
     """Run a pending action for the signed-in user. Everything is re-checked against the
-    current AuthContext scope, then the change goes through the existing Leads services."""
+    current AuthContext scope, then the change goes through the existing Leads services.
+    An email can be edited on its card; the edited subject and message are what is sent."""
     action = await _pending_action(deps, action_id)
+    if edits is not None and action.action_type != "email_send":
+        raise HTTPException(status_code=400, detail="Only an email can be edited")
     db, organization_id, user_id = deps.db, deps.organization_id, deps.user_id
     await load_lead(db, organization_id, action.enquiry_id)
 
@@ -113,13 +119,24 @@ async def confirm_action(deps: AssistantDeps, *, action_id: str) -> AssistantAct
         member = await org_member(deps, member_user_id)
         if member is None:
             raise HTTPException(status_code=404, detail="Member not found")
-    if channel in {"whatsapp", "email"}:
+    if action.action_type == "email_send" and not brevo.is_configured():
+        raise HTTPException(status_code=409, detail="Email is not connected")
+    if channel in {"whatsapp", "email"} or action.action_type == "email_send":
         contact = (await get_inbound_enquiry(db, action.enquiry_id, organization_id)).contact
         if contact.do_not_contact or contact.consent_status == "withdrawn":
             raise HTTPException(status_code=409, detail="This lead has asked not to be contacted")
 
     if not await repository.claim_action(db, action.id):
         raise HTTPException(status_code=409, detail="Action already confirmed")
+    if edits is not None:
+        # Stored as sent, so the card shows the edited email when the chat is reopened.
+        name = action.after.get("to") or contact.full_name or "the lead"
+        action.payload = payload = {"subject": edits.subject, "body": edits.body}
+        action.after = {**action.after, "subject": edits.subject, "message": edits.body}
+        action.summary = (
+            f"Email {name}: {brevo.render_template(edits.subject, name=name, email='')}"
+        )
+        repository.save(db, action)
     # Not committed here: the service below commits the claim, this entry and the change at once.
     inbound_repository.save(
         db,
@@ -177,6 +194,27 @@ async def confirm_action(deps: AssistantDeps, *, action_id: str) -> AssistantAct
                 detail=payload.get("detail", ""),
                 lead_id=action.enquiry_id,
             )
+        elif action.action_type == "email_send":
+            # Sent through the Email connector, so Tracking and the lead's Conversation tab show it.
+            sent = await email_pipeline.send_emails(
+                db,
+                organization_id=organization_id,
+                user_id=user_id,
+                payload=EmailSendCreate(
+                    enquiry_ids=[action.enquiry_id],
+                    subject=payload["subject"],
+                    body=payload["body"],
+                ),
+            )
+            outcome = sent.results[0] if sent.results else None
+            if outcome is None or not outcome.ok:
+                reason = outcome.error if outcome else "No email address on this lead"
+                # Not claimed: the card stays pending so the agent can try again.
+                raise HTTPException(
+                    status_code=502, detail=f"The email could not be sent: {reason}"
+                )
+            await db.commit()
+            result.text = "Email sent"
         elif channel in {"whatsapp", "email"}:
             inbound_repository.save(
                 db,

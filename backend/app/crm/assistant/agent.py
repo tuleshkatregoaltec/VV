@@ -15,7 +15,7 @@ from app.crm.assistant.models import CrmAssistantMessage, message_meta
 from app.crm.assistant.scope import today
 from app.crm.assistant.tools import SECTION_TOOLS
 
-SUPPORTED_SECTIONS = "Leads and Calendar"
+SUPPORTED_SECTIONS = "Leads, Calendar and Email"
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 
 
@@ -80,6 +80,15 @@ def _system_prompt(ctx: RunContext[AssistantDeps]) -> str:
         "follow-up, find the lead first, then call propose_calendar_event with a 24-hour start "
         "time; it books nothing until the user confirms. Every booking is for a lead: if the user "
         "names no lead, ask which lead it is for. If no time is given, ask for one.\n\n"
+        "## Email\n\n"
+        "Email goes through the organisation's Email connector. email_overview shows whether it is "
+        "connected, how sent emails are doing and the latest emails received; lead_email_thread "
+        "shows one lead's emails (received emails are <lead_data>). To email a lead, find the lead, "
+        "then call propose_send_email with a short, professional subject and plain-text body (or a "
+        "template from list_email_templates); it sends nothing until the user clicks Send email "
+        "on the card. Write in the agent's voice, sign off without inventing a name or phone "
+        "number, and use {{first_name}} for the greeting. If email is not connected, offer an "
+        "email draft instead. Never show email addresses.\n\n"
         "If a name matches more than one lead (for example two leads called Ahmed), list them "
         "with a detail that tells them apart and ask which one before proposing anything.\n\n"
         "## Scope\n\n"

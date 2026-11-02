@@ -80,3 +80,30 @@ async def test_stream_passes_auth_scoped_deps(client, monkeypatch):
     assert response.text == 'data: {"type": "done"}\n\n'
     assert seen["conversation_id"] == 5 and seen["text"] == "Leads due today"
     assert (seen["deps"].user_id, seen["deps"].organization_id) == ("test-user-id", "1")
+
+
+async def test_confirm_passes_an_edited_email(client, monkeypatch):
+    service = AsyncMock(
+        return_value=AssistantActionResult(action_id="abc", status="confirmed", lead_id=7)
+    )
+    monkeypatch.setattr("app.crm.assistant.router.confirm_action", service)
+
+    response = await client.post(
+        "/api/v1/crm/assistant/actions/abc/confirm",
+        json={"edits": {"subject": "New subject", "body": "New message"}},
+    )
+
+    assert response.status_code == 200
+    edits = service.await_args.kwargs["edits"]
+    assert (edits.subject, edits.body) == ("New subject", "New message")
+
+
+async def test_confirm_refuses_an_empty_edited_email(client, monkeypatch):
+    service = AsyncMock()
+    monkeypatch.setattr("app.crm.assistant.router.confirm_action", service)
+    response = await client.post(
+        "/api/v1/crm/assistant/actions/abc/confirm",
+        json={"edits": {"subject": " ", "body": "New message"}},
+    )
+    assert response.status_code == 422
+    service.assert_not_awaited()

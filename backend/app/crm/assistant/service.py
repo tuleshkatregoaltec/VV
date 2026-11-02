@@ -37,6 +37,10 @@ TOOL_LABELS = {
     "propose_share": "Preparing to share…",
     "list_calendar_events": "Checking your calendar…",
     "propose_calendar_event": "Preparing a booking…",
+    "email_overview": "Checking your email…",
+    "lead_email_thread": "Reading the lead's emails…",
+    "list_email_templates": "Looking up your templates…",
+    "propose_send_email": "Preparing an email…",
 }
 
 

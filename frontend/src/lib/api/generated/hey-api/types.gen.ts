@@ -41,6 +41,22 @@ export type AcceptInviteResponse = {
 };
 
 /**
+ * ActionEdits
+ *
+ * The agent's own version of a proposed email, sent with Send email instead of the draft.
+ */
+export type ActionEdits = {
+    /**
+     * Subject
+     */
+    subject: string;
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
  * AnalyticsResponse
  *
  * Complete analytics response for dashboard
@@ -576,6 +592,13 @@ export type AuthMeResponse = {
 };
 
 /**
+ * Body_crm-assistant-confirm_assistant_action
+ */
+export type BodyCrmAssistantConfirmAssistantAction = {
+    edits?: ActionEdits | null;
+};
+
+/**
  * Body_crm-crm_contact_import
  */
 export type BodyCrmCrmContactImport = {
@@ -980,9 +1003,27 @@ export type CalendarEventResponse = {
      */
     outcome: string | null;
     /**
+     * Rescheduled From
+     */
+    rescheduled_from: Array<CalendarSlot>;
+    /**
      * Google Sync Status
      */
     google_sync_status: 'local' | 'pending' | 'synced' | 'error';
+};
+
+/**
+ * CalendarSlot
+ */
+export type CalendarSlot = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time: string | null;
 };
 
 /**
@@ -14701,7 +14742,7 @@ export type CrmAssistantSendAssistantMessageResponses = {
 };
 
 export type CrmAssistantConfirmAssistantActionData = {
-    body?: never;
+    body?: BodyCrmAssistantConfirmAssistantAction;
     path: {
         /**
          * Action Id

@@ -7,9 +7,9 @@ these models match them, including their index names.
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlmodel import JSON, SQLModel
 from sqlmodel import Field as SQLField
@@ -133,6 +133,13 @@ class AssistantActionResult(BaseModel):
     lead_id: int
     href: str | None = None
     text: str | None = None
+
+
+class ActionEdits(BaseModel):
+    """The agent's own version of a proposed email, sent with Send email instead of the draft."""
+
+    subject: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+    body: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20000)]
 
 
 def encode_sse(payload: dict[str, Any]) -> str:

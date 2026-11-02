@@ -1,7 +1,14 @@
 /** CRM Assistant chat: the SSE events the backend streams, folded into thread messages. */
 
 export type ActionStatus = 'pending' | 'confirmed' | 'cancelled' | 'expired'
-export type ActionType = 'status' | 'note' | 'follow_up' | 'assign' | 'share'
+export type ActionType =
+	| 'status'
+	| 'note'
+	| 'follow_up'
+	| 'assign'
+	| 'share'
+	| 'calendar_event'
+	| 'email_send'
 export type ShareChannel = 'copy' | 'teammate' | 'whatsapp' | 'email'
 
 /** A change (or share) the assistant proposed; shown as a card the agent confirms. */

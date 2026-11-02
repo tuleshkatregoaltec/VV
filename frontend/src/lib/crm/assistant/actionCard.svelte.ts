@@ -9,10 +9,16 @@ export interface ActionResult {
 	text?: string | null
 }
 
+/** The agent's own version of a proposed email, sent instead of the draft. */
+export interface EmailEdits {
+	subject: string
+	body: string
+}
+
 export type CardState = ActionStatus | 'working' | 'error'
 
 interface CardDeps {
-	confirm: (actionId: string) => Promise<ActionResult>
+	confirm: (actionId: string, edits?: EmailEdits) => Promise<ActionResult>
 	cancel: (actionId: string) => Promise<ActionResult>
 	/** Runs once after the change is confirmed (refresh the CRM data). */
 	onConfirmed: () => void
@@ -45,12 +51,17 @@ export function createActionCard(action: ProposedAction, deps: CardDeps) {
 		}
 	}
 
-	const run = async (kind: 'confirm' | 'cancel') => {
+	const run = async (kind: 'confirm' | 'cancel', edits?: EmailEdits) => {
 		if (!action.action_id || !(state === 'pending' || state === 'error')) return
 		state = 'working'
 		error = undefined
 		try {
-			result = await deps[kind](action.action_id)
+			const id = action.action_id
+			result = await (kind === 'confirm'
+				? edits
+					? deps.confirm(id, edits)
+					: deps.confirm(id)
+				: deps.cancel(id))
 			state = kind === 'confirm' ? 'confirmed' : 'cancelled'
 			if (kind === 'confirm') deps.onConfirmed()
 		} catch (e) {
@@ -72,7 +83,7 @@ export function createActionCard(action: ProposedAction, deps: CardDeps) {
 		get canAct() {
 			return state === 'pending' || state === 'error'
 		},
-		confirm: () => run('confirm'),
+		confirm: (edits?: EmailEdits) => run('confirm', edits),
 		cancel: () => run('cancel')
 	}
 }

@@ -109,4 +109,11 @@ describe('assistant action card', () => {
 		await card.confirm()
 		expect(card.result?.href).toBe('https://wa.me/971501234567?text=Hi')
 	})
+
+	it('sends the agent\'s edited email with Send email', async () => {
+		const { card, deps } = setup()
+		await card.confirm({ subject: 'New subject', body: 'New message' })
+		expect(deps.confirm).toHaveBeenCalledWith('a1', { subject: 'New subject', body: 'New message' })
+		expect(card.state).toBe('confirmed')
+	})
 })
