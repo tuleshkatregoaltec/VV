@@ -145,6 +145,7 @@ from app.crm.owners import (
 from app.crm.recently_sold import approve_recent_seller
 from app.crm.renewal_leads import (
     get_area_preferences,
+    list_owner_renewals,
     list_renewal_areas,
     list_renewal_leads,
     list_renewals,
@@ -1124,9 +1125,33 @@ async def crm_renewals(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     as_of: date | None = Query(default=None),
+    owners_only: bool = Query(default=False),
     context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    """Assets › Renewals: every lease in the dataset, narrowed by the tab's filters."""
+    """Assets › Renewals: every lease in the dataset, narrowed by the tab's filters.
+
+    owners_only (what Assets › Renewals asks for): only units with a current owner in this agency's
+    owner imports, each with that owner's contact.
+    """
+    if owners_only:
+        user_id, organization_id = _auth_ids(context)
+        return await _until_disconnect(
+            request,
+            list_owner_renewals(
+                db,
+                user_id=user_id,
+                organization_id=organization_id,
+                window=window,
+                area=area,
+                property_type=property_type,
+                project=project,
+                building=building,
+                limit=limit,
+                offset=offset,
+                as_of=as_of,
+            ),
+        )
     return await _until_disconnect(
         request,
         list_renewals(

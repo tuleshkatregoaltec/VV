@@ -282,8 +282,9 @@ async def test_hidden_count_survives_a_plain_load_without_rerunning(world, monke
     assert res.move_in == date(2027, 2, 1)
 
 
-def test_v7_matches_rerun_under_v8():
-    assert matching._ALGORITHM_VERSION == "inbound-v8"
+def test_stored_matches_rerun_after_the_unit_number_fix():
+    # Stored titles from v8 still read "Unit unresolved"; v9 makes every lead re-match once.
+    assert matching._ALGORITHM_VERSION == "inbound-v9"
 
 
 async def test_listing_age_is_counted_to_today_not_to_the_last_scrape(world, monkeypatch):
@@ -307,3 +308,20 @@ async def test_saving_the_count_never_rewrites_the_brief(world):
     await _refresh(world, enquiry)
     assert enquiry.criteria == before
     assert world["hidden_written"] == {"units": 1}
+
+
+async def test_tenant_unit_shows_the_lease_unit_when_no_sale_is_matched(world):
+    # Client (3 Nov): "Unit unresolved" looked wrong; the lease itself records the unit number,
+    # only the sale match was missing.
+    row = {**_unit("A", date(2027, 1, 15)), "unit_number": "", "lease_unit_number": "805"}
+    world["units"] = [row]
+    res = await _refresh(world, _enquiry(budget_max_aed=120_000, move_in="2027-02-01"))
+    assert res.lanes["units"][0].title == "Binghatti Gate · Unit 805"
+
+
+async def test_buyer_unit_titles_are_unchanged(world):
+    # Buyer and seller matching must stay exactly as it was.
+    row = {**_unit("B", date(2027, 3, 1)), "unit_number": "", "lease_unit_number": "805"}
+    world["units"] = [row]
+    res = await _refresh(world, _enquiry("buy", budget_max_aed=1_100_000))
+    assert res.lanes["units"][0].title == "Binghatti Gate · Unit unresolved"

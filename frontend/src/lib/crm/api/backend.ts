@@ -1722,12 +1722,25 @@ export async function listRenewals(
 			property_type: p.property_type || undefined,
 			project: p.project || undefined,
 			building: p.building || undefined,
-			limit: p.limit
+			limit: p.limit,
+			owners_only: p.owners_only || undefined
 		}),
 		{ signal }
 	)
+	const owners = res.owners ?? {}
 	return {
-		items: res.leads.map((l) => renewal(l, null)),
+		items: res.leads.map((l) => {
+			const o = owners[l.unit_candidate_key]
+			const owner: RenewalOwner | null = o
+				? {
+						name: o.name ?? null,
+						phone: o.phone ?? null,
+						email: o.email ?? null,
+						source: o.source === 'workspace' ? 'Saved on this lead' : 'Owner import'
+					}
+				: null
+			return renewal(l, owner)
+		}),
 		total: res.total,
 		property_types: res.property_types ?? [],
 		projects: res.projects ?? [],

@@ -49,7 +49,10 @@ $effect(() => {
 /** The chosen company's agents, kept while one agent's listings are shown. */
 let companyAgents = $state<CompanyListingAgentInventory[]>([])
 let selectedAgent = $state<CompanyListingAgentInventory | null>(null)
-/** Renewals: every lease in the dataset, 50 at a time up to the 200 the endpoint serves. */
+/**
+ * Renewals (client, 3 Nov): leases on units with a current owner in the agency's owner imports,
+ * each with that owner's contact. 50 at a time up to the 200 the endpoint serves.
+ */
 let renewalLimit = $state(50)
 /** Area options: every area in the lease data (the list My areas uses), fetched once. */
 const renewalAreas = createQuery(() => ({
@@ -63,7 +66,8 @@ const renewals = createQuery(() => ({
 		property_type: ui.renewalPtype,
 		project: ui.renewalProject,
 		building: ui.renewalBuilding,
-		limit: renewalLimit
+		limit: renewalLimit,
+		owners_only: true
 	}),
 	enabled: ui.assetTab === 'renewals'
 }))
@@ -578,7 +582,14 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 				<div class="tblwrap">
 					<table class="tbl">
 						<thead>
-							<tr><th>Unit</th><th>Property</th><th class="r">Rent a year</th><th>Ends</th><th></th></tr>
+							<tr>
+								<th>Unit</th>
+								<th>Owner</th>
+								<th>Property</th>
+								<th class="r">Rent a year</th>
+								<th>Ends</th>
+								<th></th>
+							</tr>
 						</thead>
 						<tbody>
 							{#each res.items as r (r.id)}
@@ -588,6 +599,12 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 											{r.unit}
 										</button>
 										<div class="sub">{r.area}</div>
+									</td>
+									<td data-label="Owner">
+										{r.owner?.name ?? 'Name not imported'}
+										{#if r.owner?.phone}
+											<div class="sub"><a href="tel:{r.owner.phone}">{r.owner.phone}</a></div>
+										{/if}
 									</td>
 									<td data-label="Property">{r.property}</td>
 									<td class="r num" data-label="Rent a year">{r.rent_aed ? fmt(r.rent_aed) : ''}</td>
@@ -599,7 +616,11 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 									</td>
 								</tr>
 							{:else}
-								<tr><td colspan="5"><Empty text="No leases match these filters." /></td></tr>
+								<tr>
+									<td colspan="6">
+										<Empty text="No leases on units with an owner on file match these filters." />
+									</td>
+								</tr>
 							{/each}
 						</tbody>
 					</table>

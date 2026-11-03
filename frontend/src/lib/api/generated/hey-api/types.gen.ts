@@ -3230,6 +3230,12 @@ export type CrmRenewalsResponse = {
      * As Of
      */
     as_of: string;
+    /**
+     * Owners
+     */
+    owners?: {
+        [key: string]: CrmRenewalOwner;
+    };
 };
 
 /**
@@ -13723,6 +13729,10 @@ export type CrmCrmRenewalsData = {
          * As Of
          */
         as_of?: string | null;
+        /**
+         * Owners Only
+         */
+        owners_only?: boolean;
     };
     url: '/api/v1/crm/renewals';
 };

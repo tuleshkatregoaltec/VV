@@ -61,7 +61,8 @@ from app.supply.service import get_catalog_freshness, list_matching_inventory
 # v5 (26 Oct): units on record use the budget band; a unit with no price is review-only.
 # v7 (27 Oct): company matches use the organization's selected Property Finder broker.
 # v8 (3 Nov): tenants are matched against their move-in date; later lease ends are disqualified.
-_ALGORITHM_VERSION = "inbound-v8"
+# v9 (3 Nov): tenant units with no sale match show the lease's own unit number.
+_ALGORITHM_VERSION = "inbound-v9"
 # Lowest score stored as a match.
 _MIN_MATCH_SCORE = 50
 # Where refresh keeps how many rows each lane disqualified by move-in timing (read on load).
@@ -444,6 +445,10 @@ async def refresh_inbound_matches(
             if scored is None:
                 continue
             score, reasons, requirements = scored
+            unit = lead.get("unit_number")
+            if enquiry.intent == "rent":
+                # The lease records its own unit; the sale match is often missing (client, 3 Nov).
+                unit = unit or lead.get("lease_unit_number")
             lease_reason = f"Lease ends {lead.get('lease_end')}"
             if move_in:
                 verdict, lease_reason = lease_timing(lead.get("lease_end"), move_in)
@@ -456,7 +461,7 @@ async def refresh_inbound_matches(
                 target_type="unit",
                 target_key=str(lead["unit_candidate_key"]),
                 score=score,
-                title=f"{lead.get('building_name') or 'Building'} · Unit {lead.get('unit_number') or 'unresolved'}",
+                title=f"{lead.get('building_name') or 'Building'} · Unit {unit or 'unresolved'}",
                 subtitle=f"{bedrooms or 'Layout pending'} · AED {price:,}"
                 if price
                 else f"{bedrooms or 'Layout pending'} · value pending",

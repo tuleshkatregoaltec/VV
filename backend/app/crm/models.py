@@ -572,3 +572,5 @@ class CrmRenewalsResponse(BaseModel):
     # Listed once a project is picked.
     buildings: list[str] = Field(default_factory=list)
     as_of: date
+    # owners_only: each lease's owner from the owner imports, by unit_candidate_key.
+    owners: dict[str, CrmRenewalOwner] = Field(default_factory=dict)

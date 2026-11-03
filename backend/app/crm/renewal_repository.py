@@ -35,5 +35,23 @@ async def list_current_owner_claims(db: AsyncSession, organization_id, candidate
     ).all()
 
 
+async def list_current_owner_unit_keys(db: AsyncSession, organization_id) -> list[str]:
+    """Lease units the organization's owner imports tie to a current owner."""
+    return list(
+        (
+            await db.exec(
+                select(CrmPropertyContactClaim.unit_candidate_key)
+                .where(
+                    CrmPropertyContactClaim.organization_id == organization_id,
+                    CrmPropertyContactClaim.ownership_status.in_(CURRENT_OWNER_STATUSES),  # type: ignore[attr-defined]
+                    CrmPropertyContactClaim.unit_candidate_key.is_not(None),  # type: ignore[union-attr]
+                    CrmPropertyContactClaim.unit_candidate_key != "",
+                )
+                .distinct()
+            )
+        ).all()
+    )
+
+
 def save(db: AsyncSession, record):
     db.add(record)

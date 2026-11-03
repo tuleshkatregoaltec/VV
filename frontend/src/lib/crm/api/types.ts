@@ -760,6 +760,8 @@ export interface RenewalListParams {
 	/** Picked after a project. */
 	building: string
 	limit: number
+	/** Assets › Renewals: only units with a current owner in the agency's owner imports. */
+	owners_only?: boolean
 }
 
 export interface RenewalListResponse {

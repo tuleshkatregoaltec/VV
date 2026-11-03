@@ -86,6 +86,7 @@ async def fetch_matching_rentals(parameters):
             c.contract_state,
             c.observed_contracts,
             m.unit_number,
+            c.unit_number AS lease_unit_number,
             m.last_purchase_date,
             m.matched_sale_price,
             m.match_status,
@@ -659,6 +660,18 @@ _AREA_LEAD_CTE = _LEAD_CTE.replace(
 )
 
 
+# Assets › Renewals (owners_only): only the units the agency's owner imports tie to a current owner.
+# They are a few thousand of Dubai's leases, so they are picked before the joins and ranking.
+_UNIT_LEAD_CTE = _LEAD_CTE.replace(
+    _CANDIDATE_SOURCE,
+    """FROM (
+        SELECT *, event_key
+        FROM dxbi_rental_unit_candidates FINAL
+        WHERE unit_candidate_key IN {unit_keys:Array(String)}
+    ) AS c""",
+)
+
+
 async def run_until_disconnected(is_disconnected, work):
     """Run `work` with time-limited queries; None (queries stopped) if the caller went away."""
     try:
@@ -728,13 +741,15 @@ async def fetch_renewals(
     building,
     limit,
     offset,
+    unit_keys=None,
 ):
     """Assets › Renewals: one page of leases with its total, plus the options for its filters.
 
     Two queries instead of the dashboard's five. With an area picked, leases are narrowed to it
     before the per-unit work (the same narrowing as the agent's renewal leads).
     """
-    cte = _AREA_LEAD_CTE if area else _LEAD_CTE
+    # unit_keys (owners_only) narrows further than an area; the area filter still applies.
+    cte = _UNIT_LEAD_CTE if unit_keys else _AREA_LEAD_CTE if area else _LEAD_CTE
     where, filter_params = _where_clause(
         status=status,
         priority=None,
@@ -759,6 +774,7 @@ async def fetch_renewals(
         "as_of": anchor.isoformat(),
         "expired_days": expired_days,
         "areas": [area] if area else [],
+        **({"unit_keys": unit_keys} if unit_keys else {}),
     }
     rows_sql = (
         cte

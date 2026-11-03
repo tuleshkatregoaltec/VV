@@ -124,6 +124,7 @@ async def list_renewals(
     limit: int,
     offset: int,
     as_of: date | None = None,
+    unit_keys: list[str] | None = None,
 ) -> CrmRenewalsResponse:
     """Every lease in the dataset, whatever any agent's areas, narrowed by the tab's filters.
 
@@ -147,6 +148,7 @@ async def list_renewals(
             building=building,
             limit=limit,
             offset=offset,
+            unit_keys=unit_keys,
         )
     except Exception as exc:
         logger.exception("CRM renewals query failed")
@@ -162,6 +164,49 @@ async def list_renewals(
             "buildings": list(facets.get("buildings") or []),
         }
     )
+
+
+async def list_owner_renewals(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    organization_id: str,
+    window: str | None,
+    area: str | None,
+    property_type: str | None,
+    project: str | None,
+    building: str | None,
+    limit: int,
+    offset: int,
+    as_of: date | None = None,
+) -> CrmRenewalsResponse:
+    """Assets › Renewals: the lease list for units with a current owner on file.
+
+    Client (3 Nov): every row is an owner the agency can call as the lease ends.
+    """
+    keys = await renewal_repository.list_current_owner_unit_keys(db, organization_id)
+    if not keys:
+        # No filter would mean every lease in Dubai, so an agency without owner imports sees none.
+        anchor = as_of or date.today()
+        return CrmRenewalsResponse(leads=[], total=0, limit=limit, offset=offset, as_of=anchor)
+    res = await list_renewals(
+        window=window,
+        area=area,
+        property_type=property_type,
+        project=project,
+        building=building,
+        limit=limit,
+        offset=offset,
+        as_of=as_of,
+        unit_keys=keys,
+    )
+    owners = await _owners_by_candidate(
+        db,
+        candidate_keys=[lead.unit_candidate_key for lead in res.leads],
+        user_id=user_id,
+        organization_id=organization_id,
+    )
+    return res.model_copy(update={"owners": owners})
 
 
 async def _owners_by_candidate(

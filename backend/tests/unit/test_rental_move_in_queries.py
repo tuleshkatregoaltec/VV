@@ -26,6 +26,15 @@ def test_move_in_caps_the_lease_window(monkeypatch):
     assert "ifNull({move_by:Nullable(Date)}, today()) + 90" in sql
 
 
+def test_lease_unit_number_is_returned_beside_the_sale_match_unit(monkeypatch):
+    # The lease records its own unit; the existing unit_number (from the sale match) is kept as is.
+    calls = _capture(monkeypatch, opportunity_queries, [])
+    asyncio.run(opportunities.list_matching_rental_opportunities("JVC", ""))
+    sql = calls[0][0]
+    assert "c.unit_number AS lease_unit_number" in sql
+    assert "m.unit_number," in sql
+
+
 def test_without_move_in_the_window_stays_90_days(monkeypatch):
     calls = _capture(monkeypatch, opportunity_queries, [])
     asyncio.run(opportunities.list_matching_rental_opportunities("JVC", ""))

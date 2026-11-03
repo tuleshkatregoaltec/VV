@@ -75,3 +75,25 @@ async def test_renewals_tab_rejects_an_unknown_window(client):
     response = await client.get("/api/v1/crm/renewals", params={"window": "last_decade"})
 
     assert response.status_code == 422
+
+
+async def test_owner_renewals_are_scoped_to_the_signed_in_agency(client, monkeypatch):
+    # Renewals list one agency's owner file; another agency's owners must never show.
+    owners = AsyncMock(
+        return_value=CrmRenewalsResponse(
+            leads=[], total=0, limit=50, offset=0, as_of=date(2026, 11, 3)
+        )
+    )
+    everyone = AsyncMock()
+    monkeypatch.setattr("app.crm.router.list_owner_renewals", owners)
+    monkeypatch.setattr("app.crm.router.list_renewals", everyone)
+
+    response = await client.get(
+        "/api/v1/crm/renewals", params={"owners_only": "true", "window": "expiring_60"}
+    )
+
+    assert response.status_code == 200
+    kwargs = owners.await_args.kwargs
+    assert (kwargs["organization_id"], kwargs["user_id"]) == ("1", "test-user-id")
+    assert kwargs["window"] == "expiring_60"
+    everyone.assert_not_awaited()

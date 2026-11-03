@@ -987,6 +987,40 @@ describe('Assets › Renewals (/api/v1/crm/renewals)', () => {
 		await crm.renewals.list(params, controller.signal)
 		expect(get.mock.calls[0][1]).toMatchObject({ signal: controller.signal })
 	})
+
+	// Client (3 Nov): Assets › Renewals lists only units with a current owner in the owner
+	// imports, each with the owner's contact, so the agent can call them as the lease ends.
+	it('asks for owner units when told to and shows each owner', async () => {
+		const get = serve({
+			'/api/v1/crm/renewals': {
+				...renewalsResponse,
+				owners: {
+					'unit-1': {
+						name: 'Maya Example',
+						phone: '+971500000002',
+						email: null,
+						source: 'owner_import'
+					}
+				}
+			}
+		})
+		const { crm } = await import('$lib/crm/api')
+		const res = await crm.renewals.list({ ...params, owners_only: true })
+		expect(String(get.mock.calls[0][0])).toContain('owners_only=true')
+		expect(res.items[0].owner).toEqual({
+			name: 'Maya Example',
+			phone: '+971500000002',
+			email: null,
+			source: 'Owner import'
+		})
+	})
+
+	it('asks for every lease unless owner units are asked for', async () => {
+		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
+		const { crm } = await import('$lib/crm/api')
+		await crm.renewals.list(params)
+		expect(String(get.mock.calls[0][0])).not.toContain('owners_only')
+	})
 })
 
 describe('CRM areas with no backend yet', () => {
