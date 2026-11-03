@@ -25,11 +25,15 @@ from app.crm.opportunity_queries import (
 )
 
 
-async def list_matching_rental_opportunities(area: str, property_type: str) -> list[dict[str, Any]]:
+async def list_matching_rental_opportunities(
+    area: str, property_type: str, move_by: date | None = None
+) -> list[dict[str, Any]]:
+    """Leases in the area; with a move-in date, up to 90 days past it, in-time leases first."""
     return await opportunity_queries.fetch_matching_rentals(
         {
             "area": area,
             "property_type": property_type,
+            "move_by": move_by,
         }
     )
 

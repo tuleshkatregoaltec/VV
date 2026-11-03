@@ -93,7 +93,7 @@ async def fetch_matching_rentals(parameters):
         FROM dxbi_rental_unit_candidates AS c FINAL
         LEFT JOIN dxbi_rental_sale_matches AS m FINAL USING (unit_candidate_key)
         WHERE
-            c.lease_end BETWEEN today() - 1825 AND today() + 90
+            c.lease_end BETWEEN today() - 1825 AND ifNull({move_by:Nullable(Date)}, today()) + 90
             AND (
                 {area:String} = ''
                 OR positionCaseInsensitiveUTF8(c.area_name, {area:String}) > 0
@@ -105,7 +105,8 @@ async def fetch_matching_rentals(parameters):
                 OR lowerUTF8(c.property_type) = lowerUTF8({property_type:String})
             )
         ORDER BY
-            abs(dateDiff('day', today(), c.lease_end)) ASC,
+            c.lease_end > ifNull({move_by:Nullable(Date)}, toDate('2149-06-06')) ASC,
+            abs(dateDiff('day', ifNull({move_by:Nullable(Date)}, today()), c.lease_end)) ASC,
             c.annual_rent_aed DESC
         LIMIT 40
         """,

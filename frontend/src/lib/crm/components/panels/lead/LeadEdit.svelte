@@ -3,6 +3,7 @@ import { untrack } from 'svelte'
 import { crm } from '../../../api'
 import type { LeadDetail, LeadFieldKey, LeadFields, LeadType } from '../../../api/types'
 import { fieldShown, LEAD_TYPE_ORDER, LEAD_TYPES } from '../../../config'
+import { ISO_DAY } from '../../../format'
 import { panel } from '../../../stores/panel.svelte'
 import { write } from '../../../write'
 import MoneyInput from '../../ui/MoneyInput.svelte'
@@ -104,6 +105,15 @@ async function save(e: SubmitEvent) {
 					<option value="">Not stated</option>
 					{#each f.options as o (o)}<option value={o}>{o}</option>{/each}
 				</select>
+			{:else if f.date}
+				<!-- An older free-text value (e.g. "ASAP") stays until a date is picked. -->
+				<input
+					id="edit-{f.key}"
+					type="date"
+					title={draft[f.key] && !ISO_DAY.test(String(draft[f.key])) ? `Saved as "${draft[f.key]}"` : undefined}
+					value={ISO_DAY.test(String(draft[f.key] ?? '')) ? draft[f.key] : ''}
+					onchange={(e) => (draft[f.key] = e.currentTarget.value)}
+				/>
 			{:else}
 				<input id="edit-{f.key}" type="text" bind:value={draft[f.key]} />
 			{/if}

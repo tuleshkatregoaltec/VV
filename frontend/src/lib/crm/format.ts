@@ -35,6 +35,9 @@ export function shortDate(iso: string): string {
 }
 
 /** 10 Nov 2025 */
+/** A YYYY-MM-DD day, as a date input saves it. */
+export const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
 export function fullDate(iso: string): string {
 	const d = utc(iso)
 	return `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`

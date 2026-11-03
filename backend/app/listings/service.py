@@ -261,6 +261,13 @@ async def listing_analytics_from_clickhouse(
     )
 
 
+async def get_listing_descriptions(listing_ids: list[str]) -> dict[str, str]:
+    if not listing_ids:
+        return {}
+    rows = await queries.fetch_listing_descriptions({"ids": listing_ids})
+    return {str(row["listing_id"]): str(row.get("description") or "") for row in rows}
+
+
 async def get_listing_from_clickhouse(listing_id: str) -> ListingDetailResponse:
     rows = await queries.fetch_listing_detail({"listing_id": listing_id})
     if not rows:

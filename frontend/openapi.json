@@ -22459,6 +22459,25 @@
             },
             "type": "object",
             "title": "Lanes"
+          },
+          "move_in": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Move In"
+          },
+          "hidden_after": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Hidden After"
           }
         },
         "type": "object",

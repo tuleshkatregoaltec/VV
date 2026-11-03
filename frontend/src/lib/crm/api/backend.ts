@@ -38,7 +38,7 @@ import type {
 } from '$lib/api/generated/hey-api/types.gen'
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { groupOf, LEAD_TYPES, ownerPropertyKind, PROPERTY_TYPES, SOURCE_OPTIONS } from '../config'
-import { aed, fmt, fullDate, plural, short } from '../format'
+import { aed, dayLabel, fmt, fullDate, ISO_DAY, plural, short } from '../format'
 import {
 	type ClaimStatus,
 	importCounts,
@@ -771,10 +771,13 @@ export async function leadMatches(id: number): Promise<LeadMatches> {
 	const side = groupOf(lead.lead_type)
 	const brief = LEAD_TYPES[lead.lead_type].fields
 		.filter((f) => lead.fields[f.key])
-		.map((f) => ({
-			k: f.label,
-			v: f.money ? aed(Number(lead.fields[f.key])) : String(lead.fields[f.key])
-		}))
+		.map((f) => {
+			const v = String(lead.fields[f.key])
+			return {
+				k: f.label,
+				v: f.money ? aed(Number(lead.fields[f.key])) : f.date && ISO_DAY.test(v) ? fullDate(v) : v
+			}
+		})
 	const tab = side === 'sl' ? 'sell' : lead.off_plan ? 'offplan' : 'ready'
 	// Matching needs a qualified brief (the backend refuses otherwise): ask the agent for one.
 	if (!e.qualification_complete) {
@@ -792,12 +795,18 @@ export async function leadMatches(id: number): Promise<LeadMatches> {
 	}
 	const res = await loadMatches(id)
 	const live = (lane: string) => (res.lanes[lane] ?? []).filter((m) => m.state !== 'dismissed')
+	// A tenant's matches are held to the move-in date; say how many only free up later.
+	const moveBy = res.move_in ?? null
+	const freeAfter = (lane: string) => {
+		const n = res.hidden_after?.[lane] ?? 0
+		return n && moveBy ? ` · ${n} free after ${dayLabel(moveBy)}` : ''
+	}
 
 	const tiers: MatchTier[] = LANES[side].map((t, i) => ({
 		id: t.lane,
 		n: i + 1,
 		title: t.title,
-		sub: `${live(t.lane).length} found`,
+		sub: `${live(t.lane).length} found${freeAfter(t.lane)}`,
 		chip: null,
 		gate: null,
 		groups: [
@@ -843,7 +852,7 @@ export async function leadMatches(id: number): Promise<LeadMatches> {
 		tab,
 		lead,
 		brief,
-		move_by: null,
+		move_by: moveBy,
 		shortlist: Object.values(res.lanes)
 			.flat()
 			.filter((m) => m.state === 'saved').length,

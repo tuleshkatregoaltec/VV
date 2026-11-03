@@ -39,8 +39,19 @@ from app.crm.opportunities import (
     list_matching_rental_opportunities,
     list_sales_inventory,
 )
+from app.crm.rental_timing import (
+    available_from,
+    available_reason,
+    lease_timing,
+    parse_move_in,
+    stale_caveat,
+)
 from app.listings.models import ListingCardResponse
-from app.listings.service import get_inventory_freshness, list_listings_from_clickhouse
+from app.listings.service import (
+    get_inventory_freshness,
+    get_listing_descriptions,
+    list_listings_from_clickhouse,
+)
 from app.supply.service import get_catalog_freshness, list_matching_inventory
 
 # Bump when scoring rules change: stored matches from an older version re-run on next load.
@@ -49,7 +60,12 @@ from app.supply.service import get_catalog_freshness, list_matching_inventory
 # v4 (26 Oct): studio and 7+ bedroom buyers are searched with the values listings use.
 # v5 (26 Oct): units on record use the budget band; a unit with no price is review-only.
 # v7 (27 Oct): company matches use the organization's selected Property Finder broker.
-_ALGORITHM_VERSION = "inbound-v7"
+# v8 (3 Nov): tenants are matched against their move-in date; later lease ends are disqualified.
+_ALGORITHM_VERSION = "inbound-v8"
+# Lowest score stored as a match.
+_MIN_MATCH_SCORE = 50
+# Where refresh keeps how many rows each lane disqualified by move-in timing (read on load).
+_HIDDEN_AFTER_KEY = "_match_hidden_after"
 # Highest score a match can have and still read "Review" (Near starts at 65 in _upsert_match).
 _REVIEW_ONLY_SCORE = 64
 
@@ -171,6 +187,19 @@ def _listing_subtitle(listing: ListingCardResponse) -> str:
     return " · ".join(part for part in parts if part)
 
 
+def _tenant_move_in(enquiry: CrmInboundEnquiry) -> date | None:
+    """The move-in date a tenant's matches are held to; None (no timing gate) for anyone else."""
+    if enquiry.intent != "rent":
+        return None
+    return parse_move_in((enquiry.criteria or {}).get("move_in"), today=_utcnow().date())
+
+
+def _hide(hidden: dict[str, int], lane: str, score: int) -> None:
+    """Count a row disqualified by timing, if it would otherwise have been shown."""
+    if score >= _MIN_MATCH_SCORE:
+        hidden[lane] = hidden.get(lane, 0) + 1
+
+
 def _score_listing(
     criteria: dict[str, Any],
     strict_fields: list[str],
@@ -230,7 +259,7 @@ async def _upsert_match(
     breakdown: dict[str, Any],
     snapshot: dict[str, Any],
 ) -> CrmInboundMatch | None:
-    if score < 50:
+    if score < _MIN_MATCH_SCORE:
         return None
     result = await match_repository.find_target_match(db, enquiry, target_key, target_type)
     item = result
@@ -311,6 +340,9 @@ async def refresh_inbound_matches(
     criteria = enquiry.criteria or {}
     await match_repository.mark_refreshable_matches_stale(db, enquiry_id)
     generated: list[CrmInboundMatch] = []
+    # Client call (3 Nov): a tenant needs a home free by their move-in date.
+    move_in = _tenant_move_in(enquiry)
+    hidden: dict[str, int] = {}
 
     if enquiry.intent in {"buy", "rent"}:
         requested_locations = _locations(criteria)
@@ -342,6 +374,13 @@ async def refresh_inbound_matches(
             actionability = 20 if claim.phone_primary or claim.email_primary else 10
             timing = 10 if claim.lease_end else 3
             score = min(100, location + budget + property_points + 15 + actionability + timing)
+            lease_reasons: list[str] = []
+            if move_in:
+                verdict, lease_reason = lease_timing(claim.lease_end, move_in)
+                if verdict == "after":
+                    _hide(hidden, "owners", score)
+                    continue
+                lease_reasons.append(lease_reason)
             item = await _upsert_match(
                 db,
                 enquiry=enquiry,
@@ -355,6 +394,7 @@ async def refresh_inbound_matches(
                     budget_reason,
                     "Current ownership evidence",
                     "Contact available" if actionability == 20 else "Contact enrichment needed",
+                    *lease_reasons,
                 ],
                 breakdown={
                     "requirements": location + budget + property_points + 15,
@@ -377,7 +417,9 @@ async def refresh_inbound_matches(
                 generated.append(item)
 
         for lead in await list_matching_rental_opportunities(
-            next(iter(_locations(criteria)), ""), str(criteria.get("property_type") or "")
+            next(iter(_locations(criteria)), ""),
+            str(criteria.get("property_type") or ""),
+            move_in,
         ):
             price = (
                 int(lead.get("annual_rent_aed") or 0) or None
@@ -402,6 +444,12 @@ async def refresh_inbound_matches(
             if scored is None:
                 continue
             score, reasons, requirements = scored
+            lease_reason = f"Lease ends {lead.get('lease_end')}"
+            if move_in:
+                verdict, lease_reason = lease_timing(lead.get("lease_end"), move_in)
+                if verdict == "after":
+                    _hide(hidden, "units", score)
+                    continue
             item = await _upsert_match(
                 db,
                 enquiry=enquiry,
@@ -412,7 +460,7 @@ async def refresh_inbound_matches(
                 subtitle=f"{bedrooms or 'Layout pending'} · AED {price:,}"
                 if price
                 else f"{bedrooms or 'Layout pending'} · value pending",
-                reasons=[*reasons, f"Lease ends {lead.get('lease_end')}"],
+                reasons=[*reasons, lease_reason],
                 breakdown={"requirements": requirements, "actionability": 7, "timing": 10},
                 snapshot=_json_snapshot(lead),
             )
@@ -564,6 +612,8 @@ async def refresh_inbound_matches(
                 continue
             score, reasons, breakdown = scored
             days = max(0, (now - row.listed_at).days)
+            # No description is stored for company listings, so only their age is checked.
+            caveat = stale_caveat(days, None, None) if move_in else None
             item = await _upsert_match(
                 db,
                 enquiry=enquiry,
@@ -572,7 +622,10 @@ async def refresh_inbound_matches(
                 score=score,
                 title=row.title,
                 subtitle=_listing_subtitle(_company_listing_card(row)),
-                reasons=[*reasons, f"Listed {days} day{'' if days == 1 else 's'} ago"],
+                reasons=[
+                    *reasons,
+                    caveat or f"Listed {days} day{'' if days == 1 else 's'} ago",
+                ],
                 breakdown=breakdown,
                 snapshot=row.model_dump(mode="json"),
             )
@@ -595,11 +648,30 @@ async def refresh_inbound_matches(
             price_max=band[1] if band else None,
             price_basis="annual" if enquiry.intent == "rent" else "raw",
         )
+        # Availability is written in the description, not a field (client call, 20:10).
+        descriptions = (
+            await get_listing_descriptions([listing.listing_id for listing in listings.listings])
+            if move_in
+            else {}
+        )
         for listing in listings.listings:
             scored = _score_listing(criteria, enquiry.strict_fields, enquiry.intent, listing)
             if scored is None:
                 continue
             score, reasons, breakdown = scored
+            timing_reasons: list[str] = []
+            if move_in:
+                listed = listing.listed_date.date() if listing.listed_date else now.date()
+                available = available_from(descriptions.get(listing.listing_id), listed=listed)
+                if available and available > move_in:
+                    _hide(hidden, "listings", score)
+                    continue
+                if available and available != listed:
+                    timing_reasons.append(available_reason(available))
+                # listing_age_days is the age at the last scrape; the tenant needs it today.
+                age = (now.date() - listed).days if listing.listed_date else None
+                if caveat := stale_caveat(age, available, listed):
+                    timing_reasons.append(caveat)
             item = await _upsert_match(
                 db,
                 enquiry=enquiry,
@@ -613,6 +685,7 @@ async def refresh_inbound_matches(
                     "Fresh active listing"
                     if listing_fresh
                     else "Listing catalog candidate; availability requires confirmation",
+                    *timing_reasons,
                 ],
                 breakdown=breakdown,
                 snapshot=listing.model_dump(mode="json"),
@@ -683,6 +756,8 @@ async def refresh_inbound_matches(
                 if len(matched_projects) >= 20:
                     break
 
+    if hidden or _HIDDEN_AFTER_KEY in criteria:
+        await match_repository.set_match_hidden_after(db, enquiry_id, hidden)
     await match_repository.mark_algorithm_version(db, enquiry_id, _ALGORITHM_VERSION)
     await db.commit()
     stored = await match_repository.list_matches_by_score(db, enquiry_id)
@@ -712,6 +787,8 @@ async def refresh_inbound_matches(
         offplan_catalog_available=bool(offplan_last_refresh),
         offplan_last_refresh=offplan_last_refresh,
         lanes=lanes,
+        move_in=move_in,
+        hidden_after=hidden if move_in else {},
     )
 
 
@@ -743,6 +820,7 @@ async def get_inbound_matches(
         return await refresh_inbound_matches(
             db, enquiry_id=enquiry_id, organization_id=organization_id
         )
+    move_in = _tenant_move_in(enquiry)
     listing_last_refresh, listing_fresh = await get_inventory_freshness()
     offplan_last_refresh = await get_catalog_freshness()
     lanes: dict[str, list[InboundMatchResponse]] = {
@@ -771,6 +849,8 @@ async def get_inbound_matches(
         offplan_catalog_available=bool(offplan_last_refresh),
         offplan_last_refresh=offplan_last_refresh,
         lanes=lanes,
+        move_in=move_in,
+        hidden_after=(enquiry.criteria or {}).get(_HIDDEN_AFTER_KEY) or {} if move_in else {},
     )
 
 

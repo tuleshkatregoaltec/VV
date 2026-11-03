@@ -456,6 +456,9 @@ class InboundMatchesResponse(BaseModel):
     offplan_catalog_available: bool = False
     offplan_last_refresh: datetime | None = None
     lanes: dict[str, list[InboundMatchResponse]]
+    # A tenant's move-in date, and per lane how many rows were disqualified by it.
+    move_in: date | None = None
+    hidden_after: dict[str, int] = Field(default_factory=dict)
 
 
 class InboundMatchUpdate(BaseModel):

@@ -857,6 +857,76 @@ describe('Inbox from /api/v1/crm/inbound/enquiries', () => {
 		expect(post).not.toHaveBeenCalled()
 	})
 
+	// Client call (3 Nov): a tenant's matches are held to the move-in date; the tab says how many
+	// were left out because they only free up later.
+	const tenant = (criteria: Record<string, unknown>) =>
+		enquiry({
+			id: 11,
+			intent: 'rent',
+			status: 'qualified',
+			qualification_complete: true,
+			criteria: {
+				locations: ['JVC'],
+				property_type: 'Apartment',
+				budget_max_aed: 120_000,
+				...criteria
+			}
+		})
+	const unitMatch = {
+		id: 1,
+		target_type: 'unit',
+		target_key: 'u1',
+		state: 'suggested',
+		fit: 'near',
+		title: 'Binghatti Gate · Unit 1204',
+		subtitle: '2 · AED 110,000',
+		reasons: ['Lease ends 15 Jan 2027, before move-in 1 Feb 2027'],
+		missing_fields: [],
+		snapshot: {},
+		generated_at: new Date().toISOString()
+	}
+	const matches = (extra: Record<string, unknown>) => ({
+		enquiry_id: 11,
+		listing_fresh: true,
+		lanes: { company: [], owners: [], units: [unitMatch], listings: [], offplan: [], demand: [] },
+		...extra
+	})
+
+	it('holds tenant matches to the move-in date and counts what frees up later', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries/11': tenant({ move_in: '2027-02-01' }),
+			'/api/v1/crm/inbound/enquiries/11/matches': matches({
+				move_in: '2027-02-01',
+				hidden_after: { units: 2 }
+			})
+		})
+		const res = await backend.leadMatches(11)
+		expect(res.move_by).toBe('2027-02-01')
+		const units = res.tiers.find((t) => t.id === 'units')
+		expect(units?.sub).toBe('1 found · 2 free after Mon 1 Feb')
+		expect(units?.hidden_after).toBe(0)
+		expect(res.brief).toContainEqual({ k: 'Move-in', v: '1 Feb 2027' })
+	})
+
+	it('matches a tenant with no move-in date as before', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries/11': tenant({}),
+			'/api/v1/crm/inbound/enquiries/11/matches': matches({})
+		})
+		const res = await backend.leadMatches(11)
+		expect(res.move_by).toBeNull()
+		expect(res.tiers.some((t) => t.sub.includes('free after'))).toBe(false)
+	})
+
+	it('shows an old free-text move-in as it was written', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries/11': tenant({ move_in: 'ASAP' }),
+			'/api/v1/crm/inbound/enquiries/11/matches': matches({ move_in: '2026-11-03' })
+		})
+		const res = await backend.leadMatches(11)
+		expect(res.brief).toContainEqual({ k: 'Move-in', v: 'ASAP' })
+	})
+
 	it('lists recent sellers newest sale first', async () => {
 		serveInbox({
 			inbox: [],

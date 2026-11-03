@@ -6337,6 +6337,16 @@ export type InboundMatchesResponse = {
     lanes: {
         [key: string]: Array<InboundMatchResponse>;
     };
+    /**
+     * Move In
+     */
+    move_in?: string | null;
+    /**
+     * Hidden After
+     */
+    hidden_after?: {
+        [key: string]: number;
+    };
 };
 
 /**

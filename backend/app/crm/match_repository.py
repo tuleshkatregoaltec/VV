@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import or_, update
+import json
+
+from sqlalchemy import or_, text, update
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -77,6 +79,23 @@ async def mark_algorithm_version(db: AsyncSession, enquiry_id, version):
         update(CrmInboundMatch)
         .where(CrmInboundMatch.enquiry_id == enquiry_id)
         .values(algorithm_version=version)
+    )
+
+
+async def set_match_hidden_after(db: AsyncSession, enquiry_id, hidden: dict[str, int]):
+    """Store refresh's timing counts beside the brief, touching only that key.
+
+    Refresh runs for seconds; rewriting the whole criteria from the copy it loaded would undo a
+    brief edit saved meanwhile, so the key is set in one statement on the current row.
+    """
+    return await db.exec(
+        text(
+            "UPDATE crm_inbound_enquiries "
+            "SET criteria = jsonb_set(criteria::jsonb, '{_match_hidden_after}', "
+            "CAST(:hidden AS jsonb))::json "
+            "WHERE id = :enquiry_id"
+        ),
+        params={"hidden": json.dumps(hidden), "enquiry_id": enquiry_id},
     )
 
 

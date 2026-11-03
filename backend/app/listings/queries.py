@@ -615,6 +615,23 @@ async def fetch_listing_trend(filters):
     )
 
 
+async def fetch_listing_descriptions(parameters):
+    """The latest scraped description of each listing id (tenant matching reads availability)."""
+    return await query(
+        _listing_sql(
+            """
+        SELECT
+            listing_id,
+            argMax(JSONExtractString(raw_property_json, 'description'), {SCRAPED_AT}) AS description
+        FROM {LISTINGS_TABLE}
+        WHERE listing_id IN {ids:Array(String)}
+        GROUP BY listing_id
+        """
+        ).replace("{SCRAPED_AT}", SCRAPED_AT_EXPR),
+        parameters,
+    )
+
+
 async def fetch_listing_detail(parameters):
     return await query(
         _listing_sql(
