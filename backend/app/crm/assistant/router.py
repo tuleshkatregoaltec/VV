@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -14,6 +14,7 @@ from app.crm.assistant.models import (
     AssistantConversationResponse,
     AssistantMessageRequest,
     AssistantMessageResponse,
+    AssistantTranscriptResponse,
     CreateAssistantConversationRequest,
     UpdateAssistantConversationRequest,
     encode_sse,
@@ -27,6 +28,7 @@ from app.crm.assistant.service import (
     rename_conversation,
     stream_assistant_response,
 )
+from app.crm.assistant.voice import MAX_AUDIO_BYTES, InvalidAudio, transcribe
 from app.postgres import get_db_session
 
 logger = logging.getLogger(__name__)
@@ -142,6 +144,33 @@ async def send_assistant_message(
             "Connection": "keep-alive",
         },
     )
+
+
+@router.post("/transcribe", response_model=AssistantTranscriptResponse)
+async def transcribe_voice_message(
+    audio: UploadFile = File(...),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_token_quota),
+):
+    """Turn the agent's recording (16 kHz mono WAV) into text for them to check before sending.
+    Nothing is stored and nothing is sent to the assistant."""
+    data = await audio.read(MAX_AUDIO_BYTES + 1)
+    try:
+        text = await transcribe(db, user_id=str(context.user.id), audio=data)
+    except InvalidAudio as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    except Exception as error:
+        # Only the error type: provider messages can carry what was said.
+        logger.error(
+            "assistant transcribe failed org=%s error=%s",
+            context.organization.id,
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=502, detail="Could not turn your voice into text."
+        ) from None
+    return AssistantTranscriptResponse(text=text)
 
 
 @router.post("/actions/{action_id}/confirm", response_model=AssistantActionResult)

@@ -546,6 +546,18 @@ export type AssistantMessageResponse = {
 };
 
 /**
+ * AssistantTranscriptResponse
+ *
+ * The words in a voice message, for the agent to check before sending. Empty: no speech.
+ */
+export type AssistantTranscriptResponse = {
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
  * AuthMeResponse
  */
 export type AuthMeResponse = {
@@ -596,6 +608,16 @@ export type AuthMeResponse = {
  */
 export type BodyCrmAssistantConfirmAssistantAction = {
     edits?: ActionEdits | null;
+};
+
+/**
+ * Body_crm-assistant-transcribe_voice_message
+ */
+export type BodyCrmAssistantTranscribeVoiceMessage = {
+    /**
+     * Audio
+     */
+    audio: Blob | File;
 };
 
 /**
@@ -14760,6 +14782,31 @@ export type CrmAssistantSendAssistantMessageResponses = {
      */
     200: unknown;
 };
+
+export type CrmAssistantTranscribeVoiceMessageData = {
+    body: BodyCrmAssistantTranscribeVoiceMessage;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/assistant/transcribe';
+};
+
+export type CrmAssistantTranscribeVoiceMessageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmAssistantTranscribeVoiceMessageError = CrmAssistantTranscribeVoiceMessageErrors[keyof CrmAssistantTranscribeVoiceMessageErrors];
+
+export type CrmAssistantTranscribeVoiceMessageResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssistantTranscriptResponse;
+};
+
+export type CrmAssistantTranscribeVoiceMessageResponse = CrmAssistantTranscribeVoiceMessageResponses[keyof CrmAssistantTranscribeVoiceMessageResponses];
 
 export type CrmAssistantConfirmAssistantActionData = {
     body?: BodyCrmAssistantConfirmAssistantAction;

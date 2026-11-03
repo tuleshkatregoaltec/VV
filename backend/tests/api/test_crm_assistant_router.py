@@ -107,3 +107,71 @@ async def test_confirm_refuses_an_empty_edited_email(client, monkeypatch):
     )
     assert response.status_code == 422
     service.assert_not_awaited()
+
+
+async def test_transcribe_returns_the_words_and_uses_the_signed_in_user(client, monkeypatch):
+    service = AsyncMock(return_value="Move Ahmed to qualified")
+    monkeypatch.setattr("app.crm.assistant.router.transcribe", service)
+    from app.main import app
+
+    app.dependency_overrides[require_token_quota] = lambda: None
+
+    response = await client.post(
+        "/api/v1/crm/assistant/transcribe",
+        files={"audio": ("voice.wav", b"RIFF....WAVE", "audio/wav")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"text": "Move Ahmed to qualified"}
+    assert service.await_args.kwargs["user_id"] == "test-user-id"
+    assert service.await_args.kwargs["audio"] == b"RIFF....WAVE"
+
+
+async def test_transcribe_rejects_a_bad_recording(client, monkeypatch):
+    from app.crm.assistant.voice import InvalidAudio
+    from app.main import app
+
+    monkeypatch.setattr(
+        "app.crm.assistant.router.transcribe",
+        AsyncMock(side_effect=InvalidAudio("Recording must be WAV audio.")),
+    )
+    app.dependency_overrides[require_token_quota] = lambda: None
+
+    response = await client.post(
+        "/api/v1/crm/assistant/transcribe",
+        files={"audio": ("voice.webm", b"not audio", "audio/webm")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Recording must be WAV audio."
+
+
+async def test_transcribe_provider_failure_does_not_leak_or_log_what_was_said(
+    client, monkeypatch, caplog
+):
+    """Provider errors can quote the audio's words; the agent and the logs get neither."""
+    from app.main import app
+
+    monkeypatch.setattr(
+        "app.crm.assistant.router.transcribe",
+        AsyncMock(side_effect=RuntimeError("provider said: move Ahmed +971501234567")),
+    )
+    app.dependency_overrides[require_token_quota] = lambda: None
+
+    response = await client.post(
+        "/api/v1/crm/assistant/transcribe",
+        files={"audio": ("voice.wav", b"RIFF....WAVE", "audio/wav")},
+    )
+
+    assert response.status_code == 502
+    assert "Ahmed" not in response.text
+    assert "Ahmed" not in caplog.text
+    assert "+971" not in caplog.text
+
+
+async def test_transcribe_requires_auth(client_no_auth):
+    response = await client_no_auth.post(
+        "/api/v1/crm/assistant/transcribe",
+        files={"audio": ("voice.wav", b"RIFF....WAVE", "audio/wav")},
+    )
+    assert response.status_code == 401

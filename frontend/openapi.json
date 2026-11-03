@@ -4133,7 +4133,7 @@
           "crm"
         ],
         "summary": "Crm Renewals",
-        "description": "Assets \u203a Renewals: every lease in the dataset, narrowed by the tab's filters.\n\nowners_only (Assets \u203a Owner renewals): only units with a current owner in this agency's\nowner imports, each with that owner's contact.",
+        "description": "Assets \u203a Renewals: every lease in the dataset, narrowed by the tab's filters.\n\nowners_only (what Assets \u203a Renewals asks for): only units with a current owner in this agency's\nowner imports, each with that owner's contact.",
         "operationId": "crm-crm_renewals",
         "parameters": [
           {
@@ -5944,6 +5944,49 @@
         "responses": {
           "200": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/crm/assistant/transcribe": {
+      "post": {
+        "tags": [
+          "crm-assistant",
+          "crm-assistant"
+        ],
+        "summary": "Transcribe Voice Message",
+        "description": "Turn the agent's recording (16 kHz mono WAV) into text for them to check before sending.\nNothing is stored and nothing is sent to the assistant.",
+        "operationId": "crm-assistant-transcribe_voice_message",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_crm-assistant-transcribe_voice_message"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantTranscriptResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -12323,6 +12366,20 @@
         ],
         "title": "AssistantMessageResponse"
       },
+      "AssistantTranscriptResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "AssistantTranscriptResponse",
+        "description": "The words in a voice message, for the agent to check before sending. Empty: no speech."
+      },
       "AuthMeResponse": {
         "properties": {
           "id": {
@@ -12423,6 +12480,20 @@
         },
         "type": "object",
         "title": "Body_crm-assistant-confirm_assistant_action"
+      },
+      "Body_crm-assistant-transcribe_voice_message": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_crm-assistant-transcribe_voice_message"
       },
       "Body_crm-crm_contact_import": {
         "properties": {

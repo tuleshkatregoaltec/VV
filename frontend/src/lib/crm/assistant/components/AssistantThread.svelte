@@ -1,12 +1,15 @@
 <script lang="ts">
 import { createQuery, useQueryClient } from '@tanstack/svelte-query'
 import DOMPurify from 'dompurify'
+import Mic from 'lucide-svelte/icons/mic'
 import Send from 'lucide-svelte/icons/send'
 import { Marked } from 'marked'
 import { browser } from '$app/environment'
 import { type AssistantMessageResponse, assistant, assistantKeys } from '../api'
 import { applyEvent, type ProposedAction, parseEvent, type ThreadMessage } from '../stream'
+import { voiceSupported } from '../voice.svelte'
 import ActionCard from './ActionCard.svelte'
+import VoicePanel from './VoicePanel.svelte'
 
 /** The chat thread: stored turns, the reply streaming in, and cards for proposed changes. */
 let {
@@ -64,6 +67,7 @@ let turnError = $state<string | null>(null)
 let stream: { close: () => void } | null = null
 let streamFor: number | null = null
 let endRef: HTMLDivElement | undefined = $state()
+let talking = $state(false)
 
 const toThread = (rows: AssistantMessageResponse[]): ThreadMessage[] =>
 	rows.map((row) => ({
@@ -190,6 +194,16 @@ function onKeydown(e: KeyboardEvent) {
 		<div bind:this={endRef}></div>
 	</div>
 
+	{#if talking}
+		<VoicePanel
+			onsend={(text) => {
+				talking = false
+				void send(text)
+			}}
+			onclose={() => (talking = false)}
+		/>
+	{/if}
+
 	<form
 		class="composer"
 		onsubmit={(e) => {
@@ -204,6 +218,18 @@ function onKeydown(e: KeyboardEvent) {
 			bind:value={input}
 			onkeydown={onKeydown}
 		></textarea>
+		{#if voiceSupported}
+			<button
+				type="button"
+				class="btn ghost"
+				disabled={streaming}
+				aria-label="Speak to the assistant"
+				title="Speak to the assistant"
+				onclick={() => (talking = true)}
+			>
+				<Mic size={15} />
+			</button>
+		{/if}
 		<button type="submit" class="btn" disabled={streaming || !input.trim()} aria-label="Send">
 			<Send size={15} />
 		</button>

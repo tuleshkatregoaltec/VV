@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     # CRM Assistant only: with an OpenAI key it calls OpenAI directly; otherwise it uses OpenRouter.
     ASSISTANT_OPENAI_API_KEY: str | None = None
     ASSISTANT_MODEL: str | None = None
+    # CRM Assistant voice: an OpenRouter model that accepts audio; unset uses DEFAULT_CHAT_MODEL.
+    ASSISTANT_VOICE_MODEL: str | None = None
 
     # Auth
     AUTH_URL: AnyUrl  # configMap

@@ -135,6 +135,12 @@ class AssistantActionResult(BaseModel):
     text: str | None = None
 
 
+class AssistantTranscriptResponse(BaseModel):
+    """The words in a voice message, for the agent to check before sending. Empty: no speech."""
+
+    text: str
+
+
 class ActionEdits(BaseModel):
     """The agent's own version of a proposed email, sent with Send email instead of the draft."""
 

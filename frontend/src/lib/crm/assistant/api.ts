@@ -5,7 +5,8 @@ import type {
 	AssistantActionResult,
 	AssistantConversationListResponse,
 	AssistantConversationResponse,
-	AssistantMessageResponse
+	AssistantMessageResponse,
+	AssistantTranscriptResponse
 } from '$lib/api/generated/hey-api/types.gen'
 
 export type { AssistantActionResult, AssistantConversationResponse, AssistantMessageResponse }
@@ -37,6 +38,13 @@ export const assistant = {
 			method: 'POST',
 			body: { message }
 		}),
+
+	/** The words in a voice recording (16 kHz mono WAV), for the agent to check before sending. */
+	transcribe: (audio: Blob) => {
+		const form = new FormData()
+		form.append('audio', audio, 'voice.wav')
+		return client.post<AssistantTranscriptResponse>(`${BASE}/transcribe`, form)
+	},
 
 	/** `edits` sends the agent's edited email instead of the proposed one. */
 	confirmAction: (actionId: string, edits?: { subject: string; body: string }) =>
