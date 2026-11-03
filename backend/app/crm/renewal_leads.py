@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timezone
+from typing import Literal
 
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -125,6 +126,7 @@ async def list_renewals(
     offset: int,
     as_of: date | None = None,
     unit_keys: list[str] | None = None,
+    exclude_units: bool = False,
 ) -> CrmRenewalsResponse:
     """Every lease in the dataset, whatever any agent's areas, narrowed by the tab's filters.
 
@@ -149,6 +151,7 @@ async def list_renewals(
             limit=limit,
             offset=offset,
             unit_keys=unit_keys,
+            exclude_units=exclude_units,
         )
     except Exception as exc:
         logger.exception("CRM renewals query failed")
@@ -179,12 +182,28 @@ async def list_owner_renewals(
     limit: int,
     offset: int,
     as_of: date | None = None,
+    owner: Literal["known", "unknown"] = "known",
 ) -> CrmRenewalsResponse:
-    """Assets › Renewals: the lease list for units with a current owner on file.
+    """Assets › Renewals, split by whether the agency has the unit's owner on file.
 
-    Client (3 Nov): every row is an owner the agency can call as the lease ends.
+    known: units with a current owner in the owner imports, each with that owner's contact
+    (client, 3 Nov: someone the agency can call as the lease ends).
+    unknown: every other lease, the units whose owner is still to be found.
     """
     keys = await renewal_repository.list_current_owner_unit_keys(db, organization_id)
+    if owner == "unknown":
+        return await list_renewals(
+            window=window,
+            area=area,
+            property_type=property_type,
+            project=project,
+            building=building,
+            limit=limit,
+            offset=offset,
+            as_of=as_of,
+            unit_keys=keys,
+            exclude_units=True,
+        )
     if not keys:
         # No filter would mean every lease in Dubai, so an agency without owner imports sees none.
         anchor = as_of or date.today()

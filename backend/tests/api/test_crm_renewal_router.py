@@ -88,12 +88,19 @@ async def test_owner_renewals_are_scoped_to_the_signed_in_agency(client, monkeyp
     monkeypatch.setattr("app.crm.router.list_owner_renewals", owners)
     monkeypatch.setattr("app.crm.router.list_renewals", everyone)
 
-    response = await client.get(
-        "/api/v1/crm/renewals", params={"owners_only": "true", "window": "expiring_60"}
-    )
+    for owner in ("known", "unknown"):
+        response = await client.get(
+            "/api/v1/crm/renewals", params={"owner": owner, "window": "expiring_60"}
+        )
 
-    assert response.status_code == 200
-    kwargs = owners.await_args.kwargs
-    assert (kwargs["organization_id"], kwargs["user_id"]) == ("1", "test-user-id")
-    assert kwargs["window"] == "expiring_60"
+        assert response.status_code == 200
+        kwargs = owners.await_args.kwargs
+        assert (kwargs["organization_id"], kwargs["user_id"]) == ("1", "test-user-id")
+        assert (kwargs["owner"], kwargs["window"]) == (owner, "expiring_60")
     everyone.assert_not_awaited()
+
+
+async def test_renewals_reject_an_unknown_owner_choice(client):
+    response = await client.get("/api/v1/crm/renewals", params={"owner": "maybe"})
+
+    assert response.status_code == 422

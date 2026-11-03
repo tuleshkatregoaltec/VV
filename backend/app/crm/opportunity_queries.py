@@ -660,7 +660,7 @@ _AREA_LEAD_CTE = _LEAD_CTE.replace(
 )
 
 
-# Assets › Renewals (owners_only): only the units the agency's owner imports tie to a current owner.
+# Assets › Renewals (owner known): only the units the agency's owner imports tie to a current owner.
 # They are a few thousand of Dubai's leases, so they are picked before the joins and ranking.
 _UNIT_LEAD_CTE = _LEAD_CTE.replace(
     _CANDIDATE_SOURCE,
@@ -742,14 +742,17 @@ async def fetch_renewals(
     limit,
     offset,
     unit_keys=None,
+    exclude_units=False,
 ):
     """Assets › Renewals: one page of leases with its total, plus the options for its filters.
 
     Two queries instead of the dashboard's five. With an area picked, leases are narrowed to it
     before the per-unit work (the same narrowing as the agent's renewal leads).
     """
-    # unit_keys (owners_only) narrows further than an area; the area filter still applies.
-    cte = _UNIT_LEAD_CTE if unit_keys else _AREA_LEAD_CTE if area else _LEAD_CTE
+    # unit_keys (owner known) narrows further than an area; the area filter still applies.
+    # With exclude_units (owner unknown) those units are left out of the usual leases instead.
+    narrow = bool(unit_keys) and not exclude_units
+    cte = _UNIT_LEAD_CTE if narrow else _AREA_LEAD_CTE if area else _LEAD_CTE
     where, filter_params = _where_clause(
         status=status,
         priority=None,
@@ -770,6 +773,9 @@ async def fetch_renewals(
         search=None,
         unlet_only=unlet_only,
     )
+    if unit_keys and exclude_units:
+        where += " AND unit_candidate_key NOT IN {unit_keys:Array(String)}"
+        facet_where += " AND unit_candidate_key NOT IN {unit_keys:Array(String)}"
     base = {
         "as_of": anchor.isoformat(),
         "expired_days": expired_days,

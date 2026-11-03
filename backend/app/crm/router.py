@@ -1,6 +1,7 @@
 import json
 import secrets
 from datetime import date, datetime, time, timedelta
+from typing import Literal
 
 import httpx
 from fastapi import (
@@ -1125,16 +1126,16 @@ async def crm_renewals(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     as_of: date | None = Query(default=None),
-    owners_only: bool = Query(default=False),
+    owner: Literal["known", "unknown"] | None = Query(default=None),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Assets › Renewals: every lease in the dataset, narrowed by the tab's filters.
 
-    owners_only (what Assets › Renewals asks for): only units with a current owner in this agency's
-    owner imports, each with that owner's contact.
+    owner (the Assets › Renewals toggle): known lists only units with a current owner in this
+    agency's owner imports, each with that owner's contact; unknown lists every other lease.
     """
-    if owners_only:
+    if owner:
         user_id, organization_id = _auth_ids(context)
         return await _until_disconnect(
             request,
@@ -1150,6 +1151,7 @@ async def crm_renewals(
                 limit=limit,
                 offset=offset,
                 as_of=as_of,
+                owner=owner,
             ),
         )
     return await _until_disconnect(

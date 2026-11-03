@@ -751,6 +751,9 @@ export type RenewalWindow =
 	| 'expiring_60'
 	| 'expiring_90'
 
+/** Renewals: leases whose owner is on file, or those whose owner is still to be found. */
+export type RenewalOwnerFilter = 'known' | 'unknown'
+
 export interface RenewalListParams {
 	area: string
 	window: RenewalWindow
@@ -760,8 +763,11 @@ export interface RenewalListParams {
 	/** Picked after a project. */
 	building: string
 	limit: number
-	/** Assets › Renewals: only units with a current owner in the agency's owner imports. */
-	owners_only?: boolean
+	/**
+	 * Assets › Renewals toggle: known = units with a current owner in the agency's owner imports;
+	 * unknown = every other lease. Not set: every lease.
+	 */
+	owner?: RenewalOwnerFilter
 }
 
 export interface RenewalListResponse {

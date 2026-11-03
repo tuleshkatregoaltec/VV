@@ -12,6 +12,7 @@ import type {
 	CompanyListingAgentInventory,
 	ListingCard,
 	ListingStatus,
+	RenewalOwnerFilter,
 	RenewalWindow
 } from '$lib/crm/api/types'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
@@ -50,10 +51,15 @@ $effect(() => {
 let companyAgents = $state<CompanyListingAgentInventory[]>([])
 let selectedAgent = $state<CompanyListingAgentInventory | null>(null)
 /**
- * Renewals (client, 3 Nov): leases on units with a current owner in the agency's owner imports,
- * each with that owner's contact. 50 at a time up to the 200 the endpoint serves.
+ * Renewals (client, 3 Nov): a toggle between leases on units with a current owner in the
+ * agency's owner imports (with that owner's contact) and every other lease, whose owner is still
+ * to be found. 50 at a time up to the 200 the endpoint serves.
  */
 let renewalLimit = $state(50)
+const OWNER_ITEMS: { id: RenewalOwnerFilter; label: string }[] = [
+	{ id: 'known', label: 'Owner known' },
+	{ id: 'unknown', label: 'Owner unknown' }
+]
 /** Area options: every area in the lease data (the list My areas uses), fetched once. */
 const renewalAreas = createQuery(() => ({
 	...crmQueries.feedAreas(),
@@ -67,7 +73,7 @@ const renewals = createQuery(() => ({
 		project: ui.renewalProject,
 		building: ui.renewalBuilding,
 		limit: renewalLimit,
-		owners_only: true
+		owner: ui.renewalOwner
 	}),
 	enabled: ui.assetTab === 'renewals'
 }))
@@ -528,6 +534,12 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 	</QueryView>
 {:else if ui.assetTab === 'renewals'}
 	<div class="filters">
+		<Seg
+			label="Owner"
+			items={OWNER_ITEMS}
+			value={ui.renewalOwner}
+			onselect={(v) => filterRenewals(() => (ui.renewalOwner = v))}
+		/>
 		<FilterMenu
 			label="Lease end"
 			allLabel="All lease ends"
@@ -601,7 +613,7 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 										<div class="sub">{r.area}</div>
 									</td>
 									<td data-label="Owner">
-										{r.owner?.name ?? 'Name not imported'}
+										{ui.renewalOwner === 'unknown' ? 'Not on file' : (r.owner?.name ?? 'Name not imported')}
 										{#if r.owner?.phone}
 											<div class="sub"><a href="tel:{r.owner.phone}">{r.owner.phone}</a></div>
 										{/if}
@@ -618,7 +630,11 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 							{:else}
 								<tr>
 									<td colspan="6">
-										<Empty text="No leases on units with an owner on file match these filters." />
+										<Empty
+											text={ui.renewalOwner === 'unknown'
+												? 'No leases match these filters.'
+												: 'No leases on units with an owner on file match these filters.'}
+										/>
 									</td>
 								</tr>
 							{/each}

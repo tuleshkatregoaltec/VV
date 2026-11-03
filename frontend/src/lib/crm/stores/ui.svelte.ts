@@ -13,6 +13,7 @@ import type {
 	OwnerSource,
 	OwnerTab,
 	PropertyKind,
+	RenewalOwnerFilter,
 	RenewalWindow,
 	Source
 } from '../api/types'
@@ -46,6 +47,8 @@ export const ui = $state({
 	assetStatus: 'live' as ListingStatus,
 	/** Assets › Renewals opens on vacant units of the last 60 days. */
 	renewalWindow: 'vacant' as RenewalWindow,
+	/** Renewals opens on the leases whose owner the agency can call. */
+	renewalOwner: 'known' as RenewalOwnerFilter,
 	renewalArea: '',
 	renewalPtype: '',
 	renewalProject: '',

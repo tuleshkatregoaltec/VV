@@ -1005,8 +1005,8 @@ describe('Assets › Renewals (/api/v1/crm/renewals)', () => {
 			}
 		})
 		const { crm } = await import('$lib/crm/api')
-		const res = await crm.renewals.list({ ...params, owners_only: true })
-		expect(String(get.mock.calls[0][0])).toContain('owners_only=true')
+		const res = await crm.renewals.list({ ...params, owner: 'known' })
+		expect(String(get.mock.calls[0][0])).toContain('owner=known')
 		expect(res.items[0].owner).toEqual({
 			name: 'Maya Example',
 			phone: '+971500000002',
@@ -1019,7 +1019,21 @@ describe('Assets › Renewals (/api/v1/crm/renewals)', () => {
 		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
 		const { crm } = await import('$lib/crm/api')
 		await crm.renewals.list(params)
-		expect(String(get.mock.calls[0][0])).not.toContain('owners_only')
+		expect(String(get.mock.calls[0][0])).not.toContain('owner=')
+	})
+
+	// Client (3 Nov): a toggle between leases whose owner is on file and those still to find.
+	it('asks for the leases whose owner is unknown, which carry no owner', async () => {
+		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
+		const { crm } = await import('$lib/crm/api')
+		const res = await crm.renewals.list({ ...params, owner: 'unknown' })
+		expect(String(get.mock.calls[0][0])).toContain('owner=unknown')
+		expect(res.items[0].owner).toBeNull()
+	})
+
+	it('opens the Renewals toggle on owner known', async () => {
+		const { ui } = await import('$lib/crm/stores/ui.svelte')
+		expect(ui.renewalOwner).toBe('known')
 	})
 })
 

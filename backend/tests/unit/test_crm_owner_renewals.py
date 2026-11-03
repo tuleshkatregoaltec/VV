@@ -44,6 +44,32 @@ def test_owner_units_narrow_the_lease_query_before_ranking(monkeypatch):
         assert params["unit_keys"] == ["u1", "u2"]
 
 
+def test_unknown_owner_leases_leave_out_the_owner_units(monkeypatch):
+    # Owner unknown: every lease except those on units with an owner on file.
+    calls = _capture_queries(monkeypatch)
+    asyncio.run(
+        opportunity_queries.fetch_renewals(
+            AS_OF,
+            status=None,
+            unlet_only=False,
+            expired_days=365,
+            area=None,
+            property_type=None,
+            project=None,
+            building=None,
+            limit=50,
+            offset=0,
+            unit_keys=["u1", "u2"],
+            exclude_units=True,
+        )
+    )
+    assert len(calls) == 2
+    for sql, params in calls:
+        assert "unit_candidate_key NOT IN {unit_keys:Array(String)}" in sql
+        assert "unit_candidate_key IN {unit_keys" not in sql.replace("NOT IN", "")
+        assert params["unit_keys"] == ["u1", "u2"]
+
+
 def test_plain_renewals_are_not_narrowed(monkeypatch):
     calls = _capture_queries(monkeypatch)
     asyncio.run(
@@ -67,7 +93,7 @@ def _lead(key: str) -> dict:
     return {"unit_candidate_key": key}
 
 
-def _owner_renewals(monkeypatch, keys, leads, owners=None):
+def _owner_renewals(monkeypatch, keys, leads, owners=None, owner="known"):
     seen = {}
 
     async def owner_keys(db, organization_id):
@@ -79,6 +105,7 @@ def _owner_renewals(monkeypatch, keys, leads, owners=None):
 
     async def fetch(anchor, **kwargs):
         seen["unit_keys"] = kwargs.get("unit_keys")
+        seen["exclude_units"] = kwargs.get("exclude_units")
         return leads, len(leads), {}
 
     async def attach(db, *, candidate_keys, user_id, organization_id):
@@ -103,6 +130,7 @@ def _owner_renewals(monkeypatch, keys, leads, owners=None):
             limit=50,
             offset=0,
             as_of=AS_OF,
+            owner=owner,
         )
     )
     return res, seen
@@ -124,3 +152,19 @@ def test_no_owner_imports_means_an_empty_list_without_querying_leases(monkeypatc
     assert res.total == 0
     assert res.leads == []
     assert "unit_keys" not in seen
+
+
+def test_unknown_owner_leases_exclude_this_agencys_owner_units_and_show_no_owner(monkeypatch):
+    owner = CrmRenewalOwner(name="Maya Example", source="workspace")
+    res, seen = _owner_renewals(monkeypatch, ["u1"], [_lead("u7")], {"u7": owner}, owner="unknown")
+    assert seen["unit_keys"] == ["u1"]
+    assert seen["exclude_units"] is True
+    assert "owner_lookup" not in seen
+    assert res.owners == {}
+    assert res.total == 1
+
+
+def test_unknown_owner_without_owner_imports_is_every_lease(monkeypatch):
+    res, seen = _owner_renewals(monkeypatch, [], [_lead("u7")], owner="unknown")
+    assert not seen["unit_keys"]
+    assert res.total == 1

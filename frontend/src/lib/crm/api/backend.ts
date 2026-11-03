@@ -1723,7 +1723,7 @@ export async function listRenewals(
 			project: p.project || undefined,
 			building: p.building || undefined,
 			limit: p.limit,
-			owners_only: p.owners_only || undefined
+			owner: p.owner || undefined
 		}),
 		{ signal }
 	)

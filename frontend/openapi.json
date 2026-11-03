@@ -4133,7 +4133,7 @@
           "crm"
         ],
         "summary": "Crm Renewals",
-        "description": "Assets \u203a Renewals: every lease in the dataset, narrowed by the tab's filters.\n\nowners_only (what Assets \u203a Renewals asks for): only units with a current owner in this agency's\nowner imports, each with that owner's contact.",
+        "description": "Assets \u203a Renewals: every lease in the dataset, narrowed by the tab's filters.\n\nowner (the Assets \u203a Renewals toggle): known lists only units with a current owner in this\nagency's owner imports, each with that owner's contact; unknown lists every other lease.",
         "operationId": "crm-crm_renewals",
         "parameters": [
           {
@@ -4262,13 +4262,23 @@
             }
           },
           {
-            "name": "owners_only",
+            "name": "owner",
             "in": "query",
             "required": false,
             "schema": {
-              "type": "boolean",
-              "default": false,
-              "title": "Owners Only"
+              "anyOf": [
+                {
+                  "enum": [
+                    "known",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner"
             }
           }
         ],

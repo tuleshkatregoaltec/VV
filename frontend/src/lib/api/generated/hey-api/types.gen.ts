@@ -13752,9 +13752,9 @@ export type CrmCrmRenewalsData = {
          */
         as_of?: string | null;
         /**
-         * Owners Only
+         * Owner
          */
-        owners_only?: boolean;
+        owner?: 'known' | 'unknown' | null;
     };
     url: '/api/v1/crm/renewals';
 };
