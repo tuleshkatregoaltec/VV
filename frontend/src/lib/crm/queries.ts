@@ -45,6 +45,15 @@ export const crmKeys = {
 	whatsappTemplates: () => [...crmKeys.all, 'whatsapp', 'templates'] as const,
 	whatsappThread: (id: number) => [...crmKeys.all, 'lead', id, 'whatsapp-thread'] as const,
 	whatsappChat: (waId: string) => [...crmKeys.all, 'whatsapp', 'chat', waId] as const,
+	whatsappAudience: (p: { search: string; intent: string }) =>
+		[...crmKeys.all, 'whatsapp', 'audience', p] as const,
+	whatsappCampaigns: () => [...crmKeys.all, 'whatsapp', 'campaigns'] as const,
+	whatsappNumbers: () => [...crmKeys.all, 'whatsapp', 'numbers'] as const,
+	whatsappMetaNumbers: () => [...crmKeys.all, 'whatsapp', 'meta-numbers'] as const,
+	whatsappCampaign: (id: number) => [...crmKeys.all, 'whatsapp', 'campaign', id] as const,
+	whatsappCampaignChats: () => [...crmKeys.all, 'whatsapp', 'campaign-chats'] as const,
+	whatsappCampaignChat: (waId: string) =>
+		[...crmKeys.all, 'whatsapp', 'campaign-chat', waId] as const,
 	leadConversation: (id: number) => [...crmKeys.all, 'lead', id, 'conversation'] as const,
 	feedSummary: () => [...crmKeys.all, 'feed', 'summary'] as const,
 	feedAreas: () => [...crmKeys.all, 'feed', 'areas'] as const,
@@ -149,6 +158,39 @@ export const crmQueries = {
 	whatsappChat: (waId: string) => ({
 		queryKey: crmKeys.whatsappChat(waId),
 		queryFn: () => crm.whatsapp.chat(waId)
+	}),
+	whatsappAudience: (p: { search: string; intent: string }) => ({
+		queryKey: crmKeys.whatsappAudience(p),
+		queryFn: () => crm.whatsapp.campaigns.audience(p)
+	}),
+	/** Refreshes while a campaign is still sending, so its counts move on their own. */
+	whatsappCampaigns: () => ({
+		queryKey: crmKeys.whatsappCampaigns(),
+		queryFn: crm.whatsapp.campaigns.list,
+		refetchInterval: (q: { state: { data?: { status: string }[] } }) =>
+			q.state.data?.some((c) => c.status === 'sending') ? 5000 : false
+	}),
+	whatsappCampaign: (id: number) => ({
+		queryKey: crmKeys.whatsappCampaign(id),
+		queryFn: () => crm.whatsapp.campaigns.get(id),
+		refetchInterval: (q: { state: { data?: { status: string } } }) =>
+			q.state.data?.status === 'sending' ? 5000 : false
+	}),
+	whatsappNumbers: () => ({
+		queryKey: crmKeys.whatsappNumbers(),
+		queryFn: crm.whatsapp.numbers.list
+	}),
+	whatsappMetaNumbers: () => ({
+		queryKey: crmKeys.whatsappMetaNumbers(),
+		queryFn: crm.whatsapp.numbers.meta
+	}),
+	whatsappCampaignChats: () => ({
+		queryKey: crmKeys.whatsappCampaignChats(),
+		queryFn: crm.whatsapp.campaigns.chats
+	}),
+	whatsappCampaignChat: (waId: string) => ({
+		queryKey: crmKeys.whatsappCampaignChat(waId),
+		queryFn: () => crm.whatsapp.campaigns.chat(waId)
 	}),
 	leadConversation: (id: number) => ({
 		queryKey: crmKeys.leadConversation(id),

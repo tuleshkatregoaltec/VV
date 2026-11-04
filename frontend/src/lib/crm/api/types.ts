@@ -199,9 +199,13 @@ export interface PursuedMatch {
 	at: string
 }
 
+/** Whether the contact agreed to promotions; WhatsApp campaigns go to `provided` only. */
+export type MarketingConsent = 'unknown' | 'provided' | 'withdrawn'
+
 export interface LeadDetail extends LeadRow {
 	/** The contact's email ('' when unknown). */
 	email: string
+	consent: MarketingConsent
 	/** "On your agency's file": what the phone matches on the agency's owner file. */
 	owner_match: { summary: string; records: OwnerMatchRecord[] }
 	/** Matches the agent pursued for this lead (Pursue in Matches). */
@@ -289,6 +293,7 @@ export interface LeadPatch {
 	email?: string
 	/** Buyers only: matched to Launch desk projects (Matches › Off-plan buyers). */
 	off_plan?: boolean
+	consent?: MarketingConsent
 }
 
 /** A stage move with what that stage needs (business-rules.md, Lead stages). */
@@ -1620,8 +1625,10 @@ export interface EmailSync {
 /* ── Connectors › WhatsApp (Meta WhatsApp Cloud API) ── */
 
 export interface WhatsAppStatus {
-	/** True once an administrator has connected the business number on the server. */
+	/** True when this user can message: WhatsApp is connected and they have a number. */
 	configured: boolean
+	/** WhatsApp is set up on the server, whether or not this user has a number yet. */
+	connected: boolean
 	business_name: string | null
 	/** The business number in display form, e.g. "+971 4 123 4567". */
 	display_number: string | null
@@ -1683,4 +1690,95 @@ export interface WhatsAppChat {
 	last_at: string
 	window_ends_at: string | null
 	unread: number
+}
+
+/* ── Connectors › WhatsApp › Numbers (organization owner) ── */
+
+/** A sender number registered in the CRM, and who sends from it. */
+export interface WhatsAppNumber {
+	/** Meta's id for the number; every send goes through it. */
+	phone_number_id: string
+	display_number: string
+	label: string
+	purpose: 'agent' | 'campaign'
+	/** The agent who sends from it; null for the campaign number. */
+	user_id: string | null
+	active: boolean
+}
+
+export type WhatsAppNumberWrite = Omit<WhatsAppNumber, 'phone_number_id'>
+
+/** A number as Meta lists it under the business account. */
+export interface WhatsAppMetaNumber {
+	phone_number_id: string
+	display_number: string
+	verified_name: string | null
+	quality_rating: string | null
+}
+
+/* ── Connectors › WhatsApp › Campaigns (campaign number, organization owner) ── */
+
+/** A lead a campaign may go to: consent recorded, not opted out, with a WhatsApp number. */
+export interface WhatsAppAudienceLead {
+	id: number
+	name: string
+	wa_number: string
+	intent: 'unknown' | 'buy' | 'rent' | 'sell' | 'let'
+	source: string
+}
+
+export interface WhatsAppAudience {
+	items: WhatsAppAudienceLead[]
+	/** Left out, and why. */
+	no_consent: number
+	opted_out: number
+	no_number: number
+}
+
+export interface WhatsAppCampaignCounts {
+	total: number
+	pending: number
+	sent: number
+	delivered: number
+	read: number
+	failed: number
+	skipped: number
+	/** Caught mid-send by a restart: may or may not have arrived. */
+	unknown: number
+	replies: number
+}
+
+export interface WhatsAppCampaign {
+	id: number
+	name: string
+	template_name: string
+	template_language: string
+	status: 'sending' | 'completed'
+	created_at: string
+	completed_at: string | null
+	counts: WhatsAppCampaignCounts
+}
+
+export interface WhatsAppCampaignRecipient {
+	enquiry_id: number | null
+	name: string
+	wa_number: string
+	/** pending, sending, skipped, unknown, or what Meta reported once sent. */
+	status: string
+	error: string | null
+}
+
+export interface WhatsAppCampaignDetail extends WhatsAppCampaign {
+	template_body: string
+	params: string[]
+	recipients: WhatsAppCampaignRecipient[]
+}
+
+export interface WhatsAppCampaignCreate {
+	name: string
+	template_name: string
+	language: string
+	/** {{1}}, {{2}}… for everyone; "{first_name}" becomes each person's first name. */
+	params: string[]
+	enquiry_ids: number[]
 }

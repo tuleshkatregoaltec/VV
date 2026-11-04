@@ -286,3 +286,4 @@ projects-*.png
 # Full AI execution/evaluation evidence is private and local only.
 .evaluation/
 docs/superpowers/
+.env.example

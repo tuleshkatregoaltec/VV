@@ -52,6 +52,7 @@ const c = $derived(chats.data?.find((x) => x.wa_id === waId))
 							thread={t}
 							name={c?.lead_name ?? c?.contact_name ?? null}
 							configured={status.data.configured}
+							connected={status.data.connected}
 							sendTemplate={(tp) => crm.whatsapp.chatSendTemplate(waId, tp)}
 							reply={(body) => crm.whatsapp.chatReply(waId, body)}
 						/>

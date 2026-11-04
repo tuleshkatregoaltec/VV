@@ -24,9 +24,29 @@ export const messageTitle = (name: string) => {
 	return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
-/** An opening message as the contact will read it: {{1}} is their first name, the rest is filled when sent. */
-export const fillPreview = (body: string, firstName: string | null) =>
-	body.replace(/\{\{(\d+)\}\}/g, (_, n) => (n === '1' && firstName ? firstName : '…'))
+/** A campaign recipient: where sending got to, then what Meta reported once sent. */
+export const RECIPIENT_STATUS: Record<string, { label: string; tone: Tone }> = {
+	pending: { label: 'Waiting', tone: 'neutral' },
+	sending: { label: 'Sending', tone: 'neutral' },
+	queued: { label: 'Sent', tone: 'neutral' },
+	sent: { label: 'Sent', tone: 'neutral' },
+	delivered: { label: 'Delivered', tone: 'blue' },
+	read: { label: 'Read', tone: 'green' },
+	failed: { label: 'Failed', tone: 'red' },
+	skipped: { label: 'Skipped', tone: 'amber' },
+	unknown: { label: 'Check chat', tone: 'amber' }
+}
+
+/** The campaign value that becomes each recipient's own first name. */
+export const FIRST_NAME = '{first_name}'
+
+/** How many values an opening message needs: its highest {{n}}. */
+export const variableCount = (body: string) =>
+	Math.max(0, ...[...body.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => Number(m[1])))
+
+/** An opening message with the agent's values in place; a value not given yet shows as "…". */
+export const fillValues = (body: string, values: string[]) =>
+	body.replace(/\{\{\s*(\d+)\s*\}\}/g, (_, n) => values[Number(n) - 1]?.trim() || '…')
 
 /** A lead's score as a chance to close, in the same bands as the score chip. */
 export const potential = (score: number) => {

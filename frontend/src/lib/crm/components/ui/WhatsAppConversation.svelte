@@ -4,7 +4,13 @@ import Send from 'lucide-svelte/icons/send'
 import type { WhatsAppThread } from '../../api/types'
 import { stamp } from '../../email'
 import { crmQueries } from '../../queries'
-import { fillPreview, MESSAGE_STATUS, messageTitle, windowHoursLeft } from '../../whatsapp'
+import {
+	fillValues,
+	MESSAGE_STATUS,
+	messageTitle,
+	variableCount,
+	windowHoursLeft
+} from '../../whatsapp'
 import { write } from '../../write'
 import Chip from './Chip.svelte'
 
@@ -18,6 +24,7 @@ let {
 	thread,
 	name,
 	configured,
+	connected = configured,
 	sendTemplate,
 	reply
 }: {
@@ -25,7 +32,11 @@ let {
 	/** The lead's name; null when the number is not on a lead yet. */
 	name: string | null
 	configured: boolean
-	sendTemplate: (t: { name: string; language: string }) => Promise<unknown>
+	/** WhatsApp is set up on the server; with `configured` false, the user just has no number. */
+	connected?: boolean
+	/** `params` fill {{1}}, {{2}}… in order. Left out where a chat cannot be restarted here
+	 * (the campaign inbox: the next message to them is a new campaign). */
+	sendTemplate?: (t: { name: string; language: string; params: string[] }) => Promise<unknown>
 	reply: (body: string) => Promise<unknown>
 } = $props()
 
@@ -39,13 +50,28 @@ let sending = $state(false)
 const hours = $derived(windowHoursLeft(thread.window_ends_at))
 const them = $derived(name ?? 'Contact')
 const firstName = $derived(name?.split(/\s+/)[0] ?? null)
+// One value per {{n}} in the chosen message; {{1}} starts as the contact's first name.
+let values = $state<string[]>([])
+$effect(() => {
+	values = template
+		? Array.from({ length: variableCount(template.body) }, (_, i) =>
+				i === 0 ? (firstName ?? '') : ''
+			)
+		: []
+})
+const filled = $derived(values.every((v) => v.trim()))
 
 async function submitTemplate(e: SubmitEvent) {
 	e.preventDefault()
-	if (!template) return
+	if (!template || !sendTemplate) return
 	sending = true
 	const r = await write({
-		call: () => sendTemplate({ name: template.name, language: template.language }),
+		call: () =>
+			sendTemplate({
+				name: template.name,
+				language: template.language,
+				params: values.map((v) => v.trim())
+			}),
 		success: 'Message sent on WhatsApp'
 	})
 	sending = false
@@ -79,9 +105,14 @@ async function submitReply(e: SubmitEvent) {
 	</div>
 {/if}
 
-{#if !configured}
+{#if !configured && connected}
 	<div class="notice">
-		WhatsApp is not connected yet. Ask your administrator to connect the business number to message from here.
+		WhatsApp is connected, but you don't have a WhatsApp number yet. Ask your administrator to assign
+		you one under Connectors › WhatsApp › Numbers.
+	</div>
+{:else if !configured}
+	<div class="notice">
+		WhatsApp is not connected yet. Ask your administrator to connect it to message from here.
 	</div>
 {:else if !thread.wa_number}
 	<div class="notice">No WhatsApp number on file. Add a mobile number to message them.</div>
@@ -100,6 +131,10 @@ async function submitReply(e: SubmitEvent) {
 			</button>
 		</div>
 	</form>
+{:else if !sendTemplate}
+	<div class="notice">
+		More than 24 hours since {them} last wrote. Reach them again in a new campaign.
+	</div>
 {:else}
 	<form class="form wa-compose" onsubmit={submitTemplate}>
 		<div class="fld">
@@ -116,14 +151,20 @@ async function submitReply(e: SubmitEvent) {
 			</select>
 		</div>
 		{#if template}
+			{#each values as _, i (i)}
+				<div class="fld">
+					<label for="{uid}-v{i}">Value {i + 1}{i === 0 ? ' (first name)' : ''}</label>
+					<input id="{uid}-v{i}" bind:value={values[i]} maxlength="200" />
+				</div>
+			{/each}
 			<div class="msg me wa-preview">
 				<div class="w">Preview</div>
-				<div class="wa-body">{fillPreview(template.body, firstName)}</div>
+				<div class="wa-body">{fillValues(template.body, values)}</div>
 			</div>
 		{/if}
 		<div class="form-actions">
 			<span class="wa-grow"></span>
-			<button type="submit" class="btn sm" disabled={sending || !template}>
+			<button type="submit" class="btn sm" disabled={sending || !template || !filled}>
 				<Send size={14} />
 				{sending ? 'Sending…' : 'Send'}
 			</button>

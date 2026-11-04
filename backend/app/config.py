@@ -103,6 +103,13 @@ class Settings(BaseSettings):
     # Connectors › Email keeps sends, templates and received emails in this JSON file (no tables).
     CRM_EMAIL_STORE_PATH: str | None = None
 
+    # Meta WhatsApp Cloud API (CRM › Connectors › WhatsApp). Leave unset to keep it disabled.
+    WHATSAPP_ACCESS_TOKEN: str | None = None  # system user token, Bitwarden Secrets
+    WHATSAPP_APP_SECRET: str | None = None  # checks X-Hub-Signature-256 on webhooks, Bitwarden
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str | None = None  # our own random string, Bitwarden Secrets
+    WHATSAPP_WABA_ID: str | None = None  # WhatsApp Business Account ID, configMap
+    WHATSAPP_GRAPH_API_VERSION: str | None = None  # e.g. "v23.0": a version Meta supports
+
     # PostHog
     POSTHOG_API_KEY: str | None = None
     POSTHOG_HOST: AnyUrl | None = None

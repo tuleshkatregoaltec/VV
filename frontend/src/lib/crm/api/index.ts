@@ -12,6 +12,7 @@
  */
 import { ApiError } from '$lib/api/client'
 import { addDays } from '../format'
+import type { WhatsAppTemplateSend } from './backend'
 import * as backend from './backend'
 import type {
 	CalendarEvent,
@@ -112,11 +113,6 @@ type Ok = { ok: boolean }
 const done = <T>(data: T): Written<T> => ({ data, undo_token: null })
 const notOnBackend = backend.notOnBackend
 
-const WHATSAPP_NOT_CONNECTED: WhatsAppStatus = {
-	configured: false,
-	business_name: null,
-	display_number: null
-}
 /** Sample data: these real leads get a chat written from their own details. */
 const DEMO_NAMED = ['Ashwin Vyas']
 const demoLeads = async () => {
@@ -145,7 +141,7 @@ const noThread = (waNumber: string | null): WhatsAppThread => ({
 })
 
 const whatsappStatus = async (): Promise<WhatsAppStatus> =>
-	WHATSAPP_DEMO ? demoStatus : WHATSAPP_NOT_CONNECTED
+	WHATSAPP_DEMO ? demoStatus : backend.whatsappStatus()
 
 /** Connectors shown on the page, in build order. Calendar is left off until its spec is done. */
 const CONNECTORS: Connector[] = [
@@ -316,34 +312,65 @@ export const crm = {
 	},
 
 	/**
-	 * Connectors › WhatsApp (Meta WhatsApp Cloud API). No backend endpoint yet: it reads as not
-	 * connected and empty, and sending fails with a 501 (sample data with VITE_WHATSAPP_DEMO=1).
+	 * Connectors › WhatsApp (Meta WhatsApp Cloud API), backend /api/v1/crm/whatsapp. Everything is
+	 * the signed-in agent's own number. Sample data instead with VITE_WHATSAPP_DEMO=1 (dev only),
+	 * where sending still fails.
 	 */
 	whatsapp: {
 		status: whatsappStatus,
 		chats: async (): Promise<WhatsAppChat[]> =>
-			WHATSAPP_DEMO ? [...(await demoLeads()).map(demoChatFor), demoUnmatchedChat] : [],
-		templates: async (): Promise<WhatsAppTemplate[]> => (WHATSAPP_DEMO ? demoTemplates : []),
+			WHATSAPP_DEMO
+				? [...(await demoLeads()).map(demoChatFor), demoUnmatchedChat]
+				: backend.whatsappChats(),
+		templates: async (): Promise<WhatsAppTemplate[]> =>
+			WHATSAPP_DEMO ? demoTemplates : backend.whatsappTemplates(),
 		thread: async (enquiryId: number): Promise<WhatsAppThread> =>
 			WHATSAPP_DEMO
 				? backend
 						.getLead(enquiryId)
 						.then(demoThreadFor)
 						.catch(() => noThread(null))
-				: noThread(null),
-		sendTemplate: (_enquiryId: number, _template: { name: string; language: string }) =>
-			notOnBackend<Ok>('Sending WhatsApp messages'),
-		reply: (_enquiryId: number, _body: string) => notOnBackend<Ok>('Replying on WhatsApp'),
+				: backend.whatsappLeadThread(enquiryId),
+		sendTemplate: (enquiryId: number, template: WhatsAppTemplateSend) =>
+			WHATSAPP_DEMO
+				? notOnBackend<Ok>('Sending WhatsApp messages')
+				: backend.whatsappLeadTemplate(enquiryId, template),
+		reply: (enquiryId: number, body: string) =>
+			WHATSAPP_DEMO
+				? notOnBackend<Ok>('Replying on WhatsApp')
+				: backend.whatsappLeadReply(enquiryId, body),
 		/** A chat by WhatsApp number (Connectors › WhatsApp), on a lead or not yet. */
 		chat: async (waId: string): Promise<WhatsAppThread> => {
-			if (!WHATSAPP_DEMO) return noThread(`+${waId}`)
+			if (!WHATSAPP_DEMO) return backend.whatsappChat(waId)
 			if (waId === demoUnmatchedChat.wa_id) return demoUnmatchedThread
 			const lead = (await demoLeads()).find((l) => demoWaId(l) === waId)
 			return lead ? demoThreadFor(lead) : noThread(`+${waId}`)
 		},
-		chatSendTemplate: (_waId: string, _template: { name: string; language: string }) =>
-			notOnBackend<Ok>('Sending WhatsApp messages'),
-		chatReply: (_waId: string, _body: string) => notOnBackend<Ok>('Replying on WhatsApp')
+		chatSendTemplate: (waId: string, template: WhatsAppTemplateSend) =>
+			WHATSAPP_DEMO
+				? notOnBackend<Ok>('Sending WhatsApp messages')
+				: backend.whatsappChatTemplate(waId, template),
+		chatReply: (waId: string, body: string) =>
+			WHATSAPP_DEMO
+				? notOnBackend<Ok>('Replying on WhatsApp')
+				: backend.whatsappChatReply(waId, body),
+		/** Which agent sends from which number, and the campaign number (organization owners). */
+		numbers: {
+			list: backend.whatsappNumbers,
+			meta: backend.whatsappMetaNumbers,
+			save: backend.saveWhatsappNumber
+		},
+		/** Campaigns from the campaign number, and replies to it (organization owners only). */
+		campaigns: {
+			audience: backend.whatsappAudience,
+			list: backend.whatsappCampaigns,
+			get: backend.whatsappCampaign,
+			create: backend.createWhatsappCampaign,
+			resume: backend.resumeWhatsappCampaign,
+			chats: backend.whatsappCampaignChats,
+			chat: backend.whatsappCampaignChat,
+			reply: backend.whatsappCampaignReply
+		}
 	},
 
 	settings: {

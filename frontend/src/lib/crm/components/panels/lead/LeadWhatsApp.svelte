@@ -28,6 +28,7 @@ const lead = createQuery(() => crmQueries.lead(id))
 				thread={t}
 				name={lead.data?.name ?? null}
 				configured={status.data.configured}
+				connected={status.data.connected}
 				sendTemplate={(tp) => crm.whatsapp.sendTemplate(id, tp)}
 				reply={(body) => crm.whatsapp.reply(id, body)}
 			/>

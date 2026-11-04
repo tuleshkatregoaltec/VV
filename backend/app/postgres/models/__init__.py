@@ -34,6 +34,13 @@ from app.crm.models import (
     CrmLeadWorkspace,
     CrmSavedLead,
 )
+from app.crm.whatsapp.models import (
+    CrmWhatsAppCampaign,
+    CrmWhatsAppCampaignRecipient,
+    CrmWhatsAppMessage,
+    CrmWhatsAppNumber,
+    CrmWhatsAppOptOut,
+)
 from app.feasibility.models import FeasibilitySavedStudy
 from app.news.models import NewsArticle
 from app.organization.models import Organization, OrganizationInvitation, OrganizationMembership
@@ -73,6 +80,11 @@ __all__ = [
     "CrmAssistantConversation",
     "CrmAssistantMessage",
     "CrmAssistantAction",
+    "CrmWhatsAppNumber",
+    "CrmWhatsAppMessage",
+    "CrmWhatsAppOptOut",
+    "CrmWhatsAppCampaign",
+    "CrmWhatsAppCampaignRecipient",
     # Feasibility
     "FeasibilitySavedStudy",
 ]

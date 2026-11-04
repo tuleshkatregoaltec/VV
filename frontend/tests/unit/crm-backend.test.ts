@@ -1094,3 +1094,134 @@ describe('CRM company listing source', () => {
 		expect(del).toHaveBeenCalledWith('/api/v1/crm/company-listings/source')
 	})
 })
+
+describe('CRM WhatsApp chats from /api/v1/crm/whatsapp', () => {
+	it('shows each chat with its lead’s own stage, score and source, and leaves numbers off a lead for review', async () => {
+		serve({
+			'/api/v1/crm/whatsapp/chats': [
+				{
+					wa_id: '971500000000',
+					contact_name: 'Omar',
+					lead_id: 7,
+					lead_name: 'Omar Khan',
+					last_body: 'Can we view it Saturday?',
+					last_direction: 'in',
+					last_at: '2026-11-02T10:00:00Z',
+					window_ends_at: '2026-11-03T10:00:00Z',
+					unread: 1
+				},
+				{
+					wa_id: '971559999999',
+					contact_name: 'Unknown',
+					lead_id: null,
+					lead_name: null,
+					last_body: 'Hello',
+					last_direction: 'in',
+					last_at: '2026-11-02T09:00:00Z',
+					window_ends_at: null,
+					unread: 1
+				}
+			],
+			'/api/v1/crm/inbound/enquiries/7': enquiry()
+		})
+		const lead = await backend.getLead(7)
+
+		const [onLead, offLead] = await backend.whatsappChats()
+
+		// The chat list must agree with Leads, so it reads the lead rather than a copy of it.
+		expect(onLead).toMatchObject({
+			lead_id: 7,
+			lead_stage: lead.stage,
+			lead_score: lead.score,
+			lead_source: lead.source,
+			lead_source_short: lead.source_short
+		})
+		expect(offLead).toMatchObject({
+			lead_id: null,
+			lead_stage: null,
+			lead_score: null,
+			lead_source: null
+		})
+	})
+
+	it('sends an opening message with every value the agent filled in, from their own number', async () => {
+		const post = vi.spyOn(client, 'post').mockResolvedValue({ ok: true })
+		await backend.whatsappLeadTemplate(7, {
+			name: 'agent_enquiry_follow_up',
+			language: 'en',
+			params: ['Omar', 'Sara', 'the 2-bed in Marina Gate']
+		})
+		expect(post).toHaveBeenCalledWith('/api/v1/crm/whatsapp/leads/7/template', {
+			name: 'agent_enquiry_follow_up',
+			language: 'en',
+			params: ['Omar', 'Sara', 'the 2-bed in Marina Gate']
+		})
+	})
+})
+
+describe('CRM WhatsApp campaigns from /api/v1/crm/whatsapp/campaigns', () => {
+	it('asks the backend for the consented audience with the manager’s filters', async () => {
+		const get = serve({
+			'/api/v1/crm/whatsapp/campaign/audience': {
+				items: [],
+				no_consent: 3,
+				opted_out: 1,
+				no_number: 0
+			}
+		})
+		const out = await backend.whatsappAudience({ search: ' Marina ', intent: 'buy' })
+		expect(String(get.mock.calls.at(-1)?.[0])).toBe(
+			'/api/v1/crm/whatsapp/campaign/audience?search=Marina&intent=buy'
+		)
+		expect(out.no_consent).toBe(3)
+	})
+
+	it('starts a campaign with the chosen leads and the first-name value left for the backend', async () => {
+		const post = vi.spyOn(client, 'post').mockResolvedValue({ id: 1 })
+		await backend.createWhatsappCampaign({
+			name: 'Dubai Marina',
+			template_name: 'new_listing_alert',
+			language: 'en',
+			params: ['{first_name}', 'Dubai Marina'],
+			enquiry_ids: [7, 8]
+		})
+		// {first_name} is filled per person on the server, where each recipient's name is known.
+		expect(post).toHaveBeenCalledWith('/api/v1/crm/whatsapp/campaigns', {
+			name: 'Dubai Marina',
+			template_name: 'new_listing_alert',
+			language: 'en',
+			params: ['{first_name}', 'Dubai Marina'],
+			enquiry_ids: [7, 8]
+		})
+	})
+})
+
+describe('CRM marketing consent on a lead', () => {
+	it('shows the saved consent and stores a change as the backend consent_status', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries/7': enquiry({
+				contact: { ...enquiry().contact, consent_status: 'unknown' }
+			})
+		})
+		expect((await backend.getLead(7)).consent).toBe('unknown')
+
+		// WhatsApp campaigns only reach leads whose consent_status is "provided".
+		const patch = vi
+			.spyOn(client, 'patch')
+			.mockResolvedValue(enquiry({ contact: { ...enquiry().contact, consent_status: 'provided' } }))
+		const saved = await backend.patchLead(7, { consent: 'provided' })
+		expect(patch).toHaveBeenCalledWith('/api/v1/crm/inbound/enquiries/7', {
+			consent_status: 'provided'
+		})
+		expect(saved.data.consent).toBe('provided')
+	})
+
+	it('reads any value the backend does not know as not asked, never as agreed', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries/7': enquiry({
+				contact: { ...enquiry().contact, consent_status: 'Yes' }
+			})
+		})
+		expect((await backend.getLead(7)).consent).toBe('unknown')
+	})
+})

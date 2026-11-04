@@ -25,6 +25,7 @@ from app.core.observability import Middleware as ObservabilityMiddleware
 from app.core.observability import configure as configure_observability
 from app.crm.assistant.router import router as crm_assistant_router
 from app.crm.router import router as crm_router
+from app.crm.whatsapp.router import router as crm_whatsapp_router
 from app.feasibility.router import router as feasibility_router
 from app.filters.router import router as filters_router
 from app.listings.router import router as listings_router
@@ -93,6 +94,7 @@ app.include_router(area_router, tags=["areas"])
 app.include_router(chat_router, tags=["chat"])
 app.include_router(crm_router, tags=["crm"])
 app.include_router(crm_assistant_router, tags=["crm-assistant"])
+app.include_router(crm_whatsapp_router, tags=["crm-whatsapp"])
 app.include_router(filters_router, tags=["filters"])
 app.include_router(listings_router, tags=["listings"])
 app.include_router(news_router, tags=["news"])

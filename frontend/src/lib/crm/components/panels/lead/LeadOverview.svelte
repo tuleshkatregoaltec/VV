@@ -2,7 +2,7 @@
 import ChevronRight from 'lucide-svelte/icons/chevron-right'
 import { goto } from '$app/navigation'
 import { crm } from '../../../api'
-import type { LeadDetail, LeadStage, LeadType } from '../../../api/types'
+import type { LeadDetail, LeadStage, LeadType, MarketingConsent } from '../../../api/types'
 import { GATE_LINE, LEAD_TYPES, OFF_PLAN_FIELDS, stageOf, stagesFor } from '../../../config'
 import { aed, fullDate, priceShort } from '../../../format'
 import { openDeal, openListing, openOwner, panel } from '../../../stores/panel.svelte'
@@ -33,6 +33,24 @@ function setOffPlan(on: boolean) {
 	write({
 		call: () => crm.leads.patch(lead.id, { off_plan: on }),
 		success: on ? `${lead.name} marked off-plan` : `${lead.name} no longer off-plan`
+	})
+}
+
+const CONSENT_OPTIONS: { value: MarketingConsent; label: string }[] = [
+	{ value: 'unknown', label: 'Not asked' },
+	{ value: 'provided', label: 'Agreed' },
+	{ value: 'withdrawn', label: 'Withdrawn' }
+]
+
+function setConsent(consent: MarketingConsent) {
+	write({
+		call: () => crm.leads.patch(lead.id, { consent }),
+		success:
+			consent === 'provided'
+				? `${lead.name} agreed to promotions`
+				: consent === 'withdrawn'
+					? `${lead.name} withdrew consent: no more promotions`
+					: `${lead.name}'s consent cleared`
 	})
 }
 
@@ -244,6 +262,19 @@ const chain = $derived.by((): ChainPart[] => {
 		{/if}
 	</section>
 {/if}
+
+<section class="sec">
+	<h3>Marketing consent</h3>
+	<label class="check">
+		<span class="sr-only">Marketing consent</span>
+		<select value={lead.consent} onchange={(e) => setConsent(e.currentTarget.value as MarketingConsent)}>
+			{#each CONSENT_OPTIONS as o (o.value)}
+				<option value={o.value}>{o.label}</option>
+			{/each}
+		</select>
+		<span class="hint">Promotions (WhatsApp campaigns) go only to leads who agreed.</span>
+	</label>
+</section>
 
 <section class="sec">
 	<h3>On your agency's file</h3>

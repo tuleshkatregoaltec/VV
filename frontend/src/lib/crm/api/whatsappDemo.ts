@@ -20,6 +20,7 @@ const inHours = (hours: number) => new Date(Date.now() + hours * 3_600_000).toIS
 
 export const demoStatus: WhatsAppStatus = {
 	configured: true,
+	connected: true,
 	business_name: 'Vitevue',
 	display_number: '+971 4 123 4567'
 }

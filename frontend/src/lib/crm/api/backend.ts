@@ -89,6 +89,7 @@ import type {
 	ListingCard,
 	ListingListResponse,
 	ListingStatus,
+	MarketingConsent,
 	MarketListing,
 	MarketListingDetail,
 	MatchClient,
@@ -123,6 +124,17 @@ import type {
 	SearchResults,
 	Source,
 	VitevueLease,
+	WhatsAppAudience,
+	WhatsAppCampaign,
+	WhatsAppCampaignCreate,
+	WhatsAppCampaignDetail,
+	WhatsAppChat,
+	WhatsAppMetaNumber,
+	WhatsAppNumber,
+	WhatsAppNumberWrite,
+	WhatsAppStatus,
+	WhatsAppTemplate,
+	WhatsAppThread,
 	Written
 } from './types'
 
@@ -470,11 +482,16 @@ function leadRow(e: InboundEnquiryResponse, u: AuthMeResponse): LeadRow {
 	}
 }
 
+const CONSENT: MarketingConsent[] = ['unknown', 'provided', 'withdrawn']
+
 function leadDetail(e: InboundEnquiryResponse, u: AuthMeResponse): LeadDetail {
 	const row = leadRow(e, u)
 	return {
 		...row,
 		email: e.contact.email ?? '',
+		consent: CONSENT.includes(e.contact.consent_status as MarketingConsent)
+			? (e.contact.consent_status as MarketingConsent)
+			: 'unknown',
 		owner_match: {
 			summary: row.known,
 			records: (e.contact.registry_profiles ?? []).map((p) => ({
@@ -645,6 +662,8 @@ export async function patchLead(id: number, body: LeadPatch): Promise<Written<Le
 	if (body.lead_type) update.intent = INTENT[body.lead_type]
 	if (body.stage) update.status = statusOf(body.stage)
 	if (body.fields) update.criteria = criteriaWith(current.criteria, body.fields)
+	if (body.consent !== undefined && body.consent !== current.contact.consent_status)
+		update.consent_status = body.consent
 	if (body.off_plan !== undefined) {
 		const tags = current.tags.filter((t) => t !== OFF_PLAN_TAG)
 		update.tags = body.off_plan ? [...tags, OFF_PLAN_TAG] : tags
@@ -2320,3 +2339,101 @@ export const emailThread = (enquiryId: number) =>
 	client.get<EmailThreadItem[]>(`${CRM}/email/leads/${enquiryId}/thread`)
 
 export const deleteEmailSend = (id: number) => client.delete<void>(`${CRM}/email/sends/${id}`)
+
+/* ── Connectors › WhatsApp (/whatsapp, Meta WhatsApp Cloud API) ── */
+
+/** A chat as the backend lists it: the lead's stage, score and source are read from the lead. */
+type WhatsAppChatRow = Omit<
+	WhatsAppChat,
+	'lead_stage' | 'lead_score' | 'lead_source' | 'lead_source_short'
+>
+
+/** The template to send and its {{1}}, {{2}}… values; {{1}} defaults to the first name. */
+export interface WhatsAppTemplateSend {
+	name: string
+	language: string
+	params?: string[]
+}
+
+type Ok = { ok: boolean }
+
+export const whatsappStatus = () => client.get<WhatsAppStatus>(`${CRM}/whatsapp/status`)
+
+export const whatsappTemplates = () => client.get<WhatsAppTemplate[]>(`${CRM}/whatsapp/templates`)
+
+/** The signed-in agent's chats, each with its lead's stage, score and source when it is on one. */
+export async function whatsappChats(): Promise<WhatsAppChat[]> {
+	const rows = await client.get<WhatsAppChatRow[]>(`${CRM}/whatsapp/chats`)
+	const ids = [...new Set(rows.flatMap((r) => (r.lead_id === null ? [] : [r.lead_id])))]
+	const leads = new Map(
+		await Promise.all(ids.map(async (id) => [id, await getLead(id).catch(() => null)] as const))
+	)
+	return rows.map((r) => {
+		const lead = r.lead_id === null ? null : leads.get(r.lead_id)
+		return {
+			...r,
+			lead_stage: lead?.stage ?? null,
+			lead_score: lead?.score ?? null,
+			lead_source: lead?.source ?? null,
+			lead_source_short: lead?.source_short ?? null
+		}
+	})
+}
+
+export const whatsappLeadThread = (enquiryId: number) =>
+	client.get<WhatsAppThread>(`${CRM}/whatsapp/leads/${enquiryId}/thread`)
+
+export const whatsappLeadTemplate = (enquiryId: number, body: WhatsAppTemplateSend) =>
+	client.post<Ok>(`${CRM}/whatsapp/leads/${enquiryId}/template`, body)
+
+export const whatsappLeadReply = (enquiryId: number, body: string) =>
+	client.post<Ok>(`${CRM}/whatsapp/leads/${enquiryId}/reply`, { body })
+
+export const whatsappChat = (waId: string) =>
+	client.get<WhatsAppThread>(`${CRM}/whatsapp/chats/${waId}`)
+
+export const whatsappChatTemplate = (waId: string, body: WhatsAppTemplateSend) =>
+	client.post<Ok>(`${CRM}/whatsapp/chats/${waId}/template`, body)
+
+export const whatsappChatReply = (waId: string, body: string) =>
+	client.post<Ok>(`${CRM}/whatsapp/chats/${waId}/reply`, { body })
+
+/* Sender numbers (organization owners). */
+
+export const whatsappNumbers = () => client.get<WhatsAppNumber[]>(`${CRM}/whatsapp/numbers`)
+
+export const whatsappMetaNumbers = () =>
+	client.get<WhatsAppMetaNumber[]>(`${CRM}/whatsapp/meta/numbers`)
+
+export const saveWhatsappNumber = (phoneNumberId: string, body: WhatsAppNumberWrite) =>
+	client.put<WhatsAppNumber>(`${CRM}/whatsapp/numbers/${phoneNumberId}`, body)
+
+/* Campaigns from the campaign number (organization owners). */
+
+export function whatsappAudience(p: { search?: string; intent?: string } = {}) {
+	const params = new URLSearchParams()
+	if (p.search?.trim()) params.set('search', p.search.trim())
+	if (p.intent) params.set('intent', p.intent)
+	const q = params.toString()
+	return client.get<WhatsAppAudience>(`${CRM}/whatsapp/campaign/audience${q ? `?${q}` : ''}`)
+}
+
+export const whatsappCampaigns = () => client.get<WhatsAppCampaign[]>(`${CRM}/whatsapp/campaigns`)
+
+export const whatsappCampaign = (id: number) =>
+	client.get<WhatsAppCampaignDetail>(`${CRM}/whatsapp/campaigns/${id}`)
+
+export const createWhatsappCampaign = (body: WhatsAppCampaignCreate) =>
+	client.post<WhatsAppCampaignDetail>(`${CRM}/whatsapp/campaigns`, body)
+
+export const resumeWhatsappCampaign = (id: number) =>
+	client.post<WhatsAppCampaignDetail>(`${CRM}/whatsapp/campaigns/${id}/resume`, {})
+
+export const whatsappCampaignChats = () =>
+	client.get<WhatsAppChatRow[]>(`${CRM}/whatsapp/campaign/chats`)
+
+export const whatsappCampaignChat = (waId: string) =>
+	client.get<WhatsAppThread>(`${CRM}/whatsapp/campaign/chats/${waId}`)
+
+export const whatsappCampaignReply = (waId: string, body: string) =>
+	client.post<Ok>(`${CRM}/whatsapp/campaign/chats/${waId}/reply`, { body })
