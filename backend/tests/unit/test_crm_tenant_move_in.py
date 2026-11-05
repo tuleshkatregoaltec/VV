@@ -124,7 +124,7 @@ def world(monkeypatch):
     async def noop(*args, **kwargs):
         return None
 
-    async def owners(db, organization_id, locations):
+    async def owners(db, organization_id, locations, budget_band=None):
         return state["owners"]
 
     async def find_target(db, enquiry, target_key, target_type):
@@ -284,7 +284,7 @@ async def test_hidden_count_survives_a_plain_load_without_rerunning(world, monke
 
 def test_stored_matches_rerun_after_the_unit_number_fix():
     # Stored titles from v8 still read "Unit unresolved"; v9 makes every lead re-match once.
-    assert matching._ALGORITHM_VERSION == "inbound-v9"
+    assert matching._ALGORITHM_VERSION == "inbound-v10"
 
 
 async def test_listing_age_is_counted_to_today_not_to_the_last_scrape(world, monkeypatch):

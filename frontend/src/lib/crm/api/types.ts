@@ -893,7 +893,14 @@ export interface OwnerUnit {
 	status: string
 	status_chip: Chip
 	rent: { aed: number; from: string; to: string } | null
-	market: { sale: [number, number]; rent: [number, number] } | null
+	/** Today's estimated value: sale range, the estimate and its confidence. Rent is not estimated yet. */
+	market: {
+		sale: [number, number]
+		rent: [number, number] | null
+		estimate: number
+		confidence: 'high' | 'medium' | 'low'
+		valued_at: string
+	} | null
 	rent_history: { year: number; aed: number }[]
 	transactions: { when: string; what: string; aed: number | null }[]
 	/** Where this unit came from: "Business Bay 2024 SVR · Sheet1 row 12". Empty when unknown. */

@@ -59,6 +59,7 @@ from app.crm.ownership import (
 )
 from app.crm.recently_sold import sync_after_ownership_change
 from app.crm.registry_fallback import _apply_registry_unit_fallbacks
+from app.crm.valuation_service import value_owner_claims
 from app.crm.workspaces import _enrich_workspaces
 
 logger = logging.getLogger(__name__)
@@ -306,6 +307,7 @@ async def process_contact_import(
         await db.commit()
         _invalidate_owner_summary_cache(organization_id)
         await sync_after_ownership_change(db, organization_id=organization_id)
+        await _value_import(db, organization_id=organization_id, import_id=record.id)
         return await _import_response(db, record)
     except HTTPException:
         raise
@@ -323,6 +325,15 @@ async def process_contact_import(
         import_repository.save(db, record)
         await db.commit()
         raise HTTPException(status_code=422, detail=f"Import failed: {exc}") from exc
+
+
+async def _value_import(db: AsyncSession, *, organization_id: str, import_id: int | None) -> None:
+    """Estimate today's value of the import's current owners; never fails the import."""
+    try:
+        await value_owner_claims(db, organization_id=organization_id, import_id=import_id)
+    except Exception:
+        logger.exception("Owner valuation after import failed", extra={"import_id": import_id})
+        await db.rollback()
 
 
 async def _import_response(

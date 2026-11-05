@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import or_, text, update
+from sqlalchemy import func, or_, text, update
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -18,7 +18,14 @@ from app.crm.inbound_policy import (
 )
 
 
-async def find_owner_candidates(db: AsyncSession, organization_id, requested_locations):
+async def find_owner_candidates(
+    db: AsyncSession, organization_id, requested_locations, budget_band=None
+):
+    """Current owners in the requested area; with a budget band, only homes valued inside it.
+
+    The band filter runs before the limit, so owners who fit the budget are not crowded out by
+    higher-confidence owners who do not. Unvalued homes fall back to their last sale price.
+    """
     claims_statement = select(CrmPropertyContactClaim).where(
         CrmPropertyContactClaim.organization_id == organization_id,
         CrmPropertyContactClaim.ownership_status.in_(  # type: ignore[union-attr]
@@ -34,6 +41,16 @@ async def find_owner_candidates(db: AsyncSession, organization_id, requested_loc
                 CrmPropertyContactClaim.building_name.ilike(location_pattern),  # type: ignore[union-attr]
             )
         )
+    if budget_band:
+        low = func.coalesce(
+            CrmPropertyContactClaim.estimated_value_low_aed,
+            CrmPropertyContactClaim.latest_sale_price_aed,
+        )
+        high = func.coalesce(
+            CrmPropertyContactClaim.estimated_value_high_aed,
+            CrmPropertyContactClaim.latest_sale_price_aed,
+        )
+        claims_statement = claims_statement.where(high >= budget_band[0], low <= budget_band[1])
     claims_result = await db.exec(
         claims_statement.order_by(CrmPropertyContactClaim.confidence_score.desc()).limit(80)
     )

@@ -163,6 +163,14 @@ class CrmPropertyContactClaim(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSON, nullable=False),
     )
+    # Today's value from recent comparable sales (app.crm.valuation); null when not valued.
+    estimated_value_aed: int | None = SQLField(default=None, sa_type=BigInteger)
+    estimated_value_low_aed: int | None = SQLField(default=None, sa_type=BigInteger)
+    estimated_value_high_aed: int | None = SQLField(default=None, sa_type=BigInteger)
+    valuation: dict[str, Any] = SQLField(
+        default_factory=dict,
+        sa_column=Column(JSON, nullable=False, server_default=text("'{}'")),
+    )
     created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
@@ -414,6 +422,12 @@ class CrmOwnerProperty(BaseModel):
     registry_unit_number: str | None = None
     registry_building_name: str | None = None
     registry_area_name: str | None = None
+    # Today's estimated value (app.crm.valuation); null when the unit could not be valued.
+    estimated_value_aed: int | None = None
+    estimated_value_low_aed: int | None = None
+    estimated_value_high_aed: int | None = None
+    valuation_confidence: Literal["high", "medium", "low"] | None = None
+    valued_at: date | None = None
     later_sale_date: date | None = None
     lease_end: date | None = None
     annual_rent_aed: int | None = SQLField(default=None, sa_type=BigInteger)

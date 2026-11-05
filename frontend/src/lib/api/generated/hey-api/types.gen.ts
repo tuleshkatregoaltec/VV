@@ -2872,6 +2872,26 @@ export type CrmOwnerProperty = {
      */
     registry_area_name?: string | null;
     /**
+     * Estimated Value Aed
+     */
+    estimated_value_aed?: number | null;
+    /**
+     * Estimated Value Low Aed
+     */
+    estimated_value_low_aed?: number | null;
+    /**
+     * Estimated Value High Aed
+     */
+    estimated_value_high_aed?: number | null;
+    /**
+     * Valuation Confidence
+     */
+    valuation_confidence?: 'high' | 'medium' | 'low' | null;
+    /**
+     * Valued At
+     */
+    valued_at?: string | null;
+    /**
      * Later Sale Date
      */
     later_sale_date?: string | null;

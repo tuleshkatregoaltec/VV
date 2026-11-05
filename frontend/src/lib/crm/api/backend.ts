@@ -949,6 +949,21 @@ function ownerRow(p: CrmOwnerProfile, ws: CrmOwnerWorkspaceSummary | undefined):
 	}
 }
 
+/** Today's estimated value of the unit (owner valuation, 5 Nov); rent is not estimated yet. */
+function ownerMarket(p: CrmOwnerProperty): OwnerUnit['market'] {
+	if (!p.estimated_value_aed || !p.valuation_confidence || !p.valued_at) return null
+	return {
+		sale: [
+			p.estimated_value_low_aed ?? p.estimated_value_aed,
+			p.estimated_value_high_aed ?? p.estimated_value_aed
+		],
+		rent: null,
+		estimate: p.estimated_value_aed,
+		confidence: p.valuation_confidence,
+		valued_at: p.valued_at
+	}
+}
+
 function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 	const sale =
 		p.registry_sale_price_aed ?? p.latest_sale_price_aed ?? p.imported_transaction_price_aed ?? null
@@ -986,7 +1001,7 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 		status_chip: chip,
 		// The backend keeps the lease end, not its start, so "Rent now" shows through `status`.
 		rent: null,
-		market: null,
+		market: ownerMarket(p),
 		rent_history: [],
 		transactions: [...new Map(transactions.map((t) => [`${t.when}${t.what}`, t])).values()].map(
 			(t) => ({ ...t, when: t.when.slice(0, 10) })

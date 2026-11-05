@@ -30,6 +30,8 @@ from app.crm.matching_policy import (
     _listing_property_type,
     _listing_type_matches,
     _location_fit,
+    _owner_budget_band,
+    _owner_value_fit,
     _property_fit,
     _violates_strict_fields,
 )
@@ -62,7 +64,8 @@ from app.supply.service import get_catalog_freshness, list_matching_inventory
 # v7 (27 Oct): company matches use the organization's selected Property Finder broker.
 # v8 (3 Nov): tenants are matched against their move-in date; later lease ends are disqualified.
 # v9 (3 Nov): tenant units with no sale match show the lease's own unit number.
-_ALGORITHM_VERSION = "inbound-v9"
+# v10 (5 Nov): buyers are matched against an owner's estimated value, not the old purchase price.
+_ALGORITHM_VERSION = "inbound-v10"
 # Lowest score stored as a match.
 _MIN_MATCH_SCORE = 50
 # Where refresh keeps how many rows each lane disqualified by move-in timing (read on load).
@@ -347,8 +350,12 @@ async def refresh_inbound_matches(
 
     if enquiry.intent in {"buy", "rent"}:
         requested_locations = _locations(criteria)
+        buying = enquiry.intent == "buy"
         claims_result = await match_repository.find_owner_candidates(
-            db, organization_id, requested_locations
+            db,
+            organization_id,
+            requested_locations,
+            budget_band=_owner_budget_band(criteria) if buying else None,
         )
         best_by_owner: dict[str, CrmPropertyContactClaim] = {}
         for claim in claims_result:
@@ -359,16 +366,34 @@ async def refresh_inbound_matches(
             location, location_reason = _location_fit(
                 criteria, claim.area_name, claim.project_name, claim.building_name
             )
-            owner_value = (
-                claim.annual_rent_aed if enquiry.intent == "rent" else claim.latest_sale_price_aed
-            )
-            budget, budget_reason = _budget_fit(criteria, owner_value)
+            estimate = claim.estimated_value_aed if buying else None
+            if estimate:
+                budget, budget_reason = _owner_value_fit(
+                    criteria,
+                    estimate,
+                    claim.estimated_value_low_aed or estimate,
+                    claim.estimated_value_high_aed or estimate,
+                )
+            else:
+                owner_value = (
+                    claim.annual_rent_aed
+                    if enquiry.intent == "rent"
+                    else claim.latest_sale_price_aed
+                )
+                budget, budget_reason = _budget_fit(criteria, owner_value)
+                if buying and budget:
+                    budget_reason = f"{budget_reason} (last sale, no estimate)"
             property_points = _property_fit(criteria, claim.property_type)
+            # Registry bedrooms come with the valuation; unknown bedrooms still pass, as before.
+            owner_bedrooms = str((claim.valuation or {}).get("bedrooms") or "")
+            bedroom_points, bedroom_reason = (
+                _bedroom_fit(criteria, owner_bedrooms) if owner_bedrooms else (5, "")
+            )
             if _violates_strict_fields(
                 enquiry.strict_fields,
                 location_points=location,
                 budget_points=budget,
-                bedroom_points=5,
+                bedroom_points=bedroom_points,
                 property_points=property_points,
             ):
                 continue
@@ -389,10 +414,16 @@ async def refresh_inbound_matches(
                 target_key=claim.owner_key,
                 score=score,
                 title=claim.contact_name,
-                subtitle=f"{claim.building_name or claim.project_name} · Unit {claim.unit_number}",
+                subtitle=f"{claim.building_name or claim.project_name} · Unit {claim.unit_number}"
+                + (f" · Est. AED {estimate:,}" if estimate else ""),
                 reasons=[
                     location_reason,
                     budget_reason,
+                    *(
+                        [bedroom_reason]
+                        if owner_bedrooms and criteria.get("bedrooms_min") is not None
+                        else []
+                    ),
                     "Current ownership evidence",
                     "Contact available" if actionability == 20 else "Contact enrichment needed",
                     *lease_reasons,
@@ -411,6 +442,10 @@ async def refresh_inbound_matches(
                     "building_name": claim.building_name,
                     "unit_number": claim.unit_number,
                     "latest_sale_price_aed": claim.latest_sale_price_aed,
+                    "estimated_value_aed": claim.estimated_value_aed,
+                    "estimated_value_low_aed": claim.estimated_value_low_aed,
+                    "estimated_value_high_aed": claim.estimated_value_high_aed,
+                    "valuation_confidence": (claim.valuation or {}).get("confidence"),
                     "lease_end": claim.lease_end.isoformat() if claim.lease_end else None,
                 },
             )

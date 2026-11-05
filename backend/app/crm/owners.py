@@ -313,6 +313,15 @@ def _property_from_rows(
         later_sale_date=best.later_sale_date,
         lease_end=best.lease_end,
         annual_rent_aed=best.annual_rent_aed,
+        estimated_value_aed=best.estimated_value_aed,
+        estimated_value_low_aed=best.estimated_value_low_aed,
+        estimated_value_high_aed=best.estimated_value_high_aed,
+        valuation_confidence=(best.valuation or {}).get("confidence"),
+        valued_at=(
+            date.fromisoformat(best.valuation["valued_at"])
+            if (best.valuation or {}).get("valued_at")
+            else None
+        ),
         duplicate_count=_claim_duplicate_count(claims),
         source_lists=sorted({contact_list.name for _, contact_list in rows}),
         source_rows=_claim_source_rows(claims),
@@ -533,6 +542,17 @@ def _sql_owner_property(row: dict[str, Any]) -> CrmOwnerProperty:
         later_sale_date=row["later_sale_date"],
         lease_end=row["lease_end"],
         annual_rent_aed=(int(row["annual_rent_aed"]) if row["annual_rent_aed"] else None),
+        estimated_value_aed=int(row["estimated_value_aed"])
+        if row.get("estimated_value_aed")
+        else None,
+        estimated_value_low_aed=int(row["estimated_value_low_aed"])
+        if row.get("estimated_value_low_aed")
+        else None,
+        estimated_value_high_aed=int(row["estimated_value_high_aed"])
+        if row.get("estimated_value_high_aed")
+        else None,
+        valuation_confidence=row.get("valuation_confidence") or None,
+        valued_at=date.fromisoformat(row["valued_at"]) if row.get("valued_at") else None,
         duplicate_count=int(row["duplicate_count"] or 1),
         source_lists=list(row["source_lists"] or []),
         source_rows=list(row["source_rows"] or []),
