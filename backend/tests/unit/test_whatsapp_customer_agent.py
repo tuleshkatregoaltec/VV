@@ -301,11 +301,16 @@ async def test_provider_failures_and_malformed_outputs_fail_closed(setup_agents,
     classifier, drafter, _ = setup_agents()
     agent = classifier if stage == "classifier" else drafter
     agent.run = AsyncMock(side_effect=RuntimeError("private provider payload"))
-    assert await build() is None
+    # Nothing is ever sent. An unclassified message is not silently dropped either: the
+    # agent gets a content-free notice. A failed draft after admission still fails closed.
+    expected = customer.UNPROCESSED_REASON if stage == "classifier" else None
+    assert getattr(await build(), "reason", None) == expected
     assert "RuntimeError" in caplog.text
     assert "private provider payload" not in caplog.text
     agent.run = AsyncMock(return_value=SimpleNamespace(output={"reply": "Invented availability"}))
-    assert await build() is None
+    result = await build()
+    assert getattr(result, "reason", None) == expected
+    assert result is None or (result.reply is None and result.store_content is False)
 
 
 async def test_no_private_history_or_identity_is_sent_to_customer_models(setup_agents):

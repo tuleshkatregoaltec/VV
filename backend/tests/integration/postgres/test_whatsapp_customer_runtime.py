@@ -323,7 +323,16 @@ async def test_ambiguous_send_and_lost_classification_are_never_replayed(pg_sess
     await pg_session.commit()
     assert not await step(c)
     await refresh(pg_session, other)
-    assert other.status == "failed" and other.content is None
+    # Never replayed, text gone, but not silently dropped: the agent gets a content-free
+    # notice and the thread waits for them.
+    assert other.status == "approval_required" and other.content is None
+    assert other.reply is None and other.topic == "unprocessed"
+    assert other.error_code == "worker_lost" and other.notification_created_at is not None
+    thread = await pg_session.get(WhatsAppCustomerThread, other.thread_id)
+    await pg_session.refresh(thread)
+    assert thread.paused
+    assert not await step(c)
+    automation.send_reply.assert_awaited_once()
 
 
 async def test_definite_meta_rejection_records_numeric_error_without_automatic_retry(

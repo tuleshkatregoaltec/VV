@@ -1,5 +1,6 @@
 """Multi-agent intake, privacy and agent self-service against real PostgreSQL tables."""
 
+import asyncio
 import json
 from datetime import timedelta
 from types import SimpleNamespace
@@ -536,3 +537,146 @@ async def test_agent_echo_during_classification_cancels_the_automated_answer(
     assert (status, reason, content) == ("cancelled", "agent_replied", None)
     assert await tables_containing(pg_session.bind, "ECHO-PRIVATE-" + message_id) == []
     assert await automation.run_customer_once(env) is False
+
+
+@pytest.fixture
+def real_admission(pg_session, env, monkeypatch):
+    """Real chat admission leases in PostgreSQL; offline models that take some time."""
+    from app.chat import admission, operations
+    from app.whatsapp import customer_agent as customer
+
+    async def sessions():
+        async with AsyncSession(pg_session.bind, expire_on_commit=False) as db:
+            yield db
+
+    monkeypatch.setattr(customer.settings, "ASSISTANT_ENABLED", True)
+    monkeypatch.setattr(operations, "get_db_session", sessions)
+    monkeypatch.setattr(operations, "channel_access", AsyncMock(return_value=True))
+    monkeypatch.setattr(admission, "get_db_session", sessions)
+    monkeypatch.setattr(
+        admission,
+        "get_user_by_id",
+        AsyncMock(return_value=SimpleNamespace(daily_token_limit=10_000_000)),
+    )
+    waits = []
+
+    async def pause(seconds):
+        waits.append(seconds)
+        await asyncio.sleep(0.01)
+
+    monkeypatch.setattr(customer, "_pause", pause)
+    classified = []
+
+    async def classify(prompt, **kwargs):
+        message = json.loads(prompt)["message"]
+        await asyncio.sleep(0.05)  # holds the agent's single admission lease
+        classified.append(message)
+        personal = message.startswith("PERSONAL")
+        return SimpleNamespace(
+            output={
+                "topic": "personal" if personal else "property",
+                "confidence": 0.99,
+                "risk": "routine",
+                "reason": "test",
+                "next_question": None,
+                "retrieval": None,
+                "asks_if_automated": False,
+            }
+        )
+
+    async def plan(prompt, **kwargs):
+        return SimpleNamespace(
+            output={"response_kind": "facts", "evidence_ids": ["faq"], "risk": "routine"}
+        )
+
+    monkeypatch.setattr(customer, "classifier", lambda: SimpleNamespace(run=classify))
+    monkeypatch.setattr(customer, "drafter", lambda: SimpleNamespace(run=plan))
+    return SimpleNamespace(customer=customer, waits=waits, classified=classified)
+
+
+async def lease_statuses(bind, user_id):
+    async with AsyncSession(bind) as db:
+        rows = await db.exec(
+            text("SELECT status FROM chat_turn_leases WHERE user_id = :user"),
+            params={"user": user_id},
+        )
+        return sorted(row[0] for row in rows.all())
+
+
+async def test_simultaneous_enquiries_to_one_agent_are_all_admitted(
+    pg_session, env, real_admission
+):
+    from app.whatsapp.customer_models import WhatsAppCustomerMessage as Message
+
+    row = await agent(pg_session, env)
+    marker = str(uuid4())
+    property_bodies = [f"Is the Marina 2BR available? {marker}-{n}" for n in range(5)]
+    personal = f"PERSONAL {marker} dinner at mum's tonight?"
+    payloads = [
+        inbound(row, body, sender=f"97150000010{n}") for n, body in enumerate(property_bodies)
+    ] + [inbound(row, personal, sender="971500000199")]
+    # Six webhooks at once, each spawning its classification as Meta would deliver them.
+    assert await asyncio.gather(*(intake.receive_customer(p, env) for p in payloads)) == [1] * 6
+    await intake.drain()
+    assert sorted(real_admission.classified) == sorted([*property_bodies, personal])
+    messages = {p["entry"][0]["changes"][0]["value"]["messages"][0]["id"]: p for p in payloads}
+    rows = {
+        message_id: await pg_session.get(Message, message_id, populate_existing=True)
+        for message_id in messages
+    }
+    statuses = {
+        rows[mid].content: (rows[mid].status, bool(rows[mid].reply))
+        for mid in rows
+        if rows[mid].content
+    }
+    assert statuses == {body: ("auto_pending", True) for body in property_bodies}
+    ignored = [r for r in rows.values() if r.content is None]
+    assert len(ignored) == 1 and ignored[0].status == "ignored" and ignored[0].reply is None
+    assert await tables_containing(pg_session.bind, "PERSONAL") == []
+    # Six real leases, one per classification, all settled; none left active.
+    assert await lease_statuses(pg_session.bind, row.user_id) == ["settled"] * 6
+
+
+async def test_admission_that_never_frees_leaves_a_content_free_notice(
+    pg_session, env, real_admission, monkeypatch
+):
+    from datetime import date
+
+    from app.chat.models import ChatTurnLease
+    from app.whatsapp import customer_repository as repository
+    from app.whatsapp.customer_models import WhatsAppCustomerMessage as Message
+    from app.whatsapp.customer_models import WhatsAppCustomerThread as Thread
+
+    monkeypatch.setattr(real_admission.customer, "ADMISSION_WAIT_SECONDS", 0.5)
+    monkeypatch.setattr(real_admission.customer, "ADMISSION_FIRST_RETRY_SECONDS", 0.05)
+    row = await agent(pg_session, env)
+    # The agent's own web chat holds their single assistant turn for the whole wait.
+    pg_session.add(
+        ChatTurnLease(
+            user_id=row.user_id,
+            organization_id=row.organization_id,
+            conversation_id=0,
+            budget_day=date.today(),
+            reserved_tokens=0,
+            expires_at=utcnow() + timedelta(minutes=10),
+        )
+    )
+    await pg_session.commit()
+    body = "SECRET-" + str(uuid4()) + " is the Marina 2BR available?"
+    payload = inbound(row, body)
+    await intake.receive_customer(payload, env)
+    await intake.drain()
+    message_id = payload["entry"][0]["changes"][0]["value"]["messages"][0]["id"]
+    message = await pg_session.get(Message, message_id, populate_existing=True)
+    assert real_admission.classified == [] and len(real_admission.waits) >= 2
+    assert message.status == "approval_required" and message.topic == "unprocessed"
+    assert message.content is None and message.reply is None
+    assert message.error_code == "admission_busy"
+    assert message.notification_created_at is not None
+    thread = await pg_session.get(Thread, message.thread_id, populate_existing=True)
+    assert thread.paused
+    assert await tables_containing(pg_session.bind, body[:43]) == []
+    # The agent sees it: in notifications and in the conversation list.
+    notices = await repository.notifications(pg_session, row.user_id, row.organization_id)
+    assert [n.id for n in notices] == [message_id]
+    assert [t.id for t in await repository.threads(pg_session, row.id)] == [thread.id]

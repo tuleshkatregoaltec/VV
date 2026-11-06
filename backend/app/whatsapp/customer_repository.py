@@ -19,9 +19,10 @@ UNSENT_STATUSES = (
     "approved",
 )
 REVIEW_STATUSES = ("auto_pending", "grace_pending", "approval_required")
-# Threads the agent sees: property enquiries, and content-free identity questions (the agent
-# must know who asked to answer personally). Personal-only contacts stay invisible.
-VISIBLE_TOPICS = ("real_estate", "identity")
+# Threads the agent sees: property enquiries, and content-free identity questions or
+# unprocessed messages (the agent must know who wrote to answer personally). Contacts whose
+# messages were all classified personal stay invisible.
+VISIBLE_TOPICS = ("real_estate", "identity", "unprocessed")
 
 
 def owner_scope(user_id, organization_id):

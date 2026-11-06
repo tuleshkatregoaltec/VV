@@ -73,6 +73,8 @@ class CustomerDraft(BaseModel):
     store_content: bool = True
     summary: str | None = Field(default=None, max_length=400)
     reason: str | None = Field(default=None, max_length=64)
+    # Content-free diagnostic for a message that could not be processed.
+    error_code: str | None = Field(default=None, max_length=64)
     asked: QualificationDetail | None = None
     evidence_snapshots: list[CustomerEvidence] = Field(default_factory=list, max_length=5)
 

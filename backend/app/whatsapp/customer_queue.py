@@ -21,6 +21,13 @@ from app.whatsapp.models import utcnow
 MAX_DAILY_MESSAGES = 20
 COMMANDS = {"STOP", "START", "HUMAN"}
 SEND_STATUSES = ("auto_pending", "grace_pending", "approved")
+# A receipt that could not be classified (admission or the classifier never succeeded, or
+# its process died). Its text is gone; the agent is told, content-free, to answer in person.
+UNPROCESSED_REASON = "Not processed automatically. Check WhatsApp and reply yourself."
+UNPROCESSED_NOTICE = (
+    "A message could not be processed automatically, so no reply was sent and the thread is "
+    "paused. Its text was not kept: read it in WhatsApp and answer yourself."
+)
 
 
 @dataclass(frozen=True)
@@ -32,6 +39,8 @@ class ClassificationJob:
     message_id: str
     revision: int
     content: str = field(repr=False)
+    # The agent whose single chat admission this job needs (in-process fairness only).
+    user_id: str | None = None
 
 
 def require_customer_config(config):
@@ -180,9 +189,27 @@ async def enqueue(db, connection, raw_messages, config):
                     message_id=message_id,
                     revision=receipt_row.revision,
                     content=body,
+                    user_id=connection.user_id,
                 )
             )
     return jobs
+
+
+def mark_unprocessed(thread, message, error_code, now):
+    """Visible, content-free end state for a receipt that was never classified."""
+    message.content = None
+    message.reply = None
+    message.evidence_ids = []
+    message.status = "approval_required"
+    message.topic = "unprocessed"
+    message.reason = UNPROCESSED_REASON
+    message.handoff_summary = UNPROCESSED_NOTICE
+    message.error_code = error_code
+    message.send_after = None
+    message.notification_created_at = now
+    message.updated_at = now
+    thread.paused = True
+    thread.updated_at = now
 
 
 async def locked_context(db, connection_id, thread_id, message_id):
@@ -235,11 +262,12 @@ async def claim(db, config):
         connection, thread, message = context
         if message.status in ("classifying", "sending"):
             # In-memory classification died with its process, or a send is unconfirmed.
-            if message.updated_at < stale:
-                message.status = "unknown" if message.status == "sending" else "failed"
+            if message.updated_at < stale and message.status == "sending":
+                message.status = "unknown"
                 message.error_code = "worker_lost"
-                message.content = None if message.status == "failed" else message.content
                 message.updated_at = now
+            elif message.updated_at < stale:
+                mark_unprocessed(thread, message, "worker_lost", now)
             await db.commit()
             continue
         due = message.status == "approved" or (

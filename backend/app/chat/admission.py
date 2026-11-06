@@ -16,6 +16,16 @@ RESERVED_TOKENS = 24000
 USER_CONCURRENCY = 1
 TENANT_CONCURRENCY = 20
 LEASE_SECONDS = 600  # Longer than the complete turn's 300-second deadline.
+BUSY = "Another assistant turn is running. Please try again shortly."
+NO_ALLOWANCE = "Insufficient daily token allowance for another assistant turn."
+
+
+class AdmissionRefused(HTTPException):
+    """429 before anything is reserved; `code` ("busy" or "allowance") lets callers wait."""
+
+    def __init__(self, code: str):
+        super().__init__(429, BUSY if code == "busy" else NO_ALLOWANCE)
+        self.code = code
 
 
 async def reserve(db, *, user_id, organization_id, conversation_id, daily_limit):
@@ -31,10 +41,10 @@ async def reserve(db, *, user_id, organization_id, conversation_id, daily_limit)
     ):
         count = await repository.active_turn_count(db, field, value, now)
         if count >= maximum:
-            raise HTTPException(429, "Another assistant turn is running. Please try again shortly.")
+            raise AdmissionRefused("busy")
     usage = await usage_repository.increment(db, user_id, now.date(), 0, 0, 0)
     if usage.total_tokens + RESERVED_TOKENS > daily_limit:
-        raise HTTPException(429, "Insufficient daily token allowance for another assistant turn.")
+        raise AdmissionRefused("allowance")
     await usage_repository.increment(db, user_id, now.date(), 0, 0, RESERVED_TOKENS)
     lease = ChatTurnLease(
         user_id=user_id,

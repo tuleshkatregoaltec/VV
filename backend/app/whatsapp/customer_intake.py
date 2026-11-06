@@ -6,8 +6,12 @@ and the change's phone_number_id. Unmatched, disconnected or spoofed pairs are d
 Privacy: blocked senders are dropped before their text is read and leave no row.
 Other text is never written to PostgreSQL, logs, Redis or disk before classification;
 it is held only in an in-process task. If the process dies mid-classification, the
-content-free receipt is marked failed by the worker after ten minutes and the text
-is lost by design.
+text is lost by design and the worker turns the receipt, after ten minutes, into a
+content-free notice for the agent.
+
+Scheduling: one thread's messages are classified in arrival order, and one agent's
+messages one at a time per process (chat admission allows one turn per agent), so a
+burst to one agent never holds the classifier slots other agents need.
 """
 
 import asyncio
@@ -33,6 +37,7 @@ _tasks: set[asyncio.Task] = set()
 _loop = None
 _slots: asyncio.Semaphore | None = None
 _thread_locks: dict[str, list] = {}  # thread_id -> [lock, users]
+_agent_locks: dict[str, list] = {}  # user_id (or connection_id) -> [lock, users]
 
 
 def parse(event):
@@ -175,12 +180,13 @@ async def _apply_change(db, account_id, field, value, config):
 
 
 def _reset_for_loop():
-    global _loop, _slots, _thread_locks
+    global _loop, _slots, _thread_locks, _agent_locks
     loop = asyncio.get_running_loop()
     if loop is not _loop:
         _loop = loop
         _slots = None
         _thread_locks = {}
+        _agent_locks = {}
     return loop
 
 
@@ -191,22 +197,35 @@ def spawn(job, config):
     task.add_done_callback(_tasks.discard)
 
 
+def _hold(locks, key):
+    entry = locks.setdefault(key, [asyncio.Lock(), 0])
+    entry[1] += 1
+    return entry
+
+
+def _release(locks, key, entry):
+    entry[1] -= 1
+    if entry[1] == 0 and locks.get(key) is entry:
+        del locks[key]
+
+
 async def _run(job, config):
     global _slots
     if _slots is None:
         _slots = asyncio.Semaphore(config.WHATSAPP_CLASSIFIER_CONCURRENCY)
-    entry = _thread_locks.setdefault(job.thread_id, [asyncio.Lock(), 0])
-    entry[1] += 1
+    agent = job.user_id or job.connection_id
+    thread = _hold(_thread_locks, job.thread_id)
+    turn = _hold(_agent_locks, agent)
     try:
-        # Per-thread order keeps conversation history coherent within this process.
-        async with entry[0], _slots:
+        # Always thread, then agent, then slot: per-thread order keeps history coherent,
+        # and a waiting job holds no classifier slot.
+        async with thread[0], turn[0], _slots:
             await automation.classify(job, config)
     except Exception as exc:
         logger.error("WhatsApp classification task failed (%s)", type(exc).__name__)
     finally:
-        entry[1] -= 1
-        if entry[1] == 0 and _thread_locks.get(job.thread_id) is entry:
-            del _thread_locks[job.thread_id]
+        _release(_agent_locks, agent, turn)
+        _release(_thread_locks, job.thread_id, thread)
 
 
 async def drain():

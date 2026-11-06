@@ -175,12 +175,19 @@ async def draft(db, location, revision, config, content):
         message.content = content if keep else None
         message.reply = result.reply
         message.risk = result.risk
-        message.topic = "real_estate" if keep else "identity"
+        message.topic = (
+            "real_estate"
+            if keep
+            else "identity"
+            if getattr(result, "reason", None) == "identity_question"
+            else "unprocessed"
+        )
         message.evidence_ids = result.evidence_ids
         message.handoff_summary = getattr(result, "summary", None)
         message.asked_detail = getattr(result, "asked", None)
         if silent:
             message.reason = getattr(result, "reason", None)
+            message.error_code = getattr(result, "error_code", None)
         automatic = not silent and result.risk == "routine" and result.auto_eligible
         message.status = "auto_pending" if automatic else "approval_required"
         now = utcnow()
