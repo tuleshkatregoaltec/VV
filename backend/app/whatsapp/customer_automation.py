@@ -11,8 +11,9 @@ import httpx
 from app.chat.operations import channel_access, create_customer_conversation
 from app.config import settings
 from app.postgres import get_db_session
-from app.whatsapp import customer_access
+from app.whatsapp import customer_access, token_crypto
 from app.whatsapp import customer_queue as queue
+from app.whatsapp import customer_repository as repository
 from app.whatsapp.customer_agent import build_customer_draft
 from app.whatsapp.models import utcnow
 
@@ -37,28 +38,25 @@ class MetaSendRejected(ValueError):
         super().__init__(self.error_code)
 
 
-async def receive_customer(event, config):
-    if not config.WHATSAPP_CUSTOMER_AUTOMATION_ENABLED:
-        return 0
-    queue.require_customer_config(config)
-    incoming = queue.inbound_messages(event, config)
-    if not incoming:
-        return 0
-    async with asynccontextmanager(get_db_session)() as db:
-        return await queue.enqueue(db, incoming, config)
-
-
 def eligible(connection, thread, message, config):
     return queue.bound(
         connection, thread, config, allow_paused=message.status == "approved"
     ) and utcnow() < message.sent_at + timedelta(hours=24)
 
 
+async def eligible_now(db, connection, thread, message, config):
+    # A contact blocked after receipt is never answered or read again.
+    return eligible(connection, thread, message, config) and not await repository.blocked_contact(
+        db, connection.id, thread.sender, None
+    )
+
+
 def scope(connection):
     return {"user_id": connection.user_id, "organization_id": connection.organization_id}
 
 
-async def draft(db, location, revision, config):
+async def draft(db, location, revision, config, content):
+    """Classify and draft from in-memory `content`; persist it only if admitted."""
     context = await queue.locked_context(db, *location)
     if context is None:
         await db.commit()
@@ -67,14 +65,15 @@ async def draft(db, location, revision, config):
     if message.status != "classifying" or message.revision != revision:
         await db.commit()
         return
-    if not eligible(*context, config) or not await channel_access(db, **scope(connection)):
+    if not await eligible_now(db, *context, config) or not await channel_access(
+        db, **scope(connection)
+    ):
         message.status = "cancelled"
         message.content = None
         message.updated_at = utcnow()
         await db.commit()
         return
     knowledge = copy.deepcopy(connection.approved_knowledge)
-    content = message.content
     history = await queue.history_for(db, thread.id)
     identity = scope(connection)
     conversation_id = thread.conversation_id
@@ -90,7 +89,10 @@ async def draft(db, location, revision, config):
         if message.status != "classifying" or message.revision != revision:
             await db.commit()
             return
-        if not eligible(*context, config) or connection.approved_knowledge != knowledge:
+        if (
+            not await eligible_now(db, *context, config)
+            or connection.approved_knowledge != knowledge
+        ):
             message.status = "cancelled"
             message.content = None
             message.updated_at = utcnow()
@@ -124,7 +126,7 @@ async def draft(db, location, revision, config):
         await db.commit()
         return
     if (
-        not eligible(*context, config)
+        not await eligible_now(db, *context, config)
         or connection.approved_knowledge != knowledge
         or not await channel_access(db, **identity)
     ):
@@ -155,6 +157,8 @@ async def draft(db, location, revision, config):
             await db.commit()
             return
         message.evidence_snapshots = snapshots
+        # The only point where inbound text becomes durable: an admitted property enquiry.
+        message.content = content
         message.reply = result.reply
         message.risk = result.risk
         message.topic = "real_estate"
@@ -170,7 +174,14 @@ async def draft(db, location, revision, config):
     await db.commit()
 
 
+def connection_token(connection, config):
+    if not connection.access_token_encrypted:
+        raise token_crypto.TokenEncryptionUnavailable("No WhatsApp token is stored")
+    return token_crypto.decrypt_token(connection.access_token_encrypted, config)
+
+
 async def send_reply(connection, thread, message, config):
+    token = connection_token(connection, config)
     url = (
         f"https://graph.facebook.com/{config.WHATSAPP_GRAPH_API_VERSION}/"
         f"{connection.phone_number_id}/messages"
@@ -178,7 +189,7 @@ async def send_reply(connection, thread, message, config):
     async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
         response = await client.post(
             url,
-            headers={"Authorization": f"Bearer {config.WHATSAPP_CUSTOMER_ACCESS_TOKEN}"},
+            headers={"Authorization": f"Bearer {token}"},
             json={
                 "messaging_product": "whatsapp",
                 "to": thread.sender,
@@ -209,7 +220,9 @@ async def send(db, location, config):
     if message.send_after is None or message.send_after > utcnow():
         await db.commit()
         return
-    if not eligible(*context, config) or not await channel_access(db, **scope(connection)):
+    if not await eligible_now(db, *context, config) or not await channel_access(
+        db, **scope(connection)
+    ):
         message.status = (
             "expired" if utcnow() >= message.sent_at + timedelta(hours=24) else "cancelled"
         )
@@ -233,6 +246,18 @@ async def send(db, location, config):
         return
     if not message.reply or len(message.reply) > 4000:
         raise ValueError("Invalid customer reply")
+    try:
+        connection_token(connection, config)
+    except token_crypto.TokenEncryptionUnavailable:
+        # Fail before `sending`: nothing reached Meta, so the outcome is definite.
+        message.status = "failed"
+        message.error_code = "token_unavailable"
+        message.reason = "The WhatsApp connection needs to be reconnected."
+        message.notification_created_at = utcnow()
+        message.send_after = None
+        message.updated_at = utcnow()
+        await db.commit()
+        return
     # Commit is the send/cancel linearization point. Owner operations reject `sending`;
     # cancellation committed first wins. There is no retry after this point.
     message.status = "sending"
@@ -283,7 +308,20 @@ async def record_failure(db, location, revision, error):
     await db.commit()
 
 
+async def classify(job, config=settings):
+    """Run one in-memory classification job in its own session (no locks held over LLM)."""
+    location = job.connection_id, job.thread_id, job.message_id
+    async with asynccontextmanager(get_db_session)() as db:
+        try:
+            async with asyncio.timeout(360):
+                await draft(db, location, job.revision, config, job.content)
+        except Exception as exc:
+            logger.error("WhatsApp customer classification failed (%s)", type(exc).__name__)
+            await record_failure(db, location, job.revision, exc)
+
+
 async def run_customer_once(config=settings):
+    """Worker lane: deliver due replies for every connected agent."""
     if not config.WHATSAPP_CUSTOMER_AUTOMATION_ENABLED:
         return False
     queue.require_customer_config(config)
@@ -291,15 +329,12 @@ async def run_customer_once(config=settings):
         claimed = await queue.claim(db, config)
         if claimed is None:
             return False
-        sending, connection, thread, message = claimed
+        connection, thread, message = claimed
         location = connection.id, thread.id, message.id
         revision = message.revision
         try:
             async with asyncio.timeout(360):
-                if sending:
-                    await send(db, location, config)
-                else:
-                    await draft(db, location, revision, config)
+                await send(db, location, config)
         except Exception as exc:
             logger.error(
                 "WhatsApp customer work failed (%s)",

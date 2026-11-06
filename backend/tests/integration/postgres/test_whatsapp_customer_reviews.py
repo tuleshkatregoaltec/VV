@@ -20,6 +20,7 @@ from app.whatsapp.customer_models import (
     WhatsAppCustomerThread,
 )
 from app.whatsapp.models import utcnow
+from app.whatsapp.token_crypto import encrypt_token
 
 
 @pytest.fixture
@@ -40,6 +41,7 @@ async def customer(pg_session, monkeypatch):
     )
     assert not connection.enabled
     connection.enabled = True
+    connection.access_token_encrypted = encrypt_token("offline-token", service.settings)
     connection.approved_knowledge = [{"id": "coverage", "text": "Dubai property enquiries."}]
     thread = WhatsAppCustomerThread(connection_id=connection.id, sender="971500000000")
     pg_session.add(thread)
@@ -438,3 +440,28 @@ async def test_whatsapp_customer_cancelled_unclassified_source_is_discarded(
     await pg_session.refresh(draft)
     assert draft.content == "Property details?"
     assert draft.reply == "Dubai property enquiries."
+
+
+async def test_approval_and_enable_require_a_connected_number_with_a_token(pg_session, customer):
+    connection, _, message, identity = customer
+    connection_id, message_id = connection.id, message.id
+    connection.access_token_encrypted = None
+    await pg_session.commit()
+    with pytest.raises(HTTPException) as approve:
+        await service.decide(
+            pg_session,
+            **identity,
+            message_id=message_id,
+            request=RevisionDecision(expected_revision=1),
+            action="approve",
+        )
+    assert approve.value.status_code == 409
+    await pg_session.rollback()
+    with pytest.raises(HTTPException) as enable:
+        await service.update_connection(
+            pg_session,
+            **identity,
+            connection_id=connection_id,
+            request=ConnectionUpdate(enabled=True),
+        )
+    assert enable.value.status_code == 409

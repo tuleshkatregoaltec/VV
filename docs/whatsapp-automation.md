@@ -101,11 +101,10 @@ that cap. Model turns additionally use the existing shared durable user/tenant q
 An empty technical chat conversation scopes budgets, without copying customer text
 into the private web chat.
 
-Personal/uncertain messages can reach the webhook, be temporarily stored and be
-classified before their bodies are erased. Meta does not pre-filter the account to
-property messages. Property history remains in PostgreSQL. This is a one-number pilot,
-not customer-wide Embedded Signup onboarding. Keep the WSL computer, Docker and
-internet running; always-on production hosting and retention remain separate work.
+Superseded on 6 November 2026 (see “Multi-agent Embedded Signup” below): inbound text
+is no longer written anywhere before classification, and every connected agent number
+is served, not only the env-configured one. Meta does not pre-filter the account to
+property messages. Property history remains in PostgreSQL.
 
 ### API
 
@@ -130,6 +129,134 @@ and exact connection owner/user plus organization scope. Credentials are never e
 Decisions require `expected_revision`; edits also require `reply`. Stale revisions
 return 409. Browser helpers follow paginated lists. No schema migration is needed
 for the selective policy; existing migration `31c7e90b42ad` provides its tables.
+
+## Multi-agent Embedded Signup (backend) — 6 November 2026
+
+Any Vitevue agent can connect their own WhatsApp Business number with Meta Embedded
+Signup in coexistence mode (they keep using the WhatsApp Business app on their phone).
+Flow: connect → contacts sync arrives → agent blocks contacts → agent turns automation
+on → property enquiries are answered from the agent's own number.
+
+### Privacy model
+
+- **Blocked contacts**: dropped in the webhook handler by phone number or business-scoped
+  user ID before the message text is read. No thread, message or log row is written
+  and nothing is queued. Blocking later also cancels unsent replies on that thread.
+- **Unclassified text is never persisted.** The webhook writes a content-free receipt
+  (`status = classifying`, `content = NULL`) for deduplication and the daily cap, commits,
+  answers Meta, then classifies in an in-process task that holds the text in memory only.
+  Text is written to `whatsapp_customer_messages.content` only once the classifier admits
+  it as a property enquiry and a reply is drafted. Personal/uncertain text ends as
+  `ignored` with no content. Nothing goes through Redis (the server's Redis uses AOF).
+- If the API process dies mid-classification the text is lost by design; the worker marks
+  the receipt `failed (worker_lost)` after ten minutes.
+- Agent replies typed in the phone app (`smb_message_echoes`) only pause a thread that
+  already has a property enquiry and cancel its unsent draft. Echo text is never read or
+  stored and no thread is created for personal chats. Message history sync is never
+  requested. Group messages are ignored.
+
+### Routing and sending
+
+Each webhook change is routed to the connection whose `account_id` (WABA ID, the entry
+`id`) **and** `phone_number_id` both match and whose `status = connected`. Spoofed or
+unknown pairs are dropped. Each agent's business token is stored Fernet-encrypted in
+`whatsapp_connections.access_token_encrypted` and decrypted only to send. The worker
+(`scripts.whatsapp_worker`) now only delivers due replies for every agent and recovers
+lost receipts; classification runs in the API process
+(`WHATSAPP_CLASSIFIER_CONCURRENCY`, default 4 per process).
+
+`account_update` `PARTNER_REMOVED` / `ACCOUNT_OFFBOARDED` disconnects the agent: automation
+off, unsent replies cancelled, token and synced contacts deleted.
+
+### Environment
+
+| Variable | Purpose |
+| --- | --- |
+| `WHATSAPP_TOKEN_ENCRYPTION_KEY` | Fernet key(s), comma-separated; first encrypts, all decrypt. **Required outside `ENVIRONMENT=local`**; without it tokens cannot be stored or read and sending fails closed. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
+| `WHATSAPP_APP_ID` | Meta app ID (public; returned to the browser for `FB.init`). |
+| `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` | Facebook Login for Business configuration ID (public). Absent → signup reports `not_configured`. |
+| `WHATSAPP_CLASSIFIER_CONCURRENCY` | In-process classifier concurrency (default 4). |
+
+Existing: `WHATSAPP_APP_SECRET` (signature checks and code exchange),
+`WHATSAPP_GRAPH_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_CUSTOMER_AUTOMATION_ENABLED`
+(global kill switch). `WHATSAPP_CUSTOMER_PHONE_NUMBER_ID/ACCOUNT_ID/ACCESS_TOKEN` and
+`WHATSAPP_PILOT_USER_ID/ORGANIZATION_ID` are now only used to migrate the env pilot.
+
+### Env pilot migration (Kian's number)
+
+Migration `7a1d3c5e9b20` marks existing connections `onboarding_type = env`. On API and
+worker start-up, `bootstrap_env_connection` encrypts `WHATSAPP_CUSTOMER_ACCESS_TOKEN` into
+the row matching `WHATSAPP_CUSTOMER_PHONE_NUMBER_ID` (same user, organization and WABA),
+keeping its `enabled` state, or creates the row with automation off. It re-encrypts if the
+env token changes, never revives a disconnected row and never takes a number owned by
+someone else. On the server: set `WHATSAPP_TOKEN_ENCRYPTION_KEY`, run
+`alembic upgrade head`, restart API and worker. `WHATSAPP_CUSTOMER_TEST_RECIPIENT`, if set,
+still restricts only the env pilot number.
+
+### Agent API (`/api/v1/whatsapp`, active subscription; identity from the session)
+
+| Method and path | Request | Response |
+| --- | --- | --- |
+| `GET /signup/config` | — | `{configured, missing[], app_id, config_id, graph_api_version, extras, state}`; `state` is null when not configured |
+| `POST /signup/complete` | `{state, code, phone_number_id, waba_id, business_id?, event}`; `event` is `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, `FINISH` or `FINISH_ONLY_WABA` (rejected 422) | `AgentConnectionStatus` |
+| `GET /connection` | — | `AgentConnectionStatus` |
+| `PATCH /connection/automation` | `{enabled}` | `AgentConnectionStatus` |
+| `POST /connection/disconnect` | — | `AgentConnectionStatus` (`state = disconnected`) |
+| `GET /connection/contacts` | `search?` (name or digits), `blocked?`, `limit` 1–500 (50), `offset` | `{items[{id, wa_id, name, in_address_book, blocked, blocked_at, updated_at}], total, limit, offset}` |
+| `PUT /connection/contacts/blocked` | `{contact_ids[], phone_numbers[], blocked}` (at least one list, ≤1000 each) | `{updated, blocked_total}` |
+| `POST /connection/contacts/sync` | — | `AgentConnectionStatus`; retries the one-time contacts sync within 24 h if the automatic request failed |
+
+`AgentConnectionStatus`: `state` (`not_configured`, `not_connected`, `connected`,
+`disconnected`), `signup_configured`, `connection_id`, `phone_number_id`, `waba_id`,
+`business_id`, `display_phone_number`, `display_name`, `onboarding_type`
+(`coexistence`, `cloud_api`, `env`), `automation_enabled`, `connected_at`,
+`disconnected_at`, `last_account_event`, `quality_rating`, `can_send_message`
+(Meta health: `AVAILABLE`, `LIMITED`, `BLOCKED`), `health_errors[]`,
+`payment_method_status` (always `unknown`: billing is on the agent's own WABA),
+`contacts {total, blocked, sync_requested_at, synced_at}`.
+
+Signup completion (code expires in ~30 s, so call it immediately from the SDK callback):
+exchanges the code (`GET /oauth/access_token` with app ID/secret), checks that
+`phone_number_id` is in `GET /{waba_id}/phone_numbers`, subscribes the app
+(`POST /{waba_id}/subscribed_apps`), registers the number only for `FINISH` (Cloud API),
+stores the encrypted token, then requests the contacts sync once
+(`POST /{phone_number_id}/smb_app_data`, `sync_type = smb_app_state_sync`) and reads
+`health_status`. Errors: 400 expired state, 403 number not in the shared WABA, 409 number
+linked to another account or agent already connected, 502 Meta rejection, 503 not
+configured. Automation starts **off** so the agent can block contacts first.
+
+Errors elsewhere: 404 when the agent has no connected number; 409 when enabling without
+a decryptable token.
+
+### Admin
+
+`GET /api/v1/admin/whatsapp/connections` (system admin): `{total, connected, automation_on,
+items[{connection_id, user_id, user_email, organization_id, organization_name,
+phone_number_id, display_phone_number, display_name, status, onboarding_type,
+automation_enabled, contacts_total, contacts_blocked, contacts_synced_at, last_message_at,
+connected_at, disconnected_at, can_send_message}]}`.
+
+### Meta app settings needed
+
+- App Dashboard → WhatsApp → Configuration → Webhooks: callback
+  `https://api-pilot.vitevue.com/api/v1/webhooks/whatsapp`, verify token
+  `WHATSAPP_VERIFY_TOKEN`; subscribe `messages`, `smb_app_state_sync`,
+  `smb_message_echoes`, `account_update` (Meta lists `history` for coexistence too; we
+  never request history, so subscribing to it is optional and its events are ignored).
+- Facebook Login for Business → Configurations: create one with the **WhatsApp Embedded
+  Signup** login variation (or the “WhatsApp Embedded Signup Configuration With 60
+  Expiration Token” template), selecting only the WhatsApp assets/permissions needed;
+  put its ID in `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID`.
+- Facebook Login for Business → Settings → Client OAuth settings: Client OAuth login,
+  Web OAuth login, Enforce HTTPS, Embedded Browser OAuth Login, Strict Mode for redirect
+  URIs and Login with the JavaScript SDK all on; add `vv-pilot.pages.dev` (and any other
+  frontend domain) to Allowed domains and Valid OAuth redirect URIs.
+
+### Not done
+
+Delivery-status reconciliation, retention/purge of property history, senders identified
+only by business-scoped user ID (no phone number) are not automated, and per-thread
+ordering is guaranteed only within one API process.
 
 ## Verification and current pilot state — 3 November 2026
 

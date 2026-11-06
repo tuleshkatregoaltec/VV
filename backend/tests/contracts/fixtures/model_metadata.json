@@ -285,10 +285,17 @@
     ]
   },
   "whatsapp_connections": {
-    "ddl": "\nCREATE TABLE whatsapp_connections (\n\tid VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tphone_number_id VARCHAR NOT NULL, \n\taccount_id VARCHAR NOT NULL, \n\tdisplay_name VARCHAR NOT NULL, \n\tenabled BOOLEAN NOT NULL, \n\tmarket_data_enabled BOOLEAN NOT NULL, \n\tapproved_knowledge JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (phone_number_id)\n)\n\n",
+    "ddl": "\nCREATE TABLE whatsapp_connections (\n\tid VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tphone_number_id VARCHAR NOT NULL, \n\taccount_id VARCHAR NOT NULL, \n\tdisplay_name VARCHAR NOT NULL, \n\tenabled BOOLEAN NOT NULL, \n\tmarket_data_enabled BOOLEAN NOT NULL, \n\tapproved_knowledge JSON NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tonboarding_type VARCHAR, \n\tbusiness_id VARCHAR, \n\tdisplay_phone_number VARCHAR, \n\taccess_token_encrypted TEXT, \n\tquality_rating VARCHAR, \n\thealth JSON, \n\tlast_account_event VARCHAR, \n\tconnected_at TIMESTAMP WITH TIME ZONE, \n\tdisconnected_at TIMESTAMP WITH TIME ZONE, \n\tcontacts_sync_requested_at TIMESTAMP WITH TIME ZONE, \n\tcontacts_synced_at TIMESTAMP WITH TIME ZONE, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (phone_number_id)\n)\n\n",
     "indexes": [
+      "CREATE INDEX ix_whatsapp_connections_account_id ON whatsapp_connections (account_id)",
       "CREATE INDEX ix_whatsapp_connections_organization_id ON whatsapp_connections (organization_id)",
       "CREATE INDEX ix_whatsapp_connections_user_id ON whatsapp_connections (user_id)"
+    ]
+  },
+  "whatsapp_contacts": {
+    "ddl": "\nCREATE TABLE whatsapp_contacts (\n\tid VARCHAR NOT NULL, \n\tconnection_id VARCHAR NOT NULL, \n\twa_id VARCHAR, \n\tbsuid VARCHAR, \n\tname VARCHAR, \n\tin_address_book BOOLEAN NOT NULL, \n\tblocked BOOLEAN NOT NULL, \n\tblocked_at TIMESTAMP WITH TIME ZONE, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_whatsapp_contact_wa_id UNIQUE (connection_id, wa_id), \n\tCONSTRAINT uq_whatsapp_contact_bsuid UNIQUE (connection_id, bsuid), \n\tFOREIGN KEY(connection_id) REFERENCES whatsapp_connections (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_whatsapp_contact_blocked ON whatsapp_contacts (connection_id, blocked)"
     ]
   },
   "whatsapp_customer_messages": {

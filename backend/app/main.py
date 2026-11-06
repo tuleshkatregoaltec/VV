@@ -38,6 +38,12 @@ from app.supply.router import router as supply_router
 from app.transaction.router import router as transaction_router
 from app.upload.router import health_router
 from app.upload.router import router as upload_router
+from app.whatsapp.connection_router import admin_router as whatsapp_admin_router
+from app.whatsapp.connection_router import router as whatsapp_connection_router
+from app.whatsapp.customer_connections import (
+    bootstrap_on_startup as bootstrap_whatsapp_env_connection,
+)
+from app.whatsapp.customer_intake import shutdown as drain_whatsapp_classification
 from app.whatsapp.customer_router import router as whatsapp_customer_router
 from app.whatsapp.logging import CallbackQueryFilter
 from app.whatsapp.router import router as whatsapp_router
@@ -60,7 +66,9 @@ def custom_generate_unique_id(route: APIRoute) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown."""
+    await bootstrap_whatsapp_env_connection()
     yield
+    await drain_whatsapp_classification()
     await close_clickhouse()
     await close_postgres()
     if observability_provider is not None:
@@ -111,6 +119,8 @@ app.include_router(billing_router, tags=["billing"])
 app.include_router(billing_webhooks, tags=["webhooks"])
 app.include_router(whatsapp_router, tags=["webhooks"])
 app.include_router(whatsapp_customer_router, tags=["whatsapp"])
+app.include_router(whatsapp_connection_router, tags=["whatsapp"])
+app.include_router(whatsapp_admin_router, tags=["admin"])
 app.include_router(admin_router, tags=["admin"])
 app.include_router(feasibility_router, tags=["feasibility"])
 

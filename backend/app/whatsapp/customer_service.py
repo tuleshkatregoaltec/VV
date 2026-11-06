@@ -28,6 +28,12 @@ def configured_owner(user_id, organization_id, phone_number_id, account_id):
         raise HTTPException(403, "This WhatsApp asset is not configured for this account")
 
 
+def require_sendable(connection):
+    """Only a connected agent number with a stored token may enable or approve sends."""
+    if connection.status != "connected" or not connection.access_token_encrypted:
+        raise HTTPException(409, "Connect this WhatsApp number before sending")
+
+
 def message_response(row):
     response = CustomerMessageResponse.model_validate(row)
     if row.status == "ignored":
@@ -89,7 +95,7 @@ async def update_connection(db, *, connection_id, user_id, organization_id, requ
         await repository.lock_connection(db, connection_id, user_id, organization_id)
     )
     if request.enabled:
-        configured_owner(user_id, organization_id, row.phone_number_id, row.account_id)
+        require_sendable(row)
     if (
         request.market_data_enabled is not None
         and request.market_data_enabled != row.market_data_enabled
@@ -192,9 +198,7 @@ async def decide(db, *, message_id, user_id, organization_id, request, action):
     if action != "cancel" and (not connection.enabled or thread.opted_out):
         raise HTTPException(409, "Customer automation is disabled or the customer opted out")
     if action == "approve":
-        configured_owner(
-            user_id, organization_id, connection.phone_number_id, connection.account_id
-        )
+        require_sendable(connection)
         if not message.reply:
             raise HTTPException(409, "No draft is available")
         if message.sent_at <= utcnow() - timedelta(hours=24):
