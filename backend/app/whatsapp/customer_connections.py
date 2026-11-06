@@ -167,6 +167,11 @@ async def complete_signup(db, *, user_id, organization_id, request, config):
     row.onboarding_type = onboarding
     if row.status != "connected" or row.connected_at is None:
         row.connected_at = now  # starts Meta's 24-hour contacts sync window
+        # A (re)connect starts from an empty address book: request a fresh contacts sync
+        # and keep automation off until the agent re-reviews blocks and switches it on.
+        row.enabled = False
+        row.contacts_sync_requested_at = None
+        row.contacts_synced_at = None
     row.status = "connected"
     row.disconnected_at = None
     row.last_account_event = None
@@ -210,6 +215,9 @@ async def disconnect(db, connection, *, reason):
     connection.enabled = False
     connection.status = "disconnected"
     connection.access_token_encrypted = None
+    # Contacts were deleted above; a reconnect must sync them again.
+    connection.contacts_sync_requested_at = None
+    connection.contacts_synced_at = None
     connection.disconnected_at = now
     connection.last_account_event = reason
     connection.updated_at = now

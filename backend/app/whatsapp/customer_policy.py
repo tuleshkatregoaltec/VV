@@ -68,6 +68,9 @@ class CustomerDraft(BaseModel):
     evidence_ids: list[str] = Field(max_length=20)
     auto_eligible: bool
     silent: bool = False
+    # False when the message is not an admitted property enquiry: the receipt then keeps no
+    # text, only the pause and a content-free notification (identity questions).
+    store_content: bool = True
     summary: str | None = Field(default=None, max_length=400)
     reason: str | None = Field(default=None, max_length=64)
     asked: QualificationDetail | None = None

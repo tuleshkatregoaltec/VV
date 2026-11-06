@@ -196,3 +196,140 @@ def test_fallback_lines_are_varied_and_pass_their_own_checks():
         seen.add(holding)
     assert len(seen) >= 3
     assert voice.fallback_holding("same") == voice.fallback_holding("same")
+
+
+# Phrasings an independent verifier found the patterns missed (first message, no context).
+@pytest.mark.parametrize(
+    "text",
+    [
+        "real person?",
+        "Is a human replying?",
+        "Are these replies automatic?",
+        "Are you using AI to reply?",
+        "be honest, is a machine answering me?",
+        "you sound like a bot",
+        "Is this Kian or an assistant?",
+        "is a human replying? what's the 2BR price",
+        "Is someone actually reading this?",
+        "Are these messages auto generated?",
+        "Do you use ChatGPT to answer?",
+        "this feels automated",
+        # Arabic
+        "شخص حقيقي؟",
+        "هل يرد علي إنسان؟",
+        "هل الردود تلقائية؟",
+        "هل تستخدم الذكاء الاصطناعي للرد؟",
+        "بصراحة، هل آلة ترد علي؟",
+        "تبدو مثل روبوت",
+        "هل هذا كيان أم مساعد؟",
+        "هذا رد آلي؟",
+        # Hindi / Hinglish
+        "असली इंसान?",
+        "क्या कोई इंसान जवाब दे रहा है?",
+        "क्या ये जवाब ऑटोमैटिक हैं?",
+        "क्या आप जवाब देने के लिए AI इस्तेमाल कर रहे हैं?",
+        "सच बताओ, क्या मशीन जवाब दे रही है?",
+        "आप बॉट जैसे लगते हो",
+        "ये कियान है या असिस्टेंट?",
+        "asli insaan?",
+        "kya koi insaan reply kar raha hai?",
+        "kya ye replies automatic hain?",
+        "kya aap reply ke liye AI use kar rahe ho?",
+        "sach batao, machine reply kar rahi hai kya?",
+        "aap bot jaise lagte ho",
+        "ye Kian hai ya assistant?",
+        # Russian
+        "Живой человек?",
+        "Отвечает человек?",
+        "Это автоматические ответы?",
+        "Вы используете ИИ для ответов?",
+        "Честно, мне отвечает машина?",
+        "Похоже на бота",
+        "Это Киан или ассистент?",
+    ],
+)
+def test_identity_phrasings_missed_before_are_detected(text):
+    assert voice.asks_if_automated(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Does the building have automatic parking?",
+        "Is there a washing machine in the unit?",
+        "Can a real estate agent call me?",
+        "Is the price for the 2BR negotiable?",
+        "Is the gate automatic?",
+        "What's the 2BR price in Marina?",
+        "هل يوجد موقف سيارات؟",
+        "Сколько стоит квартира?",
+        "2BHK ka price kya hai?",
+    ],
+)
+def test_property_questions_with_similar_words_are_not_identity_questions(text):
+    assert not voice.asks_if_automated(text)
+
+
+# A drafted reply may never talk about its own nature: no claims, no denials, no jokes. The
+# verifier showed these denials passing before; an answer to "are you a bot?" belongs to the
+# agent personally.
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "Not a bot, just quick on my phone",
+        "This isn't automated, I'm just fast",
+        "This is not a bot",
+        "nah, no bots here",
+        "Nope, it's really me",
+        "Yes it's a person replying",
+        "Not automated at all, I type fast",
+        "Haha no robot here",
+        "It's me typing, promise",
+        "100% human",
+        "No AI involved, just me",
+        "I'm not an assistant, it's Kian",
+        "Real person here!",
+        "Nope, no machine on this end",
+        "It's not an auto reply",
+        # Arabic
+        "لا، مو بوت",
+        "هذا مو رد آلي، أنا بنفسي",
+        "لا يوجد ذكاء اصطناعي هنا",
+        "أنا شخص حقيقي",
+        "مش روبوت والله",
+        # Hindi / Hinglish
+        "नहीं, मैं बॉट नहीं हूँ",
+        "ये ऑटोमैटिक नहीं है, मैं ही हूँ",
+        "कोई मशीन नहीं, असली इंसान",
+        "nahi yaar, bot nahi hoon",
+        "main hi hoon, automatic nahi hai",
+        "asli insaan hoon",
+        # Russian
+        "Нет, это не бот",
+        "Это не автоматический ответ, я просто быстро пишу",
+        "Это правда я",
+        "Тут живой человек",
+        "Никакого ИИ, это я",
+    ],
+)
+def test_replies_that_talk_about_their_own_nature_are_rejected(reply):
+    assert "self_identity" in voice.reply_violations(reply, sources=SOURCES, context=[])
+
+
+@pytest.mark.parametrize(
+    "reply,source",
+    [
+        ("Yes, the parking is fully automated parking.", "Automated parking with 2 bays."),
+        ("There's a washing machine in the unit.", "Washing machine and dryer included."),
+        ("The gate is an automatic gate.", "Gated villa with an automatic gate."),
+    ],
+)
+def test_property_features_from_the_facts_are_not_identity_talk(reply, source):
+    assert voice.reply_violations(reply, sources=[source], context=[]) == []
+
+
+def test_feature_word_from_facts_still_cannot_deny_automation():
+    found = voice.reply_violations(
+        "This isn't automated, I'm just fast", sources=["Automated parking."], context=[]
+    )
+    assert "self_identity" in found

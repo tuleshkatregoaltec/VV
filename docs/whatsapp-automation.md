@@ -151,10 +151,15 @@ on → property enquiries are answered from the agent's own number.
   `ignored` with no content. Nothing goes through Redis (the server's Redis uses AOF).
 - If the API process dies mid-classification the text is lost by design; the worker marks
   the receipt `failed (worker_lost)` after ten minutes.
-- Agent replies typed in the phone app (`smb_message_echoes`) only pause a thread that
-  already has a property enquiry and cancel its unsent draft. Echo text is never read or
-  stored and no thread is created for personal chats. Message history sync is never
-  requested. Group messages are ignored.
+- Agent replies typed in the phone app (`smb_message_echoes`) pause a thread that
+  already has a property enquiry and cancel its unsent draft. On any other thread they
+  cancel (`agent_replied`) messages still being classified that arrived at or before the
+  echo, so the buyer is never answered twice; the thread is not paused. Echo text is never
+  read or stored and no thread is created for personal chats. Message history sync is
+  never requested. Group messages are ignored.
+- Each webhook change commits on its own. If one change fails, it alone is rolled back:
+  receipts committed by the other changes are still classified, and the error is returned
+  afterwards so Meta retries the event (committed receipts are deduplicated).
 
 ### Routing and sending
 
@@ -167,7 +172,11 @@ lost receipts; classification runs in the API process
 (`WHATSAPP_CLASSIFIER_CONCURRENCY`, default 4 per process).
 
 `account_update` `PARTNER_REMOVED` / `ACCOUNT_OFFBOARDED` disconnects the agent: automation
-off, unsent replies cancelled, token and synced contacts deleted.
+off, unsent replies cancelled, token and synced contacts deleted. Disconnecting also clears
+`contacts_sync_requested_at` / `contacts_synced_at`, so reconnecting the same number
+requests a fresh contacts sync (coexistence) and leaves automation off until the agent
+re-reviews blocks and switches it on. A reconnect of a row disconnected by older code is
+reset the same way.
 
 ### Environment
 
@@ -276,10 +285,16 @@ person. Rules agreed with the product owner:
    `approval_required` notification with `reply = null`, `reason = "identity_question"`
    and a `handoff_summary`, and the agent answers personally. Detection is a deliberately
    broad multilingual pattern set (`customer_voice.asks_if_automated`, applied before any
-   model call) plus the classifier's `asks_if_automated` flag. It only fires inside a
-   property conversation or alongside a property enquiry; otherwise the message is
-   ignored and nothing is stored, like any other non-property text. A false positive
-   costs a paused thread, never a reply.
+   model call, including indirect forms such as "is a human replying?", "are these replies
+   automatic?", "you sound like a bot", "is this Kian or an assistant?") plus the
+   classifier's `asks_if_automated` flag. Either one is enough, whatever the topic,
+   confidence or prior history, and also when the classifier call fails. The message text
+   is kept only inside an accepted property conversation or when the classifier also admits
+   it as a property enquiry. Otherwise (for example a first message "Are you a bot?") the
+   row keeps no text: `topic = "identity"`, `content = null` and a content-free
+   `handoff_summary` ("A contact asked whether replies are automated..."); the thread is
+   listed for the agent so they can see who asked. A false positive costs a paused
+   thread, never a reply.
 3. **Sensitive topics are handed off with a summary.** Negotiation, offers, legal or
    financial questions, payments, viewings/scheduling, reservations, promises and
    requests for a person produce an `approval_required` draft: a brief true holding line
@@ -290,8 +305,12 @@ person. Rules agreed with the product owner:
    possible later product decision; it is not enabled.
 4. **Grounded.** The model may phrase facts naturally ("AED 2,450,000" as "2.45M") but
    every reply is screened by `customer_voice.reply_violations` before it is stored and again
-   at the send boundary: references to being an AI/bot, claims of being human, assistant
-   boilerplate, commitments ("booked", "confirmed", "I promise", "in 10 minutes"), numbers
+   at the send boundary: any talk about the reply's own nature (`self_identity`: bot, AI,
+   automation, assistant, robot, machine, human, real person, "it's really me", in English,
+   Arabic, Hindi/Hinglish and Russian, including denials such as "not a bot, just quick on
+   my phone"; feature words such as "automated parking" or "washing machine" pass only next
+   to the same neighbouring word in the cited facts), references to being an AI/bot, claims
+   of being human, assistant boilerplate, commitments ("booked", "confirmed", "I promise", "in 10 minutes"), numbers
    (including written numbers such as "three") that appear in neither the selected facts nor
    the buyer's own messages, URLs/emails not in the facts, and availability or sold
    claims the facts do not make. A reply that fails is never sent. A failed routine

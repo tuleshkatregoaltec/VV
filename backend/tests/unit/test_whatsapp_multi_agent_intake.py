@@ -6,6 +6,7 @@ stage (not only the end state). The PostgreSQL suite repeats the key cases again
 real tables.
 """
 
+import asyncio
 import json
 import logging
 from datetime import timedelta
@@ -547,6 +548,104 @@ async def test_echo_to_a_personal_thread_changes_nothing(store):
         config(),
     )
     assert not thread.paused
+
+
+async def test_agent_reply_during_classification_cancels_the_automated_answer(store, monkeypatch):
+    # The buyer's first message is still being classified (no topic yet) when the agent
+    # answers from the phone. The automation must not answer it a second time.
+    agent(store, "a", "waba-a", "phone-a")
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_classify(**kwargs):
+        started.set()
+        await release.wait()
+        return draft()
+
+    monkeypatch.setattr(automation, "build_customer_draft", slow_classify)
+    sent_at = utcnow() - timedelta(seconds=5)
+    inbound = message(PROPERTY, timestamp=str(int(sent_at.timestamp())))
+    assert (
+        await intake.receive_customer(
+            event(("waba-a", [change("phone-a", messages=[inbound])])), config()
+        )
+        == 1
+    )
+    await started.wait()
+    echo = {
+        "to": "971500000001",
+        "id": "wamid.echo",
+        "timestamp": str(int(utcnow().timestamp())),
+        "type": "text",
+        "text": {"body": "ECHO-PRIVATE yes still available"},
+    }
+    await intake.receive_customer(
+        event(("waba-a", [change("phone-a", "smb_message_echoes", message_echoes=[echo])])),
+        config(),
+    )
+    release.set()
+    await intake.drain()
+    receipt = store.tables[WhatsAppCustomerMessage]["wamid.1"]
+    assert receipt.status == "cancelled" and receipt.reason == "agent_replied"
+    assert receipt.content is None and receipt.reply is None and receipt.send_after is None
+    assert all("ECHO-PRIVATE" not in dumped for _, dumped in store.snapshots)
+
+
+async def test_echo_does_not_cancel_a_message_that_arrived_after_it(store):
+    connection = agent(store, "a", "waba-a", "phone-a")
+    thread = store.put(WhatsAppCustomerThread(connection_id=connection.id, sender="971500000001"))
+    now = utcnow()
+    before = store.put(
+        WhatsAppCustomerMessage(
+            id="before",
+            thread_id=thread.id,
+            status="classifying",
+            sent_at=now - timedelta(minutes=1),
+        )
+    )
+    after = store.put(
+        WhatsAppCustomerMessage(
+            id="after",
+            thread_id=thread.id,
+            status="classifying",
+            sent_at=now + timedelta(minutes=1),
+        )
+    )
+    echo = {"to": "971500000001", "id": "wamid.echo", "timestamp": str(int(now.timestamp()))}
+    await intake.receive_customer(
+        event(("waba-a", [change("phone-a", "smb_message_echoes", message_echoes=[echo])])),
+        config(),
+    )
+    assert before.status == "cancelled" and after.status == "classifying"
+
+
+async def test_one_failing_change_does_not_strand_receipts_committed_before_it(store, monkeypatch):
+    agent(store, "a", "waba-a", "phone-a")
+    agent(store, "b", "waba-b", "phone-b")
+    classify = AsyncMock(return_value=draft())
+    monkeypatch.setattr(automation, "build_customer_draft", classify)
+    monkeypatch.setattr(
+        intake.contacts, "apply_state_sync", AsyncMock(side_effect=RuntimeError("boom"))
+    )
+    payload = event(
+        ("waba-a", [change("phone-a", messages=[message(PROPERTY)])]),
+        ("waba-b", [change("phone-b", "smb_app_state_sync", state_sync=[])]),
+        (
+            "waba-b",
+            [
+                change(
+                    "phone-b", messages=[message(PROPERTY, sender="971500000002", message_id="m3")]
+                )
+            ],
+        ),
+    )
+    # The failure still surfaces, so Meta retries; committed receipts are deduplicated.
+    with pytest.raises(RuntimeError):
+        await intake.receive_customer(payload, config())
+    await intake.drain()
+    rows = store.tables[WhatsAppCustomerMessage]
+    assert rows["wamid.1"].status == "auto_pending", "receipt before the failure was stranded"
+    assert rows["m3"].status == "auto_pending", "receipt after the failure was not processed"
+    assert classify.await_count == 2
 
 
 async def test_partner_removed_disconnects_the_agent_and_deletes_the_token(store):

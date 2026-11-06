@@ -13,6 +13,7 @@ is lost by design.
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from app.postgres import get_db_session
 from app.whatsapp import customer_automation as automation
@@ -57,9 +58,33 @@ def parse(event):
     return changes
 
 
+def _echo_time(echo):
+    try:
+        return datetime.fromtimestamp(int(echo["timestamp"]), timezone.utc)
+    except (KeyError, ValueError, TypeError, OverflowError, OSError):
+        return None
+
+
+async def cancel_in_flight(db, thread, before):
+    """The agent answered while these were still being classified: never answer twice."""
+    for message in await repository.messages(db, thread.id, lock=True):
+        if message.status in ("queued", "classifying") and (
+            before is None or message.sent_at <= before
+        ):
+            message.content = None
+            message.reply = None
+            message.evidence_ids = []
+            message.status = "cancelled"
+            message.reason = "agent_replied"
+            message.send_after = None
+            message.revision += 1
+            message.updated_at = utcnow()
+
+
 async def apply_echoes(db, connection, echoes):
-    """An agent reply from the phone app takes over a property thread. Echo text is
-    never read or stored, and no thread is created for a personal chat."""
+    """An agent reply from the phone app takes over a property thread, and cancels any
+    automated answer still being prepared for earlier messages. Echo text is never read or
+    stored, and no thread is created for a personal chat."""
     if not isinstance(echoes, list):
         return
     for echo in echoes:
@@ -72,6 +97,8 @@ async def apply_echoes(db, connection, echoes):
         if thread is None or thread.paused:
             continue
         if not await repository.has_property_messages(db, thread.id):
+            # Topic is unknown until classification ends; only in-flight work is cancelled.
+            await cancel_in_flight(db, thread, _echo_time(echo))
             continue
         thread.paused = True
         thread.updated_at = utcnow()
@@ -97,33 +124,54 @@ async def receive_customer(event, config):
     if not changes:
         return 0
     jobs = []
+    failure = None
     async with asynccontextmanager(get_db_session)() as db:
-        # One transaction per change: at most one connection lock is held at a time.
+        # One transaction per change: at most one connection lock is held at a time. A
+        # failing change is rolled back alone; receipts committed by the others are still
+        # classified, and the error is raised afterwards so Meta retries (deduplicated).
         for account_id, field, value in changes:
-            if field == "account_update":
-                await apply_account_update(db, account_id, value)
-                await db.commit()
-                continue
-            metadata = value.get("metadata")
-            phone_number_id = (
-                metadata.get("phone_number_id") if isinstance(metadata, dict) else None
-            )
-            if not isinstance(phone_number_id, str):
-                continue
-            connection = await repository.routed_connection(db, account_id, phone_number_id)
-            if connection is None:
-                await db.commit()
-                continue
-            if field == "messages":
-                jobs.extend(await queue.enqueue(db, connection, value.get("messages", []), config))
-            elif field == "smb_app_state_sync":
-                await contacts.apply_state_sync(db, connection, value.get("state_sync", []))
-            else:
-                await apply_echoes(db, connection, value.get("message_echoes", []))
-            await db.commit()
+            try:
+                jobs.extend(await _apply_change(db, account_id, field, value, config))
+            except Exception as exc:
+                failure = failure or exc
+                logger.error("WhatsApp webhook change failed (%s)", type(exc).__name__)
+                try:
+                    await db.rollback()
+                except Exception as rollback_exc:
+                    logger.error(
+                        "WhatsApp webhook rollback failed (%s)", type(rollback_exc).__name__
+                    )
+                    break
     for job in jobs:
         spawn(job, config)
+    if failure is not None:
+        raise failure
     return len(jobs)
+
+
+async def _apply_change(db, account_id, field, value, config):
+    """Apply and commit one change; returns its classification jobs (only once committed)."""
+    if field == "account_update":
+        await apply_account_update(db, account_id, value)
+        await db.commit()
+        return []
+    metadata = value.get("metadata")
+    phone_number_id = metadata.get("phone_number_id") if isinstance(metadata, dict) else None
+    if not isinstance(phone_number_id, str):
+        return []
+    connection = await repository.routed_connection(db, account_id, phone_number_id)
+    if connection is None:
+        await db.commit()
+        return []
+    jobs = []
+    if field == "messages":
+        jobs = await queue.enqueue(db, connection, value.get("messages", []), config)
+    elif field == "smb_app_state_sync":
+        await contacts.apply_state_sync(db, connection, value.get("state_sync", []))
+    else:
+        await apply_echoes(db, connection, value.get("message_echoes", []))
+    await db.commit()
+    return jobs
 
 
 def _reset_for_loop():

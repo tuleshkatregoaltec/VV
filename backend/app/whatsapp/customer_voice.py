@@ -61,11 +61,77 @@ _IDENTITY = re.compile(
     r"|\b(?:вы|ты)\s+(?:живой\s+|настоящий\s+|реальный\s+)?человек\b"
     r"|\b(?:бот|робот)\s+или\s+человек\b|\bчеловек\s+или\s+(?:бот|робот)\b"
 )
+# Indirect phrasings: who is writing, whether replies are automatic, "you sound like a bot",
+# "is this Kian or an assistant". Each also in Arabic, Hindi/Hinglish and Russian.
+_ACTOR = r"(?:human|person|someone|somebody|anyone|anybody|machine|bot|robot|ai|computer|program|software|chat\s?bot|real\s+person|actual\s+person)"
+_WRITING = r"(?:replying|answering|responding|typing|writing|texting|reading|behind)"
+_AUTOMATIC = (
+    r"(?:automatic|automated|auto[- ]?generated|ai[- ]?generated|computer[- ]?generated|"
+    r"machine[- ]?generated|bot[- ]?generated|scripted|pre[- ]?written|canned)"
+)
+_NOT_AR = r"(?!\w)"  # Arabic letters are \w; "؟" is not
+_IDENTITY_INDIRECT = re.compile(
+    r"(?i)\b(?:real|actual|live|living)\s+(?:person|human|people|being|agent)\s*\?"
+    rf"|\b{_ACTOR}\s+(?:is\s+|are\s+)?(?:actually\s+|really\s+)?{_WRITING}\b"
+    rf"|\bwho(?:'s|\s+is)\s+(?:actually\s+|really\s+)?{_WRITING}\b"
+    r"|\b(?:repl(?:y|ies)|responses?|messages?|answers?|texts?|chats?|this)\s+(?:are\s+|is\s+|were\s+|"
+    r"seems?\s+|feels?\s+|sounds?\s+|looks?\s+)?(?:all\s+|just\s+|being\s+|so\s+|very\s+)?"
+    rf"{_AUTOMATIC}\b"
+    r"|\b(?:us(?:e|es|ing)|with|via|through|by)\s+(?:an?\s+)?(?:ai|a\.i\.|bots?|chat\s?gpt|gpt|"
+    r"chat\s?bots?|automation|software|a\s+program|machines?|robots?)\s+(?:to\s+|for\s+)?"
+    r"(?:repl|respond|answer|writ|text|chat|talk|messag)"
+    r"|\b(?:sound|seem|look|feel|talk|write|type|text)(?:s|ing)?\s+(?:like|as\s+if\s+you(?:'re|\s+are))"
+    r"\s+(?:an?\s+)?(?:bot|robot|ai|machine|chat\s?bot|computer|program|automated)\b"
+    r"|\b(?:sound|seem|feel|look)s?\s+(?:so\s+|very\s+|a\s+bit\s+|kind\s+of\s+|kinda\s+)?"
+    r"(?:automated|robotic|scripted|generated|artificial)\b"
+    r"|\bor\s+(?:an?\s+|the\s+|your\s+|some\s+)?(?:assistant|bot|robot|ai|a\.i\.|machine|chat\s?bot|"
+    r"computer|program|auto[- ]?reply|auto[- ]?responder)\b(?!')"
+    # Arabic
+    r"|(?:إنسان|انسان|شخص)\s+حقيقي"
+    r"|(?:يرد|يجاوب|يكتب|ترد|تجاوب|تكتب)\s.{0,10}(?:إنسان|انسان|شخص|آلة|الة|روبوت|بوت)"
+    + _NOT_AR
+    + r"|(?:آلة|الة|إنسان|انسان|روبوت|بوت|شخص)\s+(?:ي|ت)(?:رد|جاوب|كتب)"
+    r"|(?<!\w)(?:الردود|ردود|الرد|رد|الرسائل|رسائل|الرسالة|رسالة)\s+"
+    r"(?:آلي|الي|آلية|الية|تلقائي|تلقائية|اوتوماتيك\w*)"
+    + _NOT_AR
+    + r"|(?:تستخدم|تستعمل|يستخدم|يستعمل)\s.{0,10}(?:الذكاء\s+الاصطناعي|ذكاء\s+اصطناعي|روبوت|بوت|"
+    r"برنامج|شات\s*جي\s*بي\s*تي)"
+    r"|(?:تبدو|يبدو|كأنك|كانك|زي|مثل)\s.{0,6}(?:روبوت|بوت|آلة|الة|آلي)"
+    + _NOT_AR
+    + r"|(?<!\w)(?:أم|ام|أو|او)\s+(?:مساعد|روبوت|بوت|آلة|الة|برنامج)"
+    + _NOT_AR
+    # Hindi (Devanagari)
+    + r"|असली\s+इंसान"
+    r"|(?:इंसान|मशीन|बॉट|बोट|रोबोट|एआई|\bai\b)\s.{0,15}(?:जवाब|रिप्लाई|लिख|बात)"
+    r"|(?:\bai\b|एआई|बॉट|बोट|चैटजीपीटी|\bchatgpt\b)\s.{0,6}(?:इस्तेमाल|उपयोग|यूज़|यूज)"
+    r"|(?:जवाब|रिप्लाई|मैसेज)\s.{0,6}(?:ऑटोमैटिक|ऑटोमेटिक|स्वचालित|ऑटो)"
+    r"|(?:बॉट|बोट|रोबोट|मशीन)\s+(?:जैसे|जैसा|जैसी)"
+    r"|(?:या|अथवा)\s+(?:असिस्टेंट|बॉट|बोट|रोबोट|मशीन|एआई)"
+    # Hinglish
+    r"|\b(?:asli|asal|real)\s+(?:insaan|insan|banda|aadmi)\b"
+    r"|\b(?:insaan|insan|banda|aadmi|machine|bot|robot|ai)\b.{0,12}\b(?:reply|jawab|javab|likh|type)"
+    r"\w*\s+(?:kar|de|ho)\w*"
+    r"|\b(?:replies|reply|jawab|javab|messages?)\b.{0,6}\b(?:automatic|automated|auto)\b"
+    r"|\b(?:ai|bot|chatgpt|gpt|chatbot)\b.{0,6}\b(?:use|istemal|istemaal)\b"
+    r"|\b(?:bot|robot|machine|ai)\s+(?:jaise|jaisa|jaisi|lagte|lagta|lagti|lag\s+rahe)\b"
+    r"|\bya\s+(?:assistant|bot|robot|machine|ai)\b"
+    # Russian
+    r"|\b(?:живой|настоящий|реальный)\s+человек\b"
+    r"|\b(?:отвечает|отвечают|пишет|печатает)\s+(?:мне\s+)?(?:живой\s+|настоящий\s+|реальный\s+)?"
+    r"(?:человек|машина|бот|робот|программа|ии|нейросеть)\b"
+    r"|\b(?:человек|машина|бот|робот|программа|ии|нейросеть)\s+(?:мне\s+)?(?:отвечает|пишет|печатает)\b"
+    r"|\bавтоматическ\w*\s+(?:ответ|сообщени)\w*|автоответ"
+    r"|\b(?:используете|используешь|пользуетесь|пользуешься)\s+(?:ли\s+)?(?:ии|нейросет\w*|chatgpt|"
+    r"чатгпт|бот\w*|gpt)\b"
+    r"|\b(?:похоже|похож|похожи|звучит|звучите)\s+(?:на\s+)?(?:бот\w*|робот\w*|машин\w*|ии)\b"
+    r"|\bили\s+(?:ассистент|помощник|бот|робот|ии|нейросеть|программа)\b"
+)
 
 
 def asks_if_automated(text: str) -> bool:
     """Deliberately broad: a false positive only pauses the thread for the agent."""
-    return bool(_IDENTITY.search(text.replace("’", "'")))
+    text = text.replace("’", "'")
+    return bool(_IDENTITY.search(text) or _IDENTITY_INDIRECT.search(text))
 
 
 # --- Output screening -----------------------------------------------------------------
@@ -96,6 +162,60 @@ _HUMAN_CLAIM = re.compile(
     r"|मैं\s+(?:एक\s+)?(?:असली\s+)?इंसान|असली\s+इंसान|मैं\s+(?:बॉट|रोबोट)\s+नहीं"
     r"|\bmain\s+(?:insaan|insan)\b|\bmain\s+bot\s+nahi\b"
 )
+# Any talk about what is writing the reply is the agent's to answer, never the drafter's:
+# claims, denials and jokes alike ("not a bot, just quick", "it's really me").
+_SELF_IDENTITY = re.compile(
+    r"(?i)\b(?:bots?|chat\s?bots?|robots?|robotic|humans?|ai|a\.i\.|artificial\s+intelligence|"
+    r"auto[- ]?repl\w*|auto[- ]?respon\w*)\b"
+    r"|\b(?:real|actual|live|living)\s+(?:person|people|human|humans|man|woman|guy)\b"
+    r"|\bperson\s+(?:is\s+)?(?:replying|typing|answering|texting|writing|here|behind)\b"
+    r"|\b(?:it'?s|it\s+is|i'?m|i\s+am)\s+(?:an?\s+|the\s+)(?:person|man|woman|guy)\b"
+    r"|\b(?:it'?s|it\s+is|this\s+is)\s+(?:really\s+|actually\s+|just\s+|truly\s+|only\s+|"
+    r"definitely\s+)?me\b|\breally\s+me\b|\bme\s+(?:typing|replying|texting|writing)\b"
+    r"|\b(?:not|no|isn'?t|is\s+not|aren'?t|never|nothing)\s+(?:an?\s+|the\s+|at\s+all\s+)?"
+    r"(?:automat\w*|assistants?|machines?|programs?|computers?|software|script\w*)\b"
+    r"|\b(?:automat\w*|machine|assistant)\s+(?:nahi|nahin|nai)\b"
+    r"|\b(?:insaan|insan)\b|\bmain\s+hi\s+(?:hoon|hu|hun)\b"
+    # Arabic
+    r"|روبوت|(?<!\w)بوت(?!\w)|(?<!\w)آلي(?!\w)|تلقائي|ذكاء\s+(?:اصطناعي|صناعي)"
+    r"|(?<!\w)(?:إنسان|انسان|بشر)(?!\w)|(?:شخص|إنسان|انسان)\s+حقيقي|(?<!\w)مساعد(?!\w)"
+    r"|(?:أنا|انا)\s+(?:بنفسي|نفسي)"
+    # Hindi
+    r"|बॉट|बोट|रोबोट|एआई|इंसान|मशीन|ऑटोमैटिक|ऑटोमेटिक|स्वचालित|असिस्टेंट|मैं\s+ही\s+हू"
+    # Russian
+    r"|(?<!\w)(?:бот|бота|ботом|боты|ботов)(?!\w)|робот|(?<!\w)ии(?!\w)|нейросет"
+    r"|искусственн\w+\s+интеллект|автоматическ|автоответ|ассистент"
+    r"|(?:живой|настоящий|реальный)\s+человек|(?:я|это)\s+человек(?!\w)"
+    r"|(?<!\w)(?:это|тут|здесь)\s+(?:правда\s+|действительно\s+|реально\s+|точно\s+)?я(?!\w)"
+    r"|(?<!\w)правда\s+я(?!\w)"
+)
+# Words that also name property features ("automated parking", "washing machine"). Allowed
+# only beside the same neighbouring word in the approved facts; anywhere else they are
+# self-identity talk.
+_NATURE_WORD = re.compile(r"(?i)automat\w*|machines?|assistants?|computers?|programs?|software")
+_TOKEN = re.compile(r"[\w'-]+")
+
+
+def _bigrams(text: str) -> set[tuple[str, str]]:
+    words = _TOKEN.findall(text.lower())
+    return set(zip(words, words[1:], strict=False))
+
+
+def _self_identity(text: str, sources: list[str]) -> bool:
+    if _SELF_IDENTITY.search(text):
+        return True
+    allowed = _bigrams("\n".join(sources))
+    words = _TOKEN.findall(text.lower())
+    for index, word in enumerate(words):
+        if not _NATURE_WORD.fullmatch(word):
+            continue
+        before = (words[index - 1], word) if index else None
+        after = (word, words[index + 1]) if index + 1 < len(words) else None
+        if before not in allowed and after not in allowed:
+            return True
+    return False
+
+
 _BOILERPLATE = re.compile(
     r"(?i)thank you for (?:reaching out|contacting|your (?:inquiry|enquiry|interest))"
     r"|how (?:may|can) i (?:assist|help) you(?: today)?"
@@ -185,6 +305,8 @@ def reply_violations(reply: str, *, sources: list[str], context=()) -> list[str]
     ):
         if pattern.search(text):
             codes.append(code)
+    if _self_identity(text, sources):
+        codes.append("self_identity")
     known_text = "\n".join([*sources, *context])
     allowed = [value for value, _ in _numbers(known_text)]
     if any(not _grounded_number(value, rounded, allowed) for value, rounded in _numbers(text)):

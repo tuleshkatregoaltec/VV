@@ -170,10 +170,12 @@ async def draft(db, location, revision, config, content):
             return
         message.evidence_snapshots = snapshots
         # The only point where inbound text becomes durable: an admitted property enquiry.
-        message.content = content
+        # An identity question outside one keeps no text: sender, pause and notice only.
+        keep = not silent or getattr(result, "store_content", True)
+        message.content = content if keep else None
         message.reply = result.reply
         message.risk = result.risk
-        message.topic = "real_estate"
+        message.topic = "real_estate" if keep else "identity"
         message.evidence_ids = result.evidence_ids
         message.handoff_summary = getattr(result, "summary", None)
         message.asked_detail = getattr(result, "asked", None)

@@ -453,3 +453,86 @@ async def test_signup_completion_persists_an_encrypted_connection(pg_session, en
     assert await tables_containing(pg_session.bind, "EAAG-signup-token") == []
     assert json.dumps(status.model_dump(mode="json")).find("EAAG") == -1
     assert utcnow() - status.connected_at < timedelta(minutes=1)
+
+
+async def test_a_database_error_in_one_change_does_not_strand_the_others(
+    pg_session, env, monkeypatch
+):
+    first, second = await agent(pg_session, env), await agent(pg_session, env)
+    classify = AsyncMock(
+        return_value=SimpleNamespace(
+            reply="Marina 2BR AED 2m.", risk="routine", evidence_ids=["faq"], auto_eligible=True
+        )
+    )
+    monkeypatch.setattr(automation, "build_customer_draft", classify)
+
+    async def broken_sync(db, connection, state_sync):
+        # A real failed statement poisons the transaction; only this change may be lost.
+        await db.exec(text("SELECT * FROM no_such_table_for_this_test"))
+
+    monkeypatch.setattr(intake.contacts, "apply_state_sync", broken_sync)
+    a = inbound(first, "Is the Marina 2BR available?")
+    b = inbound(second, "Is the Marina 2BR available?", sender="971500000002")
+    sync = event(second, "smb_app_state_sync", state_sync=[])
+    payload = {
+        "object": "whatsapp_business_account",
+        "entry": [a["entry"][0], sync["entry"][0], b["entry"][0]],
+    }
+    with pytest.raises(Exception):  # noqa: B017 - surfaced so Meta retries the event
+        await intake.receive_customer(payload, env)
+    await intake.drain()
+    ids = [a["entry"][0]["changes"][0]["value"]["messages"][0]["id"]]
+    ids.append(b["entry"][0]["changes"][0]["value"]["messages"][0]["id"])
+    async with AsyncSession(pg_session.bind) as db:
+        statuses = (
+            await db.exec(
+                text("SELECT status FROM whatsapp_customer_messages WHERE id = ANY(:ids)"),
+                params={"ids": ids},
+            )
+        ).all()
+    assert sorted(row[0] for row in statuses) == ["auto_pending", "auto_pending"]
+    assert classify.await_count == 2
+
+
+async def test_agent_echo_during_classification_cancels_the_automated_answer(
+    pg_session, env, monkeypatch
+):
+    import asyncio
+
+    row = await agent(pg_session, env)
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_classify(**kwargs):
+        started.set()
+        await release.wait()
+        return SimpleNamespace(
+            reply="Marina 2BR AED 2m.", risk="routine", evidence_ids=["faq"], auto_eligible=True
+        )
+
+    monkeypatch.setattr(automation, "build_customer_draft", slow_classify)
+    payload = inbound(row, "Is the Marina 2BR available?")
+    message_id = payload["entry"][0]["changes"][0]["value"]["messages"][0]["id"]
+    await intake.receive_customer(payload, env)
+    await started.wait()
+    echo = {
+        "to": "971500000001",
+        "id": "wamid.echo-" + str(uuid4()),
+        "timestamp": str(int((utcnow() + timedelta(seconds=1)).timestamp())),
+        "type": "text",
+        "text": {"body": "ECHO-PRIVATE-" + message_id},
+    }
+    await intake.receive_customer(event(row, "smb_message_echoes", message_echoes=[echo]), env)
+    release.set()
+    await intake.drain()
+    async with AsyncSession(pg_session.bind) as db:
+        status, reason, content = (
+            await db.exec(
+                text(
+                    "SELECT status, reason, content FROM whatsapp_customer_messages WHERE id = :id"
+                ),
+                params={"id": message_id},
+            )
+        ).one()
+    assert (status, reason, content) == ("cancelled", "agent_replied", None)
+    assert await tables_containing(pg_session.bind, "ECHO-PRIVATE-" + message_id) == []
+    assert await automation.run_customer_once(env) is False

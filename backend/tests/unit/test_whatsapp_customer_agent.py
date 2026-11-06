@@ -792,6 +792,7 @@ async def test_sincere_identity_question_in_a_property_thread_gets_no_reply(setu
     assert draft.silent and draft.reply is None
     assert draft.risk == "approval" and not draft.auto_eligible and draft.evidence_ids == []
     assert draft.reason == "identity_question" and "bot or a real person" in draft.summary
+    assert draft.store_content is True  # it continues an accepted property conversation
     classifier.run.assert_not_called()
     drafter.run.assert_not_called()
     assert not budgets
@@ -811,9 +812,65 @@ async def test_classifier_catches_identity_questions_the_patterns_miss(setup_age
     assert draft.silent and draft.reply is None
 
 
-async def test_identity_question_without_property_context_is_ignored_not_stored(setup_agents):
+# A sincere identity question always pauses and notifies, even as a first message with no
+# property context: otherwise the buyer's next property message would be auto-answered by
+# the very automation they asked about. Without an admitted property enquiry the text is
+# never kept; the agent gets a content-free notification only.
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Are you a bot?",
+        "real person?",
+        "Is a human replying?",
+        "Are these replies automatic?",
+        "Are you using AI to reply?",
+        "be honest, is a machine answering me?",
+        "you sound like a bot",
+        "Is this Kian or an assistant?",
+        "هل الردود تلقائية؟",
+        "kya koi insaan reply kar raha hai?",
+        "Отвечает человек?",
+    ],
+)
+async def test_first_message_identity_question_pauses_without_keeping_text(setup_agents, message):
+    _, drafter, _ = setup_agents(topic="uncertain", confidence=0.4)
+    drafter.run = AsyncMock()
+    draft = await build(message)
+    assert draft is not None and draft.silent and draft.reply is None
+    assert draft.reason == "identity_question" and not draft.auto_eligible
+    assert draft.store_content is False
+    drafter.run.assert_not_called()
+
+
+async def test_classifier_identity_flag_counts_even_when_not_admitted(setup_agents):
     setup_agents(topic="uncertain", confidence=0.4, asks_if_automated=True)
-    assert await build("Are you a bot?") is None
+    draft = await build("Hmm is there an actual living soul typing this?")
+    assert draft.silent and draft.reply is None and draft.store_content is False
+
+
+async def test_identity_question_with_admitted_property_enquiry_keeps_the_enquiry(setup_agents):
+    _, drafter, _ = setup_agents(topic="property", confidence=0.99)
+    drafter.run = AsyncMock()
+    draft = await build("is a human replying? what's the 2BR price")
+    assert draft.silent and draft.reply is None and draft.store_content is True
+    drafter.run.assert_not_called()
+
+
+async def test_identity_question_still_pauses_when_the_classifier_fails(setup_agents):
+    classifier, _, _ = setup_agents()
+    classifier.run = AsyncMock(side_effect=RuntimeError("provider down"))
+    draft = await build("Are you a bot?")
+    assert draft.silent and draft.store_content is False
+
+
+async def test_personal_identity_question_pauses_without_any_model_call(setup_agents):
+    classifier, drafter, budgets = setup_agents()
+    classifier.run, drafter.run = AsyncMock(), AsyncMock()
+    draft = await build("Happy birthday! btw are you a bot?")
+    assert draft.silent and draft.store_content is False
+    classifier.run.assert_not_called()
+    drafter.run.assert_not_called()
+    assert not budgets
 
 
 async def test_voice_profile_and_agent_name_reach_the_drafter_prompt(setup_agents):
@@ -938,3 +995,26 @@ async def test_agent_summary_is_cleaned_like_a_reply(setup_agents):
     )
     draft = await build("Please accept my offer on the villa")
     assert draft.summary == "They're offering AED 2.2M, wants a lower price."
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "Not a bot, just quick on my phone. It has three bedrooms and a garden.",
+        "This isn't automated, I'm just fast. Three bedrooms and a garden.",
+        "Nope, it's really me. Three bedrooms and a garden.",
+        "Нет, это не бот. Три спальни и сад.",
+    ],
+)
+async def test_drafted_denial_of_automation_is_never_auto_sent(setup_agents, reply):
+    setup_agents(
+        plan={
+            "response_kind": "facts",
+            "evidence_ids": ["villa-1"],
+            "risk": "routine",
+            "reply": reply,
+        }
+    )
+    draft = await build()
+    assert draft is not None and not draft.auto_eligible and draft.risk == "approval"
+    assert draft.reply != reply and draft.reply in voice.HOLDING_LINES

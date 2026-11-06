@@ -260,6 +260,48 @@ async def test_identity_question_pauses_the_thread_notifies_and_sends_nothing(
     assert EVENTS == []
 
 
+async def test_first_message_identity_question_keeps_no_text_but_pauses_and_notifies(
+    pg_session, monkeypatch
+):
+    c, draft, _ = await setup(pg_session, monkeypatch)
+    draft.return_value = SimpleNamespace(
+        reply=None,
+        risk="approval",
+        evidence_ids=[],
+        auto_eligible=False,
+        silent=True,
+        store_content=False,
+        summary="A contact asked whether replies are automated or from a real person.",
+        reason="identity_question",
+    )
+    message = await receipt(pg_session, c, "Are you a bot?", sender="971500000001")
+    await step(c)
+    await refresh(pg_session, message)
+    thread = await pg_session.get(WhatsAppCustomerThread, message.thread_id)
+    await pg_session.refresh(thread)
+    # Only the sender, the pause and a content-free notification are stored.
+    assert message.content is None and message.reply is None
+    assert message.status == "approval_required" and message.reason == "identity_question"
+    assert message.topic == "identity" and "automated" in message.handoff_summary
+    assert message.notification_created_at is not None and thread.paused
+    connection = STATE["connection"]
+    listed = await repository.threads(pg_session, connection.id)
+    assert [row.id for row in listed] == [thread.id], "agent must see who asked"
+    notes = await repository.notifications(
+        pg_session, connection.user_id, connection.organization_id
+    )
+    assert [note.id for note in notes] == [message.id]
+    # The buyer's next property message is not auto-answered: the thread is the agent's.
+    draft.reset_mock()
+    follow_up = await receipt(pg_session, c, "Ok, what's the 2BR price?", sender="971500000001")
+    for _ in range(3):
+        await step(c)
+    await refresh(pg_session, follow_up)
+    assert follow_up.status == "ignored" and follow_up.content is None
+    draft.assert_not_called()
+    assert EVENTS == []
+
+
 async def test_voice_and_name_are_passed_to_the_drafter(pg_session, monkeypatch):
     c, draft, _ = await setup(pg_session, monkeypatch)
     await receipt(pg_session, c)

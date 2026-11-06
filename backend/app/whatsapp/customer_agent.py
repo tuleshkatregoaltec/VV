@@ -102,8 +102,8 @@ Sound like the agent texting from a phone, not like a company:
   Use voice.sign_off or the name only now and then, never on every message.
 - Vary openings and wording. Skip the greeting when the chat is already going. Contractions
   are fine. A plain "yes" or "not sure, let me check" is a good message.
-- Never call yourself an assistant, bot, AI or automated system. Never write "as an AI".
-  Never say you are human, a real person or not a bot. Never thank them for reaching out,
+- Never talk about what is writing the message: not an assistant, bot, AI, automated system,
+  machine, human or real person, and never deny any of them ("not a bot", "it's really me"). Never thank them for reaching out,
   offer to "assist", apologise for inconvenience, close with "let me know if you have any
   questions", or add a recap. No lists, headings, bold, em dashes or hype words.
 - No emoji unless voice.emoji is "light", then at most one.
@@ -141,6 +141,11 @@ HANDOFF = "A broker needs to review your enquiry and verify the property details
 IDENTITY_SUMMARY = (
     "The customer asked whether they are talking to a bot or a real person. No automatic "
     "reply was sent and the thread is paused. Please answer this one yourself."
+)
+# Content-free: used when the message itself is not kept (no admitted property enquiry).
+IDENTITY_NOTICE = (
+    "A contact asked whether replies are automated or from a real person. No automatic reply "
+    "was sent and the thread is paused. Please answer this one yourself."
 )
 
 
@@ -245,14 +250,16 @@ def _default_summary(message: str) -> str:
     return "The approved facts do not cover this enquiry, so it needs your reply."
 
 
-def silent_handoff() -> CustomerDraft:
+def silent_handoff(*, store_content: bool) -> CustomerDraft:
+    """No reply, pause, notify. The text is kept only for an admitted property thread."""
     return CustomerDraft(
         reply=None,
         risk="approval",
         evidence_ids=[],
         auto_eligible=False,
         silent=True,
-        summary=IDENTITY_SUMMARY,
+        store_content=store_content,
+        summary=IDENTITY_SUMMARY if store_content else IDENTITY_NOTICE,
         reason="identity_question",
     )
 
@@ -350,9 +357,17 @@ async def build_customer_draft(
     voice_profile: dict | None = None,
     agent_name: str = "",
 ) -> CustomerDraft | None:
-    """Return no draft/notification for unsafe, off-topic or failed model execution."""
-    if not settings.ASSISTANT_ENABLED or rejected_text(message):
+    """Return no draft/notification for unsafe, off-topic or failed model execution.
+
+    A sincere identity question is the exception: whatever its topic, history or the model's
+    outcome, it returns a silent handoff so the thread pauses and the agent is told.
+    """
+    if not settings.ASSISTANT_ENABLED:
         return None
+    identity_question = voice.asks_if_automated(message)
+    if rejected_text(message):
+        # Personal or unsafe text never reaches a model and is never kept.
+        return silent_handoff(store_content=False) if identity_question else None
     try:
         facts = approved_facts(knowledge)
         accepted_history = customer_history(history)
@@ -363,10 +378,9 @@ async def build_customer_draft(
                 return None
             if not accepted_history or not asked_question(accepted_history[-1], detail):
                 return None
-        identity_question = voice.asks_if_automated(message)
         if identity_question and accepted_history:
             # Mid-conversation and sincere: say nothing, pause, and tell the agent.
-            return silent_handoff()
+            return silent_handoff(store_content=True)
         profile = voice.prompt_voice(voice_profile, display_name=agent_name)
         context = {"message": message, "history": accepted_history}
         known = (message, *(item["content"] for item in accepted_history))
@@ -385,10 +399,12 @@ async def build_customer_draft(
                     "WhatsApp customer classification completed in %.3fs",
                     time.monotonic() - started,
                 )
+                if identity_question or decision.asks_if_automated:
+                    # Topic and confidence do not matter: no reply, pause, notify. The text
+                    # is kept only when it is also an admitted property enquiry.
+                    return silent_handoff(store_content=admitted(decision))
                 if not admitted(decision):
                     return None
-                if identity_question or decision.asks_if_automated:
-                    return silent_handoff()
                 risk = "approval" if requires_approval(message) else decision.risk
                 task: dict = {}
                 retrieved = []
@@ -446,7 +462,7 @@ async def build_customer_draft(
     except Exception as exc:
         # Log only the exception class, never payloads, provider errors or records.
         logger.warning("WhatsApp customer generation failed (%s)", type(exc).__name__)
-        return None
+        return silent_handoff(store_content=False) if identity_question else None
 
 
 def _fallback_plan(task: dict, risk: Risk) -> DraftPlan | None:

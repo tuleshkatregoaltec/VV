@@ -186,6 +186,53 @@ async def test_coexistence_signup_exchanges_subscribes_and_requests_contacts_onc
     assert len(db.rows) == 1
 
 
+async def test_reconnect_after_disconnect_resyncs_contacts_and_keeps_automation_off(
+    db, meta, monkeypatch
+):
+    # Disconnect deletes the synced contacts and blocks. Reconnecting the same number must
+    # fetch them again and leave automation off until the agent re-reviews the block list.
+    from app.whatsapp import customer_service
+
+    async def no_op(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(customer_service, "invalidate_connection", no_op)
+    monkeypatch.setattr(repository, "delete_contacts", no_op)
+    c = config()
+    row = await connections.complete_signup(
+        db, user_id="user-a", organization_id="org-a", request=request(), config=c
+    )
+    row.contacts_synced_at = row.contacts_sync_requested_at
+    row.enabled = True  # the agent reviewed blocks and switched automation on
+
+    await connections.disconnect(db, row, reason="agent_disconnected")
+    assert row.contacts_sync_requested_at is None and row.contacts_synced_at is None
+
+    meta.calls.clear()
+    row = await connections.complete_signup(
+        db, user_id="user-a", organization_id="org-a", request=request(), config=c
+    )
+    assert ("POST", "/v25.0/2002/smb_app_data") in meta.paths()
+    assert row.contacts_sync_requested_at is not None and row.contacts_synced_at is None
+    assert row.enabled is False
+
+
+async def test_reconnect_of_a_row_disconnected_before_the_fix_still_resyncs(db, meta):
+    # Rows disconnected by older code kept their sync timestamps.
+    c = config()
+    row = await connections.complete_signup(
+        db, user_id="user-a", organization_id="org-a", request=request(), config=c
+    )
+    row.status, row.enabled, row.access_token_encrypted = "disconnected", True, None
+    row.contacts_synced_at = row.contacts_sync_requested_at
+    meta.calls.clear()
+    row = await connections.complete_signup(
+        db, user_id="user-a", organization_id="org-a", request=request(), config=c
+    )
+    assert ("POST", "/v25.0/2002/smb_app_data") in meta.paths()
+    assert row.contacts_synced_at is None and row.enabled is False
+
+
 async def test_cloud_api_signup_registers_the_number_and_skips_contacts(db, meta):
     row = await connections.complete_signup(
         db, user_id="user-a", organization_id="org-a", request=request("FINISH"), config=config()
