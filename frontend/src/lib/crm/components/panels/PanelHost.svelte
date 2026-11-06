@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { PanelState } from '../../stores/panel.svelte'
 import AddRecordPanel from './AddRecordPanel.svelte'
+import AgentPanel from './AgentPanel.svelte'
 import AreasPanel from './AreasPanel.svelte'
 import BrochurePanel from './BrochurePanel.svelte'
 import ClientPanel from './ClientPanel.svelte'
@@ -66,6 +67,8 @@ const key = $derived.by(() => {
 			return `client:${p.client}`
 		case 'day':
 			return `day:${p.date}`
+		case 'agent':
+			return `agent:${p.id}:${p.view}`
 		case 'edit-event':
 			return `edit-event:${p.id}`
 		default:
@@ -137,5 +140,7 @@ const key = $derived.by(() => {
 		<OwnerReportPanel id={p.id} />
 	{:else if p.kind === 'which-doc'}
 		<WhichDocPanel dealId={p.dealId} files={p.files} index={p.index} />
+	{:else if p.kind === 'agent'}
+		<AgentPanel id={p.id} view={p.view} />
 	{/if}
 {/key}
