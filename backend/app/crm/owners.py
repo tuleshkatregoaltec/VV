@@ -322,6 +322,7 @@ def _property_from_rows(
             if (best.valuation or {}).get("valued_at")
             else None
         ),
+        valuation_status=(best.valuation or {}).get("status"),
         duplicate_count=_claim_duplicate_count(claims),
         source_lists=sorted({contact_list.name for _, contact_list in rows}),
         source_rows=_claim_source_rows(claims),
@@ -553,6 +554,7 @@ def _sql_owner_property(row: dict[str, Any]) -> CrmOwnerProperty:
         else None,
         valuation_confidence=row.get("valuation_confidence") or None,
         valued_at=date.fromisoformat(row["valued_at"]) if row.get("valued_at") else None,
+        valuation_status=row.get("valuation_status") or None,
         duplicate_count=int(row["duplicate_count"] or 1),
         source_lists=list(row["source_lists"] or []),
         source_rows=list(row["source_rows"] or []),

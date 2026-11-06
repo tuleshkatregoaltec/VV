@@ -2888,6 +2888,10 @@ export type CrmOwnerProperty = {
      */
     valuation_confidence?: 'high' | 'medium' | 'low' | null;
     /**
+     * Valuation Status
+     */
+    valuation_status?: string | null;
+    /**
      * Valued At
      */
     valued_at?: string | null;

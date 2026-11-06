@@ -160,3 +160,27 @@ def test_amounts_round_to_thousand():
     assert result.low_aed % 1000 == 0
     assert result.high_aed % 1000 == 0
     assert result.detail["valued_at"] == "2026-11-05"
+
+
+def test_range_is_at_least_five_percent_each_side():
+    # Comparables at one price (e.g. one bulk deal) must not produce a near-zero range.
+    result = estimate(
+        _subject(),
+        _comps(building_type_beds=CompStats(6, 1995, 2000, 2005)),
+        None,
+        None,
+        TODAY,
+    )
+    assert result is not None
+    assert (result.low_aed, result.high_aed) == (1_900_000, 2_100_000)
+
+
+def test_wider_comparable_range_is_kept():
+    result = estimate(
+        _subject(),
+        _comps(building_type_beds=CompStats(6, 1700, 2000, 2400)),
+        None,
+        None,
+        TODAY,
+    )
+    assert (result.low_aed, result.high_aed) == (1_700_000, 2_400_000)

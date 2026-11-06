@@ -76,3 +76,9 @@ def test_owner_property_carries_the_estimate():
 def test_owner_property_without_estimate():
     prop = _sql_owner_property(_row())
     assert prop.estimated_value_aed is None and prop.valued_at is None
+
+
+def test_owner_property_says_why_it_was_not_valued():
+    prop = _sql_owner_property(_row(valuation_status="non_residential"))
+    assert prop.estimated_value_aed is None
+    assert prop.valuation_status == "non_residential"

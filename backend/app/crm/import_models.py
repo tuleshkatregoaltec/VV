@@ -428,6 +428,8 @@ class CrmOwnerProperty(BaseModel):
     estimated_value_high_aed: int | None = None
     valuation_confidence: Literal["high", "medium", "low"] | None = None
     valued_at: date | None = None
+    # Why there is no estimate (valuation_service status), e.g. "non_residential".
+    valuation_status: str | None = None
     later_sale_date: date | None = None
     lease_end: date | None = None
     annual_rent_aed: int | None = SQLField(default=None, sa_type=BigInteger)

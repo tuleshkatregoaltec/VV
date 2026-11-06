@@ -49,6 +49,7 @@ WITH base AS (
         c.estimated_value_high_aed,
         c.valuation::jsonb ->> 'confidence' AS valuation_confidence,
         c.valuation::jsonb ->> 'valued_at' AS valued_at,
+        c.valuation::jsonb ->> 'status' AS valuation_status,
         c.owner_key AS owner_key_sql,
         c.property_key AS property_key_sql,
         CASE c.ownership_status

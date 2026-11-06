@@ -901,6 +901,8 @@ export interface OwnerUnit {
 		confidence: 'high' | 'medium' | 'low'
 		valued_at: string
 	} | null
+	/** Why there is no estimate, shown under an empty Market range: "Not estimated · land or commercial". */
+	market_note?: string
 	rent_history: { year: number; aed: number }[]
 	transactions: { when: string; what: string; aed: number | null }[]
 	/** Where this unit came from: "Business Bay 2024 SVR · Sheet1 row 12". Empty when unknown. */

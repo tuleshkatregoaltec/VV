@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal
 
-VALUATION_VERSION = "owner-value-v1"
+VALUATION_VERSION = "owner-value-v2"
 RESIDENTIAL_TYPES = frozenset({"Apartment", "Villa", "Townhouse"})
 # Comparable groups from the most to the least specific: (name, minimum sales, confidence).
 LADDER: tuple[tuple[str, int, Literal["high", "medium", "low"]], ...] = (
@@ -23,6 +23,8 @@ LADDER: tuple[tuple[str, int, Literal["high", "medium", "low"]], ...] = (
 )
 INDEX_MIN_SALES = 10
 INDEX_RANGE = 0.15
+# A comparables range is never narrower than this on either side of the estimate.
+MIN_RANGE = 0.05
 # An estimate this far from the price paid is kept but marked low confidence.
 SANE_RATIO = (0.6, 2.5)
 
@@ -75,10 +77,11 @@ def _from_comparables(
         if stats is None or stats.count < minimum:
             continue
         size = subject.size_sqft
+        value = stats.p50 * size
         return Valuation(
-            estimated_value_aed=_aed(stats.p50 * size),
-            low_aed=_aed(stats.p25 * size),
-            high_aed=_aed(stats.p75 * size),
+            estimated_value_aed=_aed(value),
+            low_aed=_aed(min(stats.p25 * size, value * (1 - MIN_RANGE))),
+            high_aed=_aed(max(stats.p75 * size, value * (1 + MIN_RANGE))),
             method="comparables",
             confidence=confidence,
             detail={

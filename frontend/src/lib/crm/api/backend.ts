@@ -964,6 +964,21 @@ function ownerMarket(p: CrmOwnerProperty): OwnerUnit['market'] {
 	}
 }
 
+/** valuation_service skip statuses, in words an agent can act on. */
+const NOT_ESTIMATED: Record<string, string> = {
+	non_residential: 'land or commercial',
+	no_registry_match: 'no matching DLD sale',
+	ambiguous_registry_match: 'DLD match unclear',
+	no_comparables: 'too few recent sales',
+	not_current_owner: 'no longer owned'
+}
+
+function ownerMarketNote(p: CrmOwnerProperty): string | undefined {
+	if (p.estimated_value_aed) return undefined
+	const why = p.valuation_status ? NOT_ESTIMATED[p.valuation_status] : undefined
+	return why ? `Not estimated · ${why}` : 'Not estimated yet'
+}
+
 function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 	const sale =
 		p.registry_sale_price_aed ?? p.latest_sale_price_aed ?? p.imported_transaction_price_aed ?? null
@@ -1002,6 +1017,7 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 		// The backend keeps the lease end, not its start, so "Rent now" shows through `status`.
 		rent: null,
 		market: ownerMarket(p),
+		market_note: ownerMarketNote(p),
 		rent_history: [],
 		transactions: [...new Map(transactions.map((t) => [`${t.when}${t.what}`, t])).values()].map(
 			(t) => ({ ...t, when: t.when.slice(0, 10) })

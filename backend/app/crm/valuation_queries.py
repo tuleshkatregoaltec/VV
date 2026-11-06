@@ -9,7 +9,10 @@ from app.clickhouse.client import query
 
 # Same price-per-sqft bounds as the listings market benchmark (listings/queries.py).
 _SALE_FILTER = "price_per_sqft_aed BETWEEN 200 AND 12000 AND size_sqft > 0"
-_STATS = "count() AS count, quantilesTDigest(0.25, 0.5, 0.75)(price_per_sqft_aed) AS psf"
+# Units sold on the same day at the same price per sqft (within about 1%) are one deal, e.g. a
+# developer or investor block. Each deal counts once, so one bulk sale cannot pass for many
+# independent comparables (Miracle Residence, Arjan: 15 studios in one Jan 2026 block deal).
+_DEAL = "transaction_date, round(log(price_per_sqft_aed) * 100)"
 
 
 def _level(name: str, keys: str, scope: str) -> str:
@@ -17,12 +20,19 @@ def _level(name: str, keys: str, scope: str) -> str:
     area = "area_key" if "area_key" in keys else "''"
     bedrooms = "bedrooms" if "bedrooms" in keys else "''"
     return f"""
-        SELECT '{name}' AS level, {building} AS building_key, {area} AS area_key,
-               property_type, {bedrooms} AS bedrooms, {_STATS}
-        FROM dxbi_sales_unit_events FINAL
-        WHERE transaction_date >= {{since:Date}} AND transaction_date < {{until:Date}}
-          AND {_SALE_FILTER} AND {scope}
-        GROUP BY {keys}
+        SELECT '{name}' AS level, building_key, area_key, property_type, bedrooms,
+               count() AS count, sum(sales) AS sales,
+               quantilesTDigest(0.25, 0.5, 0.75)(deal_psf) AS psf
+        FROM (
+            SELECT {building} AS building_key, {area} AS area_key, property_type,
+                   {bedrooms} AS bedrooms, count() AS sales,
+                   avg(price_per_sqft_aed) AS deal_psf
+            FROM dxbi_sales_unit_events FINAL
+            WHERE transaction_date >= {{since:Date}} AND transaction_date < {{until:Date}}
+              AND {_SALE_FILTER} AND {scope}
+            GROUP BY {keys}, {_DEAL}
+        )
+        GROUP BY building_key, area_key, property_type, bedrooms
     """
 
 

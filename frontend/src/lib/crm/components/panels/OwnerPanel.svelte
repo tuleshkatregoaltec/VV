@@ -244,7 +244,7 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 												: '—'}
 											o={u.market
 												? `Vitevue estimate · ${u.market.confidence} confidence · ${fullDate(u.market.valued_at)}`
-												: 'Vitevue estimate'}
+												: (u.market_note ?? 'Vitevue estimate')}
 										/>
 									</div>
 									{#if u.check}
