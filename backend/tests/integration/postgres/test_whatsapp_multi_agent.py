@@ -36,6 +36,7 @@ def config(**update):
         update={
             "ENVIRONMENT": "staging",
             "WHATSAPP_CUSTOMER_AUTOMATION_ENABLED": True,
+            "WHATSAPP_HUMAN_TIMING_ENABLED": False,
             "WHATSAPP_APP_SECRET": "offline-secret",
             "WHATSAPP_GRAPH_API_VERSION": "v25.0",
             "WHATSAPP_APP_ID": "1723271579129715",

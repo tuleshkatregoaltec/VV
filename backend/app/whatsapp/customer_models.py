@@ -1,7 +1,7 @@
 """Customer-channel persistence and authenticated review contracts; no credentials."""
 
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -9,6 +9,7 @@ from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Text, UniqueCo
 from sqlmodel import Field as SQLField
 from sqlmodel import SQLModel
 
+from app.whatsapp.customer_screen import injected
 from app.whatsapp.models import utcnow
 
 
@@ -26,6 +27,8 @@ class WhatsAppConnection(SQLModel, table=True):
     approved_knowledge: list[dict[str, str]] = SQLField(
         default_factory=list, sa_column=Column(JSON, nullable=False)
     )
+    # Per-agent writing voice (VoiceProfile as JSON); null means the default voice.
+    reply_voice: dict | None = SQLField(default=None, sa_column=Column(JSON))
     # Per-agent Meta asset state. `enabled` remains the agent's automation switch.
     status: str = "connected"  # connected | disconnected
     onboarding_type: str | None = None  # coexistence | cloud_api | env
@@ -148,6 +151,14 @@ class WhatsAppCustomerMessage(SQLModel, table=True):
     )
     outbound_id: str | None = None
     error_code: str | None = None
+    # Short note for the agent on why the thread was handed over (admitted property text only).
+    handoff_summary: str | None = SQLField(default=None, sa_column=Column(Text))
+    # Qualification question this reply asked ("transaction" | "budget" | "timeframe").
+    asked_detail: str | None = None
+    # Set when the read receipt and typing indicator went out; the reply follows after a delay.
+    typing_started_at: datetime | None = SQLField(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
 
 
 class CustomerRequest(BaseModel):
@@ -167,6 +178,35 @@ class KnowledgeUpdate(CustomerRequest):
         if len({fact.id for fact in self.approved_knowledge}) != len(self.approved_knowledge):
             raise ValueError("Knowledge fact IDs must be unique")
         return self
+
+
+class VoiceProfile(CustomerRequest):
+    """How this agent writes. Free text is the agent's own; it is still screened for
+    instruction-like content before it can reach the drafter prompt."""
+
+    agent_name: str | None = Field(default=None, min_length=1, max_length=80)
+    tone: str | None = Field(default=None, min_length=1, max_length=200)
+    sign_off: str | None = Field(default=None, min_length=1, max_length=80)
+    languages: list[Annotated[str, Field(min_length=1, max_length=30)]] = Field(
+        default_factory=list, max_length=8
+    )
+    sample_messages: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(
+        default_factory=list, max_length=3
+    )
+    emoji: Literal["none", "light"] = "none"
+
+    @model_validator(mode="after")
+    def no_instructions(self):
+        texts = [self.agent_name, self.tone, self.sign_off, *self.languages, *self.sample_messages]
+        if any(text and injected(text) for text in texts):
+            raise ValueError("Voice fields must describe style, not give instructions")
+        return self
+
+
+class VoiceUpdate(CustomerRequest):
+    """`voice: null` resets the agent to the default voice."""
+
+    voice: VoiceProfile | None
 
 
 class ConnectionCreate(KnowledgeUpdate):
@@ -210,6 +250,7 @@ class ConnectionResponse(CustomerResponse):
     enabled: bool
     market_data_enabled: bool = False
     approved_knowledge: list[ApprovedFact]
+    reply_voice: VoiceProfile | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -235,6 +276,7 @@ class CustomerMessageResponse(CustomerResponse):
     topic: str | None
     reason: str | None
     evidence_ids: list[str]
+    handoff_summary: str | None = None
     revision: int
     send_after: datetime | None
     notification_created_at: datetime | None

@@ -303,5 +303,8 @@ async def history_for(db, thread_id):
         if message.content:
             history.append({"role": "user", "content": message.content[:1000]})
         if message.reply:
-            history.append({"role": "assistant", "content": message.reply[:1000]})
+            turn = {"role": "assistant", "content": message.reply[:1000]}
+            if message.asked_detail:
+                turn["asked"] = message.asked_detail
+            history.append(turn)
     return history

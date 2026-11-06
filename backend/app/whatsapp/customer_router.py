@@ -18,6 +18,7 @@ from app.whatsapp.customer_models import (
     ReplyEdit,
     RevisionDecision,
     ThreadResponse,
+    VoiceUpdate,
 )
 
 router = APIRouter(prefix="/api/v1/whatsapp", tags=["WhatsApp review"])
@@ -73,6 +74,18 @@ async def update_knowledge(
     db: AsyncSession = Depends(get_db_session),
 ):
     return await service.update_knowledge(
+        db, **_identity(context), connection_id=connection_id, request=request
+    )
+
+
+@router.put("/connections/{connection_id}/voice", response_model=ConnectionResponse)
+async def update_voice(
+    connection_id: str,
+    request: VoiceUpdate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await service.update_voice(
         db, **_identity(context), connection_id=connection_id, request=request
     )
 

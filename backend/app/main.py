@@ -46,6 +46,7 @@ from app.whatsapp.customer_connections import (
 from app.whatsapp.customer_intake import shutdown as drain_whatsapp_classification
 from app.whatsapp.customer_router import router as whatsapp_customer_router
 from app.whatsapp.logging import CallbackQueryFilter
+from app.whatsapp.logging import scrub_notice as scrub_whatsapp_notice
 from app.whatsapp.router import router as whatsapp_router
 
 # Remote telemetry must cross our allowlist exporter; legacy Logfire defaults can
@@ -86,7 +87,7 @@ if observability_provider is not None:
     app.add_middleware(ObservabilityMiddleware)
 
 if settings.honeybadger_enabled:
-    honeybadger.configure(api_key=settings.HONEYBADGER_API_KEY)
+    honeybadger.configure(api_key=settings.HONEYBADGER_API_KEY, before_notify=scrub_whatsapp_notice)
 
 app.add_middleware(AuthenticationMiddleware, backend=AuthBackend())
 app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)

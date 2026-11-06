@@ -4517,7 +4517,7 @@
           "crm"
         ],
         "summary": "Crm Renewals",
-        "description": "Assets \u203a Renewals: every lease in the dataset, narrowed by the tab's filters.",
+        "description": "Assets › Renewals: every lease in the dataset, narrowed by the tab's filters.",
         "operationId": "crm-crm_renewals",
         "parameters": [
           {
@@ -4733,7 +4733,7 @@
           "crm"
         ],
         "summary": "Crm Renewal Leads",
-        "description": "Return lease-expiry leads in the current agent's areas and windows.\n\nkind=vacant: units whose lease ended with no later lease registered (Leads \u203a Vacant units).\nkind=upcoming: leases still running (the Inbox).",
+        "description": "Return lease-expiry leads in the current agent's areas and windows.\n\nkind=vacant: units whose lease ended with no later lease registered (Leads › Vacant units).\nkind=upcoming: leases still running (the Inbox).",
         "operationId": "crm-crm_renewal_leads",
         "parameters": [
           {
@@ -10251,6 +10251,59 @@
         }
       }
     },
+    "/api/v1/whatsapp/connections/{connection_id}/voice": {
+      "put": {
+        "tags": [
+          "whatsapp",
+          "WhatsApp review"
+        ],
+        "summary": "Update Voice",
+        "operationId": "whatsapp-update_voice",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/whatsapp/connections/{connection_id}/threads": {
       "get": {
         "tags": [
@@ -14897,6 +14950,16 @@
             "type": "array",
             "title": "Approved Knowledge"
           },
+          "reply_voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoiceProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -15786,7 +15849,7 @@
           "listed_at"
         ],
         "title": "CrmCompanyListingResponse",
-        "description": "A company listing as Assets \u203a Company listings shows it."
+        "description": "A company listing as Assets › Company listings shows it."
       },
       "CrmCompanyListingSourceResponse": {
         "properties": {
@@ -19504,7 +19567,7 @@
           "as_of"
         ],
         "title": "CrmRenewalsResponse",
-        "description": "Assets \u203a Renewals: one page of the lease-expiry dataset and the options for its filters."
+        "description": "Assets › Renewals: one page of the lease-expiry dataset and the options for its filters."
       },
       "CrmRentalComparable": {
         "properties": {
@@ -20684,6 +20747,17 @@
             },
             "type": "array",
             "title": "Evidence Ids"
+          },
+          "handoff_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Summary"
           },
           "revision": {
             "type": "integer",
@@ -34928,6 +35002,103 @@
           "ends_at"
         ],
         "title": "ViewingResponse"
+      },
+      "VoiceProfile": {
+        "properties": {
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "tone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tone"
+          },
+          "sign_off": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sign Off"
+          },
+          "languages": {
+            "items": {
+              "type": "string",
+              "maxLength": 30,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Languages"
+          },
+          "sample_messages": {
+            "items": {
+              "type": "string",
+              "maxLength": 300,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Sample Messages"
+          },
+          "emoji": {
+            "type": "string",
+            "enum": [
+              "none",
+              "light"
+            ],
+            "title": "Emoji",
+            "default": "none"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "VoiceProfile",
+        "description": "How this agent writes. Free text is the agent's own; it is still screened for\ninstruction-like content before it can reach the drafter prompt."
+      },
+      "VoiceUpdate": {
+        "properties": {
+          "voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoiceProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "voice"
+        ],
+        "title": "VoiceUpdate",
+        "description": "`voice: null` resets the agent to the default voice."
       },
       "WebhookStatusResponse": {
         "properties": {

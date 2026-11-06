@@ -116,6 +116,7 @@ and exact connection owner/user plus organization scope. Credentials are never e
 | `GET/POST /connections` | List/create the configured connection |
 | `PATCH /connections/{id}` | Enable/disable or rename |
 | `PUT /connections/{id}/knowledge` | Replace approved facts (20 unique facts, max 1,000 chars each) |
+| `PUT /connections/{id}/voice` | Set or reset (`{"voice": null}`) the agent's reply voice; see “Reply style” |
 | `GET /connections/{id}/threads` | Property conversations only |
 | `GET /threads/{id}/messages` | Conversation history, with ignored bodies redacted |
 | `GET /notifications` | Actionable review/failure notifications |
@@ -176,6 +177,7 @@ off, unsent replies cancelled, token and synced contacts deleted.
 | `WHATSAPP_APP_ID` | Meta app ID (public; returned to the browser for `FB.init`). |
 | `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` | Facebook Login for Business configuration ID (public). Absent → signup reports `not_configured`. |
 | `WHATSAPP_CLASSIFIER_CONCURRENCY` | In-process classifier concurrency (default 4). |
+| `WHATSAPP_HUMAN_TIMING_ENABLED` | Read receipt, typing indicator, human-paced delays and two-text splitting for automatic replies (default `true`). |
 
 Existing: `WHATSAPP_APP_SECRET` (signature checks and code exchange),
 `WHATSAPP_GRAPH_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_CUSTOMER_AUTOMATION_ENABLED`
@@ -257,6 +259,126 @@ connected_at, disconnected_at, can_send_message}]}`.
 Delivery-status reconciliation, retention/purge of property history, senders identified
 only by business-scoped user ID (no phone number) are not automated, and per-thread
 ordering is guaranteed only within one API process.
+
+## Reply style: sounding like the agent (backend) — 6 November 2026
+
+Goal: an automatic reply reads as if the agent wrote it, without ever pretending to be a
+person. Rules agreed with the product owner:
+
+1. **Voice.** The drafter writes the message itself, short, in the buyer's language and
+   register (English, Arabic, Hindi/Hinglish, Russian and others), with varied phrasing.
+   No bot introduction, no "As an AI", no assistant boilerplate ("Thank you for reaching
+   out", "How can I assist you today"), no lists, headings, bold, em dashes or emoji (one
+   emoji at most if the agent's voice allows it).
+2. **Never claim to be human, never deny being automated.** If a buyer sincerely asks
+   whether they are talking to a bot, AI, machine or real person, in any language,
+   the automation sends **no reply**. The thread is paused, the message is stored as an
+   `approval_required` notification with `reply = null`, `reason = "identity_question"`
+   and a `handoff_summary`, and the agent answers personally. Detection is a deliberately
+   broad multilingual pattern set (`customer_voice.asks_if_automated`, applied before any
+   model call) plus the classifier's `asks_if_automated` flag. It only fires inside a
+   property conversation or alongside a property enquiry; otherwise the message is
+   ignored and nothing is stored, like any other non-property text. A false positive
+   costs a paused thread, never a reply.
+3. **Sensitive topics are handed off with a summary.** Negotiation, offers, legal or
+   financial questions, payments, viewings/scheduling, reservations, promises and
+   requests for a person produce an `approval_required` draft: a brief true holding line
+   ("let me check with the owner and come back to you") and `handoff_summary`, a one or two
+   sentence note for the agent (what the buyer wants, any numbers they gave, why it was
+   handed over). Nothing is sent until the agent approves or edits it. The same applies
+   when the approved facts do not cover the question. Auto-sending holding lines is a
+   possible later product decision; it is not enabled.
+4. **Grounded.** The model may phrase facts naturally ("AED 2,450,000" as "2.45M") but
+   every reply is screened by `customer_voice.reply_violations` before it is stored and again
+   at the send boundary: references to being an AI/bot, claims of being human, assistant
+   boilerplate, commitments ("booked", "confirmed", "I promise", "in 10 minutes"), numbers
+   (including written numbers such as "three") that appear in neither the selected facts nor
+   the buyer's own messages, URLs/emails not in the facts, and availability or sold
+   claims the facts do not make. A reply that fails is never sent. A failed routine
+   answer becomes a handoff draft; a failed qualification question or holding line is
+   replaced by short fixed wording chosen from a few variants. Injection protection,
+   the conservative property/personal classification and the 0.95 confidence floor are
+   unchanged. The assistant stays on real-estate topics for this agent.
+
+### Qualification questions
+
+The drafter now words the buy/rent, budget and timeframe questions itself. The question
+a reply asked is stored in `whatsapp_customer_messages.asked_detail` and passed back in
+history as `asked`, so a bare "Rent" or "120k" is still recognised as the answer.
+
+### Human timing
+
+For an automatic reply, in order: wait a reading delay (4 to 20 s, longer for longer
+messages, jittered), call Graph to mark the buyer's message read and show the typing
+indicator, wait a typing delay (3 to 18 s, scaled to the reply length, jittered), then send.
+A long reply the drafter wrote as two paragraphs goes out as at most two texts, the second
+after a 1.5 to 5 s pause with a fresh indicator.
+
+Typing indicator request (verified against Meta's Cloud API docs, 6 November 2026):
+
+```
+POST /{version}/{phone_number_id}/messages
+{"messaging_product": "whatsapp", "status": "read",
+ "message_id": "<inbound wamid>", "typing_indicator": {"type": "text"}}
+```
+
+Meta clears the indicator when we reply or after 25 seconds, so every delay is below 25 s.
+The call is cosmetic: a failure is logged by class only and the reply is still sent.
+
+Implementation: the waits are `send_after` timestamps, not sleeps. `draft` sets
+`send_after` to the reading delay; the worker's first pass at that time sends the read and
+typing indicator and sets `typing_started_at` and a new `send_after` (typing delay); a
+second pass sends. The worker lane is free in between, so one agent's wait never delays
+another agent's reply. Eligibility (agent still enabled, thread not paused or opted out,
+24-hour window open, evidence still valid) is rechecked at the send pass, so an agent
+who answers from the phone during the wait cancels the automatic reply. Delays are
+skipped entirely when the 24-hour window would close within about four minutes.
+Agent-approved and agent-edited replies are sent promptly and exactly as written.
+`WHATSAPP_HUMAN_TIMING_ENABLED=false` disables all of this.
+
+### Per-agent voice: `PUT /api/v1/whatsapp/connections/{id}/voice`
+
+Request: `{"voice": VoiceProfile | null}`; `null` restores the default voice. Response:
+`ConnectionResponse`, now with `reply_voice` (`VoiceProfile | null`).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `agent_name` | string ≤ 80, optional | Name the agent goes by (defaults to the connection `display_name`) |
+| `tone` | string ≤ 200, optional | Style description, e.g. "warm, brief, a bit playful" |
+| `sign_off` | string ≤ 80, optional | Used now and then, never on every message |
+| `languages` | ≤ 8 strings ≤ 30 | Languages the agent works in. Replies still mirror the buyer's language |
+| `sample_messages` | ≤ 3 strings ≤ 300 | Messages the agent might send; the drafter imitates, never copies |
+| `emoji` | `"none"` (default) or `"light"` | `light` allows at most one emoji |
+
+Unknown fields are rejected (422), and fields that look like instructions ("ignore
+previous instructions", and the like) are rejected so a voice cannot weaken the policy.
+With nothing stored, the default is a friendly, brief, relaxed tone with no samples.
+Stored as JSON in `whatsapp_connections.reply_voice`. Changing the voice affects new drafts only.
+
+New nullable columns (migration `8b2e4f6a1c93`): `whatsapp_connections.reply_voice`,
+`whatsapp_customer_messages.handoff_summary`, `asked_detail`, `typing_started_at`.
+`CustomerMessageResponse` gains `handoff_summary` (redacted for ignored messages).
+A notification may now have `reply = null` (identity question); `approve` returns 409
+for it, and the agent can `PATCH` their own text or `cancel`.
+
+### Webhook text and observability audit
+
+Inbound message text exists only in the in-process classification job, and in PostgreSQL
+once a message is admitted as a property enquiry. Where it could have leaked, and what
+holds now:
+
+| Path | Status |
+| --- | --- |
+| Application logs | Every WhatsApp log line carries only the exception class or counts. No `exc_info` or `logger.exception`. Tests assert a sentinel buyer message never appears in captured logs when the classifier, drafter or background task fails. |
+| SQL logs and exception messages | `hide_parameters=True` on the engine (existing), so statement values never reach `logs/sql.log` or `DBAPIError` text. |
+| Uvicorn access log | Query string of the webhook path is stripped (existing `CallbackQueryFilter`). |
+| Unhandled webhook exception → server error log and Honeybadger middleware | **Fixed.** Previously an unexpected error in `receive_customer` propagated, so the traceback with its exception message (which can echo SQL values or text) went to the log and to Honeybadger with the request's query string (`hub.verify_token`) and headers. The route now catches it, logs the class only, notifies Honeybadger with the class and a fixed message, and returns 500 (Meta retries; duplicates are ignored). |
+| Honeybadger context for any webhook request | **Fixed.** `before_notify=scrub_notice` keeps only method and URL and replaces the exception with its class and a fixed message, dropping causes, headers, query string and body. |
+| Logfire / OpenTelemetry | `logfire.configure(send_to_logfire=False)` with the allowlist exporter (existing). Both WhatsApp agents are created with `instrument=False`; a test pins it. |
+| LLM provider | OpenRouter `zdr=true`, `data_collection=deny`, no fallbacks (existing). |
+
+Not covered: provider-side retention outside ZDR, and the CRM/web-chat paths, which are
+outside WhatsApp.
 
 ## Verification and current pilot state — 3 November 2026
 

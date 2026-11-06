@@ -187,6 +187,8 @@ class Settings(BaseSettings):
     # Comma-separated Fernet keys; the first encrypts, all decrypt (rotation).
     WHATSAPP_TOKEN_ENCRYPTION_KEY: str | None = Field(default=None, repr=False)
     WHATSAPP_CLASSIFIER_CONCURRENCY: int = Field(default=4, ge=1, le=32)
+    # Read receipt, typing indicator and a human-paced delay before automatic replies.
+    WHATSAPP_HUMAN_TIMING_ENABLED: bool = True
 
     # Frontend URLs for Stripe redirects
     FRONTEND_SUCCESS_URL: AnyUrl  # configMap

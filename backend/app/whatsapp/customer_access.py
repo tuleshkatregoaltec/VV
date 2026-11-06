@@ -5,6 +5,7 @@ from datetime import timedelta
 from app.analytics.market_metrics import get_market_metrics
 from app.analytics.models import MarketMetricsRequest, MarketPeriodRequest
 from app.whatsapp import customer_repository as repository
+from app.whatsapp import customer_voice as voice
 from app.whatsapp.customer_evidence import (
     CustomerEvidence,
     CustomerRetrieval,
@@ -55,11 +56,15 @@ async def retrieve(db, request: CustomerRetrieval, *, connection_id, user_id, or
     return [item] if item is not None and not rejected_text(item.text) else []
 
 
-async def valid_evidence(db, connection, evidence_ids, snapshots, reply, *, human_edited=False):
-    """Revalidate exact rendered evidence under the connection lock before sending.
+async def valid_evidence(
+    db, connection, evidence_ids, snapshots, reply, *, human_edited=False, context=()
+):
+    """Revalidate the evidence behind a reply under the connection lock before sending.
 
     Human edits are explicit broker statements and require the existing approval flow.
-    Generated replies must exactly equal their ordered, still-authorized facts.
+    Generated replies must rest on still-authorized facts and, unless they quote those
+    facts verbatim, pass the same deterministic wording checks as at draft time.
+    `context` is what the buyer said, so numbers they gave may be echoed.
     """
     if human_edited:
         return not evidence_ids and not snapshots
@@ -89,8 +94,11 @@ async def valid_evidence(db, connection, evidence_ids, snapshots, reply, *, huma
             return False
         facts[item.id] = item.text
     if not evidence_ids:
-        # Fixed questions/handoff are checked by the deterministic agent renderer.
-        return not items
+        # Questions and holding lines state no facts, only echo what the buyer said.
+        return not items and not voice.reply_violations(reply, sources=[], context=context)
     if len(set(evidence_ids)) != len(evidence_ids) or any(key not in facts for key in evidence_ids):
         return False
-    return reply == "\n\n".join(facts[key] for key in evidence_ids)
+    chosen = [facts[key] for key in evidence_ids]
+    return reply == "\n\n".join(chosen) or not voice.reply_violations(
+        reply, sources=chosen, context=context
+    )

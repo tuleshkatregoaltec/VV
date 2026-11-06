@@ -14,6 +14,8 @@ from app.postgres import get_db_session
 from app.whatsapp import customer_access, token_crypto
 from app.whatsapp import customer_queue as queue
 from app.whatsapp import customer_repository as repository
+from app.whatsapp import customer_timing as timing
+from app.whatsapp import customer_voice as voice
 from app.whatsapp.customer_agent import build_customer_draft
 from app.whatsapp.models import utcnow
 
@@ -74,6 +76,8 @@ async def draft(db, location, revision, config, content):
         await db.commit()
         return
     knowledge = copy.deepcopy(connection.approved_knowledge)
+    voice_profile = copy.deepcopy(connection.reply_voice)
+    agent_name = connection.display_name
     history = await queue.history_for(db, thread.id)
     identity = scope(connection)
     conversation_id = thread.conversation_id
@@ -115,6 +119,8 @@ async def draft(db, location, revision, config, content):
         history=history,
         conversation_id=conversation_id,
         retrieve_evidence=retrieve_evidence,
+        voice_profile=voice_profile,
+        agent_name=agent_name,
         **identity,
     )
     context = await queue.locked_context(db, *location)
@@ -138,7 +144,8 @@ async def draft(db, location, revision, config, content):
         message.reply = None
         message.evidence_ids = []
     else:
-        if (
+        silent = bool(getattr(result, "silent", False))
+        if not silent and (
             not result.reply
             or len(result.reply) > 4000
             or result.risk not in ("routine", "approval")
@@ -147,8 +154,13 @@ async def draft(db, location, revision, config, content):
         snapshots = [
             item.model_dump(mode="json") for item in getattr(result, "evidence_snapshots", [])
         ]
-        if not await customer_access.valid_evidence(
-            db, connection, result.evidence_ids, snapshots, result.reply
+        if not silent and not await customer_access.valid_evidence(
+            db,
+            connection,
+            result.evidence_ids,
+            snapshots,
+            result.reply,
+            context=[content, *[turn["content"] for turn in history]],
         ):
             message.status = "cancelled"
             message.content = None
@@ -163,13 +175,24 @@ async def draft(db, location, revision, config, content):
         message.risk = result.risk
         message.topic = "real_estate"
         message.evidence_ids = result.evidence_ids
-        automatic = result.risk == "routine" and result.auto_eligible
+        message.handoff_summary = getattr(result, "summary", None)
+        message.asked_detail = getattr(result, "asked", None)
+        if silent:
+            message.reason = getattr(result, "reason", None)
+        automatic = not silent and result.risk == "routine" and result.auto_eligible
         message.status = "auto_pending" if automatic else "approval_required"
-        message.send_after = utcnow() if automatic else None
+        now = utcnow()
+        message.send_after = (
+            timing.reading_due(
+                now, message.sent_at, len(content), enabled=config.WHATSAPP_HUMAN_TIMING_ENABLED
+            )
+            if automatic
+            else None
+        )
         if not automatic:
-            message.notification_created_at = utcnow()
+            message.notification_created_at = now
             thread.paused = True
-            thread.updated_at = utcnow()
+            thread.updated_at = now
     message.updated_at = utcnow()
     await db.commit()
 
@@ -180,24 +203,45 @@ def connection_token(connection, config):
     return token_crypto.decrypt_token(connection.access_token_encrypted, config)
 
 
-async def send_reply(connection, thread, message, config):
-    token = connection_token(connection, config)
-    url = (
+def _messages_url(connection, config):
+    return (
         f"https://graph.facebook.com/{config.WHATSAPP_GRAPH_API_VERSION}/"
         f"{connection.phone_number_id}/messages"
     )
-    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
-        response = await client.post(
-            url,
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "messaging_product": "whatsapp",
-                "to": thread.sender,
-                "type": "text",
-                "context": {"message_id": message.id},
-                "text": {"body": message.reply},
-            },
-        )
+
+
+async def mark_read_typing(connection, message, config) -> bool:
+    """Mark the buyer's message read and show Meta's typing indicator (max 25 seconds,
+    cleared when we reply). Cosmetic, so any failure is logged by class and ignored."""
+    try:
+        token = connection_token(connection, config)
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+            response = await client.post(
+                _messages_url(connection, config),
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "messaging_product": "whatsapp",
+                    "status": "read",
+                    "message_id": message.id,
+                    "typing_indicator": {"type": "text"},
+                },
+            )
+        return response.status_code == 200
+    except Exception as exc:
+        logger.warning("WhatsApp typing indicator failed (%s)", type(exc).__name__)
+        return False
+
+
+async def _post_text(client, url, token, thread, body, reply_to=None):
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": thread.sender,
+        "type": "text",
+        "text": {"body": body},
+    }
+    if reply_to is not None:
+        payload["context"] = {"message_id": reply_to}
+    response = await client.post(url, headers={"Authorization": f"Bearer {token}"}, json=payload)
     if response.status_code != 200:
         if 400 <= response.status_code < 500:
             raise MetaSendRejected(response)
@@ -206,6 +250,53 @@ async def send_reply(connection, thread, message, config):
     if not isinstance(outbound_id, str) or not 1 <= len(outbound_id) <= 512:
         raise ValueError("Invalid Meta message ID")
     return outbound_id
+
+
+async def send_reply(connection, thread, message, config):
+    token = connection_token(connection, config)
+    url = _messages_url(connection, config)
+    # Generated replies may go out as two short texts, the way people write. An agent's
+    # own edit is sent exactly as written.
+    split = (
+        config.WHATSAPP_HUMAN_TIMING_ENABLED and getattr(message, "reason", None) != "human_edited"
+    )
+    parts = voice.split_reply(message.reply) if split else [message.reply]
+    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        outbound_id = await _post_text(client, url, token, thread, parts[0], message.id)
+        for part in parts[1:]:
+            # The first text is already delivered, so a failure here must not look like a
+            # failed send (and is never retried: that would repeat the first text).
+            try:
+                await mark_read_typing(connection, message, config)
+                await asyncio.sleep(timing.split_gap(len(part)))
+                await _post_text(client, url, token, thread, part)
+            except Exception as exc:
+                logger.warning("WhatsApp second text not sent (%s)", type(exc).__name__)
+                break
+    return outbound_id
+
+
+async def show_typing(db, location, config, context):
+    """First pass of a humanized send: read receipt and typing indicator, then wait.
+
+    The wait is a later `send_after`, not a sleep, so this worker lane stays free for other
+    agents. A short lease keeps other lanes off the row while the Graph call is in flight.
+    """
+    connection, _, message = context
+    revision, now = message.revision, utcnow()
+    message.typing_started_at = now
+    message.send_after = now + timedelta(seconds=30)
+    message.updated_at = now
+    await db.commit()
+    await mark_read_typing(connection, message, config)
+    context = await queue.locked_context(db, *location)
+    if context is not None:
+        connection, thread, message = context
+        if message.revision == revision and message.status in ("auto_pending", "grace_pending"):
+            now = utcnow()
+            message.send_after = timing.typing_due(now, message.sent_at, len(message.reply))
+            message.updated_at = now
+    await db.commit()
 
 
 async def send(db, location, config):
@@ -230,6 +321,7 @@ async def send(db, location, config):
         message.updated_at = utcnow()
         await db.commit()
         return
+    history = await queue.history_for(db, thread.id)
     if not await customer_access.valid_evidence(
         db,
         connection,
@@ -237,6 +329,7 @@ async def send(db, location, config):
         message.evidence_snapshots,
         message.reply,
         human_edited=message.reason == "human_edited",
+        context=[message.content or "", *[turn["content"] for turn in history]],
     ):
         message.status = "cancelled"
         message.reason = "evidence_changed"
@@ -257,6 +350,15 @@ async def send(db, location, config):
         message.send_after = None
         message.updated_at = utcnow()
         await db.commit()
+        return
+    if (
+        config.WHATSAPP_HUMAN_TIMING_ENABLED
+        and message.status in ("auto_pending", "grace_pending")
+        and message.reason != "human_edited"
+        and message.typing_started_at is None
+        and timing.fits_window(utcnow(), message.sent_at)
+    ):
+        await show_typing(db, location, config, context)
         return
     # Commit is the send/cancel linearization point. Owner operations reject `sending`;
     # cancellation committed first wins. There is no retry after this point.

@@ -40,6 +40,7 @@ def message_response(row):
         response.content = None
         response.reply = None
         response.reason = None
+        response.handoff_summary = None
         response.evidence_ids = []
     return response
 
@@ -116,6 +117,18 @@ async def update_knowledge(db, *, connection_id, user_id, organization_id, reque
     )
     await invalidate_connection(db, row.id, "knowledge_changed")
     row.approved_knowledge = [fact.model_dump() for fact in request.approved_knowledge]
+    row.updated_at = utcnow()
+    await db.commit()
+    return row
+
+
+async def update_voice(db, *, connection_id, user_id, organization_id, request):
+    """Replace this agent's writing voice (None restores the default). Takes effect on the
+    next draft; replies already drafted keep the wording they were approved with."""
+    row = require_found(
+        await repository.lock_connection(db, connection_id, user_id, organization_id)
+    )
+    row.reply_voice = request.voice.model_dump() if request.voice else None
     row.updated_at = utcnow()
     await db.commit()
     return row

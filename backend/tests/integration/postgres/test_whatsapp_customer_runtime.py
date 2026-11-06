@@ -28,6 +28,7 @@ async def setup(pg_session, monkeypatch):
     c = settings.model_copy(
         update={
             "WHATSAPP_CUSTOMER_AUTOMATION_ENABLED": True,
+            "WHATSAPP_HUMAN_TIMING_ENABLED": False,
             "WHATSAPP_CUSTOMER_PHONE_NUMBER_ID": str(uuid4()),
             "WHATSAPP_CUSTOMER_ACCOUNT_ID": str(uuid4()),
             "WHATSAPP_CUSTOMER_ACCESS_TOKEN": "offline-token",
