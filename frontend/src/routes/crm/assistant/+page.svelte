@@ -2,6 +2,8 @@
 import { createConversationSelection } from '$lib/chat/conversationSelection.svelte'
 import ChatBox from '$lib/components/dashboard/ChatBox.svelte'
 import ConversationSidebar from '$lib/components/dashboard/ConversationSidebar.svelte'
+import { crmPresentationMode } from '$lib/crm/api'
+import PresentationConversation from '$lib/crm/components/PresentationConversation.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 
 const selection = createConversationSelection()
@@ -15,6 +17,9 @@ const selection = createConversationSelection()
 	{/snippet}
 </PageHeader>
 
+{#if crmPresentationMode}
+<PresentationConversation />
+{:else}
 <section class="grid min-h-[600px] grid-cols-1 gap-3 md:h-[72vh] md:grid-cols-[240px_1fr]" aria-label="Your CRM assistant">
 	<aside class="max-h-56 overflow-hidden rounded-lg border border-border md:max-h-none" aria-label="Conversation history">
 		<ConversationSidebar bind:selectedId={selection.id} onSelect={(id) => (selection.id = id)} />
@@ -23,3 +28,5 @@ const selection = createConversationSelection()
 		<ChatBox bind:conversationId={selection.id} />
 	</div>
 </section>
+
+{/if}

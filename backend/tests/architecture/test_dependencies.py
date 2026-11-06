@@ -60,7 +60,8 @@ def violations():
                 source.startswith("app.")
                 and not source.startswith(("app.chat.", "app.main", "app.postgres.models"))
                 and target.startswith("app.chat.")
-                and target != "app.chat.models"
+                and target not in {"app.chat.models", "app.chat.operations"}
+                and not target.startswith("app.chat.operations.")
             ):
                 found.add(f"{source} -> {target}")
     return sorted(found)

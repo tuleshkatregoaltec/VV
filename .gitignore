@@ -34,6 +34,8 @@ frontend/.DS_Store
 frontend/.vercel/
 frontend/.netlify/
 frontend/.cache/
+frontend/.wrangler/
+/handoff/
 frontend/.storybook/
 frontend/coverage/
 frontend/public/build/

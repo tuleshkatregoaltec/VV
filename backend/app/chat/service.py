@@ -12,6 +12,7 @@ from app.chat.agent import _convert_to_pydantic_messages, agent
 from app.chat.dependencies import ChatDependencies
 from app.chat.events import encode_sse as _sse
 from app.chat.models import Conversation, Message
+from app.chat.routing import run_routed_turn
 from app.chat.security import (
     REFUSAL,
     RESTRICTED_HISTORY,
@@ -21,6 +22,7 @@ from app.chat.security import (
     safe_data,
 )
 from app.chat.workflows import LIMITS
+from app.config import settings
 from app.crm.assistant import has_current_access, query_my_records
 from app.crm.assistant_models import CrmAssistantQuery
 
@@ -286,6 +288,9 @@ async def stream_chat_response(
         yield _sse({"type": "content", "content": refusal})
         yield _sse({"type": "done"})
         return
+    if not settings.ASSISTANT_ENABLED:
+        yield _sse({"type": "error", "error": "The assistant is not enabled yet."})
+        return
     # Request auth and conversation lookup may already hold a read connection.
     await db.commit()
     try:
@@ -308,7 +313,8 @@ async def stream_chat_response(
             # open their own sessions during provider latency.
             await db.commit()
             deps = ChatDependencies(**scope, conversation_id=conversation_id)
-            result = await agent.run(
+            run = run_routed_turn if settings.ASSISTANT_TYPED_ROUTING_ENABLED else agent.run
+            result = await run(
                 user_message, deps=deps, message_history=history, usage_limits=LIMITS, usage=usage
             )
             provider_completed = True

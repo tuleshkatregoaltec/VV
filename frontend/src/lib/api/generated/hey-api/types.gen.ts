@@ -219,6 +219,20 @@ export type AnalyticsUnitComposition = {
 };
 
 /**
+ * ApprovedFact
+ */
+export type ApprovedFact = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
  * AreaDetailResponse
  */
 export type AreaDetailResponse = {
@@ -994,6 +1008,88 @@ export type ComparableProject = {
      * Rationale
      */
     rationale?: Array<string>;
+};
+
+/**
+ * ConnectionCreate
+ */
+export type ConnectionCreate = {
+    /**
+     * Approved Knowledge
+     */
+    approved_knowledge?: Array<ApprovedFact>;
+    /**
+     * Phone Number Id
+     */
+    phone_number_id: string;
+    /**
+     * Account Id
+     */
+    account_id: string;
+    /**
+     * Display Name
+     */
+    display_name: string;
+};
+
+/**
+ * ConnectionResponse
+ */
+export type ConnectionResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Phone Number Id
+     */
+    phone_number_id: string;
+    /**
+     * Account Id
+     */
+    account_id: string;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Market Data Enabled
+     */
+    market_data_enabled?: boolean;
+    /**
+     * Approved Knowledge
+     */
+    approved_knowledge: Array<ApprovedFact>;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * ConnectionUpdate
+ */
+export type ConnectionUpdate = {
+    /**
+     * Display Name
+     */
+    display_name?: string | null;
+    /**
+     * Enabled
+     */
+    enabled?: boolean | null;
+    /**
+     * Market Data Enabled
+     */
+    market_data_enabled?: boolean | null;
 };
 
 /**
@@ -4098,6 +4194,76 @@ export type CrmWorkspaceUpdate = {
 };
 
 /**
+ * CustomerMessageResponse
+ */
+export type CustomerMessageResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Thread Id
+     */
+    thread_id: string;
+    /**
+     * Content
+     */
+    content: string | null;
+    /**
+     * Sent At
+     */
+    sent_at: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Reply
+     */
+    reply: string | null;
+    /**
+     * Risk
+     */
+    risk: string | null;
+    /**
+     * Topic
+     */
+    topic: string | null;
+    /**
+     * Reason
+     */
+    reason: string | null;
+    /**
+     * Evidence Ids
+     */
+    evidence_ids: Array<string>;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Send After
+     */
+    send_after: string | null;
+    /**
+     * Notification Created At
+     */
+    notification_created_at: string | null;
+    /**
+     * Notification Seen At
+     */
+    notification_seen_at: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
  * CustomerPortalResponse
  *
  * Response containing Stripe Customer Portal URL
@@ -6278,7 +6444,7 @@ export type InboundOwnershipEnrichmentResponse = {
     /**
      * Verification
      */
-    verification?: 'contact_exact' | 'name_only' | 'none';
+    verification?: 'contact_exact' | 'name_only' | 'none' | 'not_checked' | 'stored';
     /**
      * Current Owner
      */
@@ -6463,6 +6629,16 @@ export type InviteUserResponse = {
      * Invitation Token
      */
     invitation_token: string;
+};
+
+/**
+ * KnowledgeUpdate
+ */
+export type KnowledgeUpdate = {
+    /**
+     * Approved Knowledge
+     */
+    approved_knowledge: Array<ApprovedFact>;
 };
 
 /**
@@ -9894,6 +10070,172 @@ export type PublishListing = {
 };
 
 /**
+ * PublishedListingCreate
+ */
+export type PublishedListingCreate = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Property Type
+     */
+    property_type: 'apartment' | 'villa' | 'townhouse' | 'penthouse' | 'office' | 'land' | 'other';
+    /**
+     * Transaction
+     */
+    transaction: 'sale' | 'rent';
+    /**
+     * Bedrooms
+     */
+    bedrooms?: number | null;
+    /**
+     * Price Aed
+     *
+     * Sale asking price or annual asking rent, in AED.
+     */
+    price_aed: number;
+    /**
+     * Area Sqft
+     */
+    area_sqft?: number | null;
+    /**
+     * Availability
+     */
+    availability: 'available' | 'under_offer' | 'unavailable';
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Approved For Customer
+     */
+    approved_for_customer: true;
+};
+
+/**
+ * PublishedListingResponse
+ */
+export type PublishedListingResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Property Type
+     */
+    property_type: 'apartment' | 'villa' | 'townhouse' | 'penthouse' | 'office' | 'land' | 'other';
+    /**
+     * Transaction
+     */
+    transaction: 'sale' | 'rent';
+    /**
+     * Bedrooms
+     */
+    bedrooms: number | null;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Area Sqft
+     */
+    area_sqft: number | null;
+    /**
+     * Availability
+     */
+    availability: 'available' | 'under_offer' | 'unavailable';
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Revoked At
+     */
+    revoked_at: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * PublishedListingUpdate
+ */
+export type PublishedListingUpdate = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Property Type
+     */
+    property_type: 'apartment' | 'villa' | 'townhouse' | 'penthouse' | 'office' | 'land' | 'other';
+    /**
+     * Transaction
+     */
+    transaction: 'sale' | 'rent';
+    /**
+     * Bedrooms
+     */
+    bedrooms?: number | null;
+    /**
+     * Price Aed
+     *
+     * Sale asking price or annual asking rent, in AED.
+     */
+    price_aed: number;
+    /**
+     * Area Sqft
+     */
+    area_sqft?: number | null;
+    /**
+     * Availability
+     */
+    availability: 'available' | 'under_offer' | 'unavailable';
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Approved For Customer
+     */
+    approved_for_customer: true;
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+};
+
+/**
  * RadarBuildingPin
  *
  * Property Finder tower coordinate with linked DLD/Ejari activity.
@@ -10339,6 +10681,30 @@ export type RentalSummary = {
      * Count Change Pct
      */
     count_change_pct?: number | null;
+};
+
+/**
+ * ReplyEdit
+ */
+export type ReplyEdit = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Reply
+     */
+    reply: string;
+};
+
+/**
+ * RevisionDecision
+ */
+export type RevisionDecision = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
 };
 
 /**
@@ -11109,6 +11475,40 @@ export type SyncAfterCheckoutRequest = {
      * Session Id
      */
     session_id: string;
+};
+
+/**
+ * ThreadResponse
+ */
+export type ThreadResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+    /**
+     * Sender
+     */
+    sender: string;
+    /**
+     * Paused
+     */
+    paused: boolean;
+    /**
+     * Opted Out
+     */
+    opted_out: boolean;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
 };
 
 /**
@@ -16760,6 +17160,606 @@ export type WebhooksStripeWebhookResponses = {
 };
 
 export type WebhooksStripeWebhookResponse = WebhooksStripeWebhookResponses[keyof WebhooksStripeWebhookResponses];
+
+export type WhatsappListConnectionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/whatsapp/connections';
+};
+
+export type WhatsappListConnectionsResponses = {
+    /**
+     * Response Whatsapp-List Connections
+     *
+     * Successful Response
+     */
+    200: Array<ConnectionResponse>;
+};
+
+export type WhatsappListConnectionsResponse = WhatsappListConnectionsResponses[keyof WhatsappListConnectionsResponses];
+
+export type WhatsappCreateConnectionData = {
+    body: ConnectionCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/whatsapp/connections';
+};
+
+export type WhatsappCreateConnectionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappCreateConnectionError = WhatsappCreateConnectionErrors[keyof WhatsappCreateConnectionErrors];
+
+export type WhatsappCreateConnectionResponses = {
+    /**
+     * Successful Response
+     */
+    201: ConnectionResponse;
+};
+
+export type WhatsappCreateConnectionResponse = WhatsappCreateConnectionResponses[keyof WhatsappCreateConnectionResponses];
+
+export type WhatsappDeleteConnectionData = {
+    body?: never;
+    path: {
+        /**
+         * Connection Id
+         */
+        connection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/connections/{connection_id}';
+};
+
+export type WhatsappDeleteConnectionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappDeleteConnectionError = WhatsappDeleteConnectionErrors[keyof WhatsappDeleteConnectionErrors];
+
+export type WhatsappDeleteConnectionResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type WhatsappDeleteConnectionResponse = WhatsappDeleteConnectionResponses[keyof WhatsappDeleteConnectionResponses];
+
+export type WhatsappGetConnectionData = {
+    body?: never;
+    path: {
+        /**
+         * Connection Id
+         */
+        connection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/connections/{connection_id}';
+};
+
+export type WhatsappGetConnectionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappGetConnectionError = WhatsappGetConnectionErrors[keyof WhatsappGetConnectionErrors];
+
+export type WhatsappGetConnectionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConnectionResponse;
+};
+
+export type WhatsappGetConnectionResponse = WhatsappGetConnectionResponses[keyof WhatsappGetConnectionResponses];
+
+export type WhatsappUpdateConnectionData = {
+    body: ConnectionUpdate;
+    path: {
+        /**
+         * Connection Id
+         */
+        connection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/connections/{connection_id}';
+};
+
+export type WhatsappUpdateConnectionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappUpdateConnectionError = WhatsappUpdateConnectionErrors[keyof WhatsappUpdateConnectionErrors];
+
+export type WhatsappUpdateConnectionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConnectionResponse;
+};
+
+export type WhatsappUpdateConnectionResponse = WhatsappUpdateConnectionResponses[keyof WhatsappUpdateConnectionResponses];
+
+export type WhatsappUpdateKnowledgeData = {
+    body: KnowledgeUpdate;
+    path: {
+        /**
+         * Connection Id
+         */
+        connection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/connections/{connection_id}/knowledge';
+};
+
+export type WhatsappUpdateKnowledgeErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappUpdateKnowledgeError = WhatsappUpdateKnowledgeErrors[keyof WhatsappUpdateKnowledgeErrors];
+
+export type WhatsappUpdateKnowledgeResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConnectionResponse;
+};
+
+export type WhatsappUpdateKnowledgeResponse = WhatsappUpdateKnowledgeResponses[keyof WhatsappUpdateKnowledgeResponses];
+
+export type WhatsappListThreadsData = {
+    body?: never;
+    path: {
+        /**
+         * Connection Id
+         */
+        connection_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/whatsapp/connections/{connection_id}/threads';
+};
+
+export type WhatsappListThreadsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappListThreadsError = WhatsappListThreadsErrors[keyof WhatsappListThreadsErrors];
+
+export type WhatsappListThreadsResponses = {
+    /**
+     * Response Whatsapp-List Threads
+     *
+     * Successful Response
+     */
+    200: Array<ThreadResponse>;
+};
+
+export type WhatsappListThreadsResponse = WhatsappListThreadsResponses[keyof WhatsappListThreadsResponses];
+
+export type WhatsappTakeoverData = {
+    body?: never;
+    path: {
+        /**
+         * Thread Id
+         */
+        thread_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/threads/{thread_id}/takeover';
+};
+
+export type WhatsappTakeoverErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappTakeoverError = WhatsappTakeoverErrors[keyof WhatsappTakeoverErrors];
+
+export type WhatsappTakeoverResponses = {
+    /**
+     * Successful Response
+     */
+    200: ThreadResponse;
+};
+
+export type WhatsappTakeoverResponse = WhatsappTakeoverResponses[keyof WhatsappTakeoverResponses];
+
+export type WhatsappResumeData = {
+    body?: never;
+    path: {
+        /**
+         * Thread Id
+         */
+        thread_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/threads/{thread_id}/resume';
+};
+
+export type WhatsappResumeErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappResumeError = WhatsappResumeErrors[keyof WhatsappResumeErrors];
+
+export type WhatsappResumeResponses = {
+    /**
+     * Successful Response
+     */
+    200: ThreadResponse;
+};
+
+export type WhatsappResumeResponse = WhatsappResumeResponses[keyof WhatsappResumeResponses];
+
+export type WhatsappListMessagesData = {
+    body?: never;
+    path: {
+        /**
+         * Thread Id
+         */
+        thread_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/whatsapp/threads/{thread_id}/messages';
+};
+
+export type WhatsappListMessagesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappListMessagesError = WhatsappListMessagesErrors[keyof WhatsappListMessagesErrors];
+
+export type WhatsappListMessagesResponses = {
+    /**
+     * Response Whatsapp-List Messages
+     *
+     * Successful Response
+     */
+    200: Array<CustomerMessageResponse>;
+};
+
+export type WhatsappListMessagesResponse = WhatsappListMessagesResponses[keyof WhatsappListMessagesResponses];
+
+export type WhatsappNotificationsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/whatsapp/notifications';
+};
+
+export type WhatsappNotificationsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappNotificationsError = WhatsappNotificationsErrors[keyof WhatsappNotificationsErrors];
+
+export type WhatsappNotificationsResponses = {
+    /**
+     * Response Whatsapp-Notifications
+     *
+     * Successful Response
+     */
+    200: Array<CustomerMessageResponse>;
+};
+
+export type WhatsappNotificationsResponse = WhatsappNotificationsResponses[keyof WhatsappNotificationsResponses];
+
+export type WhatsappApproveData = {
+    body: RevisionDecision;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/messages/{message_id}/approve';
+};
+
+export type WhatsappApproveErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappApproveError = WhatsappApproveErrors[keyof WhatsappApproveErrors];
+
+export type WhatsappApproveResponses = {
+    /**
+     * Successful Response
+     */
+    200: CustomerMessageResponse;
+};
+
+export type WhatsappApproveResponse = WhatsappApproveResponses[keyof WhatsappApproveResponses];
+
+export type WhatsappCancelData = {
+    body: RevisionDecision;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/messages/{message_id}/cancel';
+};
+
+export type WhatsappCancelErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappCancelError = WhatsappCancelErrors[keyof WhatsappCancelErrors];
+
+export type WhatsappCancelResponses = {
+    /**
+     * Successful Response
+     */
+    200: CustomerMessageResponse;
+};
+
+export type WhatsappCancelResponse = WhatsappCancelResponses[keyof WhatsappCancelResponses];
+
+export type WhatsappEditData = {
+    body: ReplyEdit;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/messages/{message_id}';
+};
+
+export type WhatsappEditErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappEditError = WhatsappEditErrors[keyof WhatsappEditErrors];
+
+export type WhatsappEditResponses = {
+    /**
+     * Successful Response
+     */
+    200: CustomerMessageResponse;
+};
+
+export type WhatsappEditResponse = WhatsappEditResponses[keyof WhatsappEditResponses];
+
+export type WhatsappSeenData = {
+    body: RevisionDecision;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/notifications/{message_id}/seen';
+};
+
+export type WhatsappSeenErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappSeenError = WhatsappSeenErrors[keyof WhatsappSeenErrors];
+
+export type WhatsappSeenResponses = {
+    /**
+     * Successful Response
+     */
+    200: CustomerMessageResponse;
+};
+
+export type WhatsappSeenResponse = WhatsappSeenResponses[keyof WhatsappSeenResponses];
+
+export type WhatsappListPublishedListingsData = {
+    body?: never;
+    path: {
+        /**
+         * Connection Id
+         */
+        connection_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/whatsapp/connections/{connection_id}/listings';
+};
+
+export type WhatsappListPublishedListingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappListPublishedListingsError = WhatsappListPublishedListingsErrors[keyof WhatsappListPublishedListingsErrors];
+
+export type WhatsappListPublishedListingsResponses = {
+    /**
+     * Response Whatsapp-List Published Listings
+     *
+     * Successful Response
+     */
+    200: Array<PublishedListingResponse>;
+};
+
+export type WhatsappListPublishedListingsResponse = WhatsappListPublishedListingsResponses[keyof WhatsappListPublishedListingsResponses];
+
+export type WhatsappPublishListingData = {
+    body: PublishedListingCreate;
+    path: {
+        /**
+         * Connection Id
+         */
+        connection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/connections/{connection_id}/listings';
+};
+
+export type WhatsappPublishListingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappPublishListingError = WhatsappPublishListingErrors[keyof WhatsappPublishListingErrors];
+
+export type WhatsappPublishListingResponses = {
+    /**
+     * Successful Response
+     */
+    201: PublishedListingResponse;
+};
+
+export type WhatsappPublishListingResponse = WhatsappPublishListingResponses[keyof WhatsappPublishListingResponses];
+
+export type WhatsappRenewListingData = {
+    body: PublishedListingUpdate;
+    path: {
+        /**
+         * Connection Id
+         */
+        connection_id: string;
+        /**
+         * Listing Id
+         */
+        listing_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/connections/{connection_id}/listings/{listing_id}';
+};
+
+export type WhatsappRenewListingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappRenewListingError = WhatsappRenewListingErrors[keyof WhatsappRenewListingErrors];
+
+export type WhatsappRenewListingResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublishedListingResponse;
+};
+
+export type WhatsappRenewListingResponse = WhatsappRenewListingResponses[keyof WhatsappRenewListingResponses];
+
+export type WhatsappRevokeListingData = {
+    body: RevisionDecision;
+    path: {
+        /**
+         * Connection Id
+         */
+        connection_id: string;
+        /**
+         * Listing Id
+         */
+        listing_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/connections/{connection_id}/listings/{listing_id}/revoke';
+};
+
+export type WhatsappRevokeListingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappRevokeListingError = WhatsappRevokeListingErrors[keyof WhatsappRevokeListingErrors];
+
+export type WhatsappRevokeListingResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublishedListingResponse;
+};
+
+export type WhatsappRevokeListingResponse = WhatsappRevokeListingResponses[keyof WhatsappRevokeListingResponses];
 
 export type AdminListAllOrganizationsData = {
     body?: never;

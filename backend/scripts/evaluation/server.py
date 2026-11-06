@@ -38,6 +38,9 @@ def create_app():
     )
 
     directory = private_directory(Path(os.environ["VV_EVALUATION_DIRECTORY"]))
+    from scripts.evaluation.http_trial import CaseBudgetContext, install_http_budget
+
+    plan = install_http_budget(directory, settings)
     secrets = tuple(
         str(value)
         for key, value in settings.model_dump().items()
@@ -86,24 +89,47 @@ def create_app():
     from app.postgres import get_postgres_engine
 
     instrument_postgres(get_postgres_engine(), tracer)
+    from app.chat import routing, workflows
     from app.chat.agent import agent
 
+    typed = plan["routing_mode"] == "typed"
+    primary = routing.router_agent if typed else agent
+    tool_owners = (
+        (
+            workflows.market_agent,
+            workflows.pricing_agent,
+            workflows.crm_agent,
+            workflows.followup_agent,
+            workflows.action_agent,
+        )
+        if typed
+        else (agent,)
+    )
     tools = {
         name: {"description": tool.description, "schema": tool.function_schema.json_schema}
-        for name, tool in agent._function_toolset.tools.items()
+        for owner in tool_owners
+        for name, tool in owner._function_toolset.tools.items()
     }
     private_write(
         directory / "runtime.json",
         {
-            "configured_model": settings.DEFAULT_CHAT_MODEL,
+            "configured_model": plan["model"],
+            "typed_routing": typed,
+            "campaign_stage": "flows",
+            "snapshot_sha256": plan["snapshot_sha256"],
             "provider": "openrouter",
-            "agent": "app.chat.agent.agent",
-            "agent_name": agent.name,
-            "prompt_sha256": fingerprint(agent._system_prompts),
+            "agent": "app.chat.routing.run_routed_turn" if typed else "app.chat.agent.agent",
+            "agent_name": primary.name,
+            "prompt_sha256": fingerprint(primary._system_prompts),
             "tools_sha256": fingerprint(tools),
             "tools": tools,
-            "model_settings": {"openrouter_reasoning": {"effort": "low"}},
+            "model_settings": primary.model_settings,
+            "agent_settings": {
+                name: value["model_settings"]
+                for name, value in plan["execution_context"]["agents"].items()
+            },
+            "provider_price_caps": plan["provider_price_caps"],
             "remote_telemetry": False,
         },
     )
-    return TraceMiddleware(app, tracer)
+    return CaseBudgetContext(TraceMiddleware(app, tracer), plan)

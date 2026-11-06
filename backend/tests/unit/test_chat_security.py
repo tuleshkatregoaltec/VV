@@ -13,6 +13,8 @@ from app.chat.security import REFUSAL, input_refusal, safe_answer, safe_data, sa
 
 @pytest.fixture(autouse=True)
 def offline_admission(monkeypatch):
+    monkeypatch.setattr(service.settings, "ASSISTANT_ENABLED", True)
+    monkeypatch.setattr(service.settings, "ASSISTANT_TYPED_ROUTING_ENABLED", False)
     monkeypatch.setattr(service.admission, "acquire", AsyncMock(return_value="lease"))
     monkeypatch.setattr(service.admission, "finish", AsyncMock())
 
@@ -120,7 +122,8 @@ async def test_input_refusal_does_not_call_model_or_save(monkeypatch):
     run.assert_not_awaited()
 
 
-async def test_reassignment_during_generation_withholds_complete_answer(monkeypatch):
+@pytest.mark.parametrize("typed_routing", [False, True])
+async def test_reassignment_during_generation_withholds_complete_answer(monkeypatch, typed_routing):
     from pydantic_ai.usage import RunUsage
 
     monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=True))
@@ -133,7 +136,9 @@ async def test_reassignment_during_generation_withholds_complete_answer(monkeypa
         deps.evidence.append({"query": {"resource": "leads"}, "fingerprint": "old"})
         return SimpleNamespace(output="Customer private phone", usage=lambda: RunUsage())
 
+    monkeypatch.setattr(service.settings, "ASSISTANT_TYPED_ROUTING_ENABLED", typed_routing)
     monkeypatch.setattr(service, "agent", SimpleNamespace(run=generate))
+    monkeypatch.setattr(service, "run_routed_turn", generate)
     events = [
         event async for event in service.stream_chat_response(AsyncMock(), 1, "My lead", "u", "o")
     ]
@@ -154,7 +159,10 @@ def test_business_source_counts_preserve_distinctions_without_physical_names():
     }
 
 
-async def test_membership_revoked_during_generation_never_reaches_delivery(monkeypatch):
+@pytest.mark.parametrize("typed_routing", [False, True])
+async def test_membership_revoked_during_generation_never_reaches_delivery(
+    monkeypatch, typed_routing
+):
     from pydantic_ai.usage import RunUsage
 
     monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=True))
@@ -166,7 +174,9 @@ async def test_membership_revoked_during_generation_never_reaches_delivery(monke
         deps.evidence.append({"query": {"resource": "leads"}, "fingerprint": "old"})
         return SimpleNamespace(output="Revoked private answer", usage=lambda: RunUsage())
 
+    monkeypatch.setattr(service.settings, "ASSISTANT_TYPED_ROUTING_ENABLED", typed_routing)
     monkeypatch.setattr(service, "agent", SimpleNamespace(run=generate))
+    monkeypatch.setattr(service, "run_routed_turn", generate)
     events = [
         event async for event in service.stream_chat_response(AsyncMock(), 1, "My lead", "u", "o")
     ]

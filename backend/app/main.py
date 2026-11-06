@@ -38,6 +38,9 @@ from app.supply.router import router as supply_router
 from app.transaction.router import router as transaction_router
 from app.upload.router import health_router
 from app.upload.router import router as upload_router
+from app.whatsapp.customer_router import router as whatsapp_customer_router
+from app.whatsapp.logging import CallbackQueryFilter
+from app.whatsapp.router import router as whatsapp_router
 
 # Remote telemetry must cross our allowlist exporter; legacy Logfire defaults can
 # capture endpoint bodies and provider exceptions containing private CRM text.
@@ -46,6 +49,7 @@ observability_provider = configure_observability(settings)
 if observability_provider is None:
     Agent.instrument_all(False)
 logging.config.dictConfig(LOGGING_CONFIG)
+logging.getLogger("uvicorn.access").addFilter(CallbackQueryFilter())
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -105,6 +109,8 @@ app.include_router(upload_router, tags=["upload"])
 app.include_router(health_router, tags=["upload"])
 app.include_router(billing_router, tags=["billing"])
 app.include_router(billing_webhooks, tags=["webhooks"])
+app.include_router(whatsapp_router, tags=["webhooks"])
+app.include_router(whatsapp_customer_router, tags=["whatsapp"])
 app.include_router(admin_router, tags=["admin"])
 app.include_router(feasibility_router, tags=["feasibility"])
 

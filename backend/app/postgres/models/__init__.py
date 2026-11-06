@@ -42,8 +42,20 @@ from app.feasibility.models import FeasibilitySavedStudy
 from app.news.models import NewsArticle
 from app.organization.models import Organization, OrganizationInvitation, OrganizationMembership
 from app.token_usage.models import UserTokenUsage
+from app.whatsapp.customer_models import (
+    WhatsAppConnection,
+    WhatsAppCustomerMessage,
+    WhatsAppCustomerThread,
+    WhatsAppPublishedListing,
+)
+from app.whatsapp.models import WhatsAppTurn
 
 __all__ = [
+    "WhatsAppPublishedListing",
+    "WhatsAppConnection",
+    "WhatsAppCustomerThread",
+    "WhatsAppCustomerMessage",
+    "WhatsAppTurn",
     "AssistantAction",
     "AssistantListingDraft",
     "AssistantOutbox",

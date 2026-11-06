@@ -4,30 +4,24 @@ No application server, database, customer record, or real action is used. The ca
 HTTP/database benchmark remains a separate acceptance test. Run without --live to preview.
 """
 
-import argparse
 import asyncio
 import copy
 import hashlib
 import json
+import re
 import statistics
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
 from pydantic_ai import ModelRetry, Tool
 from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models.openrouter import OpenRouterModelSettings
-from pydantic_ai.providers.openrouter import OpenRouterProvider
 from pydantic_ai.usage import UsageLimits
 
-from app.chat.agent import agent
 from app.chat.dependencies import ChatDependencies
 from app.chat.workflows import crm_agent, market_agent, pricing_agent
 from app.config import settings
-from app.core.openrouter import CompatibleOpenRouterModel
 from scripts.evaluation.dataset import load_benchmark
-from scripts.evaluation.tracing import private_directory, private_write
 
 FIXTURES = Path(__file__).with_name("model_trial_cases.json")
 MAX_TOKENS = 24000
@@ -128,11 +122,20 @@ def checks(case, calls, answer):
     matching = [call for call in calls if call["tool"] == expected and call["valid"]]
     filters = case.get("expected_arguments", {})
     arguments_ok = bool(matching) and any(
-        all(call["arguments"].get(key) == value for key, value in filters.items())
+        all(
+            call["arguments"].get("request", call["arguments"]).get(key) == value
+            for key, value in filters.items()
+        )
         for call in matching
     )
     prohibited = [
-        marker for marker in case.get("forbidden_output", []) if marker.lower() in answer.lower()
+        marker
+        for marker in case.get("forbidden_output", [])
+        if (
+            bool(re.search(r"base64,\s*[A-Za-z0-9+/=]{8,}", answer, re.IGNORECASE))
+            if marker.lower() == "base64,"
+            else marker.lower() in answer.lower()
+        )
     ]
     return {
         "expected_tool": arguments_ok if expected else None,
@@ -226,140 +229,15 @@ def summarise(records):
 
 
 async def live_trial(args):
-    if settings.ENVIRONMENT != "local":
-        raise ValueError("Model trials require ENVIRONMENT=local")
-    if args.repeat < 1 or args.repeat > 3 or not 0 < args.budget_usd <= 5:
-        raise ValueError("Use 1-3 repeats and a budget at most USD 5")
-    models = args.model or [
-        settings.DEFAULT_CHAT_MODEL,
-        "anthropic/claude-haiku-5.5",
-        "openai/gpt-6-luna",
-        "openai/gpt-6.1-sol",
-    ]
-    if len(models) != len(set(models)) or len(models) > 4:
-        raise ValueError("Choose at most four distinct models")
-    async with httpx.AsyncClient(timeout=25) as client:
-        response = await client.get("https://openrouter.ai/api/v1/models")
-        response.raise_for_status()
-        catalog = {m["id"]: m for m in response.json()["data"]}
-    cases = load_cases()
-    if args.case:
-        cases = [case for case in cases if case["id"] in args.case]
-        if {case["id"] for case in cases} != set(args.case):
-            raise ValueError("Unknown case selection")
-    for model in models:
-        if model not in catalog or "tools" not in catalog[model].get("supported_parameters", []):
-            raise ValueError("Candidate must be listed and support tools")
-    directory = Path(args.directory)
-    if directory.exists():
-        raise ValueError("Use a fresh evidence directory")
-    private_directory(directory)
-    manifest = {
-        "synthetic_only": True,
-        "scope": "Focused specialist quality; orchestrator acceptance is tested separately offline",
-        "workflows": {
-            workflow.name: {
-                "prompt_sha256": hashlib.sha256(str(workflow._system_prompts).encode()).hexdigest(),
-                "tools": sorted(workflow._function_toolset.tools),
-            }
-            for workflow in (market_agent, pricing_agent, crm_agent)
-        },
-        "started_at": datetime.now(UTC).isoformat(),
-        "models": models,
-        "case_ids": [case["id"] for case in cases],
-        "repeat": args.repeat,
-        "budget_usd": args.budget_usd,
-        "prompt_sha256": hashlib.sha256(str(agent._system_prompts).encode()).hexdigest(),
-        "fixtures_sha256": hashlib.sha256(FIXTURES.read_bytes()).hexdigest(),
-        "benchmark_sha256": load_benchmark().digest,
-        "reference_date": "2026-10-31",
-        "tools_sha256": hashlib.sha256(
-            json.dumps(
-                {
-                    name: {
-                        "description": tool.description,
-                        "schema": tool.function_schema.json_schema,
-                    }
-                    for name, tool in agent._function_toolset.tools.items()
-                },
-                sort_keys=True,
-            ).encode()
-        ).hexdigest(),
-        "policy": "ZDR, no data collection, all tools replaced, no customer data or actions",
-        "prices": {model: catalog[model]["pricing"] for model in models},
-    }
-    private_write(directory / "manifest.json", manifest)
-    records, accounted = [], 0.0
-    # Sequential execution bounds spending, keeps failure evidence, and avoids load bias.
-    for repeat in range(args.repeat):
-        for case in cases:
-            for model_id in models:
-                price = catalog[model_id]["pricing"]
-                reservation = (MAX_TOKENS + MAX_OUTPUT + 16000) * max(
-                    float(price["prompt"]), float(price["completion"])
-                )
-                if accounted + reservation > args.budget_usd:
-                    private_write(directory / "summary.json", summarise(records))
-                    raise RuntimeError("Budget reserve exhausted; partial evidence retained")
-                model = CompatibleOpenRouterModel(
-                    model_id, provider=OpenRouterProvider(api_key=settings.OPENROUTER_API_KEY)
-                )
-                record = await run_case(case, model)
-                record.update(model=model_id, repeat=repeat)
-                cost = record.get("provider_reported_cost_usd")
-                accounted += float(cost) if cost is not None else reservation
-                records.append(record)
-                private_write(directory / "results.json", records)
-                private_write(directory / "summary.json", summarise(records))
-                print(
-                    json.dumps(
-                        {
-                            "model": model_id,
-                            "case": case["id"],
-                            "repeat": repeat,
-                            "seconds": record["seconds"],
-                            "error": record.get("error_type"),
-                            "accounted_usd": round(accounted, 5),
-                        }
-                    ),
-                    flush=True,
-                )
-                if record.get("http_status") in {401, 402, 403}:
-                    raise RuntimeError(
-                        "Provider authentication, credits or access blocked the trial; inspect private results.json"
-                    )
-    print(json.dumps(summarise(records), indent=2))
-    if any("answer" not in record for record in records):
-        raise RuntimeError("Some model requests failed; this is not a complete comparison")
+    from scripts.evaluation.campaign import live_trial as run_campaign
+
+    return await run_campaign(args)
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--live", action="store_true")
-    parser.add_argument("--model", action="append")
-    parser.add_argument("--case", action="append")
-    parser.add_argument("--repeat", type=int, default=1)
-    parser.add_argument("--budget-usd", type=float, default=5)
-    parser.add_argument(
-        "--directory",
-        default="../.evaluation/model-trial-" + datetime.now(UTC).strftime("%Y%m%dT%H%M%S"),
-    )
-    args = parser.parse_args()
-    if args.live:
-        asyncio.run(live_trial(args))
-    else:
-        print(
-            json.dumps(
-                {
-                    "live": False,
-                    "configured_model": settings.DEFAULT_CHAT_MODEL,
-                    "cases": [
-                        {"id": case["id"], "category": case["category"]} for case in load_cases()
-                    ],
-                },
-                indent=2,
-            )
-        )
+    from scripts.evaluation.campaign import main as campaign_main
+
+    campaign_main()
 
 
 if __name__ == "__main__":

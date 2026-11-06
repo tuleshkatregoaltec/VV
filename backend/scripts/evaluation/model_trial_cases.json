@@ -12,7 +12,7 @@
       "query_market_metrics": {
         "dataset": "sales",
         "period": {
-          "start": "2026-08-02",
+          "start": "2026-08-03",
           "end": "2026-10-31",
           "label": "Synthetic fixed-reference period",
           "type": "rolling_days",
@@ -21,21 +21,33 @@
         },
         "coverage": {
           "status": "complete",
-          "data_from": null,
-          "data_to": null,
-          "covered_from": null,
-          "covered_to": null,
-          "verified_days": 0,
+          "data_from": "2026-08-03",
+          "data_to": "2026-10-31",
+          "covered_from": "2026-08-03",
+          "covered_to": "2026-10-31",
+          "verified_days": 90,
           "partial_days": 0,
           "unverified_days": 0,
-          "ranges": [],
-          "evidence_loaded_at": null,
-          "note": "Complete synthetic fixture"
+          "ranges": [
+            {
+              "start": "2026-08-03",
+              "end": "2026-10-31",
+              "status": "verified"
+            }
+          ],
+          "evidence_loaded_at": "2026-10-31T20:00:00Z",
+          "note": "Every requested calendar day is verified in this complete synthetic fixture; not live market evidence."
         },
         "filters": {
           "dataset": "sales",
           "group_by": "price_band",
-          "property_type": "apartment"
+          "property_type": "apartment",
+          "location": "JVC",
+          "reference_date": "2026-10-31",
+          "period": {
+            "type": "rolling_days",
+            "days": 90
+          }
         },
         "eligibility": "Eligible synthetic fixture records only",
         "definitions": [
@@ -84,13 +96,24 @@
         "comparison_coverage": null,
         "comparison": null,
         "change_pct": {},
-        "matched_locations": [],
+        "matched_locations": [
+          {
+            "area": "Synthetic district for Jumeirah Village Circle",
+            "master_project": "Jumeirah Village Circle",
+            "district": "Synthetic district for Jumeirah Village Circle",
+            "community": "Jumeirah Village Circle",
+            "method": "synthetic_confirmed_crosswalk",
+            "records": 10
+          }
+        ],
         "sources": {
           "Synthetic fixture; not live market evidence": 10
         },
-        "release_id": null,
-        "release_built_at": null,
-        "limitations": []
+        "release_id": "synthetic-market-fixture-v2",
+        "release_built_at": "2026-10-31T20:00:00Z",
+        "limitations": [
+          "Synthetic fixture only; these figures are not live market evidence. No wider-district-only rows are included."
+        ]
       }
     },
     "forbidden_output": []
@@ -122,16 +145,22 @@
         },
         "coverage": {
           "status": "complete",
-          "data_from": null,
-          "data_to": null,
-          "covered_from": null,
-          "covered_to": null,
-          "verified_days": 0,
+          "data_from": "2026-07-01",
+          "data_to": "2026-09-30",
+          "covered_from": "2026-07-01",
+          "covered_to": "2026-09-30",
+          "verified_days": 92,
           "partial_days": 0,
           "unverified_days": 0,
-          "ranges": [],
-          "evidence_loaded_at": null,
-          "note": "Complete synthetic fixture"
+          "ranges": [
+            {
+              "start": "2026-07-01",
+              "end": "2026-09-30",
+              "status": "verified"
+            }
+          ],
+          "evidence_loaded_at": "2026-10-31T20:00:00Z",
+          "note": "Every requested calendar day is verified in this complete synthetic fixture; not live market evidence."
         },
         "filters": {
           "dataset": "sales",
@@ -141,7 +170,9 @@
           ],
           "period": {
             "type": "previous_quarter"
-          }
+          },
+          "location": "Business Bay",
+          "reference_date": "2026-10-31"
         },
         "eligibility": "Eligible synthetic fixture records only",
         "definitions": [
@@ -189,13 +220,24 @@
         "comparison_coverage": null,
         "comparison": null,
         "change_pct": {},
-        "matched_locations": [],
+        "matched_locations": [
+          {
+            "area": "Synthetic district for Business Bay",
+            "master_project": "Business Bay",
+            "district": "Synthetic district for Business Bay",
+            "community": "Business Bay",
+            "method": "synthetic_confirmed_crosswalk",
+            "records": 20
+          }
+        ],
         "sources": {
           "Synthetic fixture; not live market evidence": 20
         },
-        "release_id": null,
-        "release_built_at": null,
-        "limitations": []
+        "release_id": "synthetic-market-fixture-v2",
+        "release_built_at": "2026-10-31T20:00:00Z",
+        "limitations": [
+          "Synthetic fixture only; these figures are not live market evidence. No wider-district-only rows are included."
+        ]
       }
     },
     "forbidden_output": []
@@ -215,7 +257,7 @@
       "query_market_metrics": {
         "dataset": "rentals",
         "period": {
-          "start": "2026-08-02",
+          "start": "2026-08-03",
           "end": "2026-10-31",
           "label": "Synthetic fixed-reference period",
           "type": "rolling_days",
@@ -224,23 +266,35 @@
         },
         "coverage": {
           "status": "complete",
-          "data_from": null,
-          "data_to": null,
-          "covered_from": null,
-          "covered_to": null,
-          "verified_days": 0,
+          "data_from": "2026-08-03",
+          "data_to": "2026-10-31",
+          "covered_from": "2026-08-03",
+          "covered_to": "2026-10-31",
+          "verified_days": 90,
           "partial_days": 0,
           "unverified_days": 0,
-          "ranges": [],
-          "evidence_loaded_at": null,
-          "note": "Complete synthetic fixture"
+          "ranges": [
+            {
+              "start": "2026-08-03",
+              "end": "2026-10-31",
+              "status": "verified"
+            }
+          ],
+          "evidence_loaded_at": "2026-10-31T20:00:00Z",
+          "note": "Every requested calendar day is verified in this complete synthetic fixture; not live market evidence."
         },
         "filters": {
           "dataset": "rentals",
           "group_by": "contract_version",
           "bedrooms": [
             "2"
-          ]
+          ],
+          "location": "JLT",
+          "reference_date": "2026-10-31",
+          "period": {
+            "type": "rolling_days",
+            "days": 90
+          }
         },
         "eligibility": "Eligible synthetic fixture records only",
         "definitions": [
@@ -286,13 +340,24 @@
         "comparison_coverage": null,
         "comparison": null,
         "change_pct": {},
-        "matched_locations": [],
+        "matched_locations": [
+          {
+            "area": "Synthetic district for Jumeirah Lakes Towers",
+            "master_project": "Jumeirah Lakes Towers",
+            "district": "Synthetic district for Jumeirah Lakes Towers",
+            "community": "Jumeirah Lakes Towers",
+            "method": "synthetic_confirmed_crosswalk",
+            "records": 20
+          }
+        ],
         "sources": {
           "Synthetic fixture; not live market evidence": 20
         },
-        "release_id": null,
-        "release_built_at": null,
-        "limitations": []
+        "release_id": "synthetic-market-fixture-v2",
+        "release_built_at": "2026-10-31T20:00:00Z",
+        "limitations": [
+          "Synthetic fixture only; these figures are not live market evidence. No wider-district-only rows are included."
+        ]
       }
     },
     "forbidden_output": []
@@ -325,16 +390,22 @@
         },
         "coverage": {
           "status": "complete",
-          "data_from": null,
-          "data_to": null,
-          "covered_from": null,
-          "covered_to": null,
-          "verified_days": 0,
+          "data_from": "2026-04-01",
+          "data_to": "2026-09-30",
+          "covered_from": "2026-04-01",
+          "covered_to": "2026-09-30",
+          "verified_days": 183,
           "partial_days": 0,
           "unverified_days": 0,
-          "ranges": [],
-          "evidence_loaded_at": null,
-          "note": "Complete synthetic fixture"
+          "ranges": [
+            {
+              "start": "2026-04-01",
+              "end": "2026-09-30",
+              "status": "verified"
+            }
+          ],
+          "evidence_loaded_at": "2026-10-31T20:00:00Z",
+          "note": "Every requested calendar day is verified in this complete synthetic fixture; not live market evidence."
         },
         "filters": {
           "dataset": "rentals",
@@ -345,7 +416,9 @@
           "period": {
             "type": "previous_months",
             "months": 6
-          }
+          },
+          "location": "Business Bay",
+          "reference_date": "2026-10-31"
         },
         "eligibility": "Eligible synthetic fixture records only",
         "definitions": [
@@ -427,13 +500,24 @@
         "comparison_coverage": null,
         "comparison": null,
         "change_pct": {},
-        "matched_locations": [],
+        "matched_locations": [
+          {
+            "area": "Synthetic district for Business Bay",
+            "master_project": "Business Bay",
+            "district": "Synthetic district for Business Bay",
+            "community": "Business Bay",
+            "method": "synthetic_confirmed_crosswalk",
+            "records": 84
+          }
+        ],
         "sources": {
           "Synthetic fixture; not live market evidence": 84
         },
-        "release_id": null,
-        "release_built_at": null,
-        "limitations": []
+        "release_id": "synthetic-market-fixture-v2",
+        "release_built_at": "2026-10-31T20:00:00Z",
+        "limitations": [
+          "Synthetic fixture only; these figures are not live market evidence. No wider-district-only rows are included."
+        ]
       }
     },
     "forbidden_output": []

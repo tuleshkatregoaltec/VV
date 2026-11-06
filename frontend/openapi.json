@@ -9532,6 +9532,940 @@
 				}
 			}
 		},
+		"/api/v1/whatsapp/connections": {
+			"get": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "List Connections",
+				"operationId": "whatsapp-list_connections",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/ConnectionResponse"
+									},
+									"type": "array",
+									"title": "Response Whatsapp-List Connections"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Create Connection",
+				"operationId": "whatsapp-create_connection",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ConnectionCreate"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConnectionResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connections/{connection_id}": {
+			"get": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Get Connection",
+				"operationId": "whatsapp-get_connection",
+				"parameters": [
+					{
+						"name": "connection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Connection Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConnectionResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"patch": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Update Connection",
+				"operationId": "whatsapp-update_connection",
+				"parameters": [
+					{
+						"name": "connection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Connection Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ConnectionUpdate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConnectionResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Delete Connection",
+				"operationId": "whatsapp-delete_connection",
+				"parameters": [
+					{
+						"name": "connection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Connection Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connections/{connection_id}/knowledge": {
+			"put": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Update Knowledge",
+				"operationId": "whatsapp-update_knowledge",
+				"parameters": [
+					{
+						"name": "connection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Connection Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/KnowledgeUpdate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConnectionResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connections/{connection_id}/threads": {
+			"get": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "List Threads",
+				"operationId": "whatsapp-list_threads",
+				"parameters": [
+					{
+						"name": "connection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Connection Id"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/ThreadResponse"
+									},
+									"title": "Response Whatsapp-List Threads"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/threads/{thread_id}/takeover": {
+			"post": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Takeover",
+				"operationId": "whatsapp-takeover",
+				"parameters": [
+					{
+						"name": "thread_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Thread Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ThreadResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/threads/{thread_id}/resume": {
+			"post": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Resume",
+				"operationId": "whatsapp-resume",
+				"parameters": [
+					{
+						"name": "thread_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Thread Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ThreadResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/threads/{thread_id}/messages": {
+			"get": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "List Messages",
+				"operationId": "whatsapp-list_messages",
+				"parameters": [
+					{
+						"name": "thread_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Thread Id"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/CustomerMessageResponse"
+									},
+									"title": "Response Whatsapp-List Messages"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/notifications": {
+			"get": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Notifications",
+				"operationId": "whatsapp-notifications",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/CustomerMessageResponse"
+									},
+									"title": "Response Whatsapp-Notifications"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/messages/{message_id}/approve": {
+			"post": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Approve",
+				"operationId": "whatsapp-approve",
+				"parameters": [
+					{
+						"name": "message_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Message Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RevisionDecision"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CustomerMessageResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/messages/{message_id}/cancel": {
+			"post": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Cancel",
+				"operationId": "whatsapp-cancel",
+				"parameters": [
+					{
+						"name": "message_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Message Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RevisionDecision"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CustomerMessageResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/messages/{message_id}": {
+			"patch": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Edit",
+				"operationId": "whatsapp-edit",
+				"parameters": [
+					{
+						"name": "message_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Message Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ReplyEdit"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CustomerMessageResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/notifications/{message_id}/seen": {
+			"post": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Seen",
+				"operationId": "whatsapp-seen",
+				"parameters": [
+					{
+						"name": "message_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Message Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RevisionDecision"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CustomerMessageResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connections/{connection_id}/listings": {
+			"get": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "List Published Listings",
+				"operationId": "whatsapp-list_published_listings",
+				"parameters": [
+					{
+						"name": "connection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Connection Id"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/PublishedListingResponse"
+									},
+									"title": "Response Whatsapp-List Published Listings"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Publish Listing",
+				"operationId": "whatsapp-publish_listing",
+				"parameters": [
+					{
+						"name": "connection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Connection Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/PublishedListingCreate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublishedListingResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connections/{connection_id}/listings/{listing_id}": {
+			"put": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Renew Listing",
+				"operationId": "whatsapp-renew_listing",
+				"parameters": [
+					{
+						"name": "connection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Connection Id"
+						}
+					},
+					{
+						"name": "listing_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Listing Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/PublishedListingUpdate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublishedListingResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connections/{connection_id}/listings/{listing_id}/revoke": {
+			"post": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Revoke Listing",
+				"operationId": "whatsapp-revoke_listing",
+				"parameters": [
+					{
+						"name": "connection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Connection Id"
+						}
+					},
+					{
+						"name": "listing_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Listing Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RevisionDecision"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublishedListingResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/admin/organizations": {
 			"get": {
 				"tags": ["admin", "admin"],
@@ -11085,6 +12019,27 @@
 				"required": ["rooms", "count", "pct_of_total"],
 				"title": "AnalyticsUnitComposition"
 			},
+			"ApprovedFact": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"maxLength": 100,
+						"minLength": 1,
+						"pattern": "^[A-Za-z0-9_-]+$",
+						"title": "Id"
+					},
+					"text": {
+						"type": "string",
+						"maxLength": 1000,
+						"minLength": 1,
+						"title": "Text"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["id", "text"],
+				"title": "ApprovedFact"
+			},
 			"AreaDetailResponse": {
 				"properties": {
 					"area_name": {
@@ -12392,6 +13347,140 @@
 				"type": "object",
 				"required": ["project_id", "project_name", "area_name", "comparison_type", "score"],
 				"title": "ComparableProject"
+			},
+			"ConnectionCreate": {
+				"properties": {
+					"approved_knowledge": {
+						"items": {
+							"$ref": "#/components/schemas/ApprovedFact"
+						},
+						"type": "array",
+						"maxItems": 20,
+						"title": "Approved Knowledge"
+					},
+					"phone_number_id": {
+						"type": "string",
+						"maxLength": 128,
+						"minLength": 1,
+						"title": "Phone Number Id"
+					},
+					"account_id": {
+						"type": "string",
+						"maxLength": 128,
+						"minLength": 1,
+						"title": "Account Id"
+					},
+					"display_name": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Display Name"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["phone_number_id", "account_id", "display_name"],
+				"title": "ConnectionCreate"
+			},
+			"ConnectionResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"phone_number_id": {
+						"type": "string",
+						"title": "Phone Number Id"
+					},
+					"account_id": {
+						"type": "string",
+						"title": "Account Id"
+					},
+					"display_name": {
+						"type": "string",
+						"title": "Display Name"
+					},
+					"enabled": {
+						"type": "boolean",
+						"title": "Enabled"
+					},
+					"market_data_enabled": {
+						"type": "boolean",
+						"title": "Market Data Enabled",
+						"default": false
+					},
+					"approved_knowledge": {
+						"items": {
+							"$ref": "#/components/schemas/ApprovedFact"
+						},
+						"type": "array",
+						"title": "Approved Knowledge"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"phone_number_id",
+					"account_id",
+					"display_name",
+					"enabled",
+					"approved_knowledge",
+					"created_at",
+					"updated_at"
+				],
+				"title": "ConnectionResponse"
+			},
+			"ConnectionUpdate": {
+				"properties": {
+					"display_name": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200,
+								"minLength": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Display Name"
+					},
+					"enabled": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Enabled"
+					},
+					"market_data_enabled": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Market Data Enabled"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "ConnectionUpdate"
 			},
 			"ConversationListResponse": {
 				"properties": {
@@ -17586,6 +18675,159 @@
 				"type": "object",
 				"title": "CrmWorkspaceUpdate"
 			},
+			"CustomerMessageResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"thread_id": {
+						"type": "string",
+						"title": "Thread Id"
+					},
+					"content": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Content"
+					},
+					"sent_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Sent At"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"reply": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reply"
+					},
+					"risk": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Risk"
+					},
+					"topic": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Topic"
+					},
+					"reason": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reason"
+					},
+					"evidence_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Evidence Ids"
+					},
+					"revision": {
+						"type": "integer",
+						"title": "Revision"
+					},
+					"send_after": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Send After"
+					},
+					"notification_created_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Notification Created At"
+					},
+					"notification_seen_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Notification Seen At"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"thread_id",
+					"content",
+					"sent_at",
+					"status",
+					"reply",
+					"risk",
+					"topic",
+					"reason",
+					"evidence_ids",
+					"revision",
+					"send_after",
+					"notification_created_at",
+					"notification_seen_at",
+					"created_at",
+					"updated_at"
+				],
+				"title": "CustomerMessageResponse"
+			},
 			"CustomerPortalResponse": {
 				"properties": {
 					"url": {
@@ -21036,7 +22278,7 @@
 					},
 					"verification": {
 						"type": "string",
-						"enum": ["contact_exact", "name_only", "none"],
+						"enum": ["contact_exact", "name_only", "none", "not_checked", "stored"],
 						"title": "Verification",
 						"default": "none"
 					},
@@ -21351,6 +22593,22 @@
 				"required": ["success", "invitation_token"],
 				"title": "InviteUserResponse",
 				"description": "Response after creating an organization invitation"
+			},
+			"KnowledgeUpdate": {
+				"properties": {
+					"approved_knowledge": {
+						"items": {
+							"$ref": "#/components/schemas/ApprovedFact"
+						},
+						"type": "array",
+						"maxItems": 20,
+						"title": "Approved Knowledge"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["approved_knowledge"],
+				"title": "KnowledgeUpdate"
 			},
 			"LandSaleEvidence": {
 				"properties": {
@@ -27423,6 +28681,297 @@
 				"required": ["listing_id"],
 				"title": "PublishListing"
 			},
+			"PublishedListingCreate": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"location": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Location"
+					},
+					"property_type": {
+						"type": "string",
+						"enum": ["apartment", "villa", "townhouse", "penthouse", "office", "land", "other"],
+						"title": "Property Type"
+					},
+					"transaction": {
+						"type": "string",
+						"enum": ["sale", "rent"],
+						"title": "Transaction"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 20.0,
+								"minimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"price_aed": {
+						"type": "number",
+						"maximum": 1000000000.0,
+						"exclusiveMinimum": 0.0,
+						"title": "Price Aed",
+						"description": "Sale asking price or annual asking rent, in AED."
+					},
+					"area_sqft": {
+						"anyOf": [
+							{
+								"type": "number",
+								"maximum": 10000000.0,
+								"exclusiveMinimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Sqft"
+					},
+					"availability": {
+						"type": "string",
+						"enum": ["available", "under_offer", "unavailable"],
+						"title": "Availability"
+					},
+					"expires_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Expires At"
+					},
+					"approved_for_customer": {
+						"type": "boolean",
+						"const": true,
+						"title": "Approved For Customer"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"title",
+					"location",
+					"property_type",
+					"transaction",
+					"price_aed",
+					"availability",
+					"expires_at",
+					"approved_for_customer"
+				],
+				"title": "PublishedListingCreate"
+			},
+			"PublishedListingResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"connection_id": {
+						"type": "string",
+						"title": "Connection Id"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"location": {
+						"type": "string",
+						"title": "Location"
+					},
+					"property_type": {
+						"type": "string",
+						"enum": ["apartment", "villa", "townhouse", "penthouse", "office", "land", "other"],
+						"title": "Property Type"
+					},
+					"transaction": {
+						"type": "string",
+						"enum": ["sale", "rent"],
+						"title": "Transaction"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"price_aed": {
+						"type": "number",
+						"title": "Price Aed"
+					},
+					"area_sqft": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Sqft"
+					},
+					"availability": {
+						"type": "string",
+						"enum": ["available", "under_offer", "unavailable"],
+						"title": "Availability"
+					},
+					"revision": {
+						"type": "integer",
+						"title": "Revision"
+					},
+					"expires_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Expires At"
+					},
+					"revoked_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Revoked At"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"connection_id",
+					"title",
+					"location",
+					"property_type",
+					"transaction",
+					"bedrooms",
+					"price_aed",
+					"area_sqft",
+					"availability",
+					"revision",
+					"expires_at",
+					"revoked_at",
+					"created_at",
+					"updated_at"
+				],
+				"title": "PublishedListingResponse"
+			},
+			"PublishedListingUpdate": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"location": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Location"
+					},
+					"property_type": {
+						"type": "string",
+						"enum": ["apartment", "villa", "townhouse", "penthouse", "office", "land", "other"],
+						"title": "Property Type"
+					},
+					"transaction": {
+						"type": "string",
+						"enum": ["sale", "rent"],
+						"title": "Transaction"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 20.0,
+								"minimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"price_aed": {
+						"type": "number",
+						"maximum": 1000000000.0,
+						"exclusiveMinimum": 0.0,
+						"title": "Price Aed",
+						"description": "Sale asking price or annual asking rent, in AED."
+					},
+					"area_sqft": {
+						"anyOf": [
+							{
+								"type": "number",
+								"maximum": 10000000.0,
+								"exclusiveMinimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Sqft"
+					},
+					"availability": {
+						"type": "string",
+						"enum": ["available", "under_offer", "unavailable"],
+						"title": "Availability"
+					},
+					"expires_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Expires At"
+					},
+					"approved_for_customer": {
+						"type": "boolean",
+						"const": true,
+						"title": "Approved For Customer"
+					},
+					"expected_revision": {
+						"type": "integer",
+						"minimum": 1.0,
+						"title": "Expected Revision"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"title",
+					"location",
+					"property_type",
+					"transaction",
+					"price_aed",
+					"availability",
+					"expires_at",
+					"approved_for_customer",
+					"expected_revision"
+				],
+				"title": "PublishedListingUpdate"
+			},
 			"RadarBuildingPin": {
 				"properties": {
 					"location_id": {
@@ -28171,6 +29720,38 @@
 				],
 				"title": "RentalSummary",
 				"description": "Summary KPI metrics for rental analytics"
+			},
+			"ReplyEdit": {
+				"properties": {
+					"expected_revision": {
+						"type": "integer",
+						"minimum": 1.0,
+						"title": "Expected Revision"
+					},
+					"reply": {
+						"type": "string",
+						"maxLength": 4000,
+						"minLength": 1,
+						"title": "Reply"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["expected_revision", "reply"],
+				"title": "ReplyEdit"
+			},
+			"RevisionDecision": {
+				"properties": {
+					"expected_revision": {
+						"type": "integer",
+						"minimum": 1.0,
+						"title": "Expected Revision"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["expected_revision"],
+				"title": "RevisionDecision"
 			},
 			"RoomAnalytics": {
 				"properties": {
@@ -29553,6 +31134,51 @@
 				"required": ["session_id"],
 				"title": "SyncAfterCheckoutRequest",
 				"description": "Request to sync after checkout"
+			},
+			"ThreadResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"connection_id": {
+						"type": "string",
+						"title": "Connection Id"
+					},
+					"sender": {
+						"type": "string",
+						"title": "Sender"
+					},
+					"paused": {
+						"type": "boolean",
+						"title": "Paused"
+					},
+					"opted_out": {
+						"type": "boolean",
+						"title": "Opted Out"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"connection_id",
+					"sender",
+					"paused",
+					"opted_out",
+					"created_at",
+					"updated_at"
+				],
+				"title": "ThreadResponse"
 			},
 			"TransactionListResponse": {
 				"properties": {

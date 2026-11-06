@@ -416,6 +416,8 @@ function nextActionOf(e: InboundEnquiryResponse): string {
 
 function knownOf(e: InboundEnquiryResponse): string {
 	const o = e.ownership_enrichment
+	if (o?.verification === 'not_checked') return 'Ownership not checked'
+	if (o?.verification === 'stored' && o.matched) return 'Ownership on file'
 	if (!o?.matched) return 'Not on file'
 	return o.reasons?.[0] ?? 'Matches an owner on file'
 }

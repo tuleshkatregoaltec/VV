@@ -16,6 +16,11 @@ def main():
     parser.add_argument("--case", action="append", dest="case_ids")
     parser.add_argument("--data-context", default="local-mutable-warehouse")
     parser.add_argument("--bindings")
+    parser.add_argument("--model")
+    parser.add_argument("--prior")
+    parser.add_argument("--snapshot")
+    parser.add_argument("--flow-case", action="append")
+    parser.add_argument("--routing-mode", choices=["existing", "typed"], default="typed")
     parser.add_argument("--references")
     parser.add_argument("--reviews")
     parser.add_argument("--baseline")
@@ -82,6 +87,11 @@ def main():
                 args.case_ids,
                 data_context=args.data_context,
                 bindings_path=args.bindings,
+                model=args.model,
+                prior=args.prior,
+                snapshot_path=args.snapshot,
+                flow_case_ids=args.flow_case,
+                routing_mode=args.routing_mode,
             )
         )
         return

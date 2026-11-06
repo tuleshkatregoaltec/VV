@@ -74,6 +74,31 @@ function serve(routes: Record<string, unknown>) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('CRM leads from /api/v1/crm/inbound', () => {
+	it.each([
+		['not_checked', false, 'Ownership not checked'],
+		['stored', true, 'Ownership on file']
+	] as const)('keeps real leads and labels %s ownership accurately', async (verification, matched, label) => {
+		serve({
+			'/api/v1/crm/inbound/enquiries': {
+				enquiries: [
+					enquiry({
+						ownership_enrichment: {
+							verification,
+							matched,
+							reasons: [label]
+						}
+					})
+				],
+				total: 1,
+				summary: {}
+			}
+		})
+		const res = await backend.listLeads({})
+		expect(res.items).toHaveLength(1)
+		expect(res.items[0].name).toBe('Omar Khan')
+		expect(res.items[0].known).toBe(label)
+	})
+
 	it('asks only for leads, so Inbox contacts cannot crowd them out of the page', async () => {
 		const get = serve({ '/api/v1/crm/inbound/enquiries': { enquiries: [], total: 0, summary: {} } })
 		await backend.listLeads({})

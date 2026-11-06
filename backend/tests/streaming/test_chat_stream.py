@@ -11,12 +11,68 @@ from app.chat.dependencies import ChatDependencies
 
 @pytest.fixture(autouse=True)
 def offline_admission(monkeypatch):
+    monkeypatch.setattr(service.settings, "ASSISTANT_ENABLED", True)
+    monkeypatch.setattr(service.settings, "ASSISTANT_TYPED_ROUTING_ENABLED", False)
     monkeypatch.setattr(service.admission, "acquire", AsyncMock(return_value="lease"))
     monkeypatch.setattr(service.admission, "finish", AsyncMock())
 
 
+async def test_disabled_rollout_never_reserves_quota_or_saves_a_message(monkeypatch):
+    monkeypatch.setattr(service.settings, "ASSISTANT_ENABLED", False)
+    monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=True))
+    save = AsyncMock()
+    monkeypatch.setattr(service, "add_message", save)
+    events = [event async for event in service.stream_chat_response(None, 3, "hello", "u", "o")]
+    assert decode(events) == [{"type": "error", "error": "The assistant is not enabled yet."}]
+    service.admission.acquire.assert_not_awaited()
+    save.assert_not_awaited()
+
+
 def decode(events):
     return [json.loads(event.removeprefix("data: ").strip()) for event in events]
+
+
+async def test_typed_rollout_preserves_stream_and_accounts_for_routing_usage(monkeypatch):
+    from pydantic_ai.models.test import TestModel
+
+    from app.chat import routing
+
+    monkeypatch.setattr(service.settings, "ASSISTANT_TYPED_ROUTING_ENABLED", True)
+    monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=True))
+    monkeypatch.setattr(service, "get_conversation_messages", AsyncMock(return_value=[]))
+    save = AsyncMock()
+    monkeypatch.setattr(service, "add_message", save)
+    legacy = AsyncMock(side_effect=AssertionError("Rollout must use the typed router"))
+    monkeypatch.setattr(service, "agent", SimpleNamespace(run=legacy))
+    with (
+        routing.router_agent.override(
+            model=TestModel(
+                custom_output_args={
+                    "decision": "route",
+                    "workflows": ["market"],
+                    "unavailable_reason": None,
+                }
+            )
+        ),
+        routing.market_agent.override(
+            model=TestModel(call_tools=[], custom_output_text="Scope unavailable")
+        ),
+    ):
+        events = [
+            event
+            async for event in service.stream_chat_response(
+                AsyncMock(), 3, "Dubai market", "u", "o"
+            )
+        ]
+    assert decode(events) == [
+        {"type": "thinking"},
+        {"type": "content", "content": "Scope unavailable"},
+        {"type": "done"},
+    ]
+    assert service.admission.finish.await_args.args[1].requests == 2
+    assert service.admission.finish.await_args.kwargs["successful"] is True
+    assert save.await_args_list[-1].args[3] == "Scope unavailable"
+    legacy.assert_not_awaited()
 
 
 async def test_missing_conversation_emits_only_error(monkeypatch):

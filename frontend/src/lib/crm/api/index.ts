@@ -1,17 +1,10 @@
-/**
- * CRM API. Every screen reads and writes through these functions only, and every value shown
- * comes from the Vitevue backend (./backend): leads, owners, imports, portal listings, the
- * agent's name, and what is built from them (Search, Matches, Home's new leads, the counts).
- *
- * Lease renewals come from the lease-expiry dataset (/api/v1/crm/renewals). Leads and its feed
- * strip also hold the Vitevue lease leads for the agent's areas (/renewal-leads).
- *
- * Areas with no backend endpoint yet (deals, calendar, the inbox's handout, the agency's
- * listings, portfolio, notifications, settings) read as empty, and their writes fail with a 501
- * so no screen reports a change that was not stored.
+/** CRM contracts use the backend by default. The isolated pilot can explicitly select
+ * fictional, read-only presentation fixtures; no fixture operation writes to the backend.
  */
+import { env } from '$env/dynamic/public'
 import { addDays } from '../format'
 import * as backend from './backend'
+import { createPresentationCrm } from './presentation'
 import type {
 	CalendarEvent,
 	CalendarSide,
@@ -154,7 +147,7 @@ async function counts(): Promise<NavCounts> {
 	}
 }
 
-export const crm = {
+const liveCrm = {
 	me: (): Promise<Me> => backend.me(),
 	counts,
 	home,
@@ -413,3 +406,11 @@ export const crm = {
 
 	connections: async (): Promise<Connection[]> => []
 }
+
+export type CrmApi = typeof liveCrm
+
+// Explicit opt-in for the isolated pilot; the normal API remains the default.
+export const crmPresentationMode = env.PUBLIC_CRM_PRESENTATION_MODE === 'true'
+export const crm: CrmApi = crmPresentationMode
+	? createPresentationCrm(liveCrm, backend.localToday())
+	: liveCrm
