@@ -298,6 +298,11 @@ async def message_exists(db, message_id):
 
 
 async def daily_counts(db, connection_id, since):
+    """Receipts that used a contact's automatic-reply allowance today.
+
+    Receipts that ended "ignored" (personal, off-topic, or on a paused/opted-out thread)
+    never earned an automatic reply, so they do not count.
+    """
     return dict(
         (
             await db.exec(
@@ -307,6 +312,7 @@ async def daily_counts(db, connection_id, since):
                 .where(
                     WhatsAppCustomerThread.connection_id == connection_id,
                     WhatsAppCustomerMessage.created_at >= since,
+                    WhatsAppCustomerMessage.status != "ignored",
                 )
                 .group_by(WhatsAppCustomerThread.sender)
             )

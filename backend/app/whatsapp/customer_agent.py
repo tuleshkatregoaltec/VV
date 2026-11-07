@@ -40,9 +40,10 @@ SETTINGS = OpenRouterModelSettings(
     openrouter_provider={"zdr": True, "data_collection": "deny"},
 )
 LIMITS = UsageLimits(request_limit=2, tool_calls_limit=0, total_tokens_limit=18000)
-# Chat admission allows one turn per agent and a daily allowance; a refusal costs nothing,
-# so the enquiry waits (text in memory only). The bound keeps the whole job, model calls
-# included, inside the classifier's 360-second deadline.
+# Chat admission allows one turn per agent and a daily allowance; a "busy" refusal costs
+# nothing, so the enquiry waits (text in memory only). The bound keeps the whole job, model
+# calls included, inside the classifier's 360-second deadline. An exhausted allowance does
+# not free up within that bound, so it goes to the agent at once.
 ADMISSION_WAIT_SECONDS = 240
 ADMISSION_FIRST_RETRY_SECONDS = 1.0
 ADMISSION_MAX_RETRY_SECONDS = 8.0
@@ -156,6 +157,9 @@ IDENTITY_SUMMARY = (
 IDENTITY_NOTICE = (
     "A contact asked whether replies are automated or from a real person. No automatic reply "
     "was sent and the thread is paused. Please answer this one yourself."
+)
+DRAFT_FAILED_SUMMARY = (
+    "Couldn't write a safe automatic reply to this enquiry. Please reply yourself."
 )
 
 
@@ -289,21 +293,36 @@ def unprocessed(error_code: str) -> CustomerDraft:
     )
 
 
+def draft_failed(message: str) -> CustomerDraft:
+    """An admitted enquiry whose draft could not be used: the agent gets it, never "ignored".
+
+    The suggested reply is a fixed holding line, so nothing model-written can go out.
+    """
+    specific = requests_human(message) or requires_approval(message)
+    return CustomerDraft(
+        reply=voice.fallback_holding(message),
+        risk="approval",
+        evidence_ids=[],
+        auto_eligible=False,
+        summary=_default_summary(message) if specific else DRAFT_FAILED_SUMMARY,
+    )
+
+
 class _NotAdmitted(Exception):
     def __init__(self, code: str):
         super().__init__(code)
         self.code = code
 
 
-async def _admitted_budget(stack: AsyncExitStack, *, wait: bool, **scope) -> RunUsage:
-    """Enter the shared chat budget, waiting with jittered back-off while it is refused."""
+async def _admitted_budget(stack: AsyncExitStack, **scope) -> RunUsage:
+    """Enter the shared chat budget, waiting with jittered back-off while it is busy."""
     waited, delay = 0.0, ADMISSION_FIRST_RETRY_SECONDS
     while True:
         try:
             return await stack.enter_async_context(operations.channel_budget(**scope))
         except operations.AdmissionRefused as exc:
             pause = delay * random.uniform(0.75, 1.25)
-            if not wait or waited + pause > ADMISSION_WAIT_SECONDS:
+            if exc.code != "busy" or waited + pause > ADMISSION_WAIT_SECONDS:
                 raise _NotAdmitted(exc.code) from None
         await _pause(pause)
         waited += pause
@@ -318,6 +337,7 @@ def render_plan(
     message: str = "",
     context: tuple[str, ...] = (),
     emoji: bool = False,
+    agent_name: str = "",
 ) -> CustomerDraft | None:
     """Turn a model plan into a sendable draft, or fail closed.
 
@@ -343,14 +363,14 @@ def render_plan(
         chosen = [sources[fact_id] for fact_id in plan.evidence_ids]
         if reply is None:
             reply = "\n\n".join(chosen)
-        elif _unusable(reply, chosen, context):
+        elif _unusable(reply, chosen, context, agent_name):
             # The model's wording cannot be trusted, so a person decides what goes out.
             kind, reply, summary = "handoff", None, _default_summary(message)
         if kind == "facts":
             evidence_ids = list(plan.evidence_ids)
     if kind == "clarify":
         detail = plan.missing_detail
-        if reply is None or _unusable(reply, [], context):
+        if reply is None or _unusable(reply, [], context, agent_name):
             reply = (
                 voice.fallback_question(detail, seed)
                 if detail in QUALIFICATION_QUESTIONS
@@ -358,7 +378,7 @@ def render_plan(
             )
         asked = detail if detail in QUALIFICATION_QUESTIONS else None
     if kind == "handoff":
-        if reply is None or _unusable(reply, [], context):
+        if reply is None or _unusable(reply, [], context, agent_name):
             reply = voice.fallback_holding(seed)
         candidate = voice.normalize_reply(plan.summary or "", emoji=False)
         summary = summary or (
@@ -384,8 +404,8 @@ def render_plan(
     )
 
 
-def _unusable(reply: str, chosen: list[str], context: tuple[str, ...]) -> bool:
-    found = voice.reply_violations(reply, sources=chosen, context=context)
+def _unusable(reply: str, chosen: list[str], context: tuple[str, ...], agent_name: str) -> bool:
+    found = voice.reply_violations(reply, sources=chosen, context=context, agent_name=agent_name)
     if found:
         logger.warning("WhatsApp customer reply rejected by output checks (%s)", ",".join(found))
     return bool(found)
@@ -403,12 +423,14 @@ async def build_customer_draft(
     voice_profile: dict | None = None,
     agent_name: str = "",
 ) -> CustomerDraft | None:
-    """Return no draft/notification for unsafe, off-topic or failed model execution.
+    """Return no draft/notification for unsafe or off-topic messages.
 
     A sincere identity question is the exception: whatever its topic, history or the model's
-    outcome, it returns a silent handoff so the thread pauses and the agent is told. A message
-    that could not be classified (admission still refused after a bounded wait, or the
-    classifier failed) returns `unprocessed`: also silent, paused and content-free.
+    outcome, it returns a silent handoff so the thread pauses and the agent is told; its text
+    is kept only when the classifier admits it as a property enquiry. A message that could not
+    be classified (admission refused, or the classifier failed) returns `unprocessed`: also
+    silent, paused and content-free. An admitted enquiry whose draft fails returns
+    `draft_failed`, so it reaches the agent too.
     """
     if not settings.ASSISTANT_ENABLED:
         return None
@@ -427,17 +449,14 @@ async def build_customer_draft(
                 return None
             if not accepted_history or not asked_question(accepted_history[-1], detail):
                 return None
-        if identity_question and accepted_history:
-            # Mid-conversation and sincere: say nothing, pause, and tell the agent.
-            return silent_handoff(store_content=True)
         profile = voice.prompt_voice(voice_profile, display_name=agent_name)
         context = {"message": message, "history": accepted_history}
         known = (message, *(item["content"] for item in accepted_history))
         async with AsyncExitStack() as stack:
-            # An identity question needs no model to pause and notify, so it never waits.
+            # An identity question waits too: only the classifier can say whether the rest of
+            # the message is a property enquiry whose text may be kept.
             usage = await _admitted_budget(
                 stack,
-                wait=not identity_question,
                 user_id=user_id,
                 organization_id=organization_id,
                 conversation_id=conversation_id,
@@ -449,7 +468,6 @@ async def build_customer_draft(
                     json.dumps(context, ensure_ascii=False), usage=usage, usage_limits=LIMITS
                 )
                 decision = TopicDecision.model_validate(classified.output)
-                stage = "draft"
                 logger.info(
                     "WhatsApp customer classification completed in %.3fs",
                     time.monotonic() - started,
@@ -460,6 +478,7 @@ async def build_customer_draft(
                     return silent_handoff(store_content=admitted(decision))
                 if not admitted(decision):
                     return None
+                stage = "draft"
                 risk = "approval" if requires_approval(message) else decision.risk
                 task: dict = {}
                 retrieved = []
@@ -498,7 +517,7 @@ async def build_customer_draft(
                     fallback=_fallback_plan(task, risk),
                 )
                 if plan is None:
-                    return None
+                    return draft_failed(message)
                 result = render_plan(
                     plan,
                     facts,
@@ -506,6 +525,7 @@ async def build_customer_draft(
                     message=message,
                     context=known,
                     emoji=profile["emoji"] == "light",
+                    agent_name=profile["agent_name"],
                 )
                 if result is not None:
                     result.evidence_snapshots = [
@@ -513,9 +533,10 @@ async def build_customer_draft(
                     ]
                 if result is None:
                     logger.warning("WhatsApp customer draft rejected by output validation")
+                    return draft_failed(message)
                 return result
     except _NotAdmitted as exc:
-        logger.warning("WhatsApp customer message not admitted after waiting (%s)", exc.code)
+        logger.warning("WhatsApp customer message not admitted (%s)", exc.code)
         if identity_question:
             return silent_handoff(store_content=False)
         return unprocessed(f"admission_{exc.code}")
@@ -524,8 +545,11 @@ async def build_customer_draft(
         logger.warning("WhatsApp customer generation failed (%s)", type(exc).__name__)
         if identity_question:
             return silent_handoff(store_content=False)
-        # Unclassified is not "personal": the agent is told, content-free. Failures before
-        # admission (revoked access, invalid knowledge) or after it fail closed as before.
+        # Unclassified is not "personal": the agent is told, content-free. An admitted
+        # enquiry whose drafting failed goes to the agent with its text. Failures before
+        # admission (revoked access, invalid knowledge) fail closed as before.
+        if stage == "draft":
+            return draft_failed(message)
         return unprocessed("classifier_failed") if stage == "classify" else None
 
 

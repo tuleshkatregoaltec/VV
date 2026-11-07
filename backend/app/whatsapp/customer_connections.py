@@ -13,6 +13,7 @@ from app.whatsapp import customer_graph as graph
 from app.whatsapp import customer_repository as repository
 from app.whatsapp import token_crypto
 from app.whatsapp.customer_models import WhatsAppConnection
+from app.whatsapp.customer_service import automation_state
 from app.whatsapp.models import utcnow
 
 logger = logging.getLogger(__name__)
@@ -306,6 +307,7 @@ async def agent_status(db, *, user_id, organization_id, config):
     total, blocked = await repository.contact_counts(db, row.id)
     await db.commit()
     health = row.health or {}
+    active, paused_reason = automation_state(row, config)
     return AgentConnectionStatus(
         state="connected" if row.status == "connected" else "disconnected",
         signup_configured=configured,
@@ -317,6 +319,8 @@ async def agent_status(db, *, user_id, organization_id, config):
         display_name=row.display_name,
         onboarding_type=row.onboarding_type,
         automation_enabled=row.enabled and row.status == "connected",
+        automation_active=active,
+        automation_paused_reason=paused_reason,
         connected_at=row.connected_at,
         disconnected_at=row.disconnected_at,
         last_account_event=row.last_account_event,
@@ -437,10 +441,12 @@ async def block_contacts(db, *, user_id, organization_id, request):
 # ─── Admin ────────────────────────────────────────────────────────────────────
 
 
-async def admin_connections(db):
+async def admin_connections(db, config=None):
     from app.auth.service import get_user_by_id
+    from app.config import settings
     from app.whatsapp.customer_models import AdminConnectionList, AdminConnectionRow
 
+    config = config or settings
     rows = await repository.admin_overview(db)
     emails = {}
     for user_id in {row["connection"].user_id for row in rows}:
@@ -453,6 +459,7 @@ async def admin_connections(db):
     items = []
     for row in rows:
         c = row["connection"]
+        active, paused_reason = automation_state(c, config)
         items.append(
             AdminConnectionRow(
                 connection_id=c.id,
@@ -466,6 +473,8 @@ async def admin_connections(db):
                 status=c.status,
                 onboarding_type=c.onboarding_type,
                 automation_enabled=c.enabled and c.status == "connected",
+                automation_active=active,
+                automation_paused_reason=paused_reason,
                 contacts_total=row["contacts_total"],
                 contacts_blocked=row["contacts_blocked"],
                 contacts_synced_at=c.contacts_synced_at,
@@ -478,7 +487,8 @@ async def admin_connections(db):
     return AdminConnectionList(
         total=len(items),
         connected=sum(item.status == "connected" for item in items),
-        automation_on=sum(item.automation_enabled for item in items),
+        automation_on=sum(item.automation_active for item in items),
+        automation_paused=sum(item.automation_paused_reason is not None for item in items),
         items=items,
     )
 

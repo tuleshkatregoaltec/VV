@@ -5,6 +5,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.core.dependencies import require_active_subscription
 from app.postgres import get_db_session
 from app.whatsapp import customer_router as routes
@@ -278,3 +279,57 @@ def test_whatsapp_customer_voice_is_bounded_and_cannot_carry_instructions(api, v
         client.put("/api/v1/whatsapp/connections/c/voice", json={"voice": voice}).status_code == 422
     )
     assert client.put("/api/v1/whatsapp/connections/c/voice", json=voice).status_code == 422
+
+
+def connection_row(**overrides):
+    values = dict(
+        id="c",
+        phone_number_id="p",
+        account_id="a",
+        display_name="Kian",
+        enabled=True,
+        status="connected",
+        market_data_enabled=False,
+        approved_knowledge=[],
+        reply_voice=None,
+        created_at=utcnow(),
+        updated_at=utcnow(),
+    )
+    return SimpleNamespace(**(values | overrides))
+
+
+def automation_fields(body):
+    return {key: body[key] for key in ("enabled", "automation_active", "automation_paused_reason")}
+
+
+# Legacy inbox toggle: the connection response must say whether replies really run,
+# not just echo the agent's own switch.
+AUTOMATION_CASES = [
+    # row overrides, ASSISTANT_ENABLED, WHATSAPP_CUSTOMER_AUTOMATION_ENABLED, expected
+    ({}, True, True, (True, True, None)),
+    ({}, False, True, (True, False, "assistant_disabled")),
+    ({}, True, False, (True, False, "intake_disabled")),
+    ({}, False, False, (True, False, "assistant_disabled")),
+    ({"enabled": False}, False, False, (False, False, None)),
+]
+
+
+@pytest.mark.parametrize("overrides,assistant,intake,expected", AUTOMATION_CASES)
+def test_whatsapp_customer_connection_responses_report_whether_replies_are_running(
+    api, monkeypatch, overrides, assistant, intake, expected
+):
+    _, client = api
+    row = connection_row(**overrides)
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", assistant)
+    monkeypatch.setattr(settings, "WHATSAPP_CUSTOMER_AUTOMATION_ENABLED", intake)
+    monkeypatch.setattr(routes.service, "list_connections", AsyncMock(return_value=[row]))
+    monkeypatch.setattr(routes.service, "get_connection", AsyncMock(return_value=row))
+    monkeypatch.setattr(routes.service, "update_connection", AsyncMock(return_value=row))
+    base = "/api/v1/whatsapp/connections"
+    bodies = [
+        client.get(base).json()[0],
+        client.get(base + "/c").json(),
+        client.patch(base + "/c", json={"market_data_enabled": False}).json(),
+    ]
+    for body in bodies:
+        assert tuple(automation_fields(body).values()) == expected

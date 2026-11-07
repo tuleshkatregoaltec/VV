@@ -333,3 +333,380 @@ def test_feature_word_from_facts_still_cannot_deny_automation():
         "This isn't automated, I'm just fast", sources=["Automated parking."], context=[]
     )
     assert "self_identity" in found
+
+
+# Gap 4: when admission is refused or the text is screened out, no model sees the message and
+# this pattern alone decides whether the agent is told. Realistic WhatsApp shorthand, typos
+# and mixed-language phrasings must therefore all be caught here.
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Shorthand and typos
+        "u a bot?",
+        "ur a bot lol",
+        "youre a bot",
+        "is ths a bot",
+        "are yuo a bot",
+        "are you a bott",
+        "bot?",
+        "chatbot?",
+        "is it a bot",
+        "automated reply?",
+        "auto reply?",
+        "u human?",
+        "r u real?",
+        "r u a real agent",
+        "is this a real agent",
+        "is it a real person",
+        "are you a live agent",
+        "live agent?",
+        "are you an assistant?",
+        "am i chatting w a bot",
+        "am i talking to a computer",
+        "talking to a bot again?",
+        "is this chat gpt",
+        "is this gemini?",
+        "did a bot write this",
+        "did AI write this",
+        "was this written by AI",
+        "this is written by chatgpt",
+        "pls tell me ur not a bot",
+        "you're not a bot are you?",
+        "not a bot right?",
+        # Who is on the other end
+        "who am I chatting with",
+        "who am i talking to?",
+        "who am i speaking to",
+        "who am I talking with right now?",
+        "Is this an automated reply?",
+        "are these automated messages?",
+        "انتي حقيقية؟",
+        "انت وسيط حقيقي؟",
+        "is it AI?",
+        "is it ai lol",
+        "whos this?",
+        "who is this",
+        "is there a real person?",
+        "is there a human there?",
+        "any human here?",
+        "anyone real there?",
+        # Arabic-English and Arabic
+        "habibi r u bot",
+        "inta bot?",
+        "enta bot wala insan",
+        "انت بوت؟",
+        "بوت؟",
+        "انت حقيقي؟",
+        "مين معي؟",
+        "مين معاي",
+        # Hinglish
+        "kya ye automatic reply hai",
+        "kya aap real ho",
+        "kya main bot se baat kar raha hoon",
+    ],
+)
+def test_whatsapp_shorthand_and_mixed_language_identity_questions_are_detected(text):
+    assert voice.asks_if_automated(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "is the AI-powered smart home included?",
+        "are you available tomorrow",
+        "is this real estate agency licensed",
+        "is this real estate agent licensed?",
+        "is the AI smart lock included",
+        "who is the developer?",
+        "who is this listing with",
+        "who's the agent for this villa?",
+        "is this the real price?",
+        "are you an agent or the owner?",
+        "are you the owner",
+        "are you there?",
+        "is anyone there?",
+        "Is Gemini Tower freehold?",
+        "I want a human",
+        "Can I speak to the agent?",
+        "Does the gym have automated lights?",
+        "is the building in Al Barsha?",
+        # Asking whether a price, photo or listing is genuine is about the property, and a
+        # false match pauses the thread, so these must keep their automated reply.
+        "هذا السعر حقيقي؟",
+        "هذه الصور حقيقية؟",
+        "هل هذا العرض حقيقي؟",
+        "هذا الإعلان حقيقي؟",
+        "هذه الشقة حقيقية ولا وهمية؟",
+        "Is it an actual person's home?",
+        "Is this actual agent or owner?",
+        "Is this a real person's listing or agency?",
+        "Do you send automated messages about new listings?",
+        "Is there an automatic reply to maintenance requests?",
+        "Who am I talking to about the viewing?",
+        "is it AI smart home enabled?",
+        "enta real estate agent?",
+        "Talking to an AI developer about smart homes",
+        "Talking to a machine learning engineer, he wants 2BR",
+        "Did a machine write the contract?",
+        "Are you real estate?",
+        "Are you real estate broker?",
+        "Are the automated messages from the building management?",
+        "Who am I speaking with regarding the mortgage?",
+        "انت متأكد السعر حقيقي؟",
+        "Is this a real person's apartment or company-owned?",
+        "is it robot parking?",
+    ],
+)
+def test_property_questions_that_share_identity_words_are_not_identity_questions(text):
+    assert not voice.asks_if_automated(text)
+
+
+# Gap 5: implicit claims to be a person are still claims about what is writing the reply.
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "Ha, all me!",
+        "it's all me, three bedrooms and a garden",
+        "I'm the one replying",
+        "I'm the one texting you, it has a garden",
+        "yes it's me personally",
+        "me personally, yes",
+        "no bots here",
+        "100% human",
+        "just me here",
+        "only me on this phone",
+        "I type these myself",
+        "I reply to all of these myself",
+        "yep, typed it myself",
+        "I personally write these",
+        "written by me",
+        "flesh and blood, don't worry",
+        "living, breathing agent here",
+        "nobody else but me",
+        "the real me, promise",
+    ],
+)
+def test_implicit_human_claims_are_rejected(reply):
+    found = voice.reply_violations(reply, sources=SOURCES, context=[])
+    assert {"human_claim", "self_identity"} & set(found), found
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "I'll send you the floor plan",
+        "it's me, Sara from X Realty",
+        "Hi, it's me Sara from X Realty. Is this to buy or to rent?",
+        "Sara here, is this to buy or to rent?",
+        "This is Sara from X Realty",
+        "Let me check with the owner and get back to you.",
+    ],
+)
+def test_the_agents_own_introduction_and_normal_lines_pass(reply):
+    assert voice.reply_violations(reply, sources=[], context=[], agent_name="Sara") == []
+
+
+def test_first_name_of_the_agent_is_enough_for_an_introduction():
+    found = voice.reply_violations(
+        "it's me, Sara. Is this to buy or to rent?",
+        sources=[],
+        context=[],
+        agent_name="Sara Khan",
+    )
+    assert found == []
+
+
+@pytest.mark.parametrize("agent_name", ["", "Kian"])
+def test_introduction_under_any_other_name_is_rejected(agent_name):
+    found = voice.reply_violations(
+        "it's me, Sara from X Realty", sources=[], context=[], agent_name=agent_name
+    )
+    assert "self_identity" in found
+
+
+@pytest.mark.parametrize(
+    "reply", ["it's really me, Sara", "yes it's me personally, Sara", "Sara here, all me"]
+)
+def test_agent_name_does_not_excuse_a_human_claim(reply):
+    found = voice.reply_violations(reply, sources=[], context=[], agent_name="Sara")
+    assert "self_identity" in found
+
+
+# The intro allowance hides "it's me, <name>" from the self-identity check, so a name that is
+# itself bot talk ("Bot", or a WhatsApp display name like "Vitevue AI") would let the reply
+# admit being automated. Such names must never earn the allowance.
+@pytest.mark.parametrize(
+    ("agent_name", "intro"),
+    [
+        ("Bot", "Bot"),
+        ("AI", "AI"),
+        ("Robot", "Robot"),
+        ("ChatGPT", "ChatGPT"),
+        ("Assistant", "Assistant"),
+        ("Vitevue AI", "Vitevue AI"),
+        ("AI Realty", "AI"),
+        ("AI Realty", "AI Realty"),
+        ("SaraBot", "SaraBot"),
+        ("Realtybot", "Realtybot"),
+        ("PropGPT", "PropGPT"),
+        ("Virtual Assistant", "Virtual Assistant"),
+        ("Automated Agent", "Automated"),
+        ("Human", "Human"),
+        ("Sara.ai", "Sara.ai"),
+    ],
+)
+def test_a_bot_like_name_never_excuses_an_introduction(agent_name, intro):
+    found = voice.reply_violations(
+        f"Hi, it's me, {intro}. When would you like to view?",
+        sources=[],
+        context=[],
+        agent_name=agent_name,
+    )
+    assert "self_identity" in found, found
+
+
+def test_the_plain_first_name_of_a_branded_display_name_still_introduces():
+    found = voice.reply_violations(
+        "Hi, it's me, Vitevue. When would you like to view?",
+        sources=[],
+        context=[],
+        agent_name="Vitevue AI",
+    )
+    assert found == []
+
+
+@pytest.mark.parametrize("reply", ["ChatGPT here, when would you like to view?", "I'm ChatGPT"])
+def test_naming_a_chat_model_as_the_writer_is_an_ai_reference(reply):
+    assert "ai_reference" in voice.reply_violations(reply, sources=[], context=[])
+
+
+# Dotted "A.I." used to be unreachable: a word boundary never follows "." before "?", a
+# space or the end of the text.
+@pytest.mark.parametrize(
+    "text",
+    [
+        "are you a.i.?",
+        "Are you an A.I.?",
+        "r u a.i.",
+        "written by a.i.?",
+        "talking to a.i.?",
+        "is this a.i. or a person?",
+        "u ai?",
+        "ur ai?",
+    ],
+)
+def test_dotted_and_shorthand_ai_identity_questions_are_detected(text):
+    assert voice.asks_if_automated(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "is it A.I. smart home enabled?",
+        "Talking to an A.I. developer about smart homes",
+        "u ai powered building?",
+    ],
+)
+def test_dotted_ai_in_property_questions_is_not_an_identity_question(text):
+    assert not voice.asks_if_automated(text)
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "Sara A.I. here. When would you like to view?",
+        "Hi, it's me, Sara A.I. When would you like to view?",
+        "A.I. here, when would you like to view?",
+    ],
+)
+def test_dotted_ai_in_a_reply_is_flagged(reply):
+    found = voice.reply_violations(reply, sources=[], context=[], agent_name="Sara")
+    assert "self_identity" in found, found
+
+
+# The "it's me, <name>" allowance must not hide an assistant-like name.
+@pytest.mark.parametrize(
+    ("agent_name", "intro"),
+    [
+        ("Sara A.I.", "Sara A.I."),
+        ("Siri", "Siri"),
+        ("Alexa", "Alexa"),
+        ("Claude", "Claude"),
+        ("Gemini", "Gemini"),
+        ("Copilot", "Copilot"),
+        ("Jarvis", "Jarvis"),
+        ("Virtual Sara", "Virtual Sara"),
+        ("Digital Sara", "Digital Sara"),
+        ("Robo Sara", "Robo Sara"),
+        ("Droid", "Droid"),
+        ("Android", "Android"),
+    ],
+)
+def test_an_assistant_like_name_never_earns_the_introduction_allowance(agent_name, intro):
+    found = voice.reply_violations(
+        f"Hi, it's me, {intro}. When would you like to view?",
+        sources=[],
+        context=[],
+        agent_name=agent_name,
+    )
+    assert "self_identity" in found, found
+
+
+@pytest.mark.parametrize(
+    ("agent_name", "reply"),
+    [
+        ("Sara", "it's me, Sara. When would you like to view?"),
+        ("Ahmed", "Hi, it's me, Ahmed from X Realty. When would you like to view?"),
+        ("Priya", "it's me, Priya. When would you like to view?"),
+        ("Sara Khan", "it's me, Sara Khan. When would you like to view?"),
+        ("Sara Talbot", "it's me, Sara. When would you like to view?"),
+        ("Sara Khan", "it's me, Sara Khan from X Realty."),
+        # "X here" and "This is X from Y" never needed the allowance and must stay clean.
+        ("Claude", "Claude here, when would you like to view?"),
+        ("Claude", "This is Claude from X Realty. When would you like to view?"),
+        ("Gemini", "Gemini here, when would you like to view?"),
+        ("Alexa", "Alexa here, when would you like to view?"),
+        ("Talbot", "Talbot here, when would you like to view?"),
+        ("Talbot", "This is Talbot from X Realty. When would you like to view?"),
+    ],
+)
+def test_real_names_keep_working_and_name_here_is_not_newly_rejected(agent_name, reply):
+    assert voice.reply_violations(reply, sources=[], context=[], agent_name=agent_name) == []
+
+
+# Claims of being a person that follow an allowed introduction are still claims.
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "Yes, it's me, Sara, in person.",
+        "It's me, Sara, typing this.",
+        "Of course it's me, Sara, who else?",
+        "It's me, Sara - not some script.",
+        "Sara here, in person.",
+        "Sara here, typing this.",
+        "Sara here - not some script.",
+        "Sara here, not automated.",
+        "Sara here, who else would it be?",
+        "Sara here, no script, just me typing.",
+        "I'm typing this myself.",
+    ],
+)
+def test_human_claims_after_an_introduction_are_flagged(reply):
+    found = voice.reply_violations(reply, sources=[], context=[], agent_name="Sara")
+    assert "self_identity" in found, found
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "I'll meet you in person at the viewing",
+        "Happy to show it in person",
+        "I'm typing up the offer now",
+        "Sara here, happy to show you around in person on Friday.",
+        "Sara here. Who else is coming to the viewing?",
+        "It's me, Sara. I'm typing up the details now.",
+        "In person viewings are possible on Friday, when suits you?",
+    ],
+)
+def test_ordinary_lines_with_similar_words_still_pass(reply):
+    assert voice.reply_violations(reply, sources=[], context=[], agent_name="Sara") == []

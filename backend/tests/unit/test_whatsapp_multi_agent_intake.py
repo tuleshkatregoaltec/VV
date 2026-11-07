@@ -9,13 +9,16 @@ real tables.
 import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic_ai.usage import RunUsage
 
 from app.config import settings
+from app.whatsapp import customer_agent
 from app.whatsapp import customer_automation as automation
 from app.whatsapp import customer_intake as intake
 from app.whatsapp import customer_queue as queue
@@ -347,6 +350,37 @@ async def test_property_content_is_persisted_only_after_classification_admits_it
     final = store.all(WhatsAppCustomerMessage)[0]
     assert final.content == PROPERTY
     assert final.topic == "real_estate" and final.status == "auto_pending"
+
+
+async def test_admitted_enquiry_whose_draft_fails_reaches_the_agent_not_ignored(store, monkeypatch):
+    """Real agent pipeline: the classifier admits the enquiry, the drafter fails."""
+
+    @asynccontextmanager
+    async def budget(**scope):
+        yield RunUsage()
+
+    async def classify(prompt, **kwargs):
+        return SimpleNamespace(
+            output={"topic": "property", "confidence": 0.99, "risk": "routine", "reason": "t"}
+        )
+
+    monkeypatch.setattr(customer_agent.settings, "ASSISTANT_ENABLED", True)
+    monkeypatch.setattr(customer_agent.operations, "channel_budget", budget)
+    monkeypatch.setattr(customer_agent, "classifier", lambda: SimpleNamespace(run=classify))
+    failing = SimpleNamespace(run=AsyncMock(side_effect=RuntimeError("provider down")))
+    monkeypatch.setattr(customer_agent, "drafter", lambda: failing)
+    connection = agent(store, "a", "waba-a", "phone-a")
+    await intake.receive_customer(
+        event(("waba-a", [change("phone-a", messages=[message(PROPERTY)])])), config()
+    )
+    await intake.drain()
+    final = store.all(WhatsAppCustomerMessage)[0]
+    assert final.status == "approval_required", final.status
+    assert final.topic == "real_estate" and final.content == PROPERTY
+    assert final.handoff_summary == customer_agent.DRAFT_FAILED_SUMMARY
+    assert final.notification_created_at is not None
+    thread = store.all(WhatsAppCustomerThread)[0]
+    assert thread.paused and thread.connection_id == connection.id
 
 
 async def test_webhooks_route_to_the_owning_agent_by_phone_number_and_waba(store, monkeypatch):

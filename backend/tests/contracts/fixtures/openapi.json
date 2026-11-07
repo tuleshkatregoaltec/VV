@@ -12903,6 +12903,11 @@
             "type": "integer",
             "title": "Automation On"
           },
+          "automation_paused": {
+            "type": "integer",
+            "title": "Automation Paused",
+            "default": 0
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/AdminConnectionRow"
@@ -12993,6 +12998,26 @@
           "automation_enabled": {
             "type": "boolean",
             "title": "Automation Enabled"
+          },
+          "automation_active": {
+            "type": "boolean",
+            "title": "Automation Active",
+            "default": false
+          },
+          "automation_paused_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "assistant_disabled",
+                  "intake_disabled"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Automation Paused Reason"
           },
           "contacts_total": {
             "type": "integer",
@@ -13182,6 +13207,26 @@
             "type": "boolean",
             "title": "Automation Enabled",
             "default": false
+          },
+          "automation_active": {
+            "type": "boolean",
+            "title": "Automation Active",
+            "default": false
+          },
+          "automation_paused_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "assistant_disabled",
+                  "intake_disabled"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Automation Paused Reason"
           },
           "connected_at": {
             "anyOf": [
@@ -14937,6 +14982,26 @@
           "enabled": {
             "type": "boolean",
             "title": "Enabled"
+          },
+          "automation_active": {
+            "type": "boolean",
+            "title": "Automation Active",
+            "default": false
+          },
+          "automation_paused_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "assistant_disabled",
+                  "intake_disabled"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Automation Paused Reason"
           },
           "market_data_enabled": {
             "type": "boolean",

@@ -1,8 +1,9 @@
 """Many buyers writing to one agent at once: no enquiry may be silently dropped.
 
 Chat admission allows one assistant turn per user at a time and a daily token allowance.
-Simultaneous enquiries to one agent must wait for admission (text in memory only), and an
-enquiry that still cannot be classified ends in a visible, content-free notice.
+Simultaneous enquiries to one agent must wait for a busy admission (text in memory only), an
+exhausted allowance goes to the agent at once, and an enquiry that still cannot be classified
+ends in a visible, content-free notice.
 """
 
 import asyncio
@@ -131,17 +132,14 @@ async def test_personal_message_in_a_burst_is_still_ignored(models, waits, monke
     assert results[0].reply and results[1] is None
 
 
-@pytest.mark.parametrize("code", ["busy", "allowance"])
-async def test_admission_that_never_frees_ends_in_a_content_free_notice(
-    models, waits, monkeypatch, code
-):
-    gate = OneTurnPerUser(refuse=code)
+async def test_admission_that_never_frees_ends_in_a_content_free_notice(models, waits, monkeypatch):
+    gate = OneTurnPerUser(refuse="busy")
     monkeypatch.setattr(customer.operations, "channel_budget", gate.budget)
     result = await build("Is the villa still available?")
     assert result.silent and result.reply is None
     assert result.store_content is False
     assert result.reason == queue.UNPROCESSED_REASON
-    assert result.error_code == f"admission_{code}"
+    assert result.error_code == "admission_busy"
     assert models == [], "nothing reaches a model without admission"
     assert len(waits) >= 3, "it waits and retries before giving up"
     assert sum(waits) <= customer.ADMISSION_WAIT_SECONDS
@@ -158,7 +156,7 @@ async def test_admission_wait_is_bounded_in_real_time(models, monkeypatch):
     assert result.reason == queue.UNPROCESSED_REASON
 
 
-async def test_identity_question_still_pauses_at_once_when_admission_is_busy(
+async def test_identity_question_still_pauses_when_busy_admission_never_frees(
     models, waits, monkeypatch
 ):
     gate = OneTurnPerUser(refuse="busy")
@@ -166,7 +164,7 @@ async def test_identity_question_still_pauses_at_once_when_admission_is_busy(
     result = await build("Are you a bot?")
     assert result.silent and result.store_content is False
     assert result.reason == "identity_question"
-    assert waits == []
+    assert models == [] and sum(waits) <= customer.ADMISSION_WAIT_SECONDS
 
 
 async def test_classifier_failure_is_a_content_free_notice_not_a_silent_drop(waits, monkeypatch):
@@ -244,3 +242,44 @@ async def test_messages_in_one_thread_are_classified_in_arrival_order(monkeypatc
     await intake.drain()
     assert [m for m in order if m.startswith("m")] == ["m1", "m2", "m3"]
     assert "x1" in order
+
+
+# --- Gap 7: identity + enquiry under contention, and exhausted allowance -------------------
+
+
+async def test_identity_question_with_an_enquiry_waits_for_admission_and_keeps_it(
+    models, waits, monkeypatch
+):
+    """Another enquiry holds the agent's one turn; the mixed message must wait for it rather
+    than lose its property text to a content-free notice."""
+    gate = OneTurnPerUser(turn_seconds=0.05)
+    monkeypatch.setattr(customer.operations, "channel_budget", gate.budget)
+    mixed = "are you a bot? also what's the price of 2BR in Marina"
+    other, result = await asyncio.gather(
+        build("Is the villa still available?", conversation_id=1),
+        build(mixed, conversation_id=2),
+    )
+    assert other.reply
+    assert result.silent and result.reply is None and result.reason == "identity_question"
+    assert result.store_content is True, "an admitted property enquiry keeps its text"
+    assert mixed in models and gate.refusals > 0 and waits
+
+
+async def test_exhausted_allowance_reaches_the_agent_without_waiting(models, waits, monkeypatch):
+    """A spent daily allowance does not free up within minutes: tell the agent at once."""
+    gate = OneTurnPerUser(refuse="allowance")
+    monkeypatch.setattr(customer.operations, "channel_budget", gate.budget)
+    result = await build("Is the villa still available?")
+    assert result.silent and result.reply is None and result.store_content is False
+    assert result.reason == queue.UNPROCESSED_REASON
+    assert result.error_code == "admission_allowance"
+    assert waits == [] and gate.refusals == 1 and models == []
+
+
+async def test_identity_question_on_exhausted_allowance_pauses_at_once(models, waits, monkeypatch):
+    gate = OneTurnPerUser(refuse="allowance")
+    monkeypatch.setattr(customer.operations, "channel_budget", gate.budget)
+    result = await build("r u real?")
+    assert result.silent and result.store_content is False
+    assert result.reason == "identity_question"
+    assert waits == [] and models == []

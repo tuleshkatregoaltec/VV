@@ -119,4 +119,4 @@ async def request_contacts_sync(
 @admin_router.get("/connections", response_model=AdminConnectionList)
 async def admin_connections(db: AsyncSession = Depends(get_db_session)):
     """How many agents are connected, and the state of each number."""
-    return await connections.admin_connections(db)
+    return await connections.admin_connections(db, config=settings)

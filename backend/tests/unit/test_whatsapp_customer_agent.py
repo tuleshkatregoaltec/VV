@@ -225,12 +225,12 @@ async def test_model_can_escalate_but_never_lower_classifier_risk(setup_agents):
 )
 async def test_factual_drafts_need_unique_approved_evidence(setup_agents, ids):
     setup_agents(plan={"response_kind": "facts", "evidence_ids": ids, "risk": "routine"})
-    assert await build() is None
+    assert_handed_to_agent(await build())
 
 
 async def test_empty_knowledge_cannot_invent_availability(setup_agents):
     setup_agents()
-    assert await build("Is the villa available?", knowledge=[]) is None
+    assert_handed_to_agent(await build("Is the villa available?", knowledge=[]))
     setup_agents(plan={"response_kind": "handoff", "evidence_ids": [], "risk": "routine"})
     draft = await build("Is the villa available?", knowledge=[])
     assert draft.reply in voice.HOLDING_LINES and draft.summary
@@ -290,9 +290,8 @@ async def test_bad_knowledge_fails_before_any_provider_call(setup_agents, knowle
 
 async def test_total_reply_bound_prevents_oversized_multi_fact_output(setup_agents):
     setup_agents(plan={"response_kind": "facts", "evidence_ids": ["a", "b"], "risk": "routine"})
-    assert (
+    assert_handed_to_agent(
         await build(knowledge=[{"id": "a", "text": "a" * 2000}, {"id": "b", "text": "b" * 2000}])
-        is None
     )
 
 
@@ -301,16 +300,22 @@ async def test_provider_failures_and_malformed_outputs_fail_closed(setup_agents,
     classifier, drafter, _ = setup_agents()
     agent = classifier if stage == "classifier" else drafter
     agent.run = AsyncMock(side_effect=RuntimeError("private provider payload"))
-    # Nothing is ever sent. An unclassified message is not silently dropped either: the
-    # agent gets a content-free notice. A failed draft after admission still fails closed.
-    expected = customer.UNPROCESSED_REASON if stage == "classifier" else None
-    assert getattr(await build(), "reason", None) == expected
+
+    # Nothing model-written is ever sent, and nothing is silently dropped: an unclassified
+    # message gives the agent a content-free notice; an admitted enquiry whose draft failed
+    # goes to the agent with a fixed holding line.
+    def check(result):
+        if stage == "classifier":
+            assert result.reason == customer.UNPROCESSED_REASON
+            assert result.reply is None and result.store_content is False
+        else:
+            assert_handed_to_agent(result)
+
+    check(await build())
     assert "RuntimeError" in caplog.text
     assert "private provider payload" not in caplog.text
     agent.run = AsyncMock(return_value=SimpleNamespace(output={"reply": "Invented availability"}))
-    result = await build()
-    assert getattr(result, "reason", None) == expected
-    assert result is None or (result.reply is None and result.store_content is False)
+    check(await build())
 
 
 async def test_no_private_history_or_identity_is_sent_to_customer_models(setup_agents):
@@ -408,7 +413,7 @@ async def test_shared_budget_cannot_allow_an_extra_model_request(setup_agents, m
         yield usage
 
     monkeypatch.setattr(customer.operations, "channel_budget", nearly_exhausted)
-    assert await build() is None
+    assert_handed_to_agent(await build())
     assert usage.requests == 2, "The draft request must be rejected before contacting a provider"
 
 
@@ -597,7 +602,7 @@ async def test_missing_detail_cannot_be_smuggled_into_other_response_kinds(setup
             "risk": "routine",
         }
     )
-    assert await build() is None
+    assert_handed_to_agent(await build())
 
 
 async def test_qualification_selector_cannot_supply_arbitrary_generated_text(setup_agents):
@@ -609,7 +614,7 @@ async def test_qualification_selector_cannot_supply_arbitrary_generated_text(set
             "risk": "routine",
         }
     )
-    assert await build() is None
+    assert_handed_to_agent(await build())
 
 
 async def test_sensitive_search_request_needs_human_approval(setup_agents):
@@ -791,16 +796,16 @@ PROPERTY_HISTORY = [
     ],
 )
 async def test_sincere_identity_question_in_a_property_thread_gets_no_reply(setup_agents, message):
-    classifier, drafter, budgets = setup_agents()
-    classifier.run, drafter.run = AsyncMock(), AsyncMock()
+    # A bare identity question is not itself a property enquiry, so even mid-thread its
+    # text is not kept: the agent gets the content-free notice.
+    _, drafter, _ = setup_agents(topic="uncertain", confidence=0.4)
+    drafter.run = AsyncMock()
     draft = await build(message, history=PROPERTY_HISTORY)
     assert draft.silent and draft.reply is None
     assert draft.risk == "approval" and not draft.auto_eligible and draft.evidence_ids == []
-    assert draft.reason == "identity_question" and "bot or a real person" in draft.summary
-    assert draft.store_content is True  # it continues an accepted property conversation
-    classifier.run.assert_not_called()
+    assert draft.reason == "identity_question" and draft.summary == customer.IDENTITY_NOTICE
+    assert draft.store_content is False
     drafter.run.assert_not_called()
-    assert not budgets
 
 
 async def test_identity_question_alongside_a_property_enquiry_is_silent(setup_agents):
@@ -1023,3 +1028,110 @@ async def test_drafted_denial_of_automation_is_never_auto_sent(setup_agents, rep
     draft = await build()
     assert draft is not None and not draft.auto_eligible and draft.risk == "approval"
     assert draft.reply != reply and draft.reply in voice.HOLDING_LINES
+
+
+async def test_drafted_introduction_with_the_agents_own_name_is_kept(setup_agents):
+    reply = "Hi, it's me Sara. It has three bedrooms and a garden."
+    setup_agents(
+        plan={
+            "response_kind": "facts",
+            "evidence_ids": ["villa-1"],
+            "risk": "routine",
+            "reply": reply,
+        }
+    )
+    draft = await customer.build_customer_draft(
+        message="How many bedrooms does the villa have?",
+        knowledge=FACTS,
+        history=[],
+        agent_name="Sara",
+        **SCOPE,
+    )
+    assert draft.reply == reply and draft.auto_eligible
+
+
+# Gap 6: an identity question mid-thread used to be stored without classification, so a
+# personal message could be kept as topic "real_estate". The text is kept only when the
+# classifier admits this message itself as a property enquiry; otherwise the agent gets the
+# content-free notice. Either way nothing is drafted or sent.
+@pytest.mark.parametrize(
+    "topic,confidence,kept",
+    [
+        ("property", 0.99, True),
+        ("personal", 0.99, False),
+        ("mixed", 0.99, False),
+        ("uncertain", 0.4, False),
+        ("property", 0.8, False),
+    ],
+)
+async def test_mid_thread_identity_question_keeps_text_only_when_classified_as_property(
+    setup_agents, topic, confidence, kept
+):
+    _, drafter, _ = setup_agents(topic=topic, confidence=confidence)
+    drafter.run = AsyncMock()
+    draft = await build("are you a bot? my wife says you are", history=PROPERTY_HISTORY)
+    assert draft.silent and draft.reply is None and draft.reason == "identity_question"
+    assert draft.store_content is kept
+    assert draft.summary == (customer.IDENTITY_SUMMARY if kept else customer.IDENTITY_NOTICE)
+    drafter.run.assert_not_called()
+
+
+async def test_mid_thread_identity_question_is_content_free_when_the_classifier_fails(
+    setup_agents,
+):
+    classifier, drafter, _ = setup_agents()
+    classifier.run = AsyncMock(side_effect=RuntimeError("provider down"))
+    drafter.run = AsyncMock()
+    draft = await build("Are you a bot?", history=PROPERTY_HISTORY)
+    assert draft.silent and draft.store_content is False
+    drafter.run.assert_not_called()
+
+
+# Gap 8: an admitted property enquiry whose draft cannot be used must still reach the agent,
+# never end as "ignored". The buyer gets nothing automatic; the agent gets a fixed holding
+# line to approve or replace, and a short summary of why.
+def assert_handed_to_agent(draft):
+    assert draft is not None, "an admitted enquiry must not vanish"
+    assert not draft.silent and draft.reply in voice.HOLDING_LINES
+    assert draft.risk == "approval" and not draft.auto_eligible
+    assert draft.evidence_ids == [] and draft.store_content
+    assert draft.summary
+
+
+async def test_admitted_enquiry_whose_draft_fails_output_checks_reaches_the_agent(setup_agents):
+    setup_agents(plan={"response_kind": "facts", "evidence_ids": ["unapproved"], "risk": "routine"})
+    draft = await build()
+    assert_handed_to_agent(draft)
+    assert draft.summary == customer.DRAFT_FAILED_SUMMARY
+
+
+async def test_admitted_enquiry_whose_drafter_fails_reaches_the_agent(setup_agents, caplog):
+    _, drafter, _ = setup_agents()
+    drafter.run = AsyncMock(side_effect=RuntimeError("private provider payload"))
+    draft = await build()
+    assert_handed_to_agent(draft)
+    assert "private provider payload" not in caplog.text
+
+
+async def test_unexpected_error_while_drafting_reaches_the_agent(setup_agents, monkeypatch):
+    setup_agents()
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(customer, "render_plan", broken)
+    assert_handed_to_agent(await build())
+
+
+async def test_failed_draft_of_a_sensitive_enquiry_keeps_the_specific_summary(
+    setup_agents, monkeypatch
+):
+    setup_agents()
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(customer, "render_plan", broken)
+    draft = await build("Can I speak to the agent about the villa?")
+    assert_handed_to_agent(draft)
+    assert draft.summary == "The customer asked to speak to you directly."

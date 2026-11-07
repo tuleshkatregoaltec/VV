@@ -7,7 +7,11 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.whatsapp import customer_repository as repository
-from app.whatsapp.customer_models import CustomerMessageResponse, WhatsAppConnection
+from app.whatsapp.customer_models import (
+    ConnectionResponse,
+    CustomerMessageResponse,
+    WhatsAppConnection,
+)
 from app.whatsapp.models import utcnow
 
 
@@ -42,6 +46,23 @@ def message_response(row):
         response.reason = None
         response.handoff_summary = None
         response.evidence_ids = []
+    return response
+
+
+def automation_state(row, config):
+    """(active, paused_reason): the agent's switch alone is not proof replies are running."""
+    if not (row.enabled and row.status == "connected"):
+        return False, None
+    if not config.ASSISTANT_ENABLED:
+        return False, "assistant_disabled"
+    if not config.WHATSAPP_CUSTOMER_AUTOMATION_ENABLED:
+        return False, "intake_disabled"
+    return True, None
+
+
+def connection_response(row):
+    response = ConnectionResponse.model_validate(row)
+    response.automation_active, response.automation_paused_reason = automation_state(row, settings)
     return response
 
 

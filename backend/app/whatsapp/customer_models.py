@@ -247,7 +247,11 @@ class ConnectionResponse(CustomerResponse):
     phone_number_id: str
     account_id: str
     display_name: str
+    # The agent's own switch. `automation_active` is whether replies are really running;
+    # `automation_paused_reason` says why a switched-on number is not.
     enabled: bool
+    automation_active: bool = False
+    automation_paused_reason: Literal["assistant_disabled", "intake_disabled"] | None = None
     market_data_enabled: bool = False
     approved_knowledge: list[ApprovedFact]
     reply_voice: VoiceProfile | None = None
@@ -427,7 +431,11 @@ class AgentConnectionStatus(BaseModel):
     display_phone_number: str | None = None
     display_name: str | None = None
     onboarding_type: str | None = None
+    # The agent's own switch. `automation_active` is whether replies are really running;
+    # `automation_paused_reason` says why a switched-on number is not ("assistant_disabled" or "intake_disabled").
     automation_enabled: bool = False
+    automation_active: bool = False
+    automation_paused_reason: Literal["assistant_disabled", "intake_disabled"] | None = None
     connected_at: datetime | None = None
     disconnected_at: datetime | None = None
     last_account_event: str | None = None
@@ -487,6 +495,8 @@ class AdminConnectionRow(BaseModel):
     status: str
     onboarding_type: str | None
     automation_enabled: bool
+    automation_active: bool = False
+    automation_paused_reason: Literal["assistant_disabled", "intake_disabled"] | None = None
     contacts_total: int
     contacts_blocked: int
     contacts_synced_at: datetime | None
@@ -500,4 +510,6 @@ class AdminConnectionList(BaseModel):
     total: int
     connected: int
     automation_on: int
+    # Switched on by the agent but not running because the assistant is disabled server-wide.
+    automation_paused: int = 0
     items: list[AdminConnectionRow]

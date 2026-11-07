@@ -362,7 +362,15 @@ async def test_daily_cap_disabled_binding_and_thread_history_isolation(pg_sessio
         await receipt(pg_session, c, sender="919000000000")
     capped = raw_message("Property?", "919000000000")
     assert await enqueue(pg_session, c, [capped]) == []
-    assert await pg_session.get(WhatsAppCustomerMessage, capped["id"]) is None
+    # Over the cap the enquiry still reaches the agent: kept without its text, thread paused.
+    row = await pg_session.get(WhatsAppCustomerMessage, capped["id"])
+    assert row.status == "approval_required" and row.content is None
+    assert row.error_code == "daily_limit"
+    assert row.handoff_summary and row.notification_created_at is not None
+    assert (await pg_session.get(WhatsAppCustomerThread, row.thread_id)).paused
+    again = raw_message("Another property?", "919000000000")
+    assert await enqueue(pg_session, c, [again]) == []
+    assert (await pg_session.get(WhatsAppCustomerMessage, again["id"])).status == "ignored"
     stop = raw_message("STOP", "919000000000")
     assert await enqueue(pg_session, c, [stop]) == []
     assert (await pg_session.get(WhatsAppCustomerMessage, stop["id"])).status == "ignored"
@@ -548,7 +556,8 @@ async def test_publication_rechecked_at_send_boundary(pg_session, monkeypatch, c
     await pg_session.commit()
     await step(c)
     await refresh(pg_session, message)
-    assert message.status == "cancelled" and message.reason == "evidence_changed"
+    assert message.status == "approval_required" and message.reason == "evidence_changed"
+    assert message.notification_created_at is not None and message.reply != item.text
     automation.send_reply.assert_not_called()
 
 
@@ -586,5 +595,6 @@ async def test_market_snapshot_rechecked_at_send_boundary(pg_session, monkeypatc
     await pg_session.commit()
     await step(c)
     await refresh(pg_session, message)
-    assert message.status == "cancelled" and message.reason == "evidence_changed"
+    assert message.status == "approval_required" and message.reason == "evidence_changed"
+    assert message.notification_created_at is not None and message.reply != item.text
     automation.send_reply.assert_not_called()

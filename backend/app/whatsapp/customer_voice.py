@@ -32,11 +32,11 @@ MAX_REPLY_CHARS = 700
 # --- Does the buyer sincerely want to know whether they are talking to a machine? -----
 _IDENTITY = re.compile(
     r"(?i)\b(?:are|r|is)\s+(?:you|u|this|that)\s+(?:an?\s+|the\s+|really\s+|actually\s+|just\s+)?"
-    r"(?:(?:real|actual|live)\s+)?(?:(?:ai|a\.i\.|bot|chat\s?bot|chatgpt|gpt|automated|"
-    r"automatic|auto[- ]?repl\w+|auto[- ]?respon\w+|virtual\s+assistant|artificial)\b"
+    r"(?:(?:real|actual|live)\s+)?(?:(?:ai|bot|chat\s?bot|chatgpt|gpt|automated|"
+    r"automatic|auto[- ]?repl\w+|auto[- ]?respon\w+|virtual\s+assistant|artificial)\b|a\.i\.(?!\w)"
     # "Are you the person handling this?" is a property question, not an identity one.
     r"|(?:human|person|robot|machine|computer|program|software)\b(?=\s*(?:[?.!,;)]|$)|\s+(?:or|and|right|really|please|lol|haha|btw|by)\b))"
-    r"|\bare\s+(?:you|u)\s+(?:really\s+)?real\b"
+    r"|\bare\s+(?:you|u)\s+(?:really\s+)?real\b(?!\s+estate)"
     r"|\byou(?:'re|\s+are|r)\s+(?:just\s+)?(?:an?\s+)?(?:bot|robot|ai|chat\s?bot|machine)\b"
     r"|\bam\s+i\s+(?:talking|speaking|chatting|texting|messaging|writing)\s+(?:to|with)\s+"
     r"(?:an?\s+|the\s+)?(?:real\s+|actual\s+|live\s+)?(?:ai|bot|robot|chat\s?bot|human|person|"
@@ -49,8 +49,12 @@ _IDENTITY = re.compile(
     r"|\bbot\s+ya\s+(?:insaan|insan|human)\b|\b(?:insaan|insan)\s+ya\s+bot\b"
     # Arabic
     r"|(?:أنت|انت|أنتي|انتي|هذا|هذه|أتحدث|اتحدث|أكلم|اكلم|أتكلم|اتكلم)\s.{0,30}"
-    r"(?:روبوت|(?<![؀-ۿ])بوت(?![؀-ۿ])|ذكاء\s+(?:اصطناعي|صناعي)|إنسان|انسان|"
+    # "؟" is in the Arabic block but is not \w, so "انت بوت؟" still matches.
+    r"(?:روبوت|(?<!\w)بوت(?!\w)|ذكاء\s+(?:اصطناعي|صناعي)|إنسان|انسان|"
     r"شخص|آلي|برنامج)"
+    # "Real" is about the buyer's "you" ("انت حقيقي؟", "انت وسيط حقيقي؟"), never about "this"
+    # ("هذا السعر حقيقي؟" asks whether the price is genuine).
+    r"|(?<!\w)(?:أنت|انت|أنتي|انتي)\s+(?:\w+\s+)?حقيقي(?:ة)?(?!\w)"
     # Hindi
     r"|(?:आप|तुम|यह|ये)\s.{0,25}(?:बॉट|बोट|रोबोट|एआई|चैटबॉट|इंसान|मशीन)"
     # Russian
@@ -85,7 +89,7 @@ _IDENTITY_INDIRECT = re.compile(
     r"|\b(?:sound|seem|feel|look)s?\s+(?:so\s+|very\s+|a\s+bit\s+|kind\s+of\s+|kinda\s+)?"
     r"(?:automated|robotic|scripted|generated|artificial)\b"
     r"|\bor\s+(?:an?\s+|the\s+|your\s+|some\s+)?(?:assistant|bot|robot|ai|a\.i\.|machine|chat\s?bot|"
-    r"computer|program|auto[- ]?reply|auto[- ]?responder)\b(?!')"
+    r"computer|program|auto[- ]?reply|auto[- ]?responder)(?!\w)(?!')"
     # Arabic
     r"|(?:إنسان|انسان|شخص)\s+حقيقي"
     r"|(?:يرد|يجاوب|يكتب|ترد|تجاوب|تكتب)\s.{0,10}(?:إنسان|انسان|شخص|آلة|الة|روبوت|بوت)"
@@ -125,6 +129,56 @@ _IDENTITY_INDIRECT = re.compile(
     r"чатгпт|бот\w*|gpt)\b"
     r"|\b(?:похоже|похож|похожи|звучит|звучите)\s+(?:на\s+)?(?:бот\w*|робот\w*|машин\w*|ии)\b"
     r"|\bили\s+(?:ассистент|помощник|бот|робот|ии|нейросеть|программа)\b"
+    # WhatsApp shorthand and typos ("u a bot?", "are yuo a bott", "r u real?")
+    r"|\b(?:are|r|ar|is)\s+(?:you|u|yu|yuo|yo|ths|this|tis|it)\s+(?:an?\s+|the\s+)?"
+    r"(?:real\s+|actual\s+|live\s+)?(?:bot+|chat\s?bot+|chat\s?gpt|gpt|"
+    # "AI" and "robot" also describe features ("is it AI smart home enabled?").
+    r"(?:ai|a\.i\.|robot)(?=\s*(?:[?.!,]|$)|\s+(?:or|right|really|lol|haha|agent|assistant|"
+    r"bot|chat\w*)\b))(?!\w)"
+    r"|\b(?:u|ur|youre|ure)\s+(?:an?\s+)?(?:bot+|robot|chat\s?bot|human|real\b(?!\s+estate)|"
+    r"(?:ai|a\.i\.)(?=\s*(?:[?.!,]|$)|\s+(?:or|right|really|lol|haha)\b))"
+    r"|\b(?:are|r)\s+(?:you|u)\s+(?:really\s+)?real\b(?!\s+estate)"
+    r"|\b(?:are|r|is)\s+(?:you|u|this|it)\s+(?:an?\s+)?(?:real|actual|live)\s+"
+    # Not "a real person's listing" or "actual agent or owner?": those ask about the property.
+    r"(?:agent|broker|person|human|guy)\b(?!'s|\s+or\s+(?:the\s+|an?\s+)?(?:owner|landlord|"
+    r"agency|agent|broker|developer|company|office)\b)"
+    r"|\b(?:are|r)\s+(?:you|u)\s+(?:an?\s+|the\s+)?assistant\s*(?:[?.!]|$)"
+    r"|\b(?:talking|speaking|chatting|texting|messaging)\s+(?:to|with|w/?)\s+(?:an?\s+|the\s+)?"
+    r"(?:bot+|chat\s?bot|chat\s?gpt|gpt|"
+    # Not "talking to an AI developer" or "a machine learning engineer".
+    r"(?:robot|ai|machine|computer|program)(?=\s*(?:[?.!,]|$)|\s+(?:or|again|right|really|now|"
+    r"here|lol|haha)\b)|a\.i\.(?=\s*(?:[?.!,]|$)|\s+(?:or|again|right|really|now|here|lol|haha)\b))(?!\w)"
+    r"|\bwho\s+am\s+i\s+(?:talking|speaking|chatting|texting|messaging|writing)"
+    # Not "who am I talking to about the viewing?": that asks which agent handles it.
+    r"(?:\s+(?:to|with|w/?))?(?=\s*(?:[?.!,]|$)|\s+(?:here|now|rn|exactly|actually|really|"
+    r"right|lol|haha|pls|please|a|an)\b)"
+    r"|\bwho(?:'s|s|\s+is)\s+this\s*(?:\?|[.!]*\s*$)"
+    r"|\b(?:is\s+this|are\s+(?:you|u)|r\s+u)\s+(?:chat\s+gpt|gemini|copilot)\b"
+    r"(?!\s+(?:tower|towers|building|residence|residences|heights))"
+    r"|\b(?:did|does|do)\s+(?:an?\s+)?(?:bot|robot|ai|a\.i\.|chat\s?gpt|gpt|machine|computer|"
+    r"program)\s+(?:write|wrote|type|generate|send)\b"
+    # The message itself, not "did a machine write the contract?"
+    r"(?=\s*(?:[?.!,]|$)|\s+(?:this|that|it|these|those|ur|your|me|the\s+(?:message|reply|"
+    r"text|response|answer)s?)\b)"
+    r"|\b(?:written|typed|generated)\s+by\s+(?:an?\s+)?(?:bot|robot|ai|a\.i\.|chat\s?gpt|gpt|"
+    r"machine|computer|program)(?!\w)"
+    r"|\bnot\s+(?:an?\s+)?(?:bot+|robot|chat\s?bot)\b(?!\s+vacuum)"
+    r"|^\W*(?:bot+|chat\s?bot|robot|ai|a\.i\.|human)\s*\?"
+    # "automated reply?" or "is this an automatic reply", but not "do you send automated
+    # messages about new listings?" or "is there an automatic reply to maintenance requests?"
+    r"|(?:^\W*|\b(?:is\s+(?:this|that|it)|this\s+is|it'?s|that'?s|are\s+(?:these|those|they|you)"
+    r"|ye|yeh|yah|kya)\s+(?:(?:an?|the|just|some|ur|your|kind|sort|of|like)\s+){0,3})"
+    r"(?:automated|automatic|auto)[- ]?(?:repl(?:y|ies)|responses?|messages?|answers?)\b"
+    r"|\b(?:is\s+there|any|anyone|anybody)\s+(?:an?\s+)?(?:real|human|actual\s+person|"
+    r"real\s+person|live\s+person)(?:\s+(?:here|there|on\s+\w+(?:\s+\w+)?))?\s*\?"
+    # Arabizi ("inta bot?") and Levantine "who's with me"
+    r"|\b(?:inta|enta|inti|enti|anta|enty|inty)\b.{0,15}\b(?:bot+|robot|ai|insan|ensan|human|"
+    r"7a2i2i|ha2i2i|haqiqi|real\b(?!\s+estate))\b"
+    r"|(?<!\w)مين\s+(?:معي|معاي|معايا|انت|أنت|حضرتك|يرد|بيرد|يكتب)(?!\w)"
+    r"|^\W*بوت\W*$"
+    # Hinglish
+    r"|\b(?:aap|ap|tum|tu)\b.{0,10}\breal\s+(?:ho|hai|hain)\b"
+    r"|\b(?:bot|robot|ai|machine|insaan|insan|human|computer)\s+se\s+baat\b"
 )
 
 
@@ -141,7 +195,7 @@ _AI_REFERENCE = re.compile(
     r"(?:ai|a\.i\.|bot|chatbot|robot|virtual|digital|automated|language model|assistant)\b"
     r"|\b(?:chat\s?bot|language model|artificial intelligence|virtual assistant|"
     r"digital assistant|ai assistant|ai-powered|auto-?repl(?:y|ies)|machine learning|llm|gpt|"
-    r"openai|automated (?:reply|response|message|assistant|system|service))\b"
+    r"openai|chat\s?gpt|automated (?:reply|response|message|assistant|system|service))\b"
     r"|مساعد\s+افتراضي|ذكاء\s+(?:اصطناعي|صناعي)|روبوت|رد\s+(?:آلي|تلقائي)"
     r"|(?<![؀-ۿ])بوت(?![؀-ۿ])"
     r"|(?<!\w)бот(?:а|ом)?(?!\w)|робот|нейросет|искусственн\w+\s+интеллект"
@@ -162,20 +216,44 @@ _HUMAN_CLAIM = re.compile(
     r"|मैं\s+(?:एक\s+)?(?:असली\s+)?इंसान|असली\s+इंसान|मैं\s+(?:बॉट|रोबोट)\s+नहीं"
     r"|\bmain\s+(?:insaan|insan)\b|\bmain\s+bot\s+nahi\b"
 )
+# Left in the text where `_without_introduction` removed "it's me, <agent>", so the screening
+# patterns can still see what follows the introduction.
+_INTRODUCTION = "\ue000"
 # Any talk about what is writing the reply is the agent's to answer, never the drafter's:
 # claims, denials and jokes alike ("not a bot, just quick", "it's really me").
 _SELF_IDENTITY = re.compile(
-    r"(?i)\b(?:bots?|chat\s?bots?|robots?|robotic|humans?|ai|a\.i\.|artificial\s+intelligence|"
+    r"(?i)\b(?:bots?|chat\s?bots?|robots?|robotic|humans?|ai|artificial\s+intelligence|"
     r"auto[- ]?repl\w*|auto[- ]?respon\w*)\b"
+    # "A.I." ends in a dot, so no word boundary follows it.
+    r"|(?<!\w)a\.i\.?(?!\w)"
     r"|\b(?:real|actual|live|living)\s+(?:person|people|human|humans|man|woman|guy)\b"
     r"|\bperson\s+(?:is\s+)?(?:replying|typing|answering|texting|writing|here|behind)\b"
     r"|\b(?:it'?s|it\s+is|i'?m|i\s+am)\s+(?:an?\s+|the\s+)(?:person|man|woman|guy)\b"
     r"|\b(?:it'?s|it\s+is|this\s+is)\s+(?:really\s+|actually\s+|just\s+|truly\s+|only\s+|"
     r"definitely\s+)?me\b|\breally\s+me\b|\bme\s+(?:typing|replying|texting|writing)\b"
-    r"|\b(?:not|no|isn'?t|is\s+not|aren'?t|never|nothing)\s+(?:an?\s+|the\s+|at\s+all\s+)?"
+    r"|\b(?:not|no|isn'?t|is\s+not|aren'?t|never|nothing)\s+"
+    r"(?:(?:an?|the|some|any|just|one\s+of\s+those|at\s+all)\s+)*"
     r"(?:automat\w*|assistants?|machines?|programs?|computers?|software|script\w*)\b"
     r"|\b(?:automat\w*|machine|assistant)\s+(?:nahi|nahin|nai)\b"
     r"|\b(?:insaan|insan)\b|\bmain\s+hi\s+(?:hoon|hu|hun)\b"
+    # Implicit claims: "Ha, all me!", "I'm the one replying", "typed it myself"
+    r"|\ball\s+me\b|\breal\s+me\b|\bflesh\s+and\s+blood\b|\bliving,?\s+breathing\b"
+    r"|\bthe\s+one\s+(?:replying|typing|texting|writing|answering|responding|messaging)\b"
+    r"|\b(?:just|only)\s+me\s+(?:here|on\s+(?:this|the|my)\b|typing|replying|texting|writing)"
+    r"|\b(?:nobody|no\s+one|no-one)\s+(?:else\s+)?but\s+me\b"
+    r"|(?:^|\b(?:yes|yep|yeah|yup|it'?s|just|only)\W+)me\s+personally\b"
+    r"|\b(?:typ\w*|writ\w*|wrote|repl(?:y|ies|ying))\b[^.!?\n]{0,25}\b(?:myself|by\s+hand)\b"
+    r"|\b(?:written|typed)\s+by\s+me\b"
+    r"|\bpersonally\s+(?:typ\w*|writ\w*|wrote|repl(?:y|ies|ying))\b"
+    # Claims that follow an introduction ("it's me, Sara, in person", "Sara here, typing
+    # this"). `_INTRODUCTION` stands in for a stripped "it's me, <name>". Plain "in person"
+    # is a viewing format and stays allowed ("happy to show it in person").
+    rf"|(?:{_INTRODUCTION}|\bhere|\bme|\byes|\byep|\byeah|\byup|\bof\s+course|\bi'?m)\W+"
+    r"in\s+person(?=\s*(?:[.!?]|$))"
+    rf"|(?:{_INTRODUCTION}|\bhere)[\s,;:\-\u2013\u2014]+(?:(?:i'?m\s+)?(?:typing|writing|replying|texting)"
+    r"\s+(?:this|these|it)\b|who\s+else\b)"
+    r"|\bwho\s+else\s+would\s+(?:it\s+be|be\s+(?:replying|typing|writing)|reply|answer|type|write)\b"
+    r"|\bi'?m\s+typing\s+this\b"
     # Arabic
     r"|روبوت|(?<!\w)بوت(?!\w)|(?<!\w)آلي(?!\w)|تلقائي|ذكاء\s+(?:اصطناعي|صناعي)"
     r"|(?<!\w)(?:إنسان|انسان|بشر)(?!\w)|(?:شخص|إنسان|انسان)\s+حقيقي|(?<!\w)مساعد(?!\w)"
@@ -199,6 +277,54 @@ _TOKEN = re.compile(r"[\w'-]+")
 def _bigrams(text: str) -> set[tuple[str, str]]:
     words = _TOKEN.findall(text.lower())
     return set(zip(words, words[1:], strict=False))
+
+
+# Bot words hidden inside a name: "SaraBot", "Realtybot", "PropGPT".
+_BOT_IN_NAME = re.compile(r"(?i)bot|gpt")
+# Whole words in a name that mark it as an assistant: well-known assistant and AI product
+# names, and words like "Virtual Sara" or "Robo Sara". Some are also real names (Alexa,
+# Claude, Gemini); those only lose the "it's me, <name>" allowance, "Claude here" and
+# "This is Claude from X Realty" never depended on it.
+_ASSISTANT_NAME_WORD = re.compile(
+    r"(?i)siri|alexa|cortana|bixby|jarvis|claude|gemini|copilot|bard|grok|llama|mistral|"
+    r"deepseek|perplexity|openai|anthropic|virtual|digital|robo|droid|android|cyborg|cyber"
+)
+
+
+def _sounds_automated(name: str) -> bool:
+    """A name that is itself bot talk ("Bot", "Vitevue AI", "Sara.ai", "SaraBot")."""
+    spaced = re.sub(r"(?<=[a-z])(?=[A-Z])|[._-]", " ", name)
+    return bool(
+        _BOT_IN_NAME.search(spaced)
+        # Separators are gone from `spaced`, so "Sara A.I." needs the raw name too.
+        or _SELF_IDENTITY.search(name)
+        or any(_ASSISTANT_NAME_WORD.fullmatch(word) for word in _TOKEN.findall(spaced))
+        or _SELF_IDENTITY.search(spaced)
+        or _AI_REFERENCE.search(spaced)
+        or _HUMAN_CLAIM.search(spaced)
+        or any(_NATURE_WORD.fullmatch(word) for word in _TOKEN.findall(spaced))
+    )
+
+
+def _without_introduction(text: str, agent_name: str) -> str:
+    """Drop "it's me, <agent>" so the agent's own introduction is not read as a claim.
+
+    Only the agent's configured name (or its first word) qualifies; "it's me, <anyone else>"
+    and "it's really me" stay self-identity talk. The name falls back to the WhatsApp display
+    name, which may be a brand like "Vitevue AI": a name that is itself bot talk never
+    qualifies, or the introduction would hide the admission.
+    """
+    names = {
+        name
+        for name in (agent_name.strip(), *agent_name.split()[:1])
+        if len(name) > 1 and not _sounds_automated(name)
+    }
+    if not names:
+        return text
+    alternatives = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
+    return re.sub(
+        rf"(?i)\b(?:it'?s|it\s+is|this\s+is)\s+me[\s,-]+(?:{alternatives})\b", _INTRODUCTION, text
+    )
 
 
 def _self_identity(text: str, sources: list[str]) -> bool:
@@ -286,12 +412,15 @@ def _grounded_number(value: float, rounded: bool, allowed: list[float]) -> bool:
     return False
 
 
-def reply_violations(reply: str, *, sources: list[str], context=()) -> list[str]:
+def reply_violations(
+    reply: str, *, sources: list[str], context=(), agent_name: str = ""
+) -> list[str]:
     """Codes for everything wrong with a generated reply; empty means it may be sent.
 
     `sources` are the approved facts the reply may state. `context` is what the buyer
     already said (current message and history): numbers there may be echoed back, but
-    never treated as facts about a property.
+    never treated as facts about a property. `agent_name` is the voice profile's name: the
+    only name the reply may introduce itself with ("it's me, Sara").
     """
     text = reply.replace("’", "'")
     codes = []
@@ -305,7 +434,7 @@ def reply_violations(reply: str, *, sources: list[str], context=()) -> list[str]
     ):
         if pattern.search(text):
             codes.append(code)
-    if _self_identity(text, sources):
+    if _self_identity(_without_introduction(text, agent_name), sources):
         codes.append("self_identity")
     known_text = "\n".join([*sources, *context])
     allowed = [value for value, _ in _numbers(known_text)]

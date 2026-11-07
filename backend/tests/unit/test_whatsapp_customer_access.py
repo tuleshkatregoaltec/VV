@@ -249,3 +249,16 @@ async def test_listing_lookup_is_capped_and_never_crosses_connection(monkeypatch
     assert len(result) == 1
     assert lookup.call_args.args == ("db", "connection", "broker", "org")
     assert lookup.call_args.kwargs["limit"] == 5
+
+
+# The draft is re-screened under the connection lock before it is saved and sent. The agent's
+# own introduction must pass there too, or an accepted draft is cancelled without notice.
+async def test_agents_own_introduction_survives_the_recheck_before_send():
+    reply = "Hi, it's me Sara from X Realty. Is this to buy or to rent?"
+    named = connection()
+    named.display_name = "Sara Khan"
+    assert await access.valid_evidence("db", named, [], [], reply)
+    assert await access.valid_evidence(
+        "db", connection(reply_voice={"agent_name": "Sara"}), [], [], reply
+    )
+    assert not await access.valid_evidence("db", connection(), [], [], reply)

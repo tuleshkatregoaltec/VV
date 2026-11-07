@@ -4,6 +4,7 @@ Inbound text is never written here: a receipt row is content-free until the
 in-memory classifier admits the message as a property enquiry.
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
@@ -18,6 +19,8 @@ from app.whatsapp.customer_models import (
 )
 from app.whatsapp.models import utcnow
 
+logger = logging.getLogger(__name__)
+
 MAX_DAILY_MESSAGES = 20
 COMMANDS = {"STOP", "START", "HUMAN"}
 SEND_STATUSES = ("auto_pending", "grace_pending", "approved")
@@ -27,6 +30,13 @@ UNPROCESSED_REASON = "Not processed automatically. Check WhatsApp and reply your
 UNPROCESSED_NOTICE = (
     "A message could not be processed automatically, so no reply was sent and the thread is "
     "paused. Its text was not kept: read it in WhatsApp and answer yourself."
+)
+# A contact past the daily automatic-reply allowance. The message is never classified, so no
+# text exists to keep: the agent is told, content-free, to answer in person.
+OVER_LIMIT_REASON = "Over today's automatic-reply limit for this contact. Reply yourself."
+OVER_LIMIT_NOTICE = (
+    "Over today's automatic-reply limit for this contact, so no reply was sent and the thread "
+    "is paused. Its text was not kept: read it in WhatsApp and reply yourself."
 )
 
 
@@ -152,8 +162,6 @@ async def enqueue(db, connection, raw_messages, config):
         if counts is None:
             counts = await repository.daily_counts(db, connection.id, today)
         command = body.upper() if body.upper() in COMMANDS else None
-        if counts.get(sender, 0) >= MAX_DAILY_MESSAGES and command is None:
-            continue
         thread = await repository.thread_for_sender(db, connection.id, sender)
         if thread is None:
             thread = WhatsAppCustomerThread(connection_id=connection.id, sender=sender)
@@ -171,6 +179,20 @@ async def enqueue(db, connection, raw_messages, config):
             thread.paused = True
         thread.updated_at = now
         ignored = command is not None or thread.opted_out or thread.paused
+        if not ignored and counts.get(sender, 0) >= MAX_DAILY_MESSAGES:
+            # Never silent: the receipt reaches the agent as needing them. No text, no reply.
+            receipt_row = WhatsAppCustomerMessage(
+                id=message_id, thread_id=thread.id, content=None, sent_at=sent_at
+            )
+            mark_over_limit(thread, receipt_row, now)
+            db.add(receipt_row)
+            await db.flush()
+            logger.warning(
+                "WhatsApp daily automatic-reply limit reached (connection=%s thread=%s)",
+                connection.id,
+                thread.id,
+            )
+            continue
         receipt_row = WhatsAppCustomerMessage(
             id=message_id,
             thread_id=thread.id,
@@ -210,6 +232,13 @@ def mark_unprocessed(thread, message, error_code, now):
     message.updated_at = now
     thread.paused = True
     thread.updated_at = now
+
+
+def mark_over_limit(thread, message, now):
+    """Visible, content-free end state for a receipt the daily limit kept from classification."""
+    mark_unprocessed(thread, message, "daily_limit", now)
+    message.reason = OVER_LIMIT_REASON
+    message.handoff_summary = OVER_LIMIT_NOTICE
 
 
 async def locked_context(db, connection_id, thread_id, message_id):

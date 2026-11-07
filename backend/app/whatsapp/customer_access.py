@@ -93,12 +93,17 @@ async def valid_evidence(
         if item.id in facts or rejected_text(item.text):
             return False
         facts[item.id] = item.text
+    agent_name = voice.prompt_voice(connection.reply_voice, display_name=connection.display_name)[
+        "agent_name"
+    ]
     if not evidence_ids:
         # Questions and holding lines state no facts, only echo what the buyer said.
-        return not items and not voice.reply_violations(reply, sources=[], context=context)
+        return not items and not voice.reply_violations(
+            reply, sources=[], context=context, agent_name=agent_name
+        )
     if len(set(evidence_ids)) != len(evidence_ids) or any(key not in facts for key in evidence_ids):
         return False
     chosen = [facts[key] for key in evidence_ids]
     return reply == "\n\n".join(chosen) or not voice.reply_violations(
-        reply, sources=chosen, context=context
+        reply, sources=chosen, context=context, agent_name=agent_name
     )

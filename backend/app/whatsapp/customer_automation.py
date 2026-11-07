@@ -16,10 +16,15 @@ from app.whatsapp import customer_queue as queue
 from app.whatsapp import customer_repository as repository
 from app.whatsapp import customer_timing as timing
 from app.whatsapp import customer_voice as voice
-from app.whatsapp.customer_agent import build_customer_draft
+from app.whatsapp.customer_agent import build_customer_draft, draft_failed
 from app.whatsapp.models import utcnow
 
 logger = logging.getLogger(__name__)
+
+SEND_RECHECK_SUMMARY = (
+    "The property facts behind the drafted reply changed before it went out, so nothing was "
+    "sent. Please reply yourself."
+)
 
 
 class MetaSendRejected(ValueError):
@@ -162,12 +167,10 @@ async def draft(db, location, revision, config, content):
             result.reply,
             context=[content, *[turn["content"] for turn in history]],
         ):
-            message.status = "cancelled"
-            message.content = None
-            message.reason = "evidence_changed"
-            message.updated_at = utcnow()
-            await db.commit()
-            return
+            # Still the current receipt of an admitted enquiry (superseded rows returned
+            # above), so the agent gets it with a fixed holding line, never the failed draft.
+            result, snapshots = draft_failed(content), []
+            message.reason = "draft_failed"
         message.evidence_snapshots = snapshots
         # The only point where inbound text becomes durable: an admitted property enquiry.
         # An identity question outside one keeps no text: sender, pause and notice only.
@@ -285,6 +288,31 @@ async def send_reply(connection, thread, message, config):
     return outbound_id
 
 
+def hand_back(thread, message):
+    """A current draft failed its send-time recheck: never send it, give it to the agent.
+
+    Nothing of this reply reached Meta (we are before `sending`). Superseded drafts never get
+    here: they are no longer in a send status, or the thread is paused and `eligible_now`
+    cancelled them quietly. The reply becomes a fixed holding line and the revision moves on,
+    so an approval made against the old text is rejected.
+    """
+    now = utcnow()
+    holding = draft_failed(message.content or "")
+    message.status = "approval_required"
+    message.reply = holding.reply
+    message.risk = holding.risk
+    message.evidence_ids = []
+    message.evidence_snapshots = []
+    message.reason = "evidence_changed"
+    message.handoff_summary = SEND_RECHECK_SUMMARY
+    message.send_after = None
+    message.revision += 1
+    message.notification_created_at = now
+    message.updated_at = now
+    thread.paused = True
+    thread.updated_at = now
+
+
 async def show_typing(db, location, config, context):
     """First pass of a humanized send: read receipt and typing indicator, then wait.
 
@@ -340,10 +368,7 @@ async def send(db, location, config):
         human_edited=message.reason == "human_edited",
         context=[message.content or "", *[turn["content"] for turn in history]],
     ):
-        message.status = "cancelled"
-        message.reason = "evidence_changed"
-        message.send_after = None
-        message.updated_at = utcnow()
+        hand_back(thread, message)
         await db.commit()
         return
     if not message.reply or len(message.reply) > 4000:
