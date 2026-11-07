@@ -1,15 +1,7 @@
 <script lang="ts">
-import { AuthClient } from '@supabase/auth-js'
-import { env } from '$env/dynamic/public'
+import { update_user_profile } from '$lib/api/auth'
 import TextInput from '$lib/components/auth/TextInput.svelte'
 import { currentUser } from '$lib/stores/user.svelte'
-
-const client = new AuthClient({
-	url: `${env.PUBLIC_AUTH_BASE_URL}`,
-	storageKey: 'authentication',
-	detectSessionInUrl: true,
-	persistSession: true
-})
 
 let firstName = $state('')
 let lastName = $state('')
@@ -38,23 +30,15 @@ async function handleSubmit() {
 	error = ''
 
 	try {
-		const result = await client.updateUser({
-			data: {
-				first_name: firstName,
-				last_name: lastName
-			}
-		})
-
-		if (result.error) {
-			error = result.error.message || 'Failed to update profile'
-			return
-		}
+		// Goes through the backend (not straight to the auth service) so it can drop its cached
+		// token check; otherwise /auth/me could keep reporting the old name for up to a minute.
+		await update_user_profile(firstName.trim(), lastName.trim())
 
 		if (currentUser.data) {
 			currentUser.data = {
 				...currentUser.data,
-				first_name: firstName,
-				last_name: lastName
+				first_name: firstName.trim(),
+				last_name: lastName.trim()
 			}
 		}
 	} catch (e) {

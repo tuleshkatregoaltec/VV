@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Optional
 
 from supabase_auth import AdminUserAttributes, AsyncGoTrueClient
@@ -6,13 +7,22 @@ from supabase_auth import User as AuthUser
 from supabase_auth.errors import AuthApiError
 
 from app.config import settings
+from app.core.cache import RedisCache
 from app.providers.auth import AuthenticatedUser
+from app.providers.auth.user_cache import AuthUserCache
 
 logger = logging.getLogger(__name__)
 
 auth_base_url = str(settings.AUTH_URL).rstrip("/")
 
-auth_client = AsyncGoTrueClient(url=auth_base_url)
+
+def build_public_auth_client(base_url: str, publishable_key: Optional[str]) -> AsyncGoTrueClient:
+    """Client for user-scoped auth calls; sends `apikey` only when a publishable key is set."""
+    headers = {"apikey": publishable_key} if publishable_key else None
+    return AsyncGoTrueClient(url=base_url, headers=headers)
+
+
+auth_client = build_public_auth_client(auth_base_url, settings.AUTH_PUBLISHABLE_KEY)
 
 _admin_headers = {
     "Authorization": f"Bearer {settings.AUTH_SERVICE_ROLE_KEY}",
@@ -22,11 +32,21 @@ admin_client = AsyncGoTrueClient(url=auth_base_url, headers=_admin_headers)
 admin_client.admin._headers.update(_admin_headers)
 
 
+# Shared across worker processes through Redis; see user_cache.py for the rules and staleness.
+# Signing out does not evict a token: it stays accepted for up to the cache TTL (60 s).
+_user_cache = AuthUserCache(RedisCache(settings.REDIS_URL, settings.REDIS_PASSWORD).redis)
+
+
 async def get_auth_user(jwt: str) -> Optional[AuthUser]:
-    """Get the Supabase auth user object for the given jwt, if valid."""
+    """Get the Supabase auth user object for the given jwt, if valid (cached briefly)."""
+    cached = await _user_cache.get(jwt)
+    if cached is not None:
+        return cached
+    started_at = time.time()
     try:
         user_response = await auth_client.get_user(jwt=jwt)
         if user_response and user_response.user:
+            await _user_cache.put(jwt, user_response.user, started_at=started_at)
             return user_response.user
     except AuthApiError:
         return None
@@ -50,6 +70,8 @@ async def update_user_token_limit(user_id: str, daily_token_limit: int) -> None:
     except (ValueError, AuthApiError) as e:
         logger.error(f"Failed to update token limit for user {user_id}: {e}")
         raise
+    finally:
+        await _user_cache.invalidate_user(user_id)
 
 
 async def update_user_profile_metadata(user_id: str, first_name: str, last_name: str) -> None:
@@ -66,6 +88,8 @@ async def update_user_profile_metadata(user_id: str, first_name: str, last_name:
     except (ValueError, AuthApiError) as e:
         logger.error(f"Failed to update profile for user {user_id}: {e}")
         raise
+    finally:
+        await _user_cache.invalidate_user(user_id)
 
 
 async def get_user_by_id(user_id: str) -> Optional[AuthenticatedUser]:
@@ -100,6 +124,8 @@ async def delete_user_admin(user_id: str) -> None:
     except (ValueError, AuthApiError) as e:
         logger.error(f"Failed to delete user {user_id}: {e}")
         raise
+    finally:
+        await _user_cache.invalidate_user(user_id)
 
 
 async def send_magic_link_email(
