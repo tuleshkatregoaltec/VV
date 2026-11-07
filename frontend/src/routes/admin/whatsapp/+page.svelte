@@ -3,6 +3,7 @@ import { createQuery } from '@tanstack/svelte-query'
 import { ApiError } from '$lib/api/client'
 import type { AdminConnectionRow } from '$lib/api/whatsapp-connect'
 import { whatsappConnectQueries } from '$lib/queries/whatsapp-connect'
+import { automationView } from '$lib/whatsapp/connect-state'
 
 const query = createQuery(() => whatsappConnectQueries.admin())
 const data = $derived(query.data)
@@ -31,6 +32,11 @@ function badge(row: AdminConnectionRow) {
 	return 'bg-warning-bg text-warning'
 }
 
+const pausedReason: Record<string, string> = {
+	assistant_disabled: 'Assistant off server-wide',
+	intake_disabled: 'Intake off server-wide'
+}
+
 const sendBadge = (value: AdminConnectionRow['can_send_message']) =>
 	value === 'BLOCKED' ? 'text-error' : value === 'LIMITED' ? 'text-warning' : 'text-fg-3'
 </script>
@@ -43,7 +49,7 @@ const sendBadge = (value: AdminConnectionRow['can_send_message']) =>
 				WhatsApp connections
 			</h1>
 			<p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-				How many agents have connected their WhatsApp number, and how many have automatic replies on.
+				How many agents have connected their WhatsApp number, and how many have automatic replies on, and how many are switched on but paused by Vitevue.
 			</p>
 		</div>
 	</section>
@@ -56,8 +62,8 @@ const sendBadge = (value: AdminConnectionRow['can_send_message']) =>
 			<button class="rounded-md border border-border bg-white px-3 py-1.5 text-fg-2" onclick={() => query.refetch()}>Retry</button>
 		</div>
 	{:else if data}
-		<dl class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-			{#each [['Numbers on record', data.total], ['Connected now', data.connected], ['Automatic replies on', data.automation_on]] as [label, value] (label)}
+		<dl class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+			{#each [['Numbers on record', data.total], ['Connected now', data.connected], ['Automatic replies on', data.automation_on], ['Automatic replies paused', data.automation_paused]] as [label, value] (label)}
 				<div class="rounded-lg border border-border bg-white p-4 shadow-sm">
 					<dt class="text-xs font-semibold uppercase tracking-wider text-fg-4">{label}</dt>
 					<dd class="mt-1 font-display text-3xl text-fg-1">{value}</dd>
@@ -79,6 +85,7 @@ const sendBadge = (value: AdminConnectionRow['can_send_message']) =>
 					</thead>
 					<tbody class="divide-y divide-border">
 						{#each data.items as row (row.connection_id)}
+							{@const replies = automationView(row, row.status)}
 							<tr>
 								<td class="px-4 py-3 text-sm">
 									<div class="font-medium text-fg-1">{row.user_email ?? row.user_id}</div>
@@ -94,7 +101,15 @@ const sendBadge = (value: AdminConnectionRow['can_send_message']) =>
 										<div class="mt-1 text-xs {sendBadge(row.can_send_message)}">Sending {row.can_send_message.toLowerCase()}</div>
 									{/if}
 								</td>
-								<td class="px-4 py-3 text-sm text-fg-2">{row.automation_enabled ? 'On' : 'Off'}</td>
+								<td class="px-4 py-3 text-sm text-fg-2">
+									{#if replies.kind === 'disconnected'}
+										<span class="inline-flex rounded-full bg-warning-bg px-2.5 py-0.5 text-xs font-medium text-warning">Not connected</span>
+										<div class="mt-1 whitespace-nowrap text-xs text-fg-4">Agent must reconnect</div>
+									{:else if replies.kind === 'paused'}
+										<span class="inline-flex rounded-full bg-warning-bg px-2.5 py-0.5 text-xs font-medium text-warning">Paused</span>
+										<div class="mt-1 whitespace-nowrap text-xs text-fg-4">{pausedReason[row.automation_paused_reason ?? ''] ?? 'Paused by Vitevue'}</div>
+									{:else}{replies.label}{/if}
+								</td>
 								<td class="px-4 py-3 text-sm text-fg-2">
 									{row.contacts_total}
 									{#if !row.contacts_synced_at && row.status === 'connected'}<span class="text-xs text-fg-4"> syncing</span>{/if}

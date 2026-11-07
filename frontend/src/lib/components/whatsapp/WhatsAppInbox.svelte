@@ -3,6 +3,8 @@ import { createQuery, useQueryClient } from '@tanstack/svelte-query'
 import { ApiError } from '$lib/api/client'
 import { whatsapp } from '$lib/api/whatsapp'
 import { whatsappKeys, whatsappQueries } from '$lib/queries/whatsapp'
+import { inboxToggleView } from '$lib/whatsapp/connect-state'
+import { handoffDetail, messageText } from '$lib/whatsapp/handoff'
 import WhatsAppMessage from './WhatsAppMessage.svelte'
 import WhatsAppPublications from './WhatsAppPublications.svelte'
 
@@ -24,6 +26,12 @@ const inbox = $derived(
 const loadError = $derived(
 	connections.isError || notifications.isError || threads.isError || messages.isError
 )
+const handoffNote = $derived(
+	thread?.paused
+		? [...(messages.data ?? [])].reverse().find((item) => item.handoff_summary)?.handoff_summary
+		: null
+)
+const toggle = $derived(connection ? inboxToggleView(connection) : null)
 const blocked = $derived(!connection?.enabled || !!thread?.opted_out || loadError)
 
 async function refresh() {
@@ -81,8 +89,9 @@ async function openReview(threadId: string) {
 	{:else if !notifications.isError && !inbox.length}<p class="mt-2 text-sm text-fg-3">No replies need approval.</p>{/if}
 	<ul class="mt-2 space-y-2">
 		{#each inbox as item (item.id)}
+			{@const shown = messageText(item)}
 			<li class="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2">
-				<div class="min-w-0 flex-1"><p class="truncate text-sm">{item.content ?? 'Customer request'}</p><p class="text-xs text-fg-3">{item.reason ?? item.topic ?? 'Human review required'}</p></div>
+				<div class="min-w-0 flex-1"><p class={['truncate text-sm', !shown.kept && 'italic text-fg-3']}>{shown.text}</p><p class="text-xs text-fg-3">{handoffDetail(item)}</p></div>
 				<button type="button" class="ui-button px-3 py-2" disabled={busy || !connections.data?.length} onclick={() => openReview(item.thread_id)}>Open review</button>
 			</li>
 		{/each}
@@ -97,8 +106,8 @@ async function openReview(threadId: string) {
 		<select id="whatsapp-connection" class="rounded-md border border-border bg-app p-2 text-sm" value={connectionId} disabled={busy} onchange={(event) => { selectedConnection = event.currentTarget.value; selectedThread = null }}>
 			{#each connections.data ?? [] as item (item.id)}<option value={item.id}>{item.display_name}</option>{/each}
 		</select>
-		<button type="button" role="switch" aria-checked={connection.enabled} aria-label="Automatic replies" class="ui-button ml-3 px-3 py-2" disabled={busy || connections.isError} onclick={() => run(() => whatsapp.updateConnection(connection.id, { enabled: !connection.enabled }))}>Automatic replies {connection.enabled ? 'on' : 'off'}</button>
-		{#if !connection.enabled}<p class="mt-2 text-sm text-fg-3">Sending is disabled for this number, including approvals.</p>{/if}
+		<button type="button" role="switch" aria-checked={connection.enabled} aria-label="Automatic replies" class="ui-button ml-3 px-3 py-2" disabled={busy || connections.isError} onclick={() => run(() => whatsapp.updateConnection(connection.id, { enabled: !connection.enabled }))}>{toggle?.text}</button>
+		{#if toggle?.note}<p class="mt-2 text-sm text-fg-3">{toggle.note}</p>{/if}
 	</section>
 	{#key connection.id}<WhatsAppPublications {connection} />{/key}
 	<div class="mt-4 grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -117,6 +126,7 @@ async function openReview(threadId: string) {
 				<div class="mb-3 rounded-lg border border-border bg-card p-4">
 					<h2 class="font-semibold">{thread.sender}</h2>
 					<p class="mt-1 text-sm text-fg-3">{thread.opted_out ? 'Customer opted out. They must send START in WhatsApp before automation can resume.' : thread.paused ? 'Human handling. Reply directly in WhatsApp; future messages will not receive automated drafts.' : 'Automation is active for this conversation.'}</p>
+					{#if handoffNote}<p class="mt-2 text-sm">{handoffNote}</p>{/if}
 					<button type="button" class="ui-button mt-3 px-3 py-2" disabled={busy || threads.isError || thread.opted_out} onclick={() => run(() => thread.paused ? whatsapp.resume(thread.id) : whatsapp.takeover(thread.id))}>{thread.paused ? 'Resume automation' : 'Take over conversation'}</button>
 					{#if !thread.paused}<p class="mt-2 text-xs text-fg-3">Taking over cancels unsent drafts. Continue the conversation directly in WhatsApp.</p>{/if}
 				</div>

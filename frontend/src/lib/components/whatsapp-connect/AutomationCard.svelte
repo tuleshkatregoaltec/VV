@@ -4,7 +4,7 @@ import { type AgentConnectionStatus, whatsappConnect } from '$lib/api/whatsapp-c
 import { toast } from '$lib/crm/stores/toast.svelte'
 import { getQueryClient } from '$lib/queries/client'
 import { whatsappConnectKeys } from '$lib/queries/whatsapp-connect'
-import { contactsSyncPending } from '$lib/whatsapp/connect-state'
+import { automationView, contactsSyncPending } from '$lib/whatsapp/connect-state'
 
 let { status }: { status: AgentConnectionStatus } = $props()
 const queryClient = getQueryClient()
@@ -12,6 +12,8 @@ const queryClient = getQueryClient()
 let working = $state(false)
 let skipWait = $state(false)
 
+const view = $derived(automationView(status, status.state))
+// The switch is the agent's own choice; `paused` is still switched on.
 const on = $derived(status.automation_enabled)
 const waiting = $derived(!on && contactsSyncPending(status) && !skipWait)
 
@@ -39,10 +41,13 @@ async function set(enabled: boolean) {
 <section class="card" aria-labelledby="auto-h">
 	<div class="ch">
 		<h2 id="auto-h">Turn on replies</h2>
-		<span class={['chip', on ? 'green' : 'outline']}>{on ? 'On' : 'Off'}</span>
+		<span class={['chip', view.kind === 'on' ? 'green' : view.kind === 'paused' || view.kind === 'disconnected' ? 'amber' : 'outline']}>{view.label}</span>
 	</div>
 	<div class="cb stack">
-		{#if on}
+		{#if view.note}
+			<p role="status"><b>{view.note}</b></p>
+			{#if view.resumeNote}<p class="muted">{view.resumeNote}</p>{/if}
+		{:else if on}
 			<p>Property enquiries to <b>{status.display_phone_number ?? 'your number'}</b> are being answered automatically. Offers, negotiation, payments and viewings come back to you.</p>
 		{:else}
 			<p>Replies start <b>off</b>. Once they are on, real estate questions sent to your number are answered automatically, except from the {status.contacts.blocked} {status.contacts.blocked === 1 ? 'contact' : 'contacts'} you blocked.</p>

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { AgentConnectionStatus } from '$lib/api/whatsapp-connect'
 import {
+	automationView,
 	contactsSyncPending,
 	healthErrorText,
 	sendingWarning,
@@ -19,6 +20,8 @@ const base: AgentConnectionStatus = {
 	display_name: 'Sara Properties',
 	onboarding_type: 'whatsapp_business_app',
 	automation_enabled: false,
+	automation_active: false,
+	automation_paused_reason: null,
 	connected_at: '2026-11-06T09:00:00Z',
 	disconnected_at: null,
 	last_account_event: null,
@@ -76,5 +79,83 @@ describe('healthErrorText', () => {
 		expect(healthErrorText({ error_description: 'Phone needs update' })).toBe('Phone needs update')
 		expect(healthErrorText({ message: 'Something' })).toBe('Something')
 		expect(healthErrorText({ nope: 1 })).toBe('Meta reported a problem with this number.')
+	})
+})
+
+describe('automationView', () => {
+	it('is off when the agent has not switched replies on', () => {
+		expect(automationView(base)).toMatchObject({ kind: 'off', label: 'Off', note: null })
+	})
+
+	it('is on only when replies are actually running', () => {
+		const on = { ...base, automation_enabled: true, automation_active: true }
+		expect(automationView(on)).toMatchObject({ kind: 'on', label: 'On', note: null })
+	})
+
+	it('is paused, with the reason in plain words, when the switch is on but the server has replies off', () => {
+		const paused = {
+			...base,
+			automation_enabled: true,
+			automation_paused_reason: 'assistant_disabled' as const
+		}
+		const view = automationView(paused)
+		expect(view.kind).toBe('paused')
+		expect(view.label).toBe('Paused')
+		expect(view.note).toBe(
+			'Automatic replies are paused by Vitevue. New messages are not answered or added to the inbox here for now, so keep replying in WhatsApp yourself.'
+		)
+		expect(view.note).not.toMatch(/go to your inbox/)
+		expect(view.resumeNote).toBe(
+			'Your switch stays on, so replies start again by themselves when Vitevue resumes them.'
+		)
+	})
+
+	it('blames the disconnected number, not Vitevue, and never promises replies resume by themselves', () => {
+		const view = automationView(
+			{ ...base, automation_enabled: true, automation_paused_reason: null },
+			'disconnected'
+		)
+		expect(view).toMatchObject({ kind: 'disconnected', label: 'Not connected', resumeNote: null })
+		expect(view.note).toBe(
+			'This number is disconnected, so automatic replies are not running. Reconnect it to start them again.'
+		)
+		expect(view.note).not.toMatch(/Vitevue/)
+	})
+
+	it('treats a disconnected number as not connected even when a stale pause reason is present', () => {
+		const view = automationView(
+			{ ...base, automation_enabled: true, automation_paused_reason: 'assistant_disabled' },
+			'disconnected'
+		)
+		expect(view.kind).toBe('disconnected')
+	})
+
+	it('keeps the generic Vitevue pause for a connected number with an unknown reason', () => {
+		const view = automationView(
+			{ ...base, automation_enabled: true, automation_paused_reason: null },
+			'connected'
+		)
+		expect(view.kind).toBe('paused')
+		expect(view.note).toBe('Automatic replies are paused by Vitevue.')
+	})
+
+	it('says plainly that nothing is being read when the whole intake is off', () => {
+		const view = automationView({
+			...base,
+			automation_enabled: true,
+			automation_paused_reason: 'intake_disabled'
+		})
+		expect(view.kind).toBe('paused')
+		expect(view.note).toMatch(/not reading new WhatsApp messages/)
+	})
+
+	it('never shows a raw code for a reason it does not know', () => {
+		const view = automationView({
+			...base,
+			automation_enabled: true,
+			automation_paused_reason: 'quota_hit' as never
+		})
+		expect(view.kind).toBe('paused')
+		expect(view.note).not.toMatch(/_/)
 	})
 })

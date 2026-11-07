@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { CustomerMessageResponse } from '$lib/api/generated/hey-api/types.gen'
 import { whatsapp } from '$lib/api/whatsapp'
+import { messageText, reasonLabel } from '$lib/whatsapp/handoff'
 
 let {
 	message,
@@ -17,6 +18,8 @@ let {
 // The parent keys this editor by revision so a refreshed draft needs a fresh review.
 let reply = $state(message.reply ?? '')
 const dirty = $derived(reply !== (message.reply ?? ''))
+const shown = $derived(messageText(message))
+const detail = $derived(message.handoff_summary || reasonLabel(message.reason))
 const reviewable = $derived(message.status === 'approval_required')
 const labels: Record<string, string> = {
 	auto_pending: 'Automatic reply queued',
@@ -40,8 +43,8 @@ const labels: Record<string, string> = {
 		<time datetime={message.sent_at}>{new Date(message.sent_at).toLocaleString()}</time>
 		<span>{labels[message.status] ?? message.status.replaceAll('_', ' ')}</span>
 	</div>
-	<p class="mt-3 whitespace-pre-wrap break-words">{message.content ?? 'Message content unavailable'}</p>
-	{#if message.reason}<p class="mt-2 text-sm text-fg-3">{message.reason}</p>{/if}
+	<p class={['mt-3 whitespace-pre-wrap break-words', !shown.kept && 'italic text-fg-3']}>{shown.text}</p>
+	{#if detail}<p class="mt-2 text-sm text-fg-3">{detail}</p>{/if}
 	{#if reviewable}
 		<label class="mt-4 block text-sm font-medium" for={`reply-${message.id}`}>Reply draft</label>
 		<textarea id={`reply-${message.id}`} class="mt-1 min-h-28 w-full rounded-md border border-border bg-app p-3 text-sm" bind:value={reply} maxlength={4000} disabled={busy || blocked}></textarea>

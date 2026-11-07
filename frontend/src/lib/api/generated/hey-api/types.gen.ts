@@ -134,6 +134,10 @@ export type AdminConnectionList = {
      */
     automation_on: number;
     /**
+     * Automation Paused
+     */
+    automation_paused?: number;
+    /**
      * Items
      */
     items: Array<AdminConnectionRow>;
@@ -187,6 +191,14 @@ export type AdminConnectionRow = {
      * Automation Enabled
      */
     automation_enabled: boolean;
+    /**
+     * Automation Active
+     */
+    automation_active?: boolean;
+    /**
+     * Automation Paused Reason
+     */
+    automation_paused_reason?: 'assistant_disabled' | 'intake_disabled' | null;
     /**
      * Contacts Total
      */
@@ -266,6 +278,14 @@ export type AgentConnectionStatus = {
      * Automation Enabled
      */
     automation_enabled?: boolean;
+    /**
+     * Automation Active
+     */
+    automation_active?: boolean;
+    /**
+     * Automation Paused Reason
+     */
+    automation_paused_reason?: 'assistant_disabled' | 'intake_disabled' | null;
     /**
      * Connected At
      */
@@ -1280,6 +1300,14 @@ export type ConnectionResponse = {
      * Enabled
      */
     enabled: boolean;
+    /**
+     * Automation Active
+     */
+    automation_active?: boolean;
+    /**
+     * Automation Paused Reason
+     */
+    automation_paused_reason?: 'assistant_disabled' | 'intake_disabled' | null;
     /**
      * Market Data Enabled
      */

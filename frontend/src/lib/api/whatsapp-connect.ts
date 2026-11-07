@@ -3,6 +3,7 @@ import { ApiError, client } from './client'
 const base = '/api/v1/whatsapp'
 
 export type ConnectionState = 'not_configured' | 'not_connected' | 'connected' | 'disconnected'
+export type AutomationPausedReason = 'assistant_disabled' | 'intake_disabled'
 export type CanSendMessage = 'AVAILABLE' | 'LIMITED' | 'BLOCKED'
 
 export interface SignupConfig {
@@ -33,6 +34,9 @@ export interface AgentConnectionStatus {
 	display_name: string | null
 	onboarding_type: string | null
 	automation_enabled: boolean
+	/** True only when the switch is on, the number is connected and the server has replies on. */
+	automation_active: boolean
+	automation_paused_reason: AutomationPausedReason | null
 	connected_at: string | null
 	disconnected_at: string | null
 	last_account_event: string | null
@@ -94,6 +98,9 @@ export interface AdminConnectionRow {
 	status: string
 	onboarding_type: string | null
 	automation_enabled: boolean
+	/** True only when the switch is on, the number is connected and the server has replies on. */
+	automation_active: boolean
+	automation_paused_reason: AutomationPausedReason | null
 	contacts_total: number
 	contacts_blocked: number
 	contacts_synced_at: string | null
@@ -107,6 +114,7 @@ export interface AdminConnections {
 	total: number
 	connected: number
 	automation_on: number
+	automation_paused: number
 	items: AdminConnectionRow[]
 }
 
