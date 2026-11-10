@@ -233,119 +233,110 @@ async def _write(
         await db.commit()
 
 
-async def _build_generation(
-    engine: AsyncEngine, organization_id: str, generation: int, *, degraded: bool
-) -> dict[str, int]:
-    async with AsyncSession(engine, expire_on_commit=False) as db:
-        ids = [
-            row[0]
-            for row in (
-                await db.exec(
-                    text(
-                        "SELECT id FROM crm_property_contact_claims "
-                        "WHERE organization_id = :org ORDER BY property_key, id"
-                    ),
-                    params={"org": organization_id},
-                )
-            ).all()
-        ]
-    try:
-        aliases = None if degraded else await _tenant_building_aliases(engine, organization_id)
-    except Exception as error:
-        logger.warning("CRM ownership building aliases unavailable")
-        raise StoreUnavailable("Registry building aliases could not be read") from error
-    token = owner_assessment._tenant_aliases.set(aliases)
-    try:
-        return await _assess_in_chunks(engine, organization_id, generation, ids, degraded=degraded)
-    finally:
-        owner_assessment._tenant_aliases.reset(token)
+def _unit_group(unit_number: str) -> str:
+    """Claims on the same unit number are assessed together.
 
-
-async def _tenant_building_aliases(
-    engine: AsyncEngine, organization_id: str
-) -> list[dict[str, Any]]:
-    """The registry's building aliases for every name the tenant's claims use.
-
-    ``capture_owner_evidence`` asks for the aliases of the names in the claims it is given. Which
-    building a name stands for is ambiguous when another building anywhere in the tenant has the
-    same name, so a chunk must see the aliases the whole tenant would have fetched.
+    The registry sales a claim is matched against are fetched for the (building, unit) pairs of
+    the claims in hand, and a project-level claim finds the sales other claims' pairs brought
+    in. That context is shared only by claims with the same unit lookup key (or the same
+    villa number), so a chunk made of whole unit groups sees what the tenant would have.
     """
-    from app.crm import owner_queries
-    from app.market.reference import property_name_lookup_key
+    from app.crm.owner_namespaces import parse_r3
+    from app.market.reference import unit_lookup_key
 
+    key = unit_lookup_key(unit_number)
+    villa = parse_r3(unit_number)
+    return f"r3:{villa[1]}" if villa else key
+
+
+async def _claim_chunks(engine: AsyncEngine, organization_id: str) -> list[list[int]]:
     async with AsyncSession(engine, expire_on_commit=False) as db:
-        pairs = (
+        claims = (
             await db.exec(
                 text(
-                    "SELECT DISTINCT building_name, project_name FROM crm_property_contact_claims "
-                    "WHERE organization_id = :org AND unit_number <> '' "
-                    "AND NOT (owner_history_evidence ? 'source_audit')"
+                    "SELECT id, unit_number, property_key FROM crm_property_contact_claims "
+                    "WHERE organization_id = :org"
                 ),
                 params={"org": organization_id},
             )
         ).all()
-    names = sorted({property_name_lookup_key(building or project) for building, project in pairs})
-    return await owner_queries.fetch_assessment_building_aliases({"names": names}) if names else []
+    ordered = sorted(((_unit_group(unit), key, claim_id) for claim_id, unit, key in claims))
+    del claims
+    chunks: list[list[int]] = []
+    current: list[int] = []
+    previous = None
+    for group, _, claim_id in ordered:
+        if len(current) >= CHUNK_CLAIMS and group != previous:
+            chunks.append(current)
+            current = []
+        current.append(claim_id)
+        previous = group
+    if current:
+        chunks.append(current)
+    return chunks
 
 
-async def _assess_in_chunks(
-    engine: AsyncEngine,
-    organization_id: str,
-    generation: int,
-    ids: list[int],
-    *,
-    degraded: bool,
+class _Components:
+    """Chunks tied together by a property that was assessed in more than one of them."""
+
+    def __init__(self) -> None:
+        self.parent: dict[int, int] = {}
+
+    def find(self, item: int) -> int:
+        self.parent.setdefault(item, item)
+        while self.parent[item] != item:
+            self.parent[item] = self.parent[self.parent[item]]
+            item = self.parent[item]
+        return item
+
+    def union(self, left: int, right: int) -> None:
+        self.parent[self.find(left)] = self.find(right)
+
+
+async def _build_generation(
+    engine: AsyncEngine, organization_id: str, generation: int, *, degraded: bool
 ) -> dict[str, int]:
+    chunks = await _claim_chunks(engine, organization_id)
     seen: dict[str, int] = {}
-    spanning: set[str] = set()
-    for index, start in enumerate(range(0, len(ids), CHUNK_CLAIMS)):
-        rows = await _assess_claims(
-            engine, organization_id, ids[start : start + CHUNK_CLAIMS], degraded=degraded
-        )
+    ties = _Components()
+    for index, claim_ids in enumerate(chunks):
+        rows = await _assess_claims(engine, organization_id, claim_ids, degraded=degraded)
         for key in {row["property_key"] for row in rows}:
             if seen.setdefault(key, index) != index:
-                spanning.add(key)
+                ties.union(seen[key], index)
         await _write(engine, organization_id, generation, rows)
         del rows
         profiles.release_memory()
     del seen
+    # A property assessed in two chunks was assessed without part of its context: assess the
+    # chunks it ties together again, as one batch. Chunks are whole unit groups, so the batch
+    # is closed over both the units and the properties involved.
+    members: dict[int, list[int]] = {}
+    for index in list(ties.parent):
+        members.setdefault(ties.find(index), []).append(index)
     repaired = 0
-    if spanning:
+    for indices in (group for group in members.values() if len(group) > 1):
+        claim_ids = [claim_id for index in indices for claim_id in chunks[index]]
         async with AsyncSession(engine, expire_on_commit=False) as db:
-            members = (
-                await db.exec(
-                    text(
-                        "SELECT property_key, claim_id FROM crm_owner_assessed_claims "
-                        "WHERE organization_id = :org AND generation = :gen "
-                        "AND property_key = ANY(:keys) ORDER BY property_key, claim_id"
-                    ),
-                    params={"org": organization_id, "gen": generation, "keys": sorted(spanning)},
-                )
-            ).all()
             await db.exec(
                 text(
                     "DELETE FROM crm_owner_assessed_claims WHERE organization_id = :org "
-                    "AND generation = :gen AND property_key = ANY(:keys)"
+                    "AND generation = :gen AND claim_id = ANY(:ids)"
                 ),
-                params={"org": organization_id, "gen": generation, "keys": sorted(spanning)},
+                params={"org": organization_id, "gen": generation, "ids": claim_ids},
             )
             await db.commit()
-        # Whole properties per batch: a batch may exceed the chunk size, never split a property.
-        batch: list[int] = []
-        last_key = None
-        for key, claim_id in members:
-            if len(batch) >= CHUNK_CLAIMS and key != last_key:
-                rows = await _assess_claims(engine, organization_id, batch, degraded=degraded)
-                await _write(engine, organization_id, generation, rows)
-                repaired += len(rows)
-                batch = []
-            batch.append(claim_id)
-            last_key = key
-        if batch:
-            rows = await _assess_claims(engine, organization_id, batch, degraded=degraded)
-            await _write(engine, organization_id, generation, rows)
-            repaired += len(rows)
-    return {"claims": len(ids), "spanning_properties": len(spanning), "repaired_claims": repaired}
+        rows = await _assess_claims(engine, organization_id, claim_ids, degraded=degraded)
+        await _write(engine, organization_id, generation, rows)
+        repaired += len(rows)
+        del rows
+        profiles.release_memory()
+    return {
+        "claims": sum(map(len, chunks)),
+        "chunks": len(chunks),
+        "tied_chunks": sum(len(group) for group in members.values() if len(group) > 1),
+        "repaired_claims": repaired,
+    }
 
 
 async def _next_generation(engine: AsyncEngine) -> int:

@@ -12,7 +12,6 @@ import time
 import weakref
 import zlib
 from collections import Counter, defaultdict
-from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
@@ -41,9 +40,6 @@ _DATE_FIELDS = {
 }
 _DATETIME_FIELDS = {"created_at", "updated_at"}
 logger = logging.getLogger(__name__)
-_tenant_aliases: ContextVar[list[dict[str, Any]] | None] = ContextVar(
-    "owner_assessment_tenant_aliases", default=None
-)
 _cache: RedisCache | None = None
 _recent: tuple[str, float, OwnerAssessmentSnapshot] | None = None
 # Scoped assessments are per request-shape, so they are kept in this process only, one
@@ -126,15 +122,8 @@ async def capture_owner_evidence(
         for unit in history_unit_aliases({**vars(candidate), "property_type": "Villa"})
     }
     names = sorted({name for name, _ in properties})
-    # A chunked build supplies the aliases of every name in the tenant: which building a name
-    # resolves to is ambiguous when another building anywhere in the tenant shares it.
-    fixed = _tenant_aliases.get()
     aliases = (
-        fixed
-        if fixed is not None
-        else (
-            await owner_queries.fetch_assessment_building_aliases({"names": names}) if names else []
-        )
+        await owner_queries.fetch_assessment_building_aliases({"names": names}) if names else []
     )
     names_by_id: dict[str, set[str]] = defaultdict(set)
     ids_by_name: dict[str, set[str]] = defaultdict(set)

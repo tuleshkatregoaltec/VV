@@ -68,10 +68,6 @@ def evidence(monkeypatch):
     async def warehouse_revision():
         return state["revision"]
 
-    async def no_aliases(engine, organization_id):
-        return []
-
-    monkeypatch.setattr(owner_store, "_tenant_building_aliases", no_aliases)
     monkeypatch.setattr(owner_assessment, "_fresh_sales", fresh_sales)
     monkeypatch.setattr(owner_assessment, "_warehouse_revision", warehouse_revision)
     monkeypatch.setattr(owner_store, "CHUNK_CLAIMS", 7)
@@ -621,3 +617,29 @@ async def test_an_unavailable_registry_is_never_published_as_confirmed_ownership
     assert (await owner_store.open_store(pg_session, org)).state.generation > (
         degraded.state.generation
     )
+
+
+async def test_claims_on_one_unit_number_are_assessed_in_the_same_chunk(
+    pg_session, tenant, monkeypatch
+):
+    """A project-level claim finds sales that other claims' unit pairs brought in."""
+    org = tenant["org"]
+    monkeypatch.setattr(owner_store, "CHUNK_CLAIMS", 2)
+    chunks = await owner_store._claim_chunks(pg_session.bind, org)
+    unit_of = {
+        row[0]: owner_store._unit_group(row[1])
+        for row in (
+            await pg_session.exec(
+                text(
+                    "SELECT id, unit_number FROM crm_property_contact_claims WHERE organization_id = :o"
+                ),
+                params={"o": org},
+            )
+        ).all()
+    }
+    homes = {}
+    for index, chunk in enumerate(chunks):
+        for claim_id in chunk:
+            assert homes.setdefault(unit_of[claim_id], index) == index, unit_of[claim_id]
+    assert len(chunks) > 1
+    assert sorted(claim for chunk in chunks for claim in chunk) == sorted(unit_of)
