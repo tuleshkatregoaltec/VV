@@ -325,6 +325,16 @@ async def _finalize(
     list_counts = await profiles.write_profiles(engine, organization_id, generation, totals, stub)
     del totals
     async with AsyncSession(engine, expire_on_commit=False) as db:
+        # Autovacuum has not seen these rows yet; without statistics the first reads can pick a
+        # plan that never finishes.
+        for table in (
+            "crm_owner_assessed_claims",
+            "crm_owner_registry_owners",
+            "crm_owner_registry_properties",
+        ):
+            await db.exec(text(f"ANALYZE {table}"))
+        await db.commit()
+    async with AsyncSession(engine, expire_on_commit=False) as db:
         if verify_tokens and (revision, warehouse) != await _tokens(db, organization_id):
             raise StoreUnavailable("Source or registry evidence changed during the build")
         return await _publish(
