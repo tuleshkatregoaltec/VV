@@ -590,3 +590,30 @@ async def test_claims_chunking_reads_each_claim_once(pg_session, tenant):
         pg_session, organization_id=org, claim_ids=ids[:5]
     )
     assert {row["id"] for row in rows} == set(ids[:5])
+
+
+async def test_an_unavailable_registry_is_never_published_as_confirmed_ownership(
+    pg_session, tenant, evidence, monkeypatch
+):
+    """Without registry evidence the tenant is assessed as unconfirmed, and only briefly."""
+    org = tenant["org"]
+    available = await owner_store.open_store(pg_session, org)
+    assert available.state.warehouse_status == "available"
+
+    async def unavailable():
+        return None
+
+    monkeypatch.setattr(owner_assessment, "_warehouse_revision", unavailable)
+    degraded = await owner_store.open_store(pg_session, org)
+    assert degraded.state.warehouse_status == "unavailable"
+    assert degraded.state.generation > available.state.generation
+    statuses = {row["assessed_status"] for row in await degraded.rows("TRUE")}
+    assert not statuses & {"verified_current_owner", "former_owner"}
+    # while it is fresh it is reused; once it is stale a rebuild is attempted again
+    assert (await owner_store.open_store(pg_session, org)).state.generation == (
+        degraded.state.generation
+    )
+    monkeypatch.setattr(owner_store, "UNAVAILABLE_LIFETIME_SECONDS", -1)
+    assert (await owner_store.open_store(pg_session, org)).state.generation > (
+        degraded.state.generation
+    )
