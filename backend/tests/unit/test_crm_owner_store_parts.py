@@ -126,3 +126,45 @@ def test_source_audit_totals_do_not_depend_on_row_order_or_chunking():
             accumulator.add(item)
         assert accumulator.result() == whole
     assert aggregate_source_audit(rows, 9) is None
+
+
+async def test_a_chunk_is_matched_against_the_aliases_of_the_whole_tenant(monkeypatch):
+    """The alias lookup for a chunk's names must not hide a same-named building elsewhere."""
+    from unittest.mock import AsyncMock
+
+    from app.crm import owner_assessment, owner_queries
+    from app.crm.identity import ParsedContact
+
+    fetch_aliases = AsyncMock(side_effect=AssertionError("a chunk must not fetch its own aliases"))
+    sales = AsyncMock(return_value=[])
+    monkeypatch.setattr(owner_queries, "fetch_assessment_building_aliases", fetch_aliases)
+    monkeypatch.setattr(owner_queries, "fetch_assessment_sales", sales)
+    candidate = ParsedContact(
+        contact_name="A",
+        area_name="Business Bay",
+        project_name="Tower",
+        building_name="Tower",
+        unit_number="101",
+        property_type="Apartment",
+        party_role="Buyer",
+        procedure_type="Sale",
+        source_sheet="s",
+        source_row_number=1,
+        row_fingerprint="1",
+        phone_primary=None,
+        phone_alternate=None,
+        email_primary=None,
+        transaction_date=None,
+        transaction_price_aed=None,
+    )
+    tenant = [
+        {"name_key": "tower", "building_id": "b1", "community_key": "bb", "project_key": ""},
+        {"name_key": "tower", "building_id": "b2", "community_key": "bb", "project_key": ""},
+    ]
+    token = owner_assessment._tenant_aliases.set(tenant)
+    try:
+        bundle = await owner_assessment.capture_owner_evidence([candidate])
+    finally:
+        owner_assessment._tenant_aliases.reset(token)
+    assert bundle["aliases"] == tenant
+    fetch_aliases.assert_not_called()

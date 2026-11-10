@@ -28,8 +28,8 @@ from app.crm.source_audit import SourceAuditAccumulator, source_audit_for_row
 
 logger = logging.getLogger(__name__)
 
-SCAN_CHUNK = 20_000
-OWNER_SLICE = 3_000
+SCAN_CHUNK = 5_000
+OWNER_SLICE = 1_500
 INSERT_BATCH = 1_000
 
 

@@ -24,6 +24,7 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 import orjson
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -248,6 +249,53 @@ async def _build_generation(
                 )
             ).all()
         ]
+    try:
+        aliases = None if degraded else await _tenant_building_aliases(engine, organization_id)
+    except Exception as error:
+        logger.warning("CRM ownership building aliases unavailable")
+        raise StoreUnavailable("Registry building aliases could not be read") from error
+    token = owner_assessment._tenant_aliases.set(aliases)
+    try:
+        return await _assess_in_chunks(engine, organization_id, generation, ids, degraded=degraded)
+    finally:
+        owner_assessment._tenant_aliases.reset(token)
+
+
+async def _tenant_building_aliases(
+    engine: AsyncEngine, organization_id: str
+) -> list[dict[str, Any]]:
+    """The registry's building aliases for every name the tenant's claims use.
+
+    ``capture_owner_evidence`` asks for the aliases of the names in the claims it is given. Which
+    building a name stands for is ambiguous when another building anywhere in the tenant has the
+    same name, so a chunk must see the aliases the whole tenant would have fetched.
+    """
+    from app.crm import owner_queries
+    from app.market.reference import property_name_lookup_key
+
+    async with AsyncSession(engine, expire_on_commit=False) as db:
+        pairs = (
+            await db.exec(
+                text(
+                    "SELECT DISTINCT building_name, project_name FROM crm_property_contact_claims "
+                    "WHERE organization_id = :org AND unit_number <> '' "
+                    "AND NOT (owner_history_evidence ? 'source_audit')"
+                ),
+                params={"org": organization_id},
+            )
+        ).all()
+    names = sorted({property_name_lookup_key(building or project) for building, project in pairs})
+    return await owner_queries.fetch_assessment_building_aliases({"names": names}) if names else []
+
+
+async def _assess_in_chunks(
+    engine: AsyncEngine,
+    organization_id: str,
+    generation: int,
+    ids: list[int],
+    *,
+    degraded: bool,
+) -> dict[str, int]:
     seen: dict[str, int] = {}
     spanning: set[str] = set()
     for index, start in enumerate(range(0, len(ids), CHUNK_CLAIMS)):
@@ -508,9 +556,17 @@ async def open_store(db: AsyncSession, organization_id: str) -> StoreReader:
         await asyncio.wait_for(asyncio.shield(task), timeout)
     except asyncio.TimeoutError:
         if state is None:
-            raise StoreUnavailable("The ownership assessment is still being built") from None
+            raise HTTPException(
+                status_code=503, detail="The ownership assessment is still being built"
+            ) from None
         return StoreReader(db, organization_id, state)
-    built = task.result()  # a failed build is this request's failure
+    try:
+        built = task.result()
+    except StoreUnavailable as error:
+        # inputs changed under the build, or the registry could not be read for it
+        if state is not None:
+            return StoreReader(db, organization_id, state)
+        raise HTTPException(status_code=503, detail=str(error)) from error
     if built is not None:
         return StoreReader(db, organization_id, built)
     # Another process holds the build: wait for its result to be published.
@@ -523,7 +579,9 @@ async def open_store(db: AsyncSession, organization_id: str) -> StoreReader:
         if loop.time() >= deadline:
             if latest is not None:
                 return StoreReader(db, organization_id, latest)
-            raise StoreUnavailable("The ownership assessment is still being built")
+            raise HTTPException(
+                status_code=503, detail="The ownership assessment is still being built"
+            )
         await asyncio.sleep(1.0)
 
 

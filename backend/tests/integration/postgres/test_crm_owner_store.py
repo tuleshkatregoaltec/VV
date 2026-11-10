@@ -68,6 +68,10 @@ def evidence(monkeypatch):
     async def warehouse_revision():
         return state["revision"]
 
+    async def no_aliases(engine, organization_id):
+        return []
+
+    monkeypatch.setattr(owner_store, "_tenant_building_aliases", no_aliases)
     monkeypatch.setattr(owner_assessment, "_fresh_sales", fresh_sales)
     monkeypatch.setattr(owner_assessment, "_warehouse_revision", warehouse_revision)
     monkeypatch.setattr(owner_store, "CHUNK_CLAIMS", 7)
