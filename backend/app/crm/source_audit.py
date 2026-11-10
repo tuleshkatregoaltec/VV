@@ -446,56 +446,74 @@ async def _response(db, record) -> CrmContactImportResponse:
     )
 
 
-def aggregate_source_audit(rows, list_id=None):
-    """Count persisted validated source references, including excluded history."""
-    references = {}
-    import_ids = set()
-    source_count = 0
-    matches = {}
-    associations = {}
-    for row in rows:
+class SourceAuditAccumulator:
+    """Count validated source references row by row, so a whole tenant need not be resident."""
+
+    def __init__(self, list_id: int | None = None) -> None:
+        self.list_id = list_id
+        self.references: dict[Any, Any] = {}
+        self.import_ids: set[Any] = set()
+        self.source_count = 0
+        self.matches: dict[Any, Any] = {}
+        self.associations: dict[Any, Any] = {}
+
+    def add(self, row: dict[str, Any]) -> None:
         audit = source_audit_for_row(row)
-        if not audit or (list_id is not None and row["list_id"] != list_id):
-            continue
-        references[(row["import_id"], audit["reference_id"])] = audit["disposition"]
-        import_ids.add(row["import_id"])
-        source_count += 1
+        if not audit or (self.list_id is not None and row["list_id"] != self.list_id):
+            return
+        self.references[(row["import_id"], audit["reference_id"])] = audit["disposition"]
+        self.import_ids.add(row["import_id"])
+        self.source_count += 1
         match = audit.get("transaction_match")
         if match:
             identity = (row["import_id"], audit["reference_id"])
-            matches[identity] = match
+            self.matches[identity] = match
             category = match.get("owner_category")
             if category in {"current", "former"}:
-                associations[
+                self.associations[
                     (identity, match.get("canonical_owner_key") or audit["canonical_owner_key"])
                 ] = category
-    if not references:
-        return None
-    counts = Counter(references.values())
-    match_counts = Counter(match.get("status") for match in matches.values())
-    association_counts = Counter(associations.values())
-    return CrmSourceAuditSummary(
-        mode="source_transaction_matched" if matches else "source_only",
-        matched_reference_count=match_counts["matched"],
-        matched_registry_property_count=len(
-            {
-                match["property_key"]
-                for match in matches.values()
-                if match.get("status") == "matched" and match.get("property_key")
-            }
-        ),
-        unmatched_reference_count=match_counts["unmatched"],
-        ambiguous_reference_count=match_counts["ambiguous"],
-        excluded_match_reference_count=match_counts["excluded"],
-        current_owner_association_count=association_counts["current"],
-        former_owner_association_count=association_counts["former"],
-        import_count=len(import_ids),
-        reference_count=len(references),
-        owner_candidate_reference_count=sum(counts[key] for key in CANDIDATE_DISPOSITIONS),
-        bank_reference_count=counts["possible_mortgage_or_bank_acquisition"],
-        excluded_nonownership_reference_count=counts["excluded_possible_nonownership_transaction"],
-        review_reference_count=sum(counts[key] for key in REVIEW_DISPOSITIONS),
-        excluded_scope_reference_count=counts["excluded_whole_building_or_project_context"],
-        source_row_count=source_count,
-        disposition_counts=dict(counts),
-    )
+
+    def result(self):
+        references, import_ids, source_count = self.references, self.import_ids, self.source_count
+        matches, associations = self.matches, self.associations
+        if not references:
+            return None
+        counts = Counter(references.values())
+        match_counts = Counter(match.get("status") for match in matches.values())
+        association_counts = Counter(associations.values())
+        return CrmSourceAuditSummary(
+            mode="source_transaction_matched" if matches else "source_only",
+            matched_reference_count=match_counts["matched"],
+            matched_registry_property_count=len(
+                {
+                    match["property_key"]
+                    for match in matches.values()
+                    if match.get("status") == "matched" and match.get("property_key")
+                }
+            ),
+            unmatched_reference_count=match_counts["unmatched"],
+            ambiguous_reference_count=match_counts["ambiguous"],
+            excluded_match_reference_count=match_counts["excluded"],
+            current_owner_association_count=association_counts["current"],
+            former_owner_association_count=association_counts["former"],
+            import_count=len(import_ids),
+            reference_count=len(references),
+            owner_candidate_reference_count=sum(counts[key] for key in CANDIDATE_DISPOSITIONS),
+            bank_reference_count=counts["possible_mortgage_or_bank_acquisition"],
+            excluded_nonownership_reference_count=counts[
+                "excluded_possible_nonownership_transaction"
+            ],
+            review_reference_count=sum(counts[key] for key in REVIEW_DISPOSITIONS),
+            excluded_scope_reference_count=counts["excluded_whole_building_or_project_context"],
+            source_row_count=source_count,
+            disposition_counts=dict(counts),
+        )
+
+
+def aggregate_source_audit(rows, list_id=None):
+    """Count persisted validated source references, including excluded history."""
+    accumulator = SourceAuditAccumulator(list_id)
+    for row in rows:
+        accumulator.add(row)
+    return accumulator.result()
