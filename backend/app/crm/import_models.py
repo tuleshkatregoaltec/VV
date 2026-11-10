@@ -21,6 +21,9 @@ CrmOwnershipStatus = Literal[
 ]
 
 
+# JSONB on PostgreSQL, plain JSON where the unit tests create tables in SQLite
+_JSONB = JSON().with_variant(JSONB(), "postgresql")
+
 class CrmContactImport(SQLModel, table=True):
     __tablename__ = "crm_contact_imports"
     __table_args__ = (
@@ -83,10 +86,10 @@ class CrmOwnerAssessmentState(SQLModel, table=True):
     checked_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
     warehouse_status: str
     built_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
-    summary: dict[str, Any] = SQLField(sa_column=Column(JSONB, nullable=False))
-    import_summaries: dict[str, Any] = SQLField(sa_column=Column(JSONB, nullable=False))
-    list_counts: dict[str, Any] = SQLField(sa_column=Column(JSONB, nullable=False))
-    source_audit: dict[str, Any] = SQLField(sa_column=Column(JSONB, nullable=False))
+    summary: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    import_summaries: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    list_counts: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    source_audit: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
 
 
 class CrmOwnerAssessedClaim(SQLModel, table=True):
@@ -145,7 +148,7 @@ class CrmOwnerAssessedClaim(SQLModel, table=True):
     match_outcome: str | None = None
     search_text: str = SQLField(sa_column=Column(Text, nullable=False))
     props_search_text: str = SQLField(sa_column=Column(Text, nullable=False))
-    row: dict[str, Any] = SQLField(sa_column=Column(JSONB, nullable=False))
+    row: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
 
 
 class CrmOwnerRegistryOwner(SQLModel, table=True):
@@ -161,7 +164,7 @@ class CrmOwnerRegistryOwner(SQLModel, table=True):
     list_id: int = SQLField(primary_key=True)
     canonical_owner_key: str = SQLField(primary_key=True)
     owner_key: str
-    profile: dict[str, Any] = SQLField(sa_column=Column(JSONB, nullable=False))
+    profile: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
     search_text: str = SQLField(sa_column=Column(Text, nullable=False))
     property_count: int
     contact_ready_count: int
