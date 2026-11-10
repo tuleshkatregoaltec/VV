@@ -394,7 +394,15 @@ async def rebuild(engine: AsyncEngine, organization_id: str) -> StoreState | Non
     except BaseException:
         await _discard(engine, organization_id, keep=None, generation=generation)
         raise
-    logger.info("CRM ownership assessment built", extra={"generation": generation, **stats})
+    logger.info(
+        "CRM ownership assessment built: generation %s, %s claims in %s chunks, %s chunks "
+        "reassessed together (%s claims)",
+        generation,
+        stats["claims"],
+        stats["chunks"],
+        stats["tied_chunks"],
+        stats["repaired_claims"],
+    )
     await _discard(engine, organization_id, keep=generation)
     return state
 
@@ -1128,14 +1136,20 @@ class StoreReader:
                     LIMIT :limit OFFSET :offset
                     """
         )
-        page = (await self.db.exec(statement, params=params)).all()
-        total = page[0][1] if page else 0
-        if not page and offset:
-            # past the last page: the total still comes from the same query
-            first = (
-                await self.db.exec(statement, params={**params, "offset": 0, "limit": 1})
-            ).all()
-            total = first[0][1] if first else 0
+        # Joining a few hundred thousand owners to their matching properties is a hash join;
+        # when the planner's estimate is off it chooses a nested loop that does not finish.
+        await self.db.exec(text("SET LOCAL enable_nestloop = off"))
+        try:
+            page = (await self.db.exec(statement, params=params)).all()
+            total = page[0][1] if page else 0
+            if not page and offset:
+                # past the last page: the total still comes from the same query
+                first = (
+                    await self.db.exec(statement, params={**params, "offset": 0, "limit": 1})
+                ).all()
+                total = first[0][1] if first else 0
+        finally:
+            await self.db.exec(text("SET LOCAL enable_nestloop = on"))
         summary = (
             await self.db.exec(
                 text(
