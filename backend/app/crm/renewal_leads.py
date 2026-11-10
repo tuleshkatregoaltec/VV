@@ -177,7 +177,10 @@ async def _owners_by_candidate(
     if not candidate_keys:
         return {}
     owners: dict[str, CrmRenewalOwner] = {}
-    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    # Only these units' claims: the whole-organization assessment is built from every claim.
+    snapshot = await get_owner_assessment(
+        db, organization_id=organization_id, unit_candidate_keys=sorted(set(candidate_keys))
+    )
     requested = set(candidate_keys)
     by_unit: dict[str, dict[str, list[dict]]] = {}
     for row in snapshot.rows:
