@@ -9,6 +9,8 @@ filters, counts and sorts by.
 
 from __future__ import annotations
 
+import ctypes
+import gc
 import logging
 from collections import defaultdict
 from datetime import datetime
@@ -29,6 +31,15 @@ logger = logging.getLogger(__name__)
 SCAN_CHUNK = 20_000
 OWNER_SLICE = 3_000
 INSERT_BATCH = 1_000
+
+
+def release_memory() -> None:
+    """Hand freed chunk memory back to the OS, so a long build stays at one chunk's size."""
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass  # not glibc; the allocator keeps what it freed
 
 
 def row_from_json(value: Any) -> dict[str, Any]:
@@ -141,6 +152,7 @@ async def scan(
         },
     }
     totals.compact = []
+    release_memory()
     return totals, stub, {"checked_at": checked_at, "warehouse_status": warehouse_status, **state}
 
 
@@ -359,4 +371,6 @@ async def write_profiles(
                     counts[name] += value
         await _insert_records(engine, _INSERT_OWNERS, owner_records)
         await _insert_records(engine, _INSERT_PROPERTIES, property_records)
+        del rows, owner_records, property_records, stored
+        release_memory()
     return list_counts

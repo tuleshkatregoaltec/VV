@@ -133,6 +133,10 @@ def _record(row: dict[str, Any], organization_id: str, generation: int) -> dict[
         "pref_support": preference[0],
         "pref_buyer": preference[1],
         "lead_id": row.get("lead_id"),
+        "building_name": row.get("building_name"),
+        "project_name": row.get("project_name"),
+        "unit_number": row.get("unit_number"),
+        "area_name": row.get("area_name"),
         "match_colour": row.get("match_colour"),
         "match_outcome": row.get("match_outcome"),
         "search_text": _search_text(row, SEARCH_FIELDS),
@@ -147,12 +151,12 @@ _INSERT = text(
         organization_id, generation, claim_id, list_id, import_id, owner_key,
         canonical_owner_key, property_key, identity_area, identity_key, group_ident, is_source, ord,
         assessed_status, party_role, transaction_date, event_conf, pref_support, pref_buyer,
-        ready_row, lead_id, match_colour, match_outcome, search_text, props_search_text, row
+        ready_row, lead_id, building_name, project_name, unit_number, area_name, match_colour, match_outcome, search_text, props_search_text, row
     )
     SELECT r.organization_id, r.generation, r.claim_id, r.list_id, r.import_id, r.owner_key,
            r.canonical_owner_key, r.property_key, r.identity_area, r.identity_key, r.group_ident,
            r.is_source, r.ord, r.assessed_status, r.party_role, r.transaction_date, r.event_conf,
-           r.pref_support, r.pref_buyer, r.ready_row, r.lead_id, r.match_colour, r.match_outcome,
+           r.pref_support, r.pref_buyer, r.ready_row, r.lead_id, r.building_name, r.project_name, r.unit_number, r.area_name, r.match_colour, r.match_outcome,
            r.search_text, r.props_search_text, r.row
     FROM jsonb_to_recordset(CAST(:payload AS jsonb)) AS r(
         organization_id varchar, generation bigint, claim_id integer, list_id integer,
@@ -160,7 +164,7 @@ _INSERT = text(
         property_key varchar, identity_area varchar, identity_key varchar, group_ident varchar,
         is_source boolean, ord bigint, assessed_status varchar, party_role varchar, transaction_date date,
         event_conf integer, pref_support boolean, pref_buyer boolean, ready_row boolean,
-        lead_id varchar,
+        lead_id varchar, building_name varchar, project_name varchar, unit_number varchar, area_name varchar,
         match_colour varchar, match_outcome varchar, search_text text,
         props_search_text text, row jsonb
     )
@@ -255,6 +259,7 @@ async def _build_generation(
                 spanning.add(key)
         await _write(engine, organization_id, generation, rows)
         del rows
+        profiles.release_memory()
     del seen
     repaired = 0
     if spanning:
@@ -786,10 +791,10 @@ class StoreReader:
             text(
                 """
                 SELECT identity_area, identity_key, min(ord) AS first_ord,
-                       (array_agg(row->>'building_name' ORDER BY ord))[1],
-                       (array_agg(row->>'project_name' ORDER BY ord))[1],
-                       (array_agg(row->>'unit_number' ORDER BY ord))[1],
-                       (array_agg(row->>'area_name' ORDER BY ord))[1]
+                       (array_agg(building_name ORDER BY ord))[1],
+                       (array_agg(project_name ORDER BY ord))[1],
+                       (array_agg(unit_number ORDER BY ord))[1],
+                       (array_agg(area_name ORDER BY ord))[1]
                 FROM crm_owner_assessed_claims
                 WHERE organization_id = :org AND generation = :gen AND import_id = :import
                   AND identity_key IS NOT NULL

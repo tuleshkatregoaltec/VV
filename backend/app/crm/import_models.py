@@ -24,6 +24,7 @@ CrmOwnershipStatus = Literal[
 # JSONB on PostgreSQL, plain JSON where the unit tests create tables in SQLite
 _JSONB = JSON().with_variant(JSONB(), "postgresql")
 
+
 class CrmContactImport(SQLModel, table=True):
     __tablename__ = "crm_contact_imports"
     __table_args__ = (
@@ -144,6 +145,10 @@ class CrmOwnerAssessedClaim(SQLModel, table=True):
     pref_buyer: bool
     ready_row: bool
     lead_id: str | None = None
+    building_name: str | None = None
+    project_name: str | None = None
+    unit_number: str | None = None
+    area_name: str | None = None
     match_colour: str | None = None
     match_outcome: str | None = None
     search_text: str = SQLField(sa_column=Column(Text, nullable=False))
