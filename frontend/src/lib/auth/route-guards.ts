@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
 	'/invite',
 	'/terms',
 	'/privacy',
+	'/data-deletion',
 	'/reset',
 	'/auth/reset-password'
 ]
