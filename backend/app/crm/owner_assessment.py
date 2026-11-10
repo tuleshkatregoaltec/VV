@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import copy
+import gc
 import hashlib
 import logging
 import time
@@ -790,6 +791,10 @@ async def get_owner_assessment(
             and (_recent[2].warehouse_status == "available" or _recent[1] > time.monotonic())
         ):
             return _recent[2]
+        # Drop the stale whole-org snapshot before decoding or rebuilding, so the old and
+        # new copies are never resident together (a 311k-claim tenant OOM-killed the API).
+        _recent = None
+        gc.collect()
         payload = await cache.get(key)
         if payload:
             try:
