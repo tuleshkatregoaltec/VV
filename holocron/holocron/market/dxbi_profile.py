@@ -31,6 +31,7 @@ a staging table and swapped in with EXCHANGE TABLES.
 from __future__ import annotations
 
 import csv
+from collections.abc import Sequence
 import re
 from pathlib import Path
 from typing import Any
@@ -156,6 +157,26 @@ _PROJECT_MASTER = """
     )"""
 
 
+# The build is split into steps whose results live in work tables: ClickHouse evaluates a CTE
+# again at every reference (the sale base was computed five times, side by side, 1.7 GB each,
+# and the joins on top did not fit in 10 GB), so what several statements read is computed once.
+# ``build_table`` creates the tables in order and drops them when the build ends.
+WORK = "dxbi_profile_work_"
+
+
+def _work_cte(name: str, table: str | None = None) -> str:
+    """The CTE ``name`` reading the work table ``table`` (default: the same name)."""
+    return f"{name} AS (SELECT * FROM {WORK}{table or name})"
+
+
+def _work_step(name: str, ctes: str, source: str | None = None) -> tuple[str, str]:
+    """A work table (name, SELECT filling it): the CTE ``source`` (default: ``name``) of ``ctes``."""
+    return (
+        f"{WORK}{name}",
+        f"WITH {ctes}\nSELECT * FROM {source or name}\n{t._HEAVY_QUERY_SETTINGS}",
+    )
+
+
 def _building_directory(*, source: str) -> str:
     """Per DXBI building (name + area), the DLD value its paired sales agree on."""
     return f"""
@@ -184,11 +205,8 @@ def _building_directory(*, source: str) -> str:
     )"""
 
 
-_SALE_RESOLVED = f"""
-WITH
-    {t._SALE_MATCH_INPUTS},
-    {_PROJECT_MASTER},
-    {t._RENTAL_AREA_CTES},
+_SALE_BASE_CTES = f"""
+    {t._SALE_EVIDENCE_INPUTS},
     dld_rows AS (
         SELECT line_id AS dld_key, area_en, project_en, master_project_en, building_name_en,
                rooms_en, is_offplan_en, reg_type_en, procedure_area
@@ -203,7 +221,7 @@ WITH
     evidence AS (
         SELECT sale_key, dld_key, 'dld_evidence' AS kind
         FROM same_price
-        WHERE day_gap <= 3 AND size_gap <= 0.01
+        WHERE day_gap <= {t.SALE_EVIDENCE_DAYS} AND size_gap <= 0.01
           AND sale_key NOT IN (SELECT sale_key FROM paired)
         ORDER BY sale_key, price_gap, day_gap, size_gap, dld_key
         LIMIT 1 BY sale_key
@@ -226,8 +244,11 @@ WITH
         FROM ({t.DXBI_SALES_BASE}) AS x
         LEFT JOIN refs AS r ON r.sale_key = x.sale_key
         LEFT JOIN dld_rows AS d ON d.dld_key = r.dld_key
-    ),
-    {_building_directory(source="base")},
+    )
+"""
+# The sale base joins each DXBI sale to its DLD sale; the building's agreed values and the
+# bedroom lookups are read from it.
+_SALE_BEDS_CTES = """
     -- The same unit's bedrooms as its other DXBI sales give them.
     unit_beds AS (
         SELECT building_key, upperUTF8(trimBoth(unit_number)) AS unit_key,
@@ -247,7 +268,32 @@ WITH
         )
         GROUP BY building_key, size_key
         HAVING max(n) / sum(n) >= 0.8 AND sum(n) >= 2
+    )
+"""
+SALE_WORK = (
+    _work_step("sale_project_master", _PROJECT_MASTER, "project_master"),
+    _work_step("sale_base", _SALE_BASE_CTES, "base"),
+    _work_step(
+        "sale_building_dir",
+        f"{_work_cte('base', 'sale_base')},{_building_directory(source='base')}",
+        "building_dir",
     ),
+    _work_step(
+        "sale_unit_beds", f"{_work_cte('base', 'sale_base')},{_SALE_BEDS_CTES}", "unit_beds"
+    ),
+    _work_step(
+        "sale_type_beds", f"{_work_cte('base', 'sale_base')},{_SALE_BEDS_CTES}", "type_beds"
+    ),
+)
+
+_SALE_RESOLVED = f"""
+WITH
+    {_work_cte("project_master", "sale_project_master")},
+    {t._RENTAL_AREA_CTES},
+    {_work_cte("base", "sale_base")},
+    {_work_cte("building_dir", "sale_building_dir")},
+    {_work_cte("unit_beds", "sale_unit_beds")},
+    {_work_cte("type_beds", "sale_type_beds")},
     resolved AS (
         SELECT b.sale_key AS sale_key, b.transaction_date AS transaction_date, b.building_name AS building_name, b.dxbi_project AS dxbi_project, b.dxbi_area AS dxbi_area, b.unit_number AS unit_number, b.property_type AS property_type, b.dxbi_bedrooms AS dxbi_bedrooms, b.market_status AS market_status, b.size_key AS size_key, b.building_key AS building_key, b.ref_kind AS ref_kind, b.ref_key AS ref_key, b.ref_area AS ref_area, b.ref_project AS ref_project, b.ref_master AS ref_master, b.ref_building AS ref_building, b.ref_bedrooms AS ref_bedrooms, b.ref_completion AS ref_completion, b.dxbi_size AS dxbi_size, b.ref_size AS ref_size,
                multiIf(b.ref_area != '', b.ref_area,
@@ -346,10 +392,8 @@ def _dld_commercial_type(alias: str) -> str:
     return f"multiIf({branches}, '')"
 
 
-_RENTAL_RESOLVED = f"""
-WITH
+_RENTAL_BASE_CTES = f"""
     {t._RENTAL_AREA_CTES},
-    {_PROJECT_MASTER},
     dld_rows AS (
         SELECT dld_rent_key, area_en, project_en, master_project_en, rooms, actual_area,
                prop_type_en, prop_sub_type_en
@@ -388,7 +432,65 @@ WITH
         FROM lease AS l
         LEFT JOIN market_rental_matches AS m ON m.dxbi_contract_key = l.contract_key
         LEFT JOIN dld_rows AS d ON d.dld_rent_key = m.dld_rent_key
+    )
+"""
+_LEASE_TYPE_BEDS_CTE = """
+    -- A home type: the bedrooms >= 80% of the building's other DXBI leases of the same size have.
+    lease_type_beds AS (
+        SELECT building_key, size_key, argMax(dxbi_bedrooms, n) AS bedrooms
+        FROM (
+            SELECT concat(lowerUTF8(building_name), '|', lowerUTF8(dld_area)) AS building_key,
+                   size_key, dxbi_bedrooms, count() AS n
+            FROM base
+            WHERE building_name != '' AND dxbi_bedrooms != '' AND size_key > 0
+            GROUP BY building_key, size_key, dxbi_bedrooms
+        )
+        GROUP BY building_key, size_key
+        HAVING max(n) / sum(n) >= 0.8 AND sum(n) >= 2
+    )
+"""
+_LEASE_BUILDING_DIR_CTES = """
+    -- What the leases of one DXBI building agree on (leases that name their building).
+    lease_building_votes AS (
+        SELECT concat(lowerUTF8(building_name), '|', lowerUTF8(dld_area)) AS building_key,
+               field, value, count() AS n
+        FROM base
+        ARRAY JOIN ['project', 'master'] AS field, [ref_project, ref_master] AS value
+        WHERE building_name != '' AND ref_kind = 'dld_pair' AND value != ''
+        GROUP BY building_key, field, value
     ),
+    lease_building_dir AS (
+        SELECT building_key,
+               argMaxIf(value, n, field = 'project') AS project,
+               maxIf(n, field = 'project') / greatest(sumIf(n, field = 'project'), 1)
+                   AS project_share,
+               sumIf(n, field = 'project') AS project_n,
+               argMaxIf(value, n, field = 'master') AS master,
+               maxIf(n, field = 'master') / greatest(sumIf(n, field = 'master'), 1) AS master_share,
+               sumIf(n, field = 'master') AS master_n
+        FROM lease_building_votes
+        GROUP BY building_key
+    )
+"""
+RENTAL_WORK = (
+    _work_step("rental_project_master", _PROJECT_MASTER, "project_master"),
+    _work_step("rental_base", _RENTAL_BASE_CTES, "base"),
+    _work_step(
+        "rental_lease_type_beds",
+        f"{_work_cte('base', 'rental_base')},{_LEASE_TYPE_BEDS_CTE}",
+        "lease_type_beds",
+    ),
+    _work_step(
+        "rental_lease_building_dir",
+        f"{_work_cte('base', 'rental_base')},{_LEASE_BUILDING_DIR_CTES}",
+        "lease_building_dir",
+    ),
+)
+
+_RENTAL_RESOLVED = f"""
+WITH
+    {_work_cte("project_master", "rental_project_master")},
+    {_work_cte("base", "rental_base")},
     -- DXBI sales by unit: one building only for (DLD area, unit number, floor area).
     sale_units AS (
         SELECT lowerUTF8(p.area_name) AS area_key, upperUTF8(trimBoth(p.unit_number)) AS unit_key,
@@ -434,19 +536,6 @@ WITH
         GROUP BY area_key, unit_key
         HAVING places = 1
     ),
-    -- A home type: the bedrooms >= 80% of the building's other DXBI leases of the same size have.
-    lease_type_beds AS (
-        SELECT building_key, size_key, argMax(dxbi_bedrooms, n) AS bedrooms
-        FROM (
-            SELECT concat(lowerUTF8(building_name), '|', lowerUTF8(dld_area)) AS building_key,
-                   size_key, dxbi_bedrooms, count() AS n
-            FROM base
-            WHERE building_name != '' AND dxbi_bedrooms != '' AND size_key > 0
-            GROUP BY building_key, size_key, dxbi_bedrooms
-        )
-        GROUP BY building_key, size_key
-        HAVING max(n) / sum(n) >= 0.8 AND sum(n) >= 2
-    ),
     -- DLD's buildings register: the project and master project of a land / building number.
     dld_building_projects AS (
         SELECT land_number AS b_land, building_number AS b_building,
@@ -456,27 +545,8 @@ WITH
         WHERE project_en != '' OR master_project_en != ''
         GROUP BY land_number, building_number
     ),
-    -- What the leases of one DXBI building agree on (leases that name their building).
-    lease_building_votes AS (
-        SELECT concat(lowerUTF8(building_name), '|', lowerUTF8(dld_area)) AS building_key,
-               field, value, count() AS n
-        FROM base
-        ARRAY JOIN ['project', 'master'] AS field, [ref_project, ref_master] AS value
-        WHERE building_name != '' AND ref_kind = 'dld_pair' AND value != ''
-        GROUP BY building_key, field, value
-    ),
-    lease_building_dir AS (
-        SELECT building_key,
-               argMaxIf(value, n, field = 'project') AS project,
-               maxIf(n, field = 'project') / greatest(sumIf(n, field = 'project'), 1)
-                   AS project_share,
-               sumIf(n, field = 'project') AS project_n,
-               argMaxIf(value, n, field = 'master') AS master,
-               maxIf(n, field = 'master') / greatest(sumIf(n, field = 'master'), 1) AS master_share,
-               sumIf(n, field = 'master') AS master_n
-        FROM lease_building_votes
-        GROUP BY building_key
-    ),
+    {_work_cte("lease_type_beds", "rental_lease_type_beds")},
+    {_work_cte("lease_building_dir", "rental_lease_building_dir")},
     resolved AS (
         SELECT b.contract_key AS contract_key, b.lease_start AS lease_start, b.building_name AS building_name, b.dxbi_project AS dxbi_project, b.dxbi_area AS dxbi_area, b.unit_number AS unit_number, b.property_type AS property_type, b.dxbi_bedrooms AS dxbi_bedrooms, b.size_sqft AS size_sqft, b.mapped_area AS mapped_area, b.mapped_area_source AS mapped_area_source, b.ref_kind AS ref_kind, b.ref_area AS ref_area, b.ref_project AS ref_project, b.ref_master AS ref_master, b.ref_bedrooms AS ref_bedrooms, b.dld_area AS dld_area, b.unit_key AS unit_key, b.size_key AS size_key, b.ref_size AS ref_size, b.ref_type AS ref_type,
                su.s_building AS sale_building, su.s_project AS sale_project,
@@ -840,7 +910,9 @@ def _web_master(project: str, area: str) -> str:
     )
 
 
-def _finished(*, table: str, columns: tuple[str, ...], resolved: str, key: str, lease: bool) -> str:
+def _finished(
+    *, table: str, columns: tuple[str, ...], resolved: str, key: str, lease: bool, work: str
+) -> str:
     """The resolved profile with every remaining field filled from the next evidence.
 
     * Master project: DLD's master of the final project, then DXBI's own master community (the
@@ -901,7 +973,7 @@ INSERT INTO `{table}` ({", ".join(columns)})
 SELECT {", ".join(columns)}
 FROM (
 WITH
-    {_PROJECT_MASTER},
+    {_work_cte("project_master", f"{work}_project_master")},
     {_AREA_FACTS},
     {_COORDINATES},
     -- Area and master-project names DLD and DXBI use: a DXBI "building" of such a name is a
@@ -1068,6 +1140,7 @@ SALE_PROFILE_SQL = _finished(
     resolved=_SALE_RESOLVED,
     key="sale_key",
     lease=False,
+    work="sale",
 )
 RENTAL_PROFILE_SQL = _finished(
     table="dxbi_rental_profile",
@@ -1075,6 +1148,7 @@ RENTAL_PROFILE_SQL = _finished(
     resolved=_RENTAL_RESOLVED,
     key="contract_key",
     lease=True,
+    work="rental",
 )
 
 # The records the Transactions pages list, once each, for the Analytics pages. The identity rules
@@ -1213,6 +1287,11 @@ LEFT JOIN dxbi_rental_profile AS p ON p.contract_key = x.contract_key
 {t._HEAVY_QUERY_SETTINGS}
 """
 
+# The work tables each build creates before its statement (in order).
+PROFILE_WORK = {
+    "dxbi_sale_profile": SALE_WORK,
+    "dxbi_rental_profile": RENTAL_WORK,
+}
 PROFILE_STATEMENTS = {
     "dxbi_sale_profile": SALE_PROFILE_SQL,
     "dxbi_rental_profile": RENTAL_PROFILE_SQL,
@@ -1235,25 +1314,47 @@ def create_tables(clickhouse: Any) -> None:
         clickhouse.command(_create_statement(table))
 
 
-def build_table(clickhouse: Any, table: str, statement: str, *, allow_empty: bool = False) -> int:
+def build_table(
+    clickhouse: Any,
+    table: str,
+    statement: str,
+    *,
+    allow_empty: bool = False,
+    work: Sequence[tuple[str, str]] = (),
+) -> int:
     """Fill a staging copy, then swap it in; an empty build leaves the served table unchanged
-    unless an empty table is a valid result (``allow_empty``)."""
+    unless an empty table is a valid result (``allow_empty``). ``work`` are the work tables
+    (name, SELECT) the statement reads, created in order and dropped at the end."""
     staging = f"{table}__staging"
-    clickhouse.command(f"DROP TABLE IF EXISTS {staging}")
-    # From the schema, not AS the served table, so a new column reaches the served table.
-    clickhouse.command(_create_statement(table).replace(table, staging, 1))
-    clickhouse.command(statement.replace(f"`{table}`", staging))
-    rows = int(clickhouse.query(f"SELECT count() FROM {staging}").result_rows[0][0])
-    if rows == 0 and not allow_empty:
+    for name, _ in work:
+        clickhouse.command(f"DROP TABLE IF EXISTS {name}")
+    try:
+        for name, select in work:
+            clickhouse.command(
+                f"CREATE TABLE {name} ENGINE = MergeTree ORDER BY tuple() AS {select}"
+            )
+        clickhouse.command(f"DROP TABLE IF EXISTS {staging}")
+        # From the schema, not AS the served table, so a new column reaches the served table.
+        clickhouse.command(_create_statement(table).replace(table, staging, 1))
+        clickhouse.command(statement.replace(f"`{table}`", staging))
+        rows = int(clickhouse.query(f"SELECT count() FROM {staging}").result_rows[0][0])
+        if rows == 0 and not allow_empty:
+            clickhouse.command(f"DROP TABLE {staging}")
+            raise RuntimeError(
+                f"{table}: the build produced no rows; the served table is unchanged"
+            )
+        clickhouse.command(f"EXCHANGE TABLES {staging} AND {table}")
         clickhouse.command(f"DROP TABLE {staging}")
-        raise RuntimeError(f"{table}: the build produced no rows; the served table is unchanged")
-    clickhouse.command(f"EXCHANGE TABLES {staging} AND {table}")
-    clickhouse.command(f"DROP TABLE {staging}")
-    return rows
+        return rows
+    finally:
+        for name, _ in work:
+            clickhouse.command(f"DROP TABLE IF EXISTS {name}")
 
 
 def build_profile(clickhouse: Any, table: str) -> int:
-    return build_table(clickhouse, table, PROFILE_STATEMENTS[table])
+    return build_table(
+        clickhouse, table, PROFILE_STATEMENTS[table], work=PROFILE_WORK.get(table, ())
+    )
 
 
 def build_profiles(clickhouse: Any) -> dict[str, int]:
