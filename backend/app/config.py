@@ -116,6 +116,8 @@ class Settings(BaseSettings):
     # Auth
     AUTH_URL: AnyUrl  # configMap
     AUTH_SERVICE_ROLE_KEY: str  # Bitwarden Secrets
+    # Hosted Supabase requires an `apikey` header on every /auth/v1 call; self-hosted GoTrue ignores it.
+    AUTH_PUBLISHABLE_KEY: str | None = None
     FIRST_SUPERUSER: EmailStr | None = None
     FIRST_SUPERUSER_PASSWORD: str | None = None
     FIRST_SUPERUSER_RENAME_FROM: EmailStr | None = None

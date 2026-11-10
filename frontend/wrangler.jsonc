@@ -7,6 +7,7 @@
 	"vars": {
 		"PUBLIC_API_BASE_URL": "https://api-pilot.vitevue.com",
 		"PUBLIC_AUTH_BASE_URL": "https://auth-pilot.vitevue.com",
+		"PUBLIC_AUTH_PUBLISHABLE_KEY": "",
 		"PUBLIC_CRM_PRESENTATION_MODE": "true",
 		"PUBLIC_POSTHOG_KEY": "",
 		"PUBLIC_POSTHOG_HOST": ""
