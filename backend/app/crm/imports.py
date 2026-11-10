@@ -63,9 +63,9 @@ from app.crm.import_parsing import (
     _parse_xlsx,
     _summary,
 )
-from app.crm.owner_assessment import get_owner_assessment
 from app.crm.owner_match_stage import run_owner_matching, stored_verdicts
 from app.crm.owner_match_status import summarize_owner_matches
+from app.crm.owner_store import open_store
 from app.crm.owners import _invalidate_owner_summary_cache, _projected_claims
 from app.crm.ownership import (
     _apply_evidence,
@@ -712,10 +712,23 @@ async def list_import_properties(
     record = await import_repository.get_import_for_org(db, import_id, organization_id)
     if not record:
         raise HTTPException(status_code=404, detail="Owner-data import not found")
-    snapshot = await get_owner_assessment(db, organization_id=organization_id)
-    current_by_property = {}
-    for row in snapshot.rows:
-        if row["property_identity"] is not None and row["assessed_status"] in {
+    store = await open_store(db, organization_id)
+    summaries = sorted(
+        await store.import_property_groups(import_id, search),
+        key=lambda group: (
+            str(group["building"] or group["project"] or "").casefold(),
+            str(group["unit"] or "").casefold(),
+            str(group["area"] or "").casefold(),
+        ),
+    )
+    visible_identities = [group["identity"] for group in summaries[offset : offset + limit]]
+    rows_by_identity: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in await store.import_group_rows(import_id, search, visible_identities):
+        rows_by_identity.setdefault(tuple(row["property_identity"]), []).append(row)
+    visible = [rows_by_identity[identity] for identity in visible_identities]
+    current_by_property: dict[tuple[str, str], dict[str, list[dict[str, Any]]]] = {}
+    for row in await store.identity_rows(visible_identities):
+        if row["assessed_status"] in {
             "verified_current_owner",
             "probable_current_owner",
             "conflicting_claim",
@@ -723,35 +736,6 @@ async def list_import_properties(
             current_by_property.setdefault(tuple(row["property_identity"]), {}).setdefault(
                 row["canonical_owner_key"], []
             ).append(row)
-    grouped = {}
-    for row in snapshot.rows:
-        if row["import_id"] != import_id or row["property_identity"] is None:
-            continue
-        if (
-            search
-            and search.strip().casefold()
-            not in " ".join(
-                str(row.get(field) or "")
-                for field in (
-                    "contact_name",
-                    "area_name",
-                    "building_name",
-                    "project_name",
-                    "unit_number",
-                )
-            ).casefold()
-        ):
-            continue
-        grouped.setdefault(tuple(row["property_identity"]), []).append(row)
-    groups = sorted(
-        grouped.values(),
-        key=lambda rows: (
-            str(rows[0].get("building_name") or rows[0].get("project_name") or "").casefold(),
-            str(rows[0].get("unit_number") or "").casefold(),
-            str(rows[0].get("area_name") or "").casefold(),
-        ),
-    )
-    visible = groups[offset : offset + limit]
     selected = []
     for group in visible:
         ordered = sorted(
@@ -769,7 +753,13 @@ async def list_import_properties(
     claims = await owner_repository.list_claims_by_ids(
         db, organization_id, [row["id"] for row in selected]
     )
-    properties = _group_properties(_projected_claims(list(claims), snapshot.rows))
+    properties = _group_properties(
+        _projected_claims(
+            list(claims),
+            selected,
+            await store.read_keys({row["canonical_owner_key"] for row in selected}),
+        )
+    )
     by_identity = {(item.property_key, _location_key(item.area)): item for item in properties}
     ordered_properties = []
     for group in visible:
@@ -791,7 +781,7 @@ async def list_import_properties(
         item.records_truncated = len(group) > _PROPERTY_RECORDS_MAX
         ordered_properties.append(item)
     return CrmImportPropertiesResponse(
-        total=len(groups),
+        total=len(summaries),
         offset=offset,
         limit=limit,
         rows=ordered_properties,

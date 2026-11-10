@@ -98,17 +98,20 @@ async def get_owner_history_summary(
     organization_id: str,
     import_id: int | None = None,
 ) -> CrmOwnerHistorySummary:
-    from app.crm.owner_assessment import get_owner_assessment, summarize_assessment_rows
+    from app.crm.owner_assessment import summarize_assessment_rows
+    from app.crm.owner_store import open_store
 
     if import_id is not None and not await owner_repository.owner_history_import_exists(
         db, organization_id, import_id
     ):
         raise HTTPException(status_code=404, detail="CRM contact import not found")
-    snapshot = await get_owner_assessment(db, organization_id=organization_id)
+    store = await open_store(db, organization_id)
     if import_id is None:
-        return snapshot.summary
-    selected = [row for row in snapshot.rows if row["import_id"] == import_id]
-    return summarize_assessment_rows(snapshot, selected)
+        return CrmOwnerHistorySummary.model_validate(store.state.summary)
+    stored = store.state.import_summaries.get(str(import_id))
+    if stored is not None:
+        return CrmOwnerHistorySummary.model_validate(stored)
+    return summarize_assessment_rows(store.snapshot_stub(), [])
 
 
 async def get_owner_history(
@@ -120,29 +123,25 @@ async def get_owner_history(
     limit: int = 50,
     offset: int = 0,
 ) -> CrmOwnerHistoryResponse:
-    from app.crm.owner_assessment import get_owner_assessment, summarize_assessment_rows
+    from app.crm.owner_assessment import summarize_assessment_rows
+    from app.crm.owner_store import open_store
 
     if import_id is not None and not await owner_repository.owner_history_import_exists(
         db, organization_id, import_id
     ):
         raise HTTPException(status_code=404, detail="CRM contact import not found")
-    snapshot = await get_owner_assessment(db, organization_id=organization_id)
-    canonical = {
-        row["canonical_owner_key"]
-        for row in snapshot.rows
-        if row["owner_key"] == owner_key or row["canonical_owner_key"] == owner_key
-    }
+    store = await open_store(db, organization_id)
+    canonical = await store.canonical_owners(owner_key)
     if not canonical:
         raise HTTPException(status_code=404, detail="Owner profile not found")
     if len(canonical) > 1:
         raise HTTPException(status_code=409, detail="Choose a distinct canonical owner identity")
     selected = [
         row
-        for row in snapshot.rows
-        if row["canonical_owner_key"] in canonical
-        and (import_id is None or row["import_id"] == import_id)
+        for row in await store.owner_rows(canonical)
+        if import_id is None or row["import_id"] == import_id
     ]
-    summary = summarize_assessment_rows(snapshot, selected)
+    summary = summarize_assessment_rows(store.snapshot_stub(), selected)
     selected.sort(
         key=lambda row: (
             row.get("transaction_date") or date.min,
