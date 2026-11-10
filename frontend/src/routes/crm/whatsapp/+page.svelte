@@ -8,12 +8,11 @@ import ConnectCard from '$lib/components/whatsapp-connect/ConnectCard.svelte'
 import ContactsCard from '$lib/components/whatsapp-connect/ContactsCard.svelte'
 import GoodToKnow from '$lib/components/whatsapp-connect/GoodToKnow.svelte'
 import StatusCard from '$lib/components/whatsapp-connect/StatusCard.svelte'
-import StepRail from '$lib/components/whatsapp-connect/StepRail.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import { toast } from '$lib/crm/stores/toast.svelte'
 import { getQueryClient } from '$lib/queries/client'
 import { whatsappConnectKeys, whatsappConnectQueries } from '$lib/queries/whatsapp-connect'
-import { type ConnectPhase, stepStates } from '$lib/whatsapp/connect-state'
+import type { ConnectPhase } from '$lib/whatsapp/connect-state'
 import { loadFacebookSdk } from '$lib/whatsapp/facebook-sdk'
 import {
 	createSignupCollector,
@@ -128,11 +127,7 @@ onDestroy(() => collector?.dispose())
 const configMessage = $derived(
 	configQuery.isError && !config ? 'Check your connection and try again.' : ''
 )
-const facts = $derived(
-	connected
-		? `Connected${status?.display_phone_number ? ` · ${status.display_phone_number}` : ''}`
-		: 'Answer buyer enquiries from your own number'
-)
+const facts = 'Answer buyer enquiries from your own number'
 </script>
 
 <svelte:head><title>WhatsApp - Vitevue CRM</title></svelte:head>
@@ -141,8 +136,6 @@ const facts = $derived(
 <PageHeader title="WhatsApp" {facts} />
 
 <div class="wa">
-	<StepRail states={stepStates(status)} />
-
 	{#if statusQuery.isError && !statusQuery.data}
 		<div class="errline" role="alert">
 			<span>Could not load your WhatsApp connection.</span>
@@ -150,43 +143,31 @@ const facts = $derived(
 		</div>
 	{:else if !statusQuery.isSuccess}
 		<div class="loading" aria-busy="true">Loading your WhatsApp connection…</div>
-	{:else}
-		<div class="cols">
-			<div class="main">
-				{#if status && connected}
-					<StatusCard {status} ondisconnected={(next) => (disconnectedNote = next)} />
-					<ContactsCard {status} />
-					<AutomationCard {status} />
-				{:else}
-					<ConnectCard
-						{config}
-						configError={configMessage}
-						sdkReady={sdk !== null}
-						{sdkError}
-						{phase}
-						error={signupError}
-						previous={status ?? disconnectedNote}
-						onconnect={connect}
-						oncancel={cancel}
-						onretry={retry}
-					/>
-				{/if}
-			</div>
-			<aside class="side" aria-label="Good to know">
-				<GoodToKnow {connected} />
-			</aside>
+	{:else if status && connected}
+		<div class="card">
+			<StatusCard {status} ondisconnected={(next) => (disconnectedNote = next)} />
+			<AutomationCard {status} />
 		</div>
+		<ContactsCard {status} />
+		<GoodToKnow connected />
+	{:else}
+		<ConnectCard
+			{config}
+			configError={configMessage}
+			sdkReady={sdk !== null}
+			{sdkError}
+			{phase}
+			error={signupError}
+			previous={status ?? disconnectedNote}
+			onconnect={connect}
+			oncancel={cancel}
+			onretry={retry}
+		/>
+		<GoodToKnow />
 	{/if}
 </div>
 
 <style>
-.wa { display: grid; gap: 22px; max-width: 1080px; }
-.cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
-.main { display: grid; gap: 14px; min-width: 0; }
-.side { position: sticky; top: 0; }
+.wa { display: grid; gap: 14px; max-width: 720px; }
 .loading { padding: 40px 12px; text-align: center; color: var(--text3); font-size: 13.5px; }
-@media (max-width: 960px) {
-	.cols { grid-template-columns: minmax(0, 1fr); }
-	.side { position: static; }
-}
 </style>

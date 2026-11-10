@@ -173,8 +173,10 @@ test('an agent connects WhatsApp, blocks contacts, turns replies on and disconne
 	await expect(page.getByText('WhatsApp connection is being set up')).toBeVisible()
 	await expect(page.getByRole('button', { name: 'Connect WhatsApp' })).toHaveCount(0)
 	await expect(page.getByRole('alert')).toHaveCount(0)
-	// The plain-language guidance is already readable.
+	// What to prepare is readable at once; the reassurance sits in a collapsed section.
 	await expect(page.getByText('Use the WhatsApp Business app.')).toBeVisible()
+	await expect(page.getByText('Blocked contacts are never read')).toBeHidden()
+	await page.getByText('Good to know', { exact: true }).click()
 	await expect(page.getByText('Blocked contacts are never read')).toBeVisible()
 	await expect(page.getByText('Personal messages are never stored.')).toBeVisible()
 	await expect(page.getByText('1,000 free replies a month')).toBeVisible()
@@ -480,7 +482,7 @@ test('a switched-on number that the server has paused says so instead of "On"', 
 		})
 	})
 	await page.goto('/crm/whatsapp')
-	const card = page.getByRole('region', { name: 'Turn on replies' })
+	const card = page.getByRole('region', { name: 'Automatic replies' })
 	await expect(card.getByText('Paused', { exact: true })).toBeVisible()
 	await expect(
 		card.getByText(

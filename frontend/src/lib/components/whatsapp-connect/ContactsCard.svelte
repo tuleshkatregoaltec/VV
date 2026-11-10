@@ -123,16 +123,13 @@ async function retrySync() {
 	<div class="ch">
 		<h2 id="contacts-h">Choose who to block <span class="ct">{status.contacts.blocked} blocked</span></h2>
 	</div>
-	<div class="cb stack">
-		<p class="lead">Block family, friends and anyone personal. Vitevue never reads messages from blocked contacts. Everyone else is treated as a possible enquiry.</p>
+	<div class="stack">
+		<p class="lead">Messages from blocked contacts are never read or stored. Everyone else is treated as a possible enquiry.</p>
 
 		{#if pending}
 			<div class="sync" role="status">
 				<span class="spin" aria-hidden="true"></span>
-				<div>
-					<b>Syncing your contacts from WhatsApp</b>
-					<span>This takes a few minutes. This page updates by itself, and you can add numbers to block below while you wait.</span>
-				</div>
+				<span class="sync-text"><b>Syncing your contacts from WhatsApp</b> This takes a few minutes and updates by itself.</span>
 				<button type="button" class="btn ghost sm" onclick={retrySync} disabled={syncing}>{syncing ? 'Asking…' : 'Ask again'}</button>
 			</div>
 		{/if}
@@ -140,27 +137,13 @@ async function retrySync() {
 		<div class="filters">
 			<label class="search">
 				<Search size={14} aria-hidden="true" />
-				<input type="search" bind:value={searchInput} placeholder="Search name or number" aria-label="Search contacts" />
+				<input type="search" bind:value={searchInput} placeholder="Search contacts" aria-label="Search contacts" />
 			</label>
 			<div class="seg" role="group" aria-label="Show contacts">
 				<button type="button" aria-pressed={view === 'all'} onclick={() => (view = 'all')}>All</button>
 				<button type="button" aria-pressed={view === 'blocked'} onclick={() => (view = 'blocked')}>Blocked</button>
 			</div>
-			<span class="count" aria-live="polite">{total} {total === 1 ? 'contact' : 'contacts'}</span>
 		</div>
-
-		{#if chosen.length > 0}
-			<div class="bulk" role="region" aria-label="Selected contacts">
-				<b>{chosen.length} selected</b>
-				{#if toBlock.length > 0}
-					<button type="button" class="btn sm" disabled={working} onclick={() => apply(true, new Set(toBlock.map((r) => r.id)))}>Block {toBlock.length}</button>
-				{/if}
-				{#if toUnblock.length > 0}
-					<button type="button" class="btn ghost sm" disabled={working} onclick={() => apply(false, new Set(toUnblock.map((r) => r.id)))}>Unblock {toUnblock.length}</button>
-				{/if}
-				<button type="button" class="btn plain sm" onclick={() => (selected = new Set())}>Clear</button>
-			</div>
-		{/if}
 
 		{#if query.isError && rows.length === 0}
 			<div class="errline" role="alert"><span>Could not load your contacts.</span><button type="button" class="btn ghost sm" onclick={() => query.refetch()}>Retry</button></div>
@@ -174,81 +157,108 @@ async function retrySync() {
 				{:else}No contacts were synced from WhatsApp. Add numbers to block below.{/if}
 			</div>
 		{:else}
-			<label class="all"><input type="checkbox" checked={allShown} onchange={() => (selected = selectVisible(selected, rows))} /> Select all shown</label>
-			<ul class="list">
-				{#each rows as contact (contact.id)}
-					<li class={['row', contact.blocked && 'is-blocked']}>
-						<input
-							type="checkbox"
-							checked={selected.has(contact.id)}
-							onchange={() => (selected = selectionAfterToggle(selected, contact.id))}
-							aria-label="Select {label(contact)}"
-						/>
-						<div class="who">
-							<b>{label(contact)}</b>
-							{#if contact.name}<span class="muted num">+{contact.wa_id}</span>{/if}
+			<div class="listbox">
+				<div class="lh">
+					<label class="all"><input type="checkbox" checked={allShown} onchange={() => (selected = selectVisible(selected, rows))} /> Select all shown</label>
+					{#if chosen.length > 0}
+						<div class="bulk" role="region" aria-label="Selected contacts">
+							<b>{chosen.length} selected</b>
+							{#if toBlock.length > 0}
+								<button type="button" class="btn sm" disabled={working} onclick={() => apply(true, new Set(toBlock.map((r) => r.id)))}>Block {toBlock.length}</button>
+							{/if}
+							{#if toUnblock.length > 0}
+								<button type="button" class="btn ghost sm" disabled={working} onclick={() => apply(false, new Set(toUnblock.map((r) => r.id)))}>Unblock {toUnblock.length}</button>
+							{/if}
+							<button type="button" class="btn plain sm" onclick={() => (selected = new Set())}>Clear</button>
 						</div>
-						{#if contact.in_address_book}<span class="chip outline">Saved</span>{/if}
-						{#if contact.blocked}<span class="chip red">Blocked</span>{/if}
-						<button
-							type="button"
-							class={['btn sm', contact.blocked ? 'ghost' : 'danger']}
-							disabled={working}
-							onclick={() => apply(!contact.blocked, new Set([contact.id]))}
-							aria-label="{contact.blocked ? 'Unblock' : 'Block'} {label(contact)}"
-						>{contact.blocked ? 'Unblock' : 'Block'}</button>
-					</li>
-				{/each}
-			</ul>
-			{#if query.hasNextPage}
-				<button type="button" class="btn ghost more" disabled={query.isFetchingNextPage} onclick={() => query.fetchNextPage()}>
-					{query.isFetchingNextPage ? 'Loading…' : `Show more (${total - rows.length} left)`}
-				</button>
-			{/if}
+					{:else}
+						<span class="count" aria-live="polite">{total} {total === 1 ? 'contact' : 'contacts'}</span>
+					{/if}
+				</div>
+				<ul class="list">
+					{#each rows as contact (contact.id)}
+						<li class={['row', contact.blocked && 'is-blocked']}>
+							<input
+								type="checkbox"
+								checked={selected.has(contact.id)}
+								onchange={() => (selected = selectionAfterToggle(selected, contact.id))}
+								aria-label="Select {label(contact)}"
+							/>
+							<div class="who">
+								<b>{label(contact)}</b>
+								{#if contact.name || contact.in_address_book}
+									<span class="sub">{#if contact.name}<span class="num">+{contact.wa_id}</span>{/if}{#if contact.name && contact.in_address_book}{' · '}{/if}{#if contact.in_address_book}Saved{/if}</span>
+								{/if}
+							</div>
+							{#if contact.blocked}<span class="chip red">Blocked</span>{/if}
+							<button
+								type="button"
+								class="btn ghost sm"
+								disabled={working}
+								onclick={() => apply(!contact.blocked, new Set([contact.id]))}
+								aria-label="{contact.blocked ? 'Unblock' : 'Block'} {label(contact)}"
+							>{contact.blocked ? 'Unblock' : 'Block'}</button>
+						</li>
+					{/each}
+				</ul>
+				{#if query.hasNextPage}
+					<button type="button" class="more" disabled={query.isFetchingNextPage} onclick={() => query.fetchNextPage()}>
+						{query.isFetchingNextPage ? 'Loading…' : `Show more (${total - rows.length} left)`}
+					</button>
+				{/if}
+			</div>
 		{/if}
 
 		<form class="add" onsubmit={blockNumbers}>
-			<div class="fld">
-				<label for="wa-block-number">Block a number that is not in the list</label>
-				<div class="addrow">
-					<input id="wa-block-number" type="text" inputmode="tel" bind:value={numberText} placeholder="+971 50 123 4567" aria-describedby={numberError ? 'wa-block-error' : undefined} aria-invalid={numberError ? 'true' : undefined} />
-					<button type="submit" class="btn ghost" disabled={working || !numberText.trim()}>Block number</button>
-				</div>
-				{#if numberError}<span id="wa-block-error" class="err" role="alert">{numberError}</span>{/if}
-				<span class="muted help">Separate several numbers with commas or new lines.</span>
+			<label class="sr" for="wa-block-number">Block a number that is not in the list</label>
+			<div class="addrow">
+				<input id="wa-block-number" type="text" inputmode="tel" bind:value={numberText} placeholder="Block another number, e.g. +971 50 123 4567" aria-describedby={numberError ? 'wa-block-error' : 'wa-block-help'} aria-invalid={numberError ? 'true' : undefined} />
+				<button type="submit" class="btn ghost" disabled={working || !numberText.trim()}>Block number</button>
 			</div>
+			{#if numberError}<span id="wa-block-error" class="err" role="alert">{numberError}</span>{/if}
+			<span id="wa-block-help" class="help">For a number that is not in the list. Separate several with commas or new lines.</span>
 		</form>
 	</div>
 </section>
 
 <style>
-.stack { display: grid; gap: 14px; padding: 16px; }
-.lead { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text2); max-width: 62ch; }
-.sync { display: flex; gap: 12px; align-items: center; background: var(--blue-bg); border-radius: 8px; padding: 10px 12px; font-size: 13.5px; }
-.sync > div { display: grid; gap: 2px; flex: 1; min-width: 0; }
-.sync b { color: var(--blue); font-weight: 600; }
-.sync span:not(.spin) { color: var(--text2); }
-.spin { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--blue); border-right-color: transparent; animation: turn .9s linear infinite; }
+.ch { padding: 14px 20px; }
+.stack { display: grid; gap: 14px; padding: 16px 20px 20px; }
+.lead { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text2); max-width: 62ch; }
+.sync { display: flex; gap: 10px; align-items: center; background: var(--blue-bg); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--text2); }
+.sync-text { flex: 1; min-width: 0; }
+.sync b { color: var(--blue); font-weight: 600; margin-right: 4px; }
+.spin { flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--blue); border-right-color: transparent; animation: turn .9s linear infinite; }
 @keyframes turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; border-right-color: var(--blue); } }
-.bulk { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px; border-radius: 8px; background: var(--sel); font-size: 13.5px; }
-.bulk b { margin-right: auto; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.search { flex: 1 1 200px; }
 .quiet { padding: 28px 12px; text-align: center; color: var(--text3); font-size: 13.5px; }
-.all { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--text2); padding: 0 12px; }
-.list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--sep); border-radius: 8px; max-height: 440px; overflow: auto; }
-.row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--sep); }
+.listbox { border: 1px solid var(--sep); border-radius: 8px; overflow: hidden; }
+.lh { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; min-height: 40px; padding: 6px 12px; background: var(--sunk); border-bottom: 1px solid var(--sep); font-size: 12.5px; color: var(--text2); }
+.bulk { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; color: var(--text); font-size: 13px; }
+.bulk b { margin-right: 4px; }
+.all { display: flex; gap: 8px; align-items: center; }
+.count { font-variant-numeric: tabular-nums; }
+.list { list-style: none; margin: 0; padding: 0; max-height: 400px; overflow: auto; }
+.row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--sep); }
 .row:last-child { border-bottom: 0; }
 .row.is-blocked { background: var(--sunk); }
-.who { display: grid; min-width: 0; line-height: 1.3; }
-.who b { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.num { font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.more { justify-self: center; }
-.add { border-top: 1px solid var(--sep); padding-top: 14px; }
+.who { display: grid; min-width: 0; line-height: 1.35; }
+.who b { font-weight: 550; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub { font-size: 12.5px; color: var(--text3); }
+.num { font-variant-numeric: tabular-nums; }
+.more { display: block; width: 100%; padding: 9px; border-top: 1px solid var(--sep); font-size: 13px; font-weight: 500; color: var(--accent); }
+.more:hover:not(:disabled) { background: var(--hover); }
+.add { display: grid; gap: 6px; }
 .addrow { display: flex; gap: 8px; flex-wrap: wrap; }
-.addrow input { flex: 1 1 220px; max-width: 320px; }
-.help { font-size: 12px; }
+.addrow input { flex: 1 1 240px; }
+.help { font-size: 12px; color: var(--text3); }
 .err { color: var(--red); font-size: 12.5px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 560px) {
+	.ch { padding: 12px 14px; }
+	.stack { padding: 14px; }
 	.row { grid-template-columns: 18px minmax(0, 1fr) auto; }
 	.row .chip { display: none; }
 }
