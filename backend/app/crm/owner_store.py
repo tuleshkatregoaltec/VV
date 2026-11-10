@@ -626,19 +626,27 @@ class StoreReader:
             shared_keys=shared,
         )
 
-    async def profile(self, canonical: str, list_id: int = 0):
+    async def profiles(self, canonicals: list[str], list_id: int = 0) -> dict[str, Any]:
+        """Stored profiles by identity; an identity with no reviewed profile is absent."""
         from app.crm.import_models import CrmOwnerProfile
 
-        row = (
-            await self.db.exec(
-                text(
-                    "SELECT profile FROM crm_owner_registry_owners WHERE organization_id = :org "
-                    "AND generation = :gen AND list_id = :list AND canonical_owner_key = :key"
-                ),
-                params={**self.scope, "list": list_id, "key": canonical},
-            )
-        ).first()
-        return CrmOwnerProfile.model_validate(_json_value(row[0])) if row else None
+        if not canonicals:
+            return {}
+        result = await self.db.exec(
+            text(
+                "SELECT canonical_owner_key, profile FROM crm_owner_registry_owners "
+                "WHERE organization_id = :org AND generation = :gen AND list_id = :list "
+                "AND canonical_owner_key = ANY(:keys)"
+            ),
+            params={**self.scope, "list": list_id, "keys": sorted(set(canonicals))},
+        )
+        return {
+            canonical: CrmOwnerProfile.model_validate(_json_value(profile))
+            for canonical, profile in result.all()
+        }
+
+    async def profile(self, canonical: str, list_id: int = 0):
+        return (await self.profiles([canonical], list_id)).get(canonical)
 
     async def has_source_rows(self, canonical: str) -> bool:
         return bool(

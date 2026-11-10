@@ -841,9 +841,10 @@ async def get_owner_registry(
         offset=offset,
     )
     owners = []
+    full_profiles = await store.profiles(page)
+    list_profiles = full_profiles if list_id is None else await store.profiles(page, list_id)
     for canonical in page:
-        full = await store.profile(canonical)
-        profile = full if list_id is None else await store.profile(canonical, list_id)
+        full, profile = full_profiles.get(canonical), list_profiles.get(canonical)
         if full is None or profile is None:
             continue
         properties = [
