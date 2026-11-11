@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Owner</h2>
+<table class="kv">
+  <tr><th>Owner name</th><td><bdi>{{ owner.full_name }}</bdi></td></tr>
+  <tr><th>Title deed number</th><td>{{ owner.title_deed_number }}</td></tr>
+  <tr><th>Emirates ID / passport</th><td>{{ owner.id_number }}</td></tr>
+  {% if owner.phone %}<tr><th>Phone</th><td>{{ owner.phone }}</td></tr>{% endif %}
+  {% if owner.email %}<tr><th>Email</th><td>{{ owner.email }}</td></tr>{% endif %}
+</table>
+<h2>Statement</h2>
+<p class="clause">I, <bdi>{{ owner.full_name }}</bdi>, the owner of the property described above (title deed {{ owner.title_deed_number }}), have no objection to <bdi>{{ listing.broker_name }}</bdi> marketing this property for {{ "rent" if listing.mode == "rent" else "sale" }}.</p>
+<div class="sign"><div>Owner signature and date</div><div>For <bdi>{{ listing.broker_name }}</bdi></div></div>
+{% endblock %}

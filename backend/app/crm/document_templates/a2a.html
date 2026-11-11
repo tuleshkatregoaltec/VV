@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Brokers</h2>
+<table class="kv">
+  <tr><th>Listing brokerage</th><td><bdi>{{ listing.broker_name }}</bdi></td></tr>
+  <tr><th>Listing agent</th><td><bdi>{{ listing.agent_name }}</bdi></td></tr>
+  <tr><th>Co-broking brokerage</th><td><bdi>{{ a2a.other_brokerage }}</bdi></td></tr>
+  <tr><th>Co-broking agent</th><td><bdi>{{ a2a.other_broker_name }}</bdi></td></tr>
+  <tr><th>Agent BRN</th><td>{{ a2a.other_broker_brn }}</td></tr>
+</table>
+<h2>Terms</h2>
+<table class="kv">
+  <tr><th>Commission split</th><td>{{ a2a.commission_split_pct }}% to the co-broking brokerage</td></tr>
+  <tr><th>Valid until</th><td>{{ a2a.valid_until }}</td></tr>
+</table>
+<div class="sign"><div>For <bdi>{{ listing.broker_name }}</bdi></div><div>For <bdi>{{ a2a.other_brokerage }}</bdi></div></div>
+{% endblock %}
