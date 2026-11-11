@@ -2730,6 +2730,365 @@
 				}
 			}
 		},
+		"/api/v1/crm/company-listings/{listing_key}": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Company Listing",
+				"description": "One current Property Finder listing; `managed` when it is the connected company's.",
+				"operationId": "crm-crm_company_listing",
+				"parameters": [
+					{
+						"name": "listing_key",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"pattern": "^\\d{1,20}$",
+							"title": "Listing Key"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmCompanyListingDetail"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/listing-document-info": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Listing Document Info",
+				"description": "A managed listing with the document information saved for it (revision 0 = none yet).",
+				"operationId": "crm-crm_listing_document_info",
+				"parameters": [
+					{
+						"name": "source",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"const": "property_finder",
+							"type": "string",
+							"title": "Source"
+						}
+					},
+					{
+						"name": "listing_key",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"pattern": "^\\d{1,20}$",
+							"title": "Listing Key"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ListingDocumentInfoResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"put": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Save Listing Document Info",
+				"description": "Save a listing's document information; 409 `stale_revision` if someone saved first.",
+				"operationId": "crm-crm_save_listing_document_info",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ListingDocumentInfoUpdate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ListingDocumentInfoResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/documents": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Generate Document",
+				"description": "Generate one PDF from a managed listing's saved information.\n\n201 = made now; 200 = this idempotency key already has a document (returned as is).\n422 `missing_fields`, 409 `stale_revision`, 502 when rendering or storage failed.",
+				"operationId": "crm-crm_generate_document",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GenerateDocumentRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeneratedDocumentResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Documents",
+				"description": "The organization's generated documents, newest first.",
+				"operationId": "crm-crm_documents",
+				"parameters": [
+					{
+						"name": "listing_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"pattern": "^\\d{1,20}$"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Listing Key"
+						}
+					},
+					{
+						"name": "doc_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"enum": ["noc", "brochure", "lease", "a2a"],
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Doc Type"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"default": 50,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeneratedDocumentListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/documents/{document_id}": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Document",
+				"operationId": "crm-crm_document",
+				"parameters": [
+					{
+						"name": "document_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Document Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeneratedDocumentResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/documents/{document_id}/download": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Download Document",
+				"description": "A link valid for 5 minutes; 409 `not_ready` unless the PDF was made.",
+				"operationId": "crm-crm_download_document",
+				"parameters": [
+					{
+						"name": "document_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Document Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DocumentDownloadResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/company-listings/source": {
 			"put": {
 				"tags": ["crm", "crm"],
@@ -5768,6 +6127,896 @@
 								"schema": {
 									"$ref": "#/components/schemas/HTTPValidationError"
 								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/status": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Status",
+				"description": "Whether the signed-in user can message: WhatsApp is connected and they have a number.",
+				"operationId": "crm-whatsapp-crm_whatsapp_status",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppStatusResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/templates": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Templates",
+				"description": "The business account's message templates, as Meta reviewed them.",
+				"operationId": "crm-whatsapp-crm_whatsapp_templates",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/WhatsAppTemplateResponse"
+									},
+									"type": "array",
+									"title": "Response Crm-Whatsapp-Crm Whatsapp Templates"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/chats": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Chats",
+				"description": "Conversations on the signed-in agent's number, newest first.",
+				"operationId": "crm-whatsapp-crm_whatsapp_chats",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/WhatsAppChatResponse"
+									},
+									"type": "array",
+									"title": "Response Crm-Whatsapp-Crm Whatsapp Chats"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/chats/{wa_id}": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Chat",
+				"operationId": "crm-whatsapp-crm_whatsapp_chat",
+				"parameters": [
+					{
+						"name": "wa_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"pattern": "^\\d{8,15}$",
+							"title": "Wa Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppThreadResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/chats/{wa_id}/reply": {
+			"post": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Chat Reply",
+				"description": "A free-form reply from the agent's number, inside the 24-hour window.",
+				"operationId": "crm-whatsapp-crm_whatsapp_chat_reply",
+				"parameters": [
+					{
+						"name": "wa_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"pattern": "^\\d{8,15}$",
+							"title": "Wa Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/WhatsAppReply"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppSendResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/chats/{wa_id}/template": {
+			"post": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Chat Template",
+				"description": "An approved template from the agent's number (to start, or after the window closes).",
+				"operationId": "crm-whatsapp-crm_whatsapp_chat_template",
+				"parameters": [
+					{
+						"name": "wa_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"pattern": "^\\d{8,15}$",
+							"title": "Wa Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/WhatsAppTemplateSend"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppSendResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/leads/{enquiry_id}/thread": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Lead Thread",
+				"description": "The signed-in agent's chat with a lead (Lead \u203a Conversation).",
+				"operationId": "crm-whatsapp-crm_whatsapp_lead_thread",
+				"parameters": [
+					{
+						"name": "enquiry_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Enquiry Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppThreadResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/leads/{enquiry_id}/reply": {
+			"post": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Lead Reply",
+				"operationId": "crm-whatsapp-crm_whatsapp_lead_reply",
+				"parameters": [
+					{
+						"name": "enquiry_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Enquiry Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/WhatsAppReply"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppSendResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/leads/{enquiry_id}/template": {
+			"post": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Lead Template",
+				"operationId": "crm-whatsapp-crm_whatsapp_lead_template",
+				"parameters": [
+					{
+						"name": "enquiry_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Enquiry Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/WhatsAppTemplateSend"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppSendResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/numbers": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Numbers",
+				"description": "The organization's sender numbers and who sends from each.",
+				"operationId": "crm-whatsapp-crm_whatsapp_numbers",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/WhatsAppNumberResponse"
+									},
+									"type": "array",
+									"title": "Response Crm-Whatsapp-Crm Whatsapp Numbers"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/numbers/{phone_number_id}": {
+			"put": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Save Number",
+				"description": "Register a number by its Meta Phone Number ID: an agent's, or the campaign number.",
+				"operationId": "crm-whatsapp-crm_whatsapp_save_number",
+				"parameters": [
+					{
+						"name": "phone_number_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"pattern": "^\\d{5,30}$",
+							"title": "Phone Number Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/WhatsAppNumberWrite"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppNumberResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/meta/numbers": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Meta Numbers",
+				"description": "The numbers Meta lists under the business account, with their Phone Number IDs.",
+				"operationId": "crm-whatsapp-crm_whatsapp_meta_numbers",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/WhatsAppMetaNumber"
+									},
+									"type": "array",
+									"title": "Response Crm-Whatsapp-Crm Whatsapp Meta Numbers"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/meta/subscribe": {
+			"post": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Subscribe",
+				"description": "Subscribe this app to the business account's webhooks (once, during setup).",
+				"operationId": "crm-whatsapp-crm_whatsapp_subscribe",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppSendResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/campaign/audience": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Campaign Audience",
+				"description": "Leads a campaign may go to: consent recorded, not opted out, with a WhatsApp number.",
+				"operationId": "crm-whatsapp-crm_whatsapp_campaign_audience",
+				"parameters": [
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					},
+					{
+						"name": "intent",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"pattern": "^(unknown|buy|rent|sell|let)$"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Intent"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppAudienceResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/campaigns": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Campaigns",
+				"operationId": "crm-whatsapp-crm_whatsapp_campaigns",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/WhatsAppCampaignResponse"
+									},
+									"type": "array",
+									"title": "Response Crm-Whatsapp-Crm Whatsapp Campaigns"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Create Campaign",
+				"description": "Record the campaign and its recipients, then send in the background.",
+				"operationId": "crm-whatsapp-crm_whatsapp_create_campaign",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/WhatsAppCampaignCreate"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppCampaignDetail"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/campaigns/{campaign_id}": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Campaign",
+				"operationId": "crm-whatsapp-crm_whatsapp_campaign",
+				"parameters": [
+					{
+						"name": "campaign_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Campaign Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppCampaignDetail"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/campaigns/{campaign_id}/resume": {
+			"post": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Resume Campaign",
+				"description": "Send the recipients an interrupted campaign has not reached yet.",
+				"operationId": "crm-whatsapp-crm_whatsapp_resume_campaign",
+				"parameters": [
+					{
+						"name": "campaign_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Campaign Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppCampaignDetail"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/campaign/chats": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Campaign Chats",
+				"description": "Campaign inbox: replies to the campaign number.",
+				"operationId": "crm-whatsapp-crm_whatsapp_campaign_chats",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/WhatsAppChatResponse"
+									},
+									"type": "array",
+									"title": "Response Crm-Whatsapp-Crm Whatsapp Campaign Chats"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/campaign/chats/{wa_id}": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Campaign Chat",
+				"operationId": "crm-whatsapp-crm_whatsapp_campaign_chat",
+				"parameters": [
+					{
+						"name": "wa_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"pattern": "^\\d{8,15}$",
+							"title": "Wa Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppThreadResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/campaign/chats/{wa_id}/reply": {
+			"post": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Campaign Reply",
+				"description": "Answer a campaign reply from the campaign number, inside the 24-hour window.",
+				"operationId": "crm-whatsapp-crm_whatsapp_campaign_reply",
+				"parameters": [
+					{
+						"name": "wa_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"pattern": "^\\d{8,15}$",
+							"title": "Wa Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/WhatsAppReply"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhatsAppSendResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/whatsapp/webhook": {
+			"get": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Webhook Verify",
+				"description": "Meta's check when the callback URL is saved: echo the challenge if the token matches.",
+				"operationId": "crm-whatsapp-crm_whatsapp_webhook_verify",
+				"parameters": [
+					{
+						"name": "hub.mode",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Hub.Mode"
+						}
+					},
+					{
+						"name": "hub.verify_token",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Hub.Verify Token"
+						}
+					},
+					{
+						"name": "hub.challenge",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 200,
+							"default": "",
+							"title": "Hub.Challenge"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"text/plain": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["crm-whatsapp", "crm-whatsapp"],
+				"summary": "Crm Whatsapp Webhook",
+				"description": "Incoming messages and delivery statuses. Nothing is read before the signature checks out.",
+				"operationId": "crm-whatsapp-crm_whatsapp_webhook",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {}
 							}
 						}
 					}
@@ -10867,6 +12116,145 @@
 	},
 	"components": {
 		"schemas": {
+			"A2AFields-Input": {
+				"properties": {
+					"other_brokerage": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Other Brokerage"
+					},
+					"other_broker_name": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Other Broker Name"
+					},
+					"other_broker_brn": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Other Broker Brn"
+					},
+					"commission_split_pct": {
+						"anyOf": [
+							{
+								"type": "number",
+								"maximum": 100.0,
+								"minimum": 0.0
+							},
+							{
+								"type": "string",
+								"pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Commission Split Pct"
+					},
+					"valid_until": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valid Until"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "A2AFields"
+			},
+			"A2AFields-Output": {
+				"properties": {
+					"other_brokerage": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Other Brokerage"
+					},
+					"other_broker_name": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Other Broker Name"
+					},
+					"other_broker_brn": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Other Broker Brn"
+					},
+					"commission_split_pct": {
+						"anyOf": [
+							{
+								"type": "string",
+								"pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Commission Split Pct"
+					},
+					"valid_until": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valid Until"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "A2AFields"
+			},
 			"AcceptInviteRequest": {
 				"properties": {
 					"token": {
@@ -13336,6 +14724,141 @@
 				"required": ["broker_id", "broker_name", "listings", "agents"],
 				"title": "CrmCompanyListingCompany"
 			},
+			"CrmCompanyListingDetail": {
+				"properties": {
+					"reference": {
+						"type": "string",
+						"title": "Reference"
+					},
+					"agent_name": {
+						"type": "string",
+						"title": "Agent Name"
+					},
+					"agent_phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Phone"
+					},
+					"mode": {
+						"type": "string",
+						"title": "Mode"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"property_type": {
+						"type": "string",
+						"title": "Property Type"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"size_sqft": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Sqft"
+					},
+					"price_aed": {
+						"type": "integer",
+						"title": "Price Aed"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"building_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building Name"
+					},
+					"unit_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Unit Number"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"listed_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Listed At"
+					},
+					"listing_key": {
+						"type": "string",
+						"title": "Listing Key"
+					},
+					"broker_id": {
+						"type": "string",
+						"title": "Broker Id"
+					},
+					"broker_name": {
+						"type": "string",
+						"title": "Broker Name"
+					},
+					"managed": {
+						"type": "boolean",
+						"title": "Managed"
+					}
+				},
+				"type": "object",
+				"required": [
+					"reference",
+					"agent_name",
+					"agent_phone",
+					"mode",
+					"title",
+					"property_type",
+					"bedrooms",
+					"size_sqft",
+					"price_aed",
+					"area_name",
+					"building_name",
+					"unit_number",
+					"status",
+					"listed_at",
+					"listing_key",
+					"broker_id",
+					"broker_name",
+					"managed"
+				],
+				"title": "CrmCompanyListingDetail",
+				"description": "One Property Finder listing; `managed` when it belongs to the organization's connected company.\n\nOnly managed listings may carry private owner and agreement documents."
+			},
 			"CrmCompanyListingResponse": {
 				"properties": {
 					"reference": {
@@ -15606,6 +17129,74 @@
 							}
 						],
 						"title": "Registry Area Name"
+					},
+					"estimated_value_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value Aed"
+					},
+					"estimated_value_low_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value Low Aed"
+					},
+					"estimated_value_high_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value High Aed"
+					},
+					"valuation_confidence": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["high", "medium", "low"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Confidence"
+					},
+					"valued_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valued At"
+					},
+					"valuation_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Status"
 					},
 					"later_sale_date": {
 						"anyOf": [
@@ -17975,6 +19566,62 @@
 				"title": "DimensionBreakdown",
 				"description": "Breakdown by a specific dimension (property_type, rooms, etc.)"
 			},
+			"DocumentDownloadResponse": {
+				"properties": {
+					"url": {
+						"type": "string",
+						"title": "Url"
+					},
+					"expires_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Expires At"
+					}
+				},
+				"type": "object",
+				"required": ["url", "expires_at"],
+				"title": "DocumentDownloadResponse"
+			},
+			"DocumentFields-Input": {
+				"properties": {
+					"owner": {
+						"$ref": "#/components/schemas/OwnerFields"
+					},
+					"lease": {
+						"$ref": "#/components/schemas/LeaseFields"
+					},
+					"a2a": {
+						"$ref": "#/components/schemas/A2AFields-Input"
+					},
+					"marketing": {
+						"$ref": "#/components/schemas/MarketingFields"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "DocumentFields",
+				"description": "Everything the Documents tab collects for one listing (all optional until a template needs it)."
+			},
+			"DocumentFields-Output": {
+				"properties": {
+					"owner": {
+						"$ref": "#/components/schemas/OwnerFields"
+					},
+					"lease": {
+						"$ref": "#/components/schemas/LeaseFields"
+					},
+					"a2a": {
+						"$ref": "#/components/schemas/A2AFields-Output"
+					},
+					"marketing": {
+						"$ref": "#/components/schemas/MarketingFields"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "DocumentFields",
+				"description": "Everything the Documents tab collects for one listing (all optional until a template needs it)."
+			},
 			"EmailEvent": {
 				"properties": {
 					"event": {
@@ -19933,6 +21580,39 @@
 				"required": ["type", "use"],
 				"title": "GISLandUse"
 			},
+			"GenerateDocumentRequest": {
+				"properties": {
+					"source": {
+						"type": "string",
+						"const": "property_finder",
+						"title": "Source"
+					},
+					"listing_key": {
+						"type": "string",
+						"pattern": "^\\d{1,20}$",
+						"title": "Listing Key"
+					},
+					"doc_type": {
+						"type": "string",
+						"enum": ["noc", "brochure", "lease", "a2a"],
+						"title": "Doc Type"
+					},
+					"expected_revision": {
+						"type": "integer",
+						"minimum": 1.0,
+						"title": "Expected Revision"
+					},
+					"idempotency_key": {
+						"type": "string",
+						"format": "uuid",
+						"title": "Idempotency Key"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["source", "listing_key", "doc_type", "expected_revision", "idempotency_key"],
+				"title": "GenerateDocumentRequest"
+			},
 			"GenerateStudyRequest": {
 				"properties": {
 					"plot_number": {
@@ -20000,6 +21680,114 @@
 				"type": "object",
 				"required": ["plot_data", "assumptions", "research", "study_context"],
 				"title": "GenerateStudyResponse"
+			},
+			"GeneratedDocumentListResponse": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/GeneratedDocumentResponse"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": ["items", "total", "limit", "offset"],
+				"title": "GeneratedDocumentListResponse"
+			},
+			"GeneratedDocumentResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid",
+						"title": "Id"
+					},
+					"source": {
+						"type": "string",
+						"title": "Source"
+					},
+					"listing_key": {
+						"type": "string",
+						"title": "Listing Key"
+					},
+					"listing_title": {
+						"type": "string",
+						"title": "Listing Title"
+					},
+					"doc_type": {
+						"type": "string",
+						"enum": ["noc", "brochure", "lease", "a2a"],
+						"title": "Doc Type"
+					},
+					"template_version": {
+						"type": "string",
+						"title": "Template Version"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["generating", "ready", "failed"],
+						"title": "Status"
+					},
+					"failure_code": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Failure Code"
+					},
+					"size_bytes": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Bytes"
+					},
+					"created_by_user_id": {
+						"type": "string",
+						"title": "Created By User Id"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"source",
+					"listing_key",
+					"listing_title",
+					"doc_type",
+					"template_version",
+					"status",
+					"failure_code",
+					"size_bytes",
+					"created_by_user_id",
+					"created_at"
+				],
+				"title": "GeneratedDocumentResponse",
+				"description": "What the lists show; never the private snapshot or the storage key."
 			},
 			"GeoPin": {
 				"properties": {
@@ -20471,6 +22259,7 @@
 							"contacted",
 							"qualified",
 							"viewing",
+							"offer",
 							"valuation",
 							"signed",
 							"active",
@@ -20749,6 +22538,7 @@
 									"contacted",
 									"qualified",
 									"viewing",
+									"offer",
 									"valuation",
 									"signed",
 									"active",
@@ -21794,6 +23584,110 @@
 					"price_sqm"
 				],
 				"title": "LandSaleEvidence"
+			},
+			"LeaseFields": {
+				"properties": {
+					"tenant_name": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Tenant Name"
+					},
+					"tenant_phone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Tenant Phone"
+					},
+					"tenant_email": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "email"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Tenant Email"
+					},
+					"start_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Start Date"
+					},
+					"end_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "End Date"
+					},
+					"annual_rent_aed": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"minimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Annual Rent Aed"
+					},
+					"cheques": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 12.0,
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Cheques"
+					},
+					"security_deposit_aed": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"minimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Security Deposit Aed"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "LeaseFields"
 			},
 			"ListingAnalyticsResponse": {
 				"properties": {
@@ -22924,6 +24818,49 @@
 				"type": "object",
 				"required": ["listing_id", "listing_mode", "asset_class", "title"],
 				"title": "ListingDetailResponse"
+			},
+			"ListingDocumentInfoResponse": {
+				"properties": {
+					"listing": {
+						"$ref": "#/components/schemas/CrmCompanyListingDetail"
+					},
+					"fields": {
+						"$ref": "#/components/schemas/DocumentFields-Output"
+					},
+					"revision": {
+						"type": "integer",
+						"title": "Revision"
+					}
+				},
+				"type": "object",
+				"required": ["listing", "fields", "revision"],
+				"title": "ListingDocumentInfoResponse"
+			},
+			"ListingDocumentInfoUpdate": {
+				"properties": {
+					"source": {
+						"type": "string",
+						"const": "property_finder",
+						"title": "Source"
+					},
+					"listing_key": {
+						"type": "string",
+						"pattern": "^\\d{1,20}$",
+						"title": "Listing Key"
+					},
+					"fields": {
+						"$ref": "#/components/schemas/DocumentFields-Input"
+					},
+					"expected_revision": {
+						"type": "integer",
+						"minimum": 0.0,
+						"title": "Expected Revision"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["source", "listing_key", "fields", "expected_revision"],
+				"title": "ListingDocumentInfoUpdate"
 			},
 			"ListingFiltersResponse": {
 				"properties": {
@@ -24233,6 +26170,25 @@
 				"title": "MarketTrendResponse",
 				"description": "Response for the market trend chart endpoint"
 			},
+			"MarketingFields": {
+				"properties": {
+					"description": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 2000
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Description"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "MarketingFields"
+			},
 			"MasterProjectResponse": {
 				"properties": {
 					"master_name": {
@@ -25169,6 +27125,73 @@
 					"usage_percentage"
 				],
 				"title": "OrganizationUserDetailResponse"
+			},
+			"OwnerFields": {
+				"properties": {
+					"full_name": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Full Name"
+					},
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "email"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					},
+					"title_deed_number": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Title Deed Number"
+					},
+					"id_number": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Id Number"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "OwnerFields"
 			},
 			"OwnerOrganizationCreateRequest": {
 				"properties": {
@@ -30280,6 +32303,749 @@
 				"required": ["status"],
 				"title": "WebhookStatusResponse",
 				"description": "Simple webhook acknowledgement response."
+			},
+			"WhatsAppAudienceLead": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"wa_number": {
+						"type": "string",
+						"title": "Wa Number"
+					},
+					"intent": {
+						"type": "string",
+						"title": "Intent"
+					},
+					"source": {
+						"type": "string",
+						"title": "Source"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "wa_number", "intent", "source"],
+				"title": "WhatsAppAudienceLead"
+			},
+			"WhatsAppAudienceResponse": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/WhatsAppAudienceLead"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"no_consent": {
+						"type": "integer",
+						"title": "No Consent"
+					},
+					"opted_out": {
+						"type": "integer",
+						"title": "Opted Out"
+					},
+					"no_number": {
+						"type": "integer",
+						"title": "No Number"
+					}
+				},
+				"type": "object",
+				"required": ["items", "no_consent", "opted_out", "no_number"],
+				"title": "WhatsAppAudienceResponse",
+				"description": "Leads a campaign may go to, and how many were left out and why."
+			},
+			"WhatsAppCampaignCounts": {
+				"properties": {
+					"total": {
+						"type": "integer",
+						"title": "Total",
+						"default": 0
+					},
+					"pending": {
+						"type": "integer",
+						"title": "Pending",
+						"default": 0
+					},
+					"sent": {
+						"type": "integer",
+						"title": "Sent",
+						"default": 0
+					},
+					"delivered": {
+						"type": "integer",
+						"title": "Delivered",
+						"default": 0
+					},
+					"read": {
+						"type": "integer",
+						"title": "Read",
+						"default": 0
+					},
+					"failed": {
+						"type": "integer",
+						"title": "Failed",
+						"default": 0
+					},
+					"skipped": {
+						"type": "integer",
+						"title": "Skipped",
+						"default": 0
+					},
+					"unknown": {
+						"type": "integer",
+						"title": "Unknown",
+						"default": 0
+					},
+					"replies": {
+						"type": "integer",
+						"title": "Replies",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"title": "WhatsAppCampaignCounts",
+				"description": "Recipients by where sending got to, then sent messages by what Meta reported."
+			},
+			"WhatsAppCampaignCreate": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Name"
+					},
+					"template_name": {
+						"type": "string",
+						"maxLength": 512,
+						"minLength": 1,
+						"title": "Template Name"
+					},
+					"language": {
+						"type": "string",
+						"maxLength": 15,
+						"minLength": 2,
+						"title": "Language"
+					},
+					"params": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 20,
+						"title": "Params"
+					},
+					"enquiry_ids": {
+						"items": {
+							"type": "integer"
+						},
+						"type": "array",
+						"maxItems": 5000,
+						"minItems": 1,
+						"title": "Enquiry Ids"
+					}
+				},
+				"type": "object",
+				"required": ["name", "template_name", "language", "enquiry_ids"],
+				"title": "WhatsAppCampaignCreate"
+			},
+			"WhatsAppCampaignDetail": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"template_name": {
+						"type": "string",
+						"title": "Template Name"
+					},
+					"template_language": {
+						"type": "string",
+						"title": "Template Language"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["sending", "completed"],
+						"title": "Status"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"completed_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Completed At"
+					},
+					"counts": {
+						"$ref": "#/components/schemas/WhatsAppCampaignCounts"
+					},
+					"template_body": {
+						"type": "string",
+						"title": "Template Body"
+					},
+					"params": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Params"
+					},
+					"recipients": {
+						"items": {
+							"$ref": "#/components/schemas/WhatsAppCampaignRecipientResponse"
+						},
+						"type": "array",
+						"title": "Recipients"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"template_name",
+					"template_language",
+					"status",
+					"created_at",
+					"completed_at",
+					"counts",
+					"template_body",
+					"params",
+					"recipients"
+				],
+				"title": "WhatsAppCampaignDetail"
+			},
+			"WhatsAppCampaignRecipientResponse": {
+				"properties": {
+					"enquiry_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Enquiry Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"wa_number": {
+						"type": "string",
+						"title": "Wa Number"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"error": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Error"
+					}
+				},
+				"type": "object",
+				"required": ["enquiry_id", "name", "wa_number", "status", "error"],
+				"title": "WhatsAppCampaignRecipientResponse"
+			},
+			"WhatsAppCampaignResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"template_name": {
+						"type": "string",
+						"title": "Template Name"
+					},
+					"template_language": {
+						"type": "string",
+						"title": "Template Language"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["sending", "completed"],
+						"title": "Status"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"completed_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Completed At"
+					},
+					"counts": {
+						"$ref": "#/components/schemas/WhatsAppCampaignCounts"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"template_name",
+					"template_language",
+					"status",
+					"created_at",
+					"completed_at",
+					"counts"
+				],
+				"title": "WhatsAppCampaignResponse"
+			},
+			"WhatsAppChatResponse": {
+				"properties": {
+					"wa_id": {
+						"type": "string",
+						"title": "Wa Id"
+					},
+					"contact_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Contact Name"
+					},
+					"lead_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Id"
+					},
+					"lead_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Name"
+					},
+					"last_body": {
+						"type": "string",
+						"title": "Last Body"
+					},
+					"last_direction": {
+						"type": "string",
+						"enum": ["in", "out"],
+						"title": "Last Direction"
+					},
+					"last_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Last At"
+					},
+					"window_ends_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Window Ends At"
+					},
+					"unread": {
+						"type": "integer",
+						"title": "Unread"
+					}
+				},
+				"type": "object",
+				"required": [
+					"wa_id",
+					"contact_name",
+					"lead_id",
+					"lead_name",
+					"last_body",
+					"last_direction",
+					"last_at",
+					"window_ends_at",
+					"unread"
+				],
+				"title": "WhatsAppChatResponse"
+			},
+			"WhatsAppMessageResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"direction": {
+						"type": "string",
+						"enum": ["in", "out"],
+						"title": "Direction"
+					},
+					"body": {
+						"type": "string",
+						"title": "Body"
+					},
+					"at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "At"
+					},
+					"status": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["queued", "sent", "delivered", "read", "failed"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Status"
+					},
+					"template": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Template"
+					},
+					"error": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Error"
+					}
+				},
+				"type": "object",
+				"required": ["id", "direction", "body", "at", "status", "template", "error"],
+				"title": "WhatsAppMessageResponse"
+			},
+			"WhatsAppMetaNumber": {
+				"properties": {
+					"phone_number_id": {
+						"type": "string",
+						"title": "Phone Number Id"
+					},
+					"display_number": {
+						"type": "string",
+						"title": "Display Number"
+					},
+					"verified_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Verified Name"
+					},
+					"quality_rating": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Quality Rating"
+					}
+				},
+				"type": "object",
+				"required": ["phone_number_id", "display_number", "verified_name", "quality_rating"],
+				"title": "WhatsAppMetaNumber",
+				"description": "A number as Meta lists it under the business account (setup only)."
+			},
+			"WhatsAppNumberResponse": {
+				"properties": {
+					"phone_number_id": {
+						"type": "string",
+						"title": "Phone Number Id"
+					},
+					"display_number": {
+						"type": "string",
+						"title": "Display Number"
+					},
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"purpose": {
+						"type": "string",
+						"enum": ["agent", "campaign"],
+						"title": "Purpose"
+					},
+					"user_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "User Id"
+					},
+					"active": {
+						"type": "boolean",
+						"title": "Active"
+					}
+				},
+				"type": "object",
+				"required": ["phone_number_id", "display_number", "label", "purpose", "user_id", "active"],
+				"title": "WhatsAppNumberResponse"
+			},
+			"WhatsAppNumberWrite": {
+				"properties": {
+					"display_number": {
+						"type": "string",
+						"maxLength": 40,
+						"minLength": 3,
+						"title": "Display Number"
+					},
+					"label": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Label"
+					},
+					"purpose": {
+						"type": "string",
+						"enum": ["agent", "campaign"],
+						"title": "Purpose"
+					},
+					"user_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "User Id"
+					},
+					"active": {
+						"type": "boolean",
+						"title": "Active",
+						"default": true
+					}
+				},
+				"type": "object",
+				"required": ["display_number", "label", "purpose"],
+				"title": "WhatsAppNumberWrite"
+			},
+			"WhatsAppReply": {
+				"properties": {
+					"body": {
+						"type": "string",
+						"maxLength": 4096,
+						"minLength": 1,
+						"title": "Body"
+					}
+				},
+				"type": "object",
+				"required": ["body"],
+				"title": "WhatsAppReply"
+			},
+			"WhatsAppSendResponse": {
+				"properties": {
+					"ok": {
+						"type": "boolean",
+						"title": "Ok"
+					}
+				},
+				"type": "object",
+				"required": ["ok"],
+				"title": "WhatsAppSendResponse"
+			},
+			"WhatsAppStatusResponse": {
+				"properties": {
+					"configured": {
+						"type": "boolean",
+						"title": "Configured"
+					},
+					"connected": {
+						"type": "boolean",
+						"title": "Connected"
+					},
+					"business_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Business Name"
+					},
+					"display_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Display Number"
+					}
+				},
+				"type": "object",
+				"required": ["configured", "connected", "business_name", "display_number"],
+				"title": "WhatsAppStatusResponse",
+				"description": "Whether the signed-in user can message: the server is connected and they have a number."
+			},
+			"WhatsAppTemplateResponse": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"language": {
+						"type": "string",
+						"title": "Language"
+					},
+					"category": {
+						"type": "string",
+						"enum": ["marketing", "utility", "authentication"],
+						"title": "Category"
+					},
+					"review": {
+						"type": "string",
+						"enum": ["approved", "pending", "rejected", "paused"],
+						"title": "Review"
+					},
+					"body": {
+						"type": "string",
+						"title": "Body"
+					}
+				},
+				"type": "object",
+				"required": ["name", "language", "category", "review", "body"],
+				"title": "WhatsAppTemplateResponse"
+			},
+			"WhatsAppTemplateSend": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 512,
+						"minLength": 1,
+						"title": "Name"
+					},
+					"language": {
+						"type": "string",
+						"maxLength": 15,
+						"minLength": 2,
+						"title": "Language"
+					},
+					"params": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 20,
+						"title": "Params"
+					}
+				},
+				"type": "object",
+				"required": ["name", "language"],
+				"title": "WhatsAppTemplateSend"
+			},
+			"WhatsAppThreadResponse": {
+				"properties": {
+					"wa_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Wa Number"
+					},
+					"opted_out": {
+						"type": "boolean",
+						"title": "Opted Out"
+					},
+					"window_ends_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Window Ends At"
+					},
+					"messages": {
+						"items": {
+							"$ref": "#/components/schemas/WhatsAppMessageResponse"
+						},
+						"type": "array",
+						"title": "Messages"
+					}
+				},
+				"type": "object",
+				"required": ["wa_number", "opted_out", "window_ends_at", "messages"],
+				"title": "WhatsAppThreadResponse"
 			},
 			"app__admin__models__OrganizationMemberResponse": {
 				"properties": {

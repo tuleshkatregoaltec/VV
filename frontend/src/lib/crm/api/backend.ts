@@ -12,6 +12,7 @@ import { ApiError, client } from '$lib/api/client'
 import type {
 	AuthMeResponse,
 	CrmAreaPreferencesResponse,
+	CrmCompanyListingDetail,
 	CrmContactImportResponse,
 	CrmContactListDetail,
 	CrmDroppedRowsResponse,
@@ -28,13 +29,19 @@ import type {
 	CrmRenewalOwner,
 	CrmRenewalsResponse,
 	CrmWorkspaceResponse,
+	DocumentDownloadResponse,
+	GenerateDocumentRequest,
+	GeneratedDocumentListResponse,
+	GeneratedDocumentResponse,
 	InboundEnquiryListResponse,
 	InboundEnquiryResponse,
 	InboundEnquiryUpdate,
 	InboundImportPreviewResponse,
 	InboundImportResponse,
 	InboundMatchesResponse,
-	InboundMatchResponse
+	InboundMatchResponse,
+	ListingDocumentInfoResponse,
+	ListingDocumentInfoUpdate
 } from '$lib/api/generated/hey-api/types.gen'
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { groupOf, LEAD_TYPES, ownerPropertyKind, PROPERTY_TYPES, SOURCE_OPTIONS } from '../config'
@@ -53,6 +60,7 @@ import type {
 	CompanyListingAgentInventory,
 	CompanyListingCompany,
 	CompanyListingFilter,
+	DocumentListParams,
 	EmailInboundList,
 	EmailLeadList,
 	EmailLeadParams,
@@ -87,6 +95,7 @@ import type {
 	LeadStageMove,
 	LeadType,
 	ListingCard,
+	ListingDetail,
 	ListingListResponse,
 	ListingStatus,
 	MarketingConsent,
@@ -2353,6 +2362,58 @@ export async function selectCompanyListingSource(broker_id: string) {
 		broker_id
 	})
 }
+
+/* ── listing documents (/company-listings/{key}, /listing-document-info, /documents) ── */
+
+/** A company card's id is `PF-<Property Finder listing id>`; documents use the bare id. */
+export const listingKeyOf = (id: string): string | null => /^PF-(\d{1,20})$/.exec(id)?.[1] ?? null
+
+export async function getCompanyListing(listingKey: string): Promise<ListingDetail> {
+	const r = await client.get<CrmCompanyListingDetail>(`${CRM}/company-listings/${listingKey}`)
+	return {
+		...companyCard(r),
+		managed: r.managed,
+		listing_key: r.listing_key,
+		documents: { required: [], notes: {}, received: [] },
+		form_a_status: { tone: 'neutral', label: 'Not tracked' },
+		permit_status: 'none',
+		leads: [],
+		lead_stages: null,
+		deals: [],
+		matched: [],
+		from_lead: null,
+		can_publish: false
+	}
+}
+
+export const getDocumentInfo = (listingKey: string) =>
+	client.get<ListingDocumentInfoResponse>(
+		`${CRM}/listing-document-info?source=property_finder&listing_key=${encodeURIComponent(listingKey)}`
+	)
+
+export const saveDocumentInfo = (body: ListingDocumentInfoUpdate) =>
+	client.put<ListingDocumentInfoResponse>(`${CRM}/listing-document-info`, body)
+
+export const generateDocument = (body: GenerateDocumentRequest) =>
+	client.post<GeneratedDocumentResponse>(`${CRM}/documents`, body)
+
+export function listDocuments(p: DocumentListParams = {}) {
+	const params = new URLSearchParams()
+	if (p.listingKey) params.set('listing_key', p.listingKey)
+	if (p.docType) params.set('doc_type', p.docType)
+	if (p.search?.trim()) params.set('search', p.search.trim())
+	if (p.limit) params.set('limit', String(p.limit))
+	if (p.offset) params.set('offset', String(p.offset))
+	const q = params.toString()
+	return client.get<GeneratedDocumentListResponse>(`${CRM}/documents${q ? `?${q}` : ''}`)
+}
+
+export const getDocument = (id: string) =>
+	client.get<GeneratedDocumentResponse>(`${CRM}/documents/${id}`)
+
+/** A link valid for a few minutes; ask again for every download. */
+export const downloadDocument = (id: string) =>
+	client.post<DocumentDownloadResponse>(`${CRM}/documents/${id}/download`, {})
 
 /* ── Connectors › Email (/email, Brevo) ── */
 

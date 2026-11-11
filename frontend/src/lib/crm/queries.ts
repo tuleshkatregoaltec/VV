@@ -4,6 +4,7 @@ import type {
 	CompanyListingFilter,
 	DealTab,
 	DealType,
+	DocumentListParams,
 	EmailLeadParams,
 	EmailSendStatus,
 	InboxFilter,
@@ -70,6 +71,9 @@ export const crmKeys = {
 		companyAgent?: CompanyListingFilter
 	) => [...crmKeys.all, 'listings', scope, status ?? 'all', limit, offset, companyAgent] as const,
 	listing: (id: string) => [...crmKeys.all, 'listing', id] as const,
+	documentInfo: (listingKey: string) => [...crmKeys.all, 'document-info', listingKey] as const,
+	documentsAll: () => [...crmKeys.all, 'documents'] as const,
+	documents: (p: DocumentListParams) => [...crmKeys.all, 'documents', p] as const,
 	portfolio: () => [...crmKeys.all, 'portfolio'] as const,
 	renewals: (p: RenewalListParams) => [...crmKeys.all, 'renewals', p] as const,
 	renewal: (id: string) => [...crmKeys.all, 'renewal', id] as const,
@@ -226,6 +230,14 @@ export const crmQueries = {
 		placeholderData: keepPreviousData
 	}),
 	listing: (id: string) => ({ queryKey: crmKeys.listing(id), queryFn: () => crm.listings.get(id) }),
+	documentInfo: (listingKey: string) => ({
+		queryKey: crmKeys.documentInfo(listingKey),
+		queryFn: () => crm.documents.info(listingKey)
+	}),
+	documents: (p: DocumentListParams) => ({
+		queryKey: crmKeys.documents(p),
+		queryFn: () => crm.documents.list(p)
+	}),
 	portfolio: () => ({ queryKey: crmKeys.portfolio(), queryFn: crm.portfolio.get }),
 	renewals: (p: RenewalListParams) => ({
 		queryKey: crmKeys.renewals(p),
