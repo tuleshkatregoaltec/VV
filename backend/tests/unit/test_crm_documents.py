@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 from crm_document_helpers import listing
 from fastapi import HTTPException
@@ -333,3 +335,122 @@ async def test_rendering_runs_in_a_worker_thread_and_respects_the_deadline(monke
     monkeypatch.setattr(documents, "RENDER_TIMEOUT_SECONDS", 0.05)
     with pytest.raises(TimeoutError):
         await documents._render("noc", {})
+
+
+# ── listing and downloading (Task 8) ─────────────────────────────────────────
+
+
+@pytest.fixture
+def signer(monkeypatch):
+    signed = []
+
+    async def fake_sign(object_key):
+        signed.append(object_key)
+        return "https://storage.example/signed", datetime(2026, 11, 11, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(documents, "signed_pdf_url", fake_sign)
+    return signed
+
+
+async def _ready_noc(db, org="org-a"):
+    await _saved(db, org=org)
+    document, _ = await _generate(db, generate_request(), org=org)
+    return document
+
+
+async def test_documents_survive_the_listing_leaving_property_finder(
+    db, listings, pipeline, signer
+):
+    made = await _ready_noc(db)
+    listings.clear()  # no longer published
+    page = await documents.list_documents(db, organization_id="org-a")
+    assert [item.id for item in page.items] == [made.id]
+    assert page.items[0].listing_title == "Marina Gate 2BR"
+    assert (await documents.get_document(db, organization_id="org-a", document_id=made.id)).id
+    link = await documents.download_document(db, organization_id="org-a", document_id=made.id)
+    assert link.url == "https://storage.example/signed"
+
+
+async def test_documents_stay_with_the_organization_after_switching_company(db, listings, pipeline):
+    made = await _ready_noc(db)
+    listings["123"] = listing(managed=False)
+    page = await documents.list_documents(db, organization_id="org-a")
+    assert [item.id for item in page.items] == [made.id]
+    assert (await documents.list_documents(db, organization_id="org-b")).items == []
+
+
+async def test_another_organization_gets_the_same_404_as_a_missing_document(
+    db, listings, pipeline, signer
+):
+    made = await _ready_noc(db)
+    details = []
+    for org, document_id in (("org-b", made.id), ("org-a", uuid4())):
+        for call in (documents.get_document, documents.download_document):
+            with pytest.raises(HTTPException) as error:
+                await call(db, organization_id=org, document_id=document_id)
+            details.append((error.value.status_code, error.value.detail))
+    assert set(details) == {(404, "Document not found")}
+    assert signer == []  # no link is ever signed before the access check passes
+
+
+async def test_failed_document_has_no_download(db, listings, pipeline, signer, monkeypatch):
+    async def broken(*args):
+        raise RenderError("boom")
+
+    monkeypatch.setattr(documents, "_render", broken)
+    await _saved(db)
+    with pytest.raises(HTTPException) as failure:
+        await _generate(db, generate_request())
+    from uuid import UUID
+
+    document_id = UUID(failure.value.detail["document_id"])
+    with pytest.raises(HTTPException) as error:
+        await documents.download_document(db, organization_id="org-a", document_id=document_id)
+    assert (error.value.status_code, error.value.detail) == (409, "not_ready")
+    assert signer == []
+
+
+async def test_list_filters_by_listing_type_and_search_newest_first(db, listings, pipeline):
+    listings["456"] = listing("456", title="Palm Villa")
+    await _saved(db)
+    noc, _ = await _generate(db, generate_request())
+    brochure, _ = await _generate(db, generate_request("brochure"))
+    await documents.save_document_info(
+        db,
+        organization_id="org-a",
+        user_id="u1",
+        payload=ListingDocumentInfoUpdate(
+            source="property_finder",
+            listing_key="456",
+            fields=DocumentFields(),
+            expected_revision=0,
+        ),
+    )
+    palm, _ = await _generate(
+        db,
+        GenerateDocumentRequest(
+            source="property_finder",
+            listing_key="456",
+            doc_type="brochure",
+            expected_revision=1,
+            idempotency_key=uuid4(),
+        ),
+    )
+
+    def ids(page):
+        return [item.id for item in page.items]
+
+    everything = await documents.list_documents(db, organization_id="org-a")
+    assert ids(everything) == [palm.id, brochure.id, noc.id] and everything.total == 3
+    assert ids(await documents.list_documents(db, organization_id="org-a", listing_key="123")) == [
+        brochure.id,
+        noc.id,
+    ]
+    assert ids(await documents.list_documents(db, organization_id="org-a", doc_type="noc")) == [
+        noc.id
+    ]
+    assert ids(await documents.list_documents(db, organization_id="org-a", search="palm")) == [
+        palm.id
+    ]
+    second = await documents.list_documents(db, organization_id="org-a", limit=2, offset=2)
+    assert (ids(second), second.total) == ([noc.id], 3)

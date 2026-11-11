@@ -16,7 +16,7 @@ from uuid import UUID
 
 import anyio
 from fastapi import HTTPException
-from sqlalchemy import update
+from sqlalchemy import func, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -25,14 +25,17 @@ from app.crm.company_listings import get_company_listing
 from app.crm.document_models import (
     CrmGeneratedDocument,
     CrmListingDocumentInfo,
+    DocType,
+    DocumentDownloadResponse,
     DocumentFields,
+    GeneratedDocumentListResponse,
     GeneratedDocumentResponse,
     GenerateDocumentRequest,
     ListingDocumentInfoResponse,
     ListingDocumentInfoUpdate,
 )
 from app.crm.document_rendering import RenderError, render_pdf
-from app.crm.document_storage import store_pdf
+from app.crm.document_storage import signed_pdf_url, store_pdf
 from app.crm.document_templates import TEMPLATES, build_snapshot, missing_fields
 from app.crm.models import CrmCompanyListingDetail
 
@@ -40,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 SOURCE = "property_finder"
 LISTING_NOT_FOUND = "Listing not found"
+DOCUMENT_NOT_FOUND = "Document not found"
 STALE_REVISION = "stale_revision"
 # Per API process: rendering is CPU-bound and runs in worker threads.
 RENDER_CONCURRENCY = 2
@@ -289,3 +293,70 @@ async def reconcile_stale_documents(
     )
     await db.commit()
     return result.rowcount
+
+
+async def list_documents(
+    db: AsyncSession,
+    *,
+    organization_id: str,
+    listing_key: str | None = None,
+    doc_type: DocType | None = None,
+    search: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> GeneratedDocumentListResponse:
+    """The organization's documents, newest first. Independent of the listing still existing."""
+    conditions = [CrmGeneratedDocument.organization_id == organization_id]
+    if listing_key:
+        conditions.append(CrmGeneratedDocument.listing_key == listing_key)
+    if doc_type:
+        conditions.append(CrmGeneratedDocument.doc_type == doc_type)
+    if search and search.strip():
+        term = f"%{search.strip().lower()}%"
+        conditions.append(
+            or_(
+                func.lower(CrmGeneratedDocument.listing_title).like(term),
+                CrmGeneratedDocument.listing_key.like(term),
+            )
+        )
+    total = (
+        await db.exec(select(func.count()).select_from(CrmGeneratedDocument).where(*conditions))
+    ).one()
+    rows = (
+        await db.exec(
+            select(CrmGeneratedDocument)
+            .where(*conditions)
+            .order_by(CrmGeneratedDocument.created_at.desc(), CrmGeneratedDocument.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+    return GeneratedDocumentListResponse(
+        items=[_document_response(row) for row in rows], total=total, limit=limit, offset=offset
+    )
+
+
+async def _owned_document(
+    db: AsyncSession, organization_id: str, document_id: UUID
+) -> CrmGeneratedDocument:
+    document = await db.get(CrmGeneratedDocument, document_id)
+    if document is None or document.organization_id != organization_id:
+        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
+    return document
+
+
+async def get_document(
+    db: AsyncSession, *, organization_id: str, document_id: UUID
+) -> GeneratedDocumentResponse:
+    return _document_response(await _owned_document(db, organization_id, document_id))
+
+
+async def download_document(
+    db: AsyncSession, *, organization_id: str, document_id: UUID
+) -> DocumentDownloadResponse:
+    """A fresh short-lived link, issued only after the organization's access is checked."""
+    document = await _owned_document(db, organization_id, document_id)
+    if document.status != "ready" or not document.object_key:
+        raise HTTPException(status_code=409, detail="not_ready")
+    url, expires_at = await signed_pdf_url(document.object_key)
+    return DocumentDownloadResponse(url=url, expires_at=expires_at)
