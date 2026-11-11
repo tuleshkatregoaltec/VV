@@ -10,6 +10,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Path,
     Query,
     Request,
     Response,
@@ -31,6 +32,7 @@ from app.crm.calendar_models import (
 )
 from app.crm.company_listings import (
     clear_company_source,
+    get_company_listing,
     list_company_listings,
     select_company_source,
 )
@@ -120,6 +122,7 @@ from app.crm.matching import (
 from app.crm.models import (
     CrmAreaPreferencesResponse,
     CrmAreaPreferencesUpdate,
+    CrmCompanyListingDetail,
     CrmCompanyListingSourceResponse,
     CrmCompanyListingSourceUpdate,
     CrmCompanyListingsResponse,
@@ -703,6 +706,20 @@ async def crm_company_listings(
         agent_name=agent_name,
         search=search,
     )
+
+
+@router.get("/company-listings/{listing_key}", response_model=CrmCompanyListingDetail)
+async def crm_company_listing(
+    listing_key: str = Path(pattern=r"^\d{1,20}$"),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """One current Property Finder listing; `managed` when it is the connected company's."""
+    _, organization_id = _auth_ids(context)
+    listing = await get_company_listing(db, organization_id, listing_key)
+    if listing is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    return listing
 
 
 @router.put("/company-listings/source", response_model=CrmCompanyListingSourceResponse)

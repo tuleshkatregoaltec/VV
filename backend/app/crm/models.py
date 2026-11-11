@@ -474,6 +474,18 @@ class CrmCompanyListingResponse(BaseModel):
     listed_at: datetime
 
 
+class CrmCompanyListingDetail(CrmCompanyListingResponse):
+    """One Property Finder listing; `managed` when it belongs to the organization's connected company.
+
+    Only managed listings may carry private owner and agreement documents.
+    """
+
+    listing_key: str
+    broker_id: str
+    broker_name: str
+    managed: bool
+
+
 class CrmCompanyListingCompany(BaseModel):
     broker_id: str
     broker_name: str

@@ -99,3 +99,85 @@ async def test_clearing_with_no_source_does_nothing(monkeypatch):
     db = _FakeSession()
     await company_listings.clear_company_source(db, organization_id="org")
     assert db.deleted == [] and db.statements == [] and not db.committed
+
+
+def _pf_row(broker_id: str = "B1") -> dict:
+    return {
+        "property_key": "pk-123",
+        "listing_id": "123",
+        "title": "Marina Gate 2BR",
+        "mode": "sale",
+        "property_type": "Apartment",
+        "bedrooms": "2",
+        "size_sqft": 1200,
+        "price_aed": 2500000,
+        "area_name": "Dubai Marina",
+        "building_name": "Marina Gate",
+        "broker_id": broker_id,
+        "broker_name": "Big Firm",
+        "agent_name": "Navi Singh",
+        "agent_phone": "",
+        "listed_at": None,
+    }
+
+
+def _source(broker_id: str):
+    from app.crm.models import CrmCompanyListingSource
+
+    return CrmCompanyListingSource(
+        organization_id="org-1",
+        broker_id=broker_id,
+        broker_name="Big Firm",
+        selected_by_user_id="u",
+    )
+
+
+def _patch_detail(monkeypatch, rows, source):
+    seen: dict = {}
+
+    async def fake_query(sql, parameters):
+        seen["sql"], seen["parameters"] = sql, parameters
+        return rows
+
+    async def fake_source(db, organization_id):
+        return source
+
+    monkeypatch.setattr(company_listings, "query", fake_query)
+    monkeypatch.setattr(company_listings, "_selected_source", fake_source)
+    return seen
+
+
+@pytest.mark.asyncio
+async def test_listing_of_the_connected_company_is_managed(monkeypatch):
+    seen = _patch_detail(monkeypatch, [_pf_row("B1")], _source("B1"))
+
+    detail = await company_listings.get_company_listing(None, "org-1", "123")
+
+    assert (detail.reference, detail.listing_key, detail.managed) == ("PF-123", "123", True)
+    assert (detail.broker_id, detail.broker_name) == ("B1", "Big Firm")
+    # The listing is looked up by its Property Finder id, never by its title.
+    assert seen["parameters"]["listing_key"] == "123"
+
+
+@pytest.mark.asyncio
+async def test_another_companys_listing_is_visible_but_not_managed(monkeypatch):
+    # Browsing another company is allowed; its private documents are not.
+    _patch_detail(monkeypatch, [_pf_row("B2")], _source("B1"))
+
+    detail = await company_listings.get_company_listing(None, "org-1", "123")
+
+    assert detail.managed is False
+
+
+@pytest.mark.asyncio
+async def test_listing_is_not_managed_without_a_connected_company(monkeypatch):
+    _patch_detail(monkeypatch, [_pf_row("B1")], None)
+
+    assert (await company_listings.get_company_listing(None, "org-1", "123")).managed is False
+
+
+@pytest.mark.asyncio
+async def test_listing_no_longer_published_returns_none(monkeypatch):
+    _patch_detail(monkeypatch, [], _source("B1"))
+
+    assert await company_listings.get_company_listing(None, "org-1", "123") is None
