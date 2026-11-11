@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ spec.title }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 22mm 18mm 24mm;
+    @bottom-left { content: "{{ spec.title }} · {{ listing.reference }}"; font-size: 8pt; color: #666; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #666; }
+    {% if draft %}@top-center { content: "DRAFT – not client approved ({{ spec.version }})"; font-size: 8pt; color: #b00; }{% endif %}
+  }
+  body { font-family: "Noto Sans", "Noto Sans Arabic", "Geeza Pro", "SF Arabic", "DejaVu Sans", sans-serif; font-size: 10.5pt; line-height: 1.45; color: #111; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 12pt; margin: 6mm 0 2mm; border-bottom: 1px solid #ccc; padding-bottom: 1mm; }
+  .sub { color: #555; margin: 0 0 6mm; }
+  table.kv { width: 100%; border-collapse: collapse; }
+  table.kv th { text-align: start; width: 38%; font-weight: 600; color: #333; vertical-align: top; padding: 1.2mm 2mm 1.2mm 0; }
+  table.kv td { padding: 1.2mm 0; overflow-wrap: anywhere; }
+  table.kv tr { break-inside: avoid; }
+  .clause { margin: 0 0 3mm; overflow-wrap: anywhere; }
+  .sign { margin-top: 14mm; display: flex; gap: 12mm; break-inside: avoid; }
+  .sign div { flex: 1; border-top: 1px solid #333; padding-top: 2mm; font-size: 9pt; }
+  bdi { unicode-bidi: isolate; }
+</style>
+</head>
+<body>
+<h1>{{ spec.title }}</h1>
+<p class="sub"><bdi>{{ listing.title }}</bdi> · <bdi>{{ listing.area_name }}</bdi> · {{ listing.reference }}</p>
+<h2>Property</h2>
+<table class="kv">
+  <tr><th>Reference</th><td>{{ listing.reference }}</td></tr>
+  <tr><th>Property</th><td><bdi>{{ listing.title }}</bdi></td></tr>
+  {% if listing.building_name %}<tr><th>Building</th><td><bdi>{{ listing.building_name }}</bdi></td></tr>{% endif %}
+  {% if listing.unit_number %}<tr><th>Unit</th><td>{{ listing.unit_number }}</td></tr>{% endif %}
+  <tr><th>Area</th><td><bdi>{{ listing.area_name }}</bdi></td></tr>
+  <tr><th>Type</th><td>{{ listing.property_type }}{% if listing.bedrooms is not none %} · {{ "Studio" if listing.bedrooms == 0 else listing.bedrooms ~ " bedrooms" }}{% endif %}</td></tr>
+  {% if listing.size_sqft %}<tr><th>Size</th><td>{{ "{:,}".format(listing.size_sqft) }} sqft</td></tr>{% endif %}
+  <tr><th>{{ "Annual rent" if listing.mode == "rent" else "Price" }}</th><td>AED {{ "{:,}".format(listing.price_aed) }}</td></tr>
+</table>
+{% block body %}{% endblock %}
+</body>
+</html>

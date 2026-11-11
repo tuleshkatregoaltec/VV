@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Parties</h2>
+<table class="kv">
+  <tr><th>Landlord</th><td><bdi>{{ owner.full_name }}</bdi></td></tr>
+  <tr><th>Tenant</th><td><bdi>{{ lease.tenant_name }}</bdi></td></tr>
+  <tr><th>Tenant phone</th><td>{{ lease.tenant_phone }}</td></tr>
+  {% if lease.tenant_email %}<tr><th>Tenant email</th><td>{{ lease.tenant_email }}</td></tr>{% endif %}
+</table>
+<h2>Terms</h2>
+<table class="kv">
+  <tr><th>Lease period</th><td>{{ lease.start_date }} to {{ lease.end_date }}</td></tr>
+  <tr><th>Annual rent</th><td>AED {{ "{:,}".format(lease.annual_rent_aed) }}</td></tr>
+  <tr><th>Payment</th><td>{{ lease.cheques }} cheque{{ "" if lease.cheques == 1 else "s" }}</td></tr>
+  <tr><th>Security deposit</th><td>AED {{ "{:,}".format(lease.security_deposit_aed) }}</td></tr>
+</table>
+<div class="sign"><div>Landlord signature and date</div><div>Tenant signature and date</div></div>
+{% endblock %}
