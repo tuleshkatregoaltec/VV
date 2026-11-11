@@ -183,8 +183,24 @@
       "CREATE INDEX ix_crm_mutation_audit_org_time ON crm_mutation_audit (organization_id, occurred_at)"
     ]
   },
+  "crm_owner_assessed_claims": {
+    "ddl": "\nCREATE TABLE crm_owner_assessed_claims (\n\torganization_id VARCHAR NOT NULL, \n\tgeneration BIGINT NOT NULL, \n\tclaim_id INTEGER NOT NULL, \n\tlist_id INTEGER NOT NULL, \n\timport_id INTEGER NOT NULL, \n\towner_key VARCHAR NOT NULL, \n\tcanonical_owner_key VARCHAR NOT NULL, \n\tproperty_key VARCHAR NOT NULL, \n\tidentity_area VARCHAR, \n\tidentity_key VARCHAR, \n\tgroup_ident VARCHAR NOT NULL, \n\tis_source BOOLEAN NOT NULL, \n\tord BIGINT NOT NULL, \n\tassessed_status VARCHAR NOT NULL, \n\tparty_role VARCHAR NOT NULL, \n\ttransaction_date DATE, \n\tevent_conf INTEGER NOT NULL, \n\tpref_support BOOLEAN NOT NULL, \n\tpref_buyer BOOLEAN NOT NULL, \n\tready_row BOOLEAN NOT NULL, \n\tlead_id VARCHAR, \n\tbuilding_name VARCHAR, \n\tproject_name VARCHAR, \n\tunit_number VARCHAR, \n\tarea_name VARCHAR, \n\tmatch_colour VARCHAR, \n\tmatch_outcome VARCHAR, \n\tsearch_text TEXT NOT NULL, \n\tprops_search_text TEXT NOT NULL, \n\trow JSONB NOT NULL, \n\tPRIMARY KEY (organization_id, generation, claim_id)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_assessed_claim_canonical ON crm_owner_assessed_claims (organization_id, generation, canonical_owner_key)",
+      "CREATE INDEX ix_crm_assessed_claim_identity ON crm_owner_assessed_claims (organization_id, generation, identity_key, identity_area)",
+      "CREATE INDEX ix_crm_assessed_claim_import ON crm_owner_assessed_claims (organization_id, generation, import_id, ord)",
+      "CREATE INDEX ix_crm_assessed_claim_lead ON crm_owner_assessed_claims (organization_id, generation, lead_id) WHERE lead_id IS NOT NULL",
+      "CREATE INDEX ix_crm_assessed_claim_list ON crm_owner_assessed_claims (organization_id, generation, list_id, ord)",
+      "CREATE INDEX ix_crm_assessed_claim_owner ON crm_owner_assessed_claims (organization_id, generation, owner_key)",
+      "CREATE INDEX ix_crm_assessed_claim_property ON crm_owner_assessed_claims (organization_id, generation, property_key)"
+    ]
+  },
   "crm_owner_assessment_revisions": {
     "ddl": "\nCREATE TABLE crm_owner_assessment_revisions (\n\torganization_id VARCHAR NOT NULL, \n\trevision BIGINT NOT NULL, \n\tPRIMARY KEY (organization_id)\n)\n\n",
+    "indexes": []
+  },
+  "crm_owner_assessment_state": {
+    "ddl": "\nCREATE TABLE crm_owner_assessment_state (\n\torganization_id VARCHAR NOT NULL, \n\tgeneration BIGINT NOT NULL, \n\trevision VARCHAR NOT NULL, \n\twarehouse_revision VARCHAR NOT NULL, \n\tchecked_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\twarehouse_status VARCHAR NOT NULL, \n\tbuilt_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tsummary JSONB NOT NULL, \n\timport_summaries JSONB NOT NULL, \n\tlist_counts JSONB NOT NULL, \n\tsource_audit JSONB NOT NULL, \n\tPRIMARY KEY (organization_id)\n)\n\n",
     "indexes": []
   },
   "crm_owner_notes": {
@@ -194,6 +210,16 @@
       "CREATE INDEX ix_crm_owner_notes_user_id ON crm_owner_notes (user_id)",
       "CREATE INDEX ix_crm_owner_notes_workspace_id ON crm_owner_notes (workspace_id)"
     ]
+  },
+  "crm_owner_registry_owners": {
+    "ddl": "\nCREATE TABLE crm_owner_registry_owners (\n\torganization_id VARCHAR NOT NULL, \n\tgeneration BIGINT NOT NULL, \n\tlist_id INTEGER NOT NULL, \n\tcanonical_owner_key VARCHAR NOT NULL, \n\towner_key VARCHAR NOT NULL, \n\tprofile JSONB NOT NULL, \n\tsearch_text TEXT NOT NULL, \n\tproperty_count INTEGER NOT NULL, \n\tcontact_ready_count INTEGER NOT NULL, \n\thighest_confidence_score INTEGER NOT NULL, \n\tnext_lease_end DATE, \n\tdeveloper_side_seller BOOLEAN NOT NULL, \n\tinvalid_identity_sources BOOLEAN NOT NULL, \n\tno_properties BOOLEAN NOT NULL, \n\tin_rental BOOLEAN NOT NULL, \n\tin_registry BOOLEAN NOT NULL, \n\tin_prior BOOLEAN NOT NULL, \n\tin_review BOOLEAN NOT NULL, \n\tin_multi BOOLEAN NOT NULL, \n\tPRIMARY KEY (organization_id, generation, list_id, canonical_owner_key)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_registry_owner_key ON crm_owner_registry_owners (organization_id, generation, list_id, owner_key)"
+    ]
+  },
+  "crm_owner_registry_properties": {
+    "ddl": "\nCREATE TABLE crm_owner_registry_properties (\n\torganization_id VARCHAR NOT NULL, \n\tgeneration BIGINT NOT NULL, \n\tlist_id INTEGER NOT NULL, \n\tcanonical_owner_key VARCHAR NOT NULL, \n\tordinal INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tready BOOLEAN NOT NULL, \n\trental_linked BOOLEAN NOT NULL, \n\tlease_end DATE, \n\tannual_rent_aed BIGINT, \n\tsale_price_aed BIGINT, \n\tmatch_status VARCHAR, \n\tlocation_text TEXT NOT NULL, \n\theadline_rank INTEGER NOT NULL, \n\tconfidence INTEGER NOT NULL, \n\tPRIMARY KEY (organization_id, generation, list_id, canonical_owner_key, ordinal)\n)\n\n",
+    "indexes": []
   },
   "crm_owner_workspaces": {
     "ddl": "\nCREATE TABLE crm_owner_workspaces (\n\tid SERIAL NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\towner_key VARCHAR NOT NULL, \n\tpipeline_status VARCHAR NOT NULL, \n\thighlight_color VARCHAR NOT NULL, \n\tnext_follow_up DATE, \n\ttags JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_owner_workspace_identity UNIQUE (user_id, organization_id, owner_key)\n)\n\n",

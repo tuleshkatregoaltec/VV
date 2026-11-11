@@ -3,7 +3,7 @@ see the tenant one owner at a time."""
 
 from datetime import date
 
-from app.crm import owners
+from app.crm import owner_rows as rows_rules
 from app.crm.owner_signals import SignalContext, build_owner_signals
 from app.crm.source_audit import SourceAuditAccumulator, aggregate_source_audit
 
@@ -59,11 +59,11 @@ def test_read_keys_from_shared_keys_equal_read_keys_from_every_row():
         row(3, "b", "2", owner_key="own-b"),
         row(4, "c", "3"),
     ]
-    whole = owners._owner_read_keys(rows)
+    whole = rows_rules.owner_read_keys(rows)
     shared = {"shared"}
     parts = {}
     for canonical in {r["canonical_owner_key"] for r in rows}:
-        parts |= owners._owner_read_keys(
+        parts |= rows_rules.owner_read_keys(
             [r for r in rows if r["canonical_owner_key"] == canonical], shared_keys=shared
         )
     assert parts == whole
@@ -86,10 +86,10 @@ def test_list_counts_add_up_across_owners():
         row(3, "b", "2", role="Buyer", assessed_status="former_owner"),
         row(4, "c", "3", role="Buyer", assessed_status="conflicting_claim"),
     ]
-    whole = owners._assessed_list_counts(rows)
+    whole = rows_rules.assessed_list_counts(rows)
     total = dict.fromkeys(whole, 0)
     for canonical in {r["canonical_owner_key"] for r in rows}:
-        for key, value in owners._assessed_list_counts(
+        for key, value in rows_rules.assessed_list_counts(
             [r for r in rows if r["canonical_owner_key"] == canonical]
         ).items():
             total[key] += value

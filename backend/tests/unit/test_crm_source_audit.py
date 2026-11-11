@@ -10,7 +10,7 @@ import pytest
 from fastapi import HTTPException, UploadFile
 from pydantic import ValidationError
 
-from app.crm import owner_assessment, owners, source_audit
+from app.crm import owner_assessment, owner_rows, source_audit
 from app.crm.owner_projection import _property_identity
 
 
@@ -145,7 +145,7 @@ def test_reviewed_multiple_phone_group_keeps_all_rows_and_one_scoped_party():
         assert row["ownership_status"] == "probable_current_owner"
         assert _property_identity(row) == ("source_audit", "11:plot:1")
     snapshot = owner_assessment._source_snapshot(rows, datetime.now(timezone.utc))
-    profiles = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)
+    profiles = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)
     assert len(profiles) == 1
     assert len(profiles[0].phone_numbers) == 3
     assert profiles[0].property_count == 1
@@ -184,7 +184,7 @@ def test_coowners_and_audited_scoped_references_do_not_merge():
     )
     assert len(snapshot.rows) == 4
     assert snapshot.summary.identifiable_property_count == 2
-    profiles = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)
+    profiles = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)
     assert len(profiles) == 3
     assert sum(profile.property_count for profile in profiles) == 3
     summary = source_audit.aggregate_source_audit(snapshot.rows)
@@ -389,7 +389,7 @@ def test_plot_reference_and_source_area_remain_visible_without_inventing_a_unit(
     assert all(row["area_name"] == "Master District" and row["unit_number"] == "" for row in rows)
     snapshot = owner_assessment._source_snapshot(rows, datetime.now(timezone.utc))
     assert snapshot.summary.legacy_source_event_count == 0
-    profile = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)[0]
+    profile = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)[0]
     reference = profile.properties[0].source_reference
     assert reference.reference_id == "plot:1"
     assert reference.land_number == "1"
@@ -427,7 +427,7 @@ def matched_history_rows():
 
 def test_matched_history_exposes_supported_former_and_preserves_reference_denominator():
     snapshot = owner_assessment._source_snapshot(matched_history_rows(), datetime.now(timezone.utc))
-    profiles = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)
+    profiles = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)
     assert snapshot.warehouse_status == "available"
     assert snapshot.summary.owner_property_count == 2
     assert snapshot.summary.unresolved_count == 0
@@ -494,7 +494,7 @@ def test_former_with_anchored_acquisition_but_only_workbook_successor_stays_unve
     match = rows[1]["evidence"]["source_audit"]["transaction_match"]
     match.update(acquisition_sale_keys=["acquisition"], later_sale_date=None)
     snapshot = owner_assessment._source_snapshot(rows, datetime.now(timezone.utc))
-    profiles = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)
+    profiles = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)
     former = next(
         p for owner in profiles for p in owner.properties if p.ownership_status == "former_owner"
     )

@@ -32,20 +32,34 @@ from app.crm.import_models import (
 from app.crm.imports import _PROPERTY_RECORDS_MAX, _group_properties
 from app.crm.owner_assessment import OwnerAssessmentSnapshot, summarize_assessment_rows
 from app.crm.owner_history import _family, _property_identity
+from app.crm.owner_rows import (
+    assessed_contact_groups as _assessed_contact_groups,
+)
+from app.crm.owner_rows import (
+    assessed_profiles as _assessed_profiles,
+)
+from app.crm.owner_rows import (
+    assessed_row_preference as _assessed_row_preference,
+)
+from app.crm.owner_rows import (
+    owner_read_keys as _owner_read_keys,
+)
+from app.crm.owner_rows import (
+    owner_registry_summary as _owner_registry_summary,
+)
+from app.crm.owner_rows import (
+    profile_with_properties as _profile_with_properties,
+)
+from app.crm.owner_rows import (
+    source_contact_ready as _source_contact_ready,
+)
 from app.crm.owners import (
-    _assessed_contact_groups,
     _assessed_list_summary,
-    _assessed_profiles,
     _assessed_property_matches,
-    _assessed_row_preference,
     _claim_duplicate_count,
     _claim_response,
-    _owner_read_keys,
-    _owner_registry_summary,
     _profile_search_matches,
-    _profile_with_properties,
     _projected_claims,
-    _source_contact_ready,
 )
 from app.crm.workspaces import _owner_workspace_summaries
 

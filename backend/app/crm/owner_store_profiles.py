@@ -23,6 +23,14 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm.import_models import CrmOwnerProfile
 from app.crm.owner_assessment import OwnerAssessmentSnapshot, restore_row, summarize_assessment_rows
+from app.crm.owner_rows import (
+    HEADLINE_PRIORITY,
+    assessed_list_counts,
+    assessed_profiles,
+    owner_read_keys,
+    owner_registry_summary,
+    property_contact_ready,
+)
 from app.crm.owner_signals import SignalContext, build_owner_signals
 from app.crm.source_audit import SourceAuditAccumulator, source_audit_for_row
 
@@ -204,12 +212,10 @@ def _profile_records(
     generation: int,
     list_id: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    from app.crm import owners
-
     owner_rows, property_rows = [], []
     for profile in profiles:
         canonical = canonical_by_read_key[profile.owner_key]
-        flags = owners._owner_registry_summary([profile])
+        flags = owner_registry_summary([profile])
         owner_rows.append(
             {
                 "organization_id": organization_id,
@@ -255,7 +261,7 @@ def _profile_records(
                     "canonical_owner_key": canonical,
                     "ordinal": ordinal,
                     "status": item.ownership_status,
-                    "ready": owners._property_contact_ready(item, profile),
+                    "ready": property_contact_ready(item, profile),
                     "rental_linked": bool(item.lead_id and item.unit_candidate_key),
                     "lease_end": item.lease_end.isoformat() if item.lease_end else None,
                     "annual_rent_aed": item.annual_rent_aed,
@@ -266,7 +272,7 @@ def _profile_records(
                     "location_text": " ".join(
                         (item.area_name, item.project_name, item.building_name, item.unit_number)
                     ).casefold(),
-                    "headline_rank": owners._HEADLINE_PRIORITY.get(item.ownership_status, 1),
+                    "headline_rank": HEADLINE_PRIORITY.get(item.ownership_status, 1),
                     "confidence": item.confidence_score,
                 }
             )
@@ -293,7 +299,6 @@ async def write_profiles(
     stub: OwnerAssessmentSnapshot,
 ) -> dict[str, dict[str, int]]:
     """Second pass: owner profiles, and each list's contact counts, owner by owner."""
-    from app.crm import owners
 
     async with AsyncSession(engine, expire_on_commit=False) as db:
         canonicals = [
@@ -335,7 +340,7 @@ async def write_profiles(
                 )
             ).all()
         rows = [row_from_json(value) for (value,) in stored]
-        read_keys = owners._owner_read_keys(rows, shared_keys=shared)
+        read_keys = owner_read_keys(rows, shared_keys=shared)
         canonical_by_read_key = {read_key: canonical for canonical, read_key in read_keys.items()}
         signals = build_owner_signals(rows, context=totals.context)
         by_list: dict[int, list[dict[str, Any]]] = defaultdict(list)
@@ -345,7 +350,7 @@ async def write_profiles(
         owner_records: list[dict[str, Any]] = []
         property_records: list[dict[str, Any]] = []
         for list_id, variant_rows in variants.items():
-            profiles = owners._assessed_profiles(
+            profiles = assessed_profiles(
                 variant_rows, snapshot=stub, read_keys=read_keys, signals=signals
             )
             owner_part, property_part = _profile_records(
@@ -367,7 +372,7 @@ async def write_profiles(
                         "former_owners": 0,
                     },
                 )
-                for name, value in owners._assessed_list_counts(variant_rows).items():
+                for name, value in assessed_list_counts(variant_rows).items():
                     counts[name] += value
         await _insert_records(engine, _INSERT_OWNERS, owner_records)
         await _insert_records(engine, _INSERT_PROPERTIES, property_records)

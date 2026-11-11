@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 from owner_store_support import install_rows
 
-from app.crm import owner_assessment, owners
+from app.crm import owner_assessment, owner_rows, owners
 
 _spec = importlib.util.spec_from_file_location(
     "unit_source_audit_fixtures", Path(__file__).parents[2] / "unit" / "test_crm_source_audit.py"
@@ -127,7 +127,7 @@ async def test_transaction_match_filter_preserves_unverified_roles_before_paging
         for p in response.owners[0].properties
     )
     assert response.source_audit.reference_count == 5  # The file denominator is not filtered.
-    profiles = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)
+    profiles = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)
     refs = {
         p.source_reference.reference_id: p.source_reference
         for owner in profiles

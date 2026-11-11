@@ -32,6 +32,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.cache import RedisCache
 from app.crm import owner_assessment, owner_repository
 from app.crm import owner_store_profiles as profiles
+from app.crm.owner_rows import assessed_row_preference, owner_read_keys, source_contact_ready
 from app.crm.source_audit import source_audit_for_row
 
 logger = logging.getLogger(__name__)
@@ -84,15 +85,14 @@ def _search_text(row: dict[str, Any], fields: tuple[str, ...]) -> str:
 
 def _ready_row(row: dict[str, Any]) -> bool:
     """The row alone can reach its owner: a leased unit, a current owner and a usable channel."""
-    from app.crm import owners
     from app.crm.identity import has_usable_contact
 
     return bool(
         row["property_identity"] is not None
         and row.get("lead_id")
         and row.get("unit_candidate_key")
-        and owners._source_contact_ready(row["assessed_status"], row.get("party_role"))
-        and owners._source_contact_ready(
+        and source_contact_ready(row["assessed_status"], row.get("party_role"))
+        and source_contact_ready(
             row.get("event_assessed_status", row["assessed_status"]), row.get("party_role")
         )
         and has_usable_contact(
@@ -106,11 +106,10 @@ def _ready_row(row: dict[str, Any]) -> bool:
 
 def _record(row: dict[str, Any], organization_id: str, generation: int) -> dict[str, Any]:
     """The indexed columns beside one assessed row's JSON."""
-    from app.crm import owners
 
     identity = row["property_identity"]
     is_source = bool(source_audit_for_row(row))
-    preference = owners._assessed_row_preference(row)
+    preference = assessed_row_preference(row)
     transaction_date = row.get("transaction_date")
     return {
         "organization_id": organization_id,
@@ -642,7 +641,6 @@ class StoreReader:
 
     async def read_keys(self, canonicals: list[str] | set[str]) -> dict[str, str]:
         """The key each person is shown under, from every row they own."""
-        from app.crm import owners
 
         if not canonicals:
             return {}
@@ -675,7 +673,7 @@ class StoreReader:
             if owner_keys
             else set()
         )
-        return owners._owner_read_keys(
+        return owner_read_keys(
             [
                 {"canonical_owner_key": canonical, "owner_key": owner_key, "id": claim_id}
                 for canonical, owner_key, claim_id in events

@@ -17,8 +17,12 @@ from app.crm.import_job_models import CrmImportJob
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactList,
+    CrmOwnerAssessedClaim,
     CrmOwnerAssessmentRevision,
+    CrmOwnerAssessmentState,
     CrmOwnerNote,
+    CrmOwnerRegistryOwner,
+    CrmOwnerRegistryProperty,
     CrmOwnerWorkspace,
     CrmPropertyContactClaim,
 )
@@ -91,6 +95,10 @@ __all__ = [
     "CrmOwnerWorkspace",
     "CrmOwnerNote",
     "CrmOwnerAssessmentRevision",
+    "CrmOwnerAssessmentState",
+    "CrmOwnerAssessedClaim",
+    "CrmOwnerRegistryOwner",
+    "CrmOwnerRegistryProperty",
     "CrmInboundImport",
     "CrmInboundContact",
     "CrmInboundEnquiry",
