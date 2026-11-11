@@ -58,8 +58,22 @@ jobs:
           CF_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           install -d -m 700 ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/vv_deploy
+          # Repair common copy-paste damage (Windows line endings, newlines turned into
+          # spaces or lost) by re-wrapping the key body between its BEGIN/END lines.
+          python3 - > ~/.ssh/vv_deploy <<'PY'
+          import os, re, sys, textwrap
+          raw = os.environ["SSH_KEY"].replace("\r", "")
+          m = re.search(r"-----BEGIN ([A-Z ]+)-----(.*?)-----END \1-----", raw, re.S)
+          if not m:
+              sys.exit("VV_DEPLOY_SSH_KEY has no BEGIN/END private key block")
+          kind, body = m.group(1), re.sub(r"\s+", "", m.group(2))
+          print(f"-----BEGIN {kind}-----\n" + "\n".join(textwrap.wrap(body, 70)) + f"\n-----END {kind}-----")
+          PY
           chmod 600 ~/.ssh/vv_deploy
+          if ! ssh-keygen -y -f ~/.ssh/vv_deploy > /dev/null; then
+            echo "::error::VV_DEPLOY_SSH_KEY is not a readable private key. Re-add it from the key file (whole content, BEGIN to END)."
+            exit 1
+          fi
           echo "${DEPLOY_HOST} ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBaraMT0qrh8X6DrOut8mUK6aeu9sqX89V1sdrdb0t4V" > ~/.ssh/known_hosts
           cat > ~/.ssh/config <<EOF
           Host vv-deploy
