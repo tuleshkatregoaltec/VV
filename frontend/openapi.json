@@ -3051,7 +3051,7 @@
 			"post": {
 				"tags": ["crm", "crm"],
 				"summary": "Crm Download Document",
-				"description": "A link valid for 5 minutes; 409 `not_ready` unless the PDF was made.",
+				"description": "A link valid for 5 minutes (`inline=true` previews it in the browser).\n\n409 `not_ready` unless the PDF was made.",
 				"operationId": "crm-crm_download_document",
 				"parameters": [
 					{
@@ -3062,6 +3062,16 @@
 							"type": "string",
 							"format": "uuid",
 							"title": "Document Id"
+						}
+					},
+					{
+						"name": "inline",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"default": false,
+							"title": "Inline"
 						}
 					}
 				],

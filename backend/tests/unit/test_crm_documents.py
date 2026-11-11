@@ -344,7 +344,7 @@ async def test_rendering_runs_in_a_worker_thread_and_respects_the_deadline(monke
 def signer(monkeypatch):
     signed = []
 
-    async def fake_sign(object_key):
+    async def fake_sign(object_key, *, inline=False):
         signed.append(object_key)
         return "https://storage.example/signed", datetime(2026, 11, 11, tzinfo=timezone.utc)
 
@@ -454,3 +454,22 @@ async def test_list_filters_by_listing_type_and_search_newest_first(db, listings
     ]
     second = await documents.list_documents(db, organization_id="org-a", limit=2, offset=2)
     assert (ids(second), second.total) == ([noc.id], 3)
+
+
+async def test_preview_link_is_signed_inline_after_the_access_check(
+    db, listings, pipeline, monkeypatch
+):
+    made = await _ready_noc(db)
+    seen = []
+
+    async def fake_sign(object_key, *, inline=False):
+        seen.append(inline)
+        return "https://storage.example/signed", datetime(2026, 11, 11, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(documents, "signed_pdf_url", fake_sign)
+    await documents.download_document(db, organization_id="org-a", document_id=made.id, inline=True)
+    with pytest.raises(HTTPException):
+        await documents.download_document(
+            db, organization_id="org-b", document_id=made.id, inline=True
+        )
+    assert seen == [True]

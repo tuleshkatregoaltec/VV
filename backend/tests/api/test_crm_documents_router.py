@@ -159,3 +159,26 @@ async def test_real_property_finder_listing_ids_are_accepted(client, monkeypatch
 
     assert response.status_code == 200
     assert service.await_args.args[2] == REAL_KEY
+
+
+async def test_preview_asks_for_an_inline_link(client, monkeypatch):
+    from datetime import datetime, timezone
+
+    from app.crm.document_models import DocumentDownloadResponse
+
+    service = AsyncMock(
+        return_value=DocumentDownloadResponse(
+            url="https://storage.example/signed",
+            expires_at=datetime(2026, 11, 11, tzinfo=timezone.utc),
+        )
+    )
+    monkeypatch.setattr("app.crm.router.download_document", service)
+
+    response = await client.post(
+        "/api/v1/crm/documents/00000000-0000-0000-0000-000000000001/download",
+        params={"inline": "true"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert service.await_args.kwargs["inline"] is True

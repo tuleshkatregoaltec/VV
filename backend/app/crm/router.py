@@ -824,12 +824,18 @@ async def crm_document(
 async def crm_download_document(
     document_id: UUID,
     response: Response,
+    inline: bool = Query(default=False),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """A link valid for 5 minutes; 409 `not_ready` unless the PDF was made."""
+    """A link valid for 5 minutes (`inline=true` previews it in the browser).
+
+    409 `not_ready` unless the PDF was made.
+    """
     _, organization_id = _auth_ids(context)
-    link = await download_document(db, organization_id=organization_id, document_id=document_id)
+    link = await download_document(
+        db, organization_id=organization_id, document_id=document_id, inline=inline
+    )
     # The link is a bearer credential: never cache it.
     response.headers["Cache-Control"] = "no-store"
     return link

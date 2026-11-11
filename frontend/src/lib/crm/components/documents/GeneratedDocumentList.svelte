@@ -38,6 +38,7 @@ const docs = createQuery(() =>
 	})
 )
 let downloading = $state<string | null>(null)
+let previewing = $state<string | null>(null)
 
 const when = (iso: string) =>
 	new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
@@ -52,6 +53,26 @@ async function download(d: GeneratedDocumentResponse) {
 		toast.show(errorText(e), { tone: 'error' })
 	} finally {
 		downloading = null
+	}
+}
+
+/**
+ * Open the PDF in a new tab. The tab opens on the click itself (so popup blockers allow it)
+ * and is pointed at the fresh link once it arrives; it closes again if that fails.
+ */
+async function preview(d: GeneratedDocumentResponse) {
+	const tab = window.open('', '_blank')
+	if (tab) tab.opener = null
+	previewing = d.id
+	try {
+		const link = await crm.documents.preview(d.id)
+		if (tab) tab.location.href = link.url
+		else window.location.assign(link.url)
+	} catch (e) {
+		tab?.close()
+		toast.show(errorText(e), { tone: 'error' })
+	} finally {
+		previewing = null
 	}
 }
 </script>
@@ -77,6 +98,15 @@ async function download(d: GeneratedDocumentResponse) {
 					</div>
 					<div class="acts">
 						{#if d.status === 'ready'}
+							<button
+								type="button"
+								class="btn ghost sm"
+								disabled={previewing === d.id}
+								aria-label="Preview {docLabel(d.doc_type)}"
+								onclick={() => preview(d)}
+							>
+								{previewing === d.id ? 'Opening…' : 'Preview'}
+							</button>
 							<button
 								type="button"
 								class="btn ghost sm"
