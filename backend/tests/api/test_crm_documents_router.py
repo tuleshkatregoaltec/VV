@@ -59,3 +59,56 @@ async def test_saving_document_info_rejects_a_body_organization(client, monkeypa
 
     assert response.status_code == 422
     service.assert_not_awaited()
+
+
+def _generated():
+    from datetime import datetime, timezone
+    from uuid import UUID
+
+    from app.crm.document_models import GeneratedDocumentResponse
+
+    return GeneratedDocumentResponse(
+        id=UUID("00000000-0000-0000-0000-000000000001"),
+        source="property_finder",
+        listing_key="123",
+        listing_title="Marina Gate 2BR",
+        doc_type="noc",
+        template_version="draft-1",
+        status="ready",
+        failure_code=None,
+        size_bytes=10,
+        created_by_user_id="test-user-id",
+        created_at=datetime(2026, 11, 11, tzinfo=timezone.utc),
+    )
+
+
+GENERATE = {
+    "source": "property_finder",
+    "listing_key": "123",
+    "doc_type": "noc",
+    "expected_revision": 1,
+    "idempotency_key": "6f1d3c1e-8a7b-4c33-9b1a-2f0e5d4c3b2a",
+}
+
+
+async def test_new_document_is_201_and_a_replayed_key_is_200(client, monkeypatch):
+    service = AsyncMock(side_effect=[(_generated(), True), (_generated(), False)])
+    monkeypatch.setattr("app.crm.router.generate_document", service)
+
+    first = await client.post("/api/v1/crm/documents", json=GENERATE)
+    again = await client.post("/api/v1/crm/documents", json=GENERATE)
+
+    assert (first.status_code, again.status_code) == (201, 200)
+    assert first.json()["id"] == again.json()["id"]
+    assert service.await_args.kwargs["organization_id"] == "1"
+    assert "snapshot" not in first.json() and "object_key" not in first.json()
+
+
+async def test_unknown_document_type_is_rejected(client, monkeypatch):
+    service = AsyncMock()
+    monkeypatch.setattr("app.crm.router.generate_document", service)
+
+    response = await client.post("/api/v1/crm/documents", json={**GENERATE, "doc_type": "invoice"})
+
+    assert response.status_code == 422
+    service.assert_not_awaited()
