@@ -2157,3 +2157,28 @@ WHERE b.snapshot_id = (
       WHERE snapshot_id = (
           SELECT snapshot_id FROM published ORDER BY collected_at DESC, snapshot_id DESC LIMIT 1)
   );
+
+-- Estimated value of ready residential sale listings from DLD sales (listing underpricing,
+-- 11 Nov 2026). Written by backend/scripts/listings/value_listings.py; one row per listing_id,
+-- joined to pf_listings_bronze by the listings API. Keep in sync with
+-- backend/app/listings/valuation_service.py: CREATE_TABLE.
+CREATE TABLE IF NOT EXISTS listing_valuations (
+    listing_id String,
+    estimate_aed UInt64,
+    low_aed UInt64,
+    high_aed UInt64,
+    confidence LowCardinality(String),
+    level LowCardinality(String),
+    basis LowCardinality(String),
+    comparable_count UInt32,
+    building_key String,
+    market_position LowCardinality(String),
+    value_gap_pct Float64,
+    asking_aed UInt64,
+    bedrooms LowCardinality(String),
+    size_sqft Float64,
+    version LowCardinality(String),
+    valued_at Date
+)
+ENGINE = ReplacingMergeTree(valued_at)
+ORDER BY listing_id;
