@@ -466,7 +466,8 @@ export const crm = {
 		generate: backend.generateDocument,
 		list: backend.listDocuments,
 		get: backend.getDocument,
-		download: backend.downloadDocument
+		download: backend.downloadDocument,
+		preview: backend.previewDocument
 	},
 
 	portfolio: {

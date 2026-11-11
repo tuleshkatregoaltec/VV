@@ -14307,7 +14307,12 @@ export type CrmCrmDownloadDocumentData = {
          */
         document_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Inline
+         */
+        inline?: boolean;
+    };
     url: '/api/v1/crm/documents/{document_id}/download';
 };
 

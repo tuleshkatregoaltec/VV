@@ -77,14 +77,23 @@ class ObjectStorageSigningError(Exception):
 
 
 async def sign_object_url(
-    *, bucket: str, key: str, expires_in: int, client_kwargs: dict[str, str]
+    *,
+    bucket: str,
+    key: str,
+    expires_in: int,
+    client_kwargs: dict[str, str],
+    response_content_disposition: str | None = None,
 ) -> str:
+    """A presigned GET; `response_content_disposition` overrides the stored header for this link."""
+    params = {"Bucket": bucket, "Key": key}
+    if response_content_disposition:
+        params["ResponseContentDisposition"] = response_content_disposition
     session = aioboto3.Session()
     async with session.client("s3", **client_kwargs) as s3:
         try:
             signed_url = s3.generate_presigned_url(
                 "get_object",
-                Params={"Bucket": bucket, "Key": key},
+                Params=params,
                 ExpiresIn=expires_in,
             )
         except Exception as exc:

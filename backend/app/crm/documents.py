@@ -352,11 +352,11 @@ async def get_document(
 
 
 async def download_document(
-    db: AsyncSession, *, organization_id: str, document_id: UUID
+    db: AsyncSession, *, organization_id: str, document_id: UUID, inline: bool = False
 ) -> DocumentDownloadResponse:
     """A fresh short-lived link, issued only after the organization's access is checked."""
     document = await _owned_document(db, organization_id, document_id)
     if document.status != "ready" or not document.object_key:
         raise HTTPException(status_code=409, detail="not_ready")
-    url, expires_at = await signed_pdf_url(document.object_key)
+    url, expires_at = await signed_pdf_url(document.object_key, inline=inline)
     return DocumentDownloadResponse(url=url, expires_at=expires_at)

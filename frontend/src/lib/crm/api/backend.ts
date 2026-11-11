@@ -2393,6 +2393,10 @@ export const getDocument = (id: string) =>
 export const downloadDocument = (id: string) =>
 	client.post<DocumentDownloadResponse>(`${CRM}/documents/${id}/download`, {})
 
+/** Same short-lived link, but the browser shows the PDF instead of saving it. */
+export const previewDocument = (id: string) =>
+	client.post<DocumentDownloadResponse>(`${CRM}/documents/${id}/download?inline=true`, {})
+
 /* ── Connectors › Email (/email, Brevo) ── */
 
 export const emailStatus = () => client.get<EmailStatus>(`${CRM}/email/status`)

@@ -112,4 +112,12 @@ describe('documents', () => {
 		expect(post).toHaveBeenCalledTimes(2)
 		expect(post).toHaveBeenCalledWith('/api/v1/crm/documents/d-1/download', {})
 	})
+
+	it('asks for a preview link that opens in the browser', async () => {
+		const post = vi.spyOn(client, 'post').mockResolvedValue({ url: 'u', expires_at: '' })
+
+		await crm.documents.preview('d-1')
+
+		expect(post).toHaveBeenCalledWith('/api/v1/crm/documents/d-1/download?inline=true', {})
+	})
 })

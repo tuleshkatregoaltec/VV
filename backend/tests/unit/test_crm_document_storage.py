@@ -91,7 +91,9 @@ def test_signing_kwargs_keep_local_minio_keys(monkeypatch):
 async def test_download_links_last_five_minutes(monkeypatch):
     seen = {}
 
-    async def fake_sign(*, bucket, key, expires_in, client_kwargs):
+    async def fake_sign(
+        *, bucket, key, expires_in, client_kwargs, response_content_disposition=None
+    ):
         seen.update(bucket=bucket, key=key, expires_in=expires_in)
         return "https://storage.example/signed"
 
@@ -109,3 +111,43 @@ async def test_download_links_last_five_minutes(monkeypatch):
 @pytest.fixture(autouse=True)
 def _bucket(monkeypatch):
     monkeypatch.setattr(document_storage.settings, "OBJECT_STORAGE_BUCKET", "bucket")
+
+
+async def test_preview_links_open_in_the_browser_and_downloads_save(monkeypatch):
+    seen = []
+
+    async def fake_sign(
+        *, bucket, key, expires_in, client_kwargs, response_content_disposition=None
+    ):
+        seen.append(response_content_disposition)
+        return "https://storage.example/signed"
+
+    monkeypatch.setattr(document_storage, "sign_object_url", fake_sign)
+    monkeypatch.setattr(document_storage, "build_object_storage_client_kwargs", lambda: {})
+
+    await document_storage.signed_pdf_url("crm-documents/org-1/x.pdf")
+    await document_storage.signed_pdf_url("crm-documents/org-1/x.pdf", inline=True)
+
+    # Download keeps the stored "attachment" header; preview overrides it for this link only.
+    assert seen == [None, "inline"]
+
+
+async def test_signed_link_carries_the_inline_override():
+    from urllib.parse import parse_qs, urlparse
+
+    from app.core.object_storage import sign_object_url
+
+    url = await sign_object_url(
+        bucket="bucket",
+        key="crm-documents/org-1/x.pdf",
+        expires_in=300,
+        client_kwargs={
+            "aws_access_key_id": "k",
+            "aws_secret_access_key": "s",
+            "region_name": "auto",
+            "endpoint_url": "http://minio.local:9000",
+        },
+        response_content_disposition="inline",
+    )
+
+    assert parse_qs(urlparse(url).query)["response-content-disposition"] == ["inline"]

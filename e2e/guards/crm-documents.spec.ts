@@ -92,13 +92,21 @@ async function mockApi(page: Page, api: Api) {
 			const items = api.documents.filter((d) => !type || d.doc_type === type);
 			return route.fulfill(json(200, { items, total: items.length, limit: 50, offset: 0 }));
 		}
-		if (/^\/documents\/[^/]+\/download$/.test(path))
+		if (/^\/documents\/[^/]+\/download$/.test(path)) {
+			const inline = url.searchParams.get('inline') === 'true';
 			return route.fulfill(
-				json(200, { url: 'http://127.0.0.1:5173/__signed/noc.pdf', expires_at: '2026-11-11T10:05:00Z' })
+				json(200, {
+					url: `http://127.0.0.1:5173/__signed/${inline ? 'preview' : 'noc'}.pdf`,
+					expires_at: '2026-11-11T10:05:00Z'
+				})
 			);
+		}
 		return route.fulfill(json(404, { detail: 'Not found' }));
 	});
-	await page.route('**/__signed/**', (route) =>
+	await page.route('**/__signed/preview.pdf', (route) =>
+		route.fulfill({ status: 200, contentType: 'application/pdf', headers: { 'Content-Disposition': 'inline' }, body: '%PDF-1.7' })
+	);
+	await page.route('**/__signed/noc.pdf', (route) =>
 		route.fulfill({
 			status: 200,
 			contentType: 'application/pdf',
@@ -206,4 +214,19 @@ test('CRM › Documents lists generated PDFs, filters by type and links to the l
 		'href',
 		'/crm/assets?listing=PF-123&tab=documents'
 	);
+});
+
+test('Preview opens the PDF in a new tab instead of downloading it', async ({ page, usePersona }) => {
+	const api = fresh();
+	api.documents = [doc('d-1', 'noc')];
+	await mockApi(page, api);
+	await usePersona('active-member');
+
+	await page.goto('/crm/documents');
+	const tab = page.waitForEvent('popup');
+	await page.getByRole('button', { name: 'Preview NOC' }).click();
+
+	const preview = await tab;
+	await expect.poll(() => preview.url()).toContain('/__signed/preview.pdf');
+	expect(api.calls.some((c) => c.path === '/documents/d-1/download?inline=true')).toBe(true);
 });

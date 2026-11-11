@@ -51,12 +51,14 @@ async def store_pdf(organization_id: str, document_id: UUID, filename: str, data
     return key
 
 
-async def signed_pdf_url(object_key: str) -> tuple[str, datetime]:
+async def signed_pdf_url(object_key: str, *, inline: bool = False) -> tuple[str, datetime]:
+    """A short-lived link; `inline` opens the PDF in the browser (preview) instead of saving it."""
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=DOWNLOAD_TTL_SECONDS)
     url = await sign_object_url(
         bucket=settings.OBJECT_STORAGE_BUCKET,
         key=object_key,
         expires_in=DOWNLOAD_TTL_SECONDS,
         client_kwargs=build_object_storage_client_kwargs(),
+        response_content_disposition="inline" if inline else None,
     )
     return url, expires_at
