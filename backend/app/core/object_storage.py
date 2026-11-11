@@ -14,8 +14,8 @@ class ObjectStorageClient:
     def __init__(
         self,
         endpoint_url: str | None,
-        access_key_id: str,
-        secret_access_key: str,
+        access_key_id: str | None,
+        secret_access_key: str | None,
         bucket_name: str,
         region: str = "auto",
         use_path_style: bool = True,
@@ -24,11 +24,13 @@ class ObjectStorageClient:
         self.bucket_name = bucket_name
         self.session = aioboto3.Session()
         self.client_kwargs = {
-            "aws_access_key_id": access_key_id,
-            "aws_secret_access_key": secret_access_key,
             "region_name": region,
             "config": Config(s3={"addressing_style": "path" if use_path_style else "auto"}),
         }
+        # Without static keys the SDK's default chain applies (e.g. a container task role).
+        if access_key_id and secret_access_key:
+            self.client_kwargs["aws_access_key_id"] = access_key_id
+            self.client_kwargs["aws_secret_access_key"] = secret_access_key
         if endpoint_url:
             self.client_kwargs["endpoint_url"] = endpoint_url
 
@@ -38,10 +40,22 @@ class ObjectStorageClient:
         async with self.session.client("s3", **self.client_kwargs) as s3:  # type: ignore
             yield s3
 
-    async def upload(self, key: str, data: bytes):
+    async def upload(
+        self,
+        key: str,
+        data: bytes,
+        *,
+        content_type: str | None = None,
+        content_disposition: str | None = None,
+    ):
         """Upload data to object storage."""
+        extra = {}
+        if content_type:
+            extra["ContentType"] = content_type
+        if content_disposition:
+            extra["ContentDisposition"] = content_disposition
         async with self.client() as s3:
-            await s3.put_object(Bucket=self.bucket_name, Key=key, Body=data)
+            await s3.put_object(Bucket=self.bucket_name, Key=key, Body=data, **extra)
 
     async def download(self, key: str) -> bytes:
         """Download data from object storage."""
