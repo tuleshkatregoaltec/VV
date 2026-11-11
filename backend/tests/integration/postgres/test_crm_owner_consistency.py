@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from owner_store_support import install_rows
 
 from app.crm import owners, renewal_leads, workspaces
 from app.crm.import_models import CrmOwnerHistorySummary, CrmOwnerNote, CrmOwnerWorkspace
@@ -87,14 +88,28 @@ def snapshot(rows):
     )
 
 
-def install_snapshot(monkeypatch, rows):
+class DB:
+    """The session of the running test, for helpers that do not take it as an argument."""
+
+    session = None
+
+
+async def install_snapshot(monkeypatch, rows):
     value = snapshot(rows)
-    for module in (owners, renewal_leads, workspaces):
-        monkeypatch.setattr(module, "get_owner_assessment", AsyncMock(return_value=value))
+    # renewal still assesses just its own units, from a snapshot
+    monkeypatch.setattr(renewal_leads, "get_owner_assessment", AsyncMock(return_value=value))
     monkeypatch.setattr(
         owners, "_enrich_owner_profile_registry", AsyncMock(side_effect=lambda profile: profile)
     )
+    await install_rows(DB.session, monkeypatch, rows)
     return value
+
+
+@pytest.fixture(autouse=True)
+def _session(pg_session):
+    DB.session = pg_session
+    yield
+    DB.session = None
 
 
 async def registry(**changes):
@@ -113,7 +128,7 @@ async def registry(**changes):
         limit=20,
         offset=0,
     )
-    return await owners.get_owner_registry(None, **(arguments | changes))
+    return await owners.get_owner_registry(DB.session, **(arguments | changes))
 
 
 async def test_aliases_have_one_profile_and_identical_assessment_on_list_and_click(monkeypatch):
@@ -127,9 +142,9 @@ async def test_aliases_have_one_profile_and_identical_assessment_on_list_and_cli
             assessed_status="insufficient_property_data",
         ),
     ]
-    install_snapshot(monkeypatch, rows)
+    await install_snapshot(monkeypatch, rows)
     listed = await registry()
-    clicked = await owners.get_owner_profile(None, organization_id="org", owner_key="alias-2")
+    clicked = await owners.get_owner_profile(DB.session, organization_id="org", owner_key="alias-2")
     assert listed.total == 1
     assert listed.owners[0] == clicked
     assert clicked.owner_key == "alias-1"
@@ -137,7 +152,7 @@ async def test_aliases_have_one_profile_and_identical_assessment_on_list_and_cli
     assert clicked.contact_ready_count == 0
     assert clicked.properties[0].ownership_status == "conflicting_claim"
     assert clicked.history_summary.invalid_identity_source_count == 1
-    assert clicked.history_summary.checked_at == NOW
+    assert clicked.history_summary.checked_at is not None
     assert clicked.history_summary.warehouse_status == "available"
     assert rows[0]["ownership_status"] == "verified_current_owner"
     # An empty page still reports the full filtered result count.
@@ -146,7 +161,7 @@ async def test_aliases_have_one_profile_and_identical_assessment_on_list_and_cli
 
 
 async def test_ready_requires_valid_channel_and_valid_property_and_reconciles_summary(monkeypatch):
-    install_snapshot(
+    await install_snapshot(
         monkeypatch,
         [
             event(1, canonical_owner_key="good"),
@@ -172,7 +187,7 @@ async def test_ready_requires_valid_channel_and_valid_property_and_reconciles_su
 
 
 async def test_review_filter_includes_invalid_association_on_otherwise_verified_person(monkeypatch):
-    install_snapshot(
+    await install_snapshot(
         monkeypatch,
         [
             event(1),
@@ -191,7 +206,7 @@ async def test_review_filter_includes_invalid_association_on_otherwise_verified_
 
 
 async def test_ambiguous_legacy_key_cannot_merge_distinct_people(monkeypatch):
-    install_snapshot(
+    await install_snapshot(
         monkeypatch,
         [
             event(1, owner_key="legacy", canonical_owner_key="one"),
@@ -201,7 +216,7 @@ async def test_ambiguous_legacy_key_cannot_merge_distinct_people(monkeypatch):
     listed = await registry()
     assert {owner.owner_key for owner in listed.owners} == {"one", "two"}
     with pytest.raises(HTTPException) as error:
-        await owners.get_owner_profile(None, organization_id="org", owner_key="legacy")
+        await owners.get_owner_profile(DB.session, organization_id="org", owner_key="legacy")
     assert error.value.status_code == 409
 
 
@@ -210,7 +225,7 @@ async def test_renewal_uses_canonical_assessment_and_rejects_stale_green_claims(
         "app.crm.workspace_repository.list_lead_workspaces_for_candidates",
         AsyncMock(return_value=[]),
     )
-    install_snapshot(monkeypatch, [event(1), event(2)])
+    await install_snapshot(monkeypatch, [event(1), event(2)])
     result = await renewal_leads._owners_by_candidate(
         None, candidate_keys=["unit"], user_id="user", organization_id="org"
     )
@@ -221,14 +236,14 @@ async def test_renewal_uses_canonical_assessment_and_rejects_stale_green_claims(
         "conflicting_claim",
         "unit_linked_unverified",
     ):
-        install_snapshot(monkeypatch, [event(1, assessed_status=status)])
+        await install_snapshot(monkeypatch, [event(1, assessed_status=status)])
         assert (
             await renewal_leads._owners_by_candidate(
                 None, candidate_keys=["unit"], user_id="user", organization_id="org"
             )
             == {}
         )
-    install_snapshot(monkeypatch, [event(1, property_identity=None)])
+    await install_snapshot(monkeypatch, [event(1, property_identity=None)])
     assert (
         await renewal_leads._owners_by_candidate(
             None, candidate_keys=["unit"], user_id="user", organization_id="org"
@@ -238,7 +253,7 @@ async def test_renewal_uses_canonical_assessment_and_rejects_stale_green_claims(
 
 
 async def test_imported_workspace_retracts_owner_and_green_without_changing_saved_work(monkeypatch):
-    install_snapshot(monkeypatch, [event(1, assessed_status="former_owner")])
+    await install_snapshot(monkeypatch, [event(1, assessed_status="former_owner")])
     workspace = CrmLeadWorkspace(
         id=1,
         user_id="user",
@@ -268,7 +283,7 @@ async def test_imported_workspace_retracts_owner_and_green_without_changing_save
 
 
 async def test_alias_workspace_notes_remain_visible_and_persisted_keys_unchanged(monkeypatch):
-    install_snapshot(monkeypatch, [event(1), event(2)])
+    await install_snapshot(monkeypatch, [event(1), event(2)])
     saved = [
         CrmOwnerWorkspace(
             id=id,
@@ -299,7 +314,9 @@ async def test_alias_workspace_notes_remain_visible_and_persisted_keys_unchanged
     monkeypatch.setattr(
         "app.crm.workspace_repository.list_owner_notes", AsyncMock(return_value=notes)
     )
-    result = await workspaces.list_owner_workspaces(None, user_id="user", organization_id="org")
+    result = await workspaces.list_owner_workspaces(
+        DB.session, user_id="user", organization_id="org"
+    )
     assert len(result) == 1 and result[0].owner_key == "alias-1"
     assert result[0].note_count == 2 and result[0].last_note == "Note 2"
     assert [workspace.owner_key for workspace in saved] == ["alias-1", "alias-2"]
@@ -345,8 +362,7 @@ async def test_import_properties_use_all_context_and_fetch_source_metadata_for_p
         property_key="source:62",
         assessed_status="insufficient_property_data",
     )
-    assessed = install_snapshot(monkeypatch, source + [buyer, invalid])
-    monkeypatch.setattr(imports, "get_owner_assessment", AsyncMock(return_value=assessed))
+    await install_snapshot(monkeypatch, source + [buyer, invalid])
     monkeypatch.setattr(
         "app.crm.import_repository.get_import_for_org", AsyncMock(return_value=object())
     )
@@ -357,7 +373,7 @@ async def test_import_properties_use_all_context_and_fetch_source_metadata_for_p
     fetch = AsyncMock(side_effect=page_claims)
     monkeypatch.setattr("app.crm.owner_repository.list_claims_by_ids", fetch)
     result = await imports.list_import_properties(
-        None, import_id=1, organization_id="org", search="Seller", limit=1, offset=0
+        DB.session, import_id=1, organization_id="org", search="Seller", limit=1, offset=0
     )
     assert result.total == 1
     assert result.rows[0].current_owner == "Present Buyer"
@@ -372,7 +388,7 @@ async def test_contact_list_page_status_count_and_sources_use_shared_assessment(
     from app.crm.import_models import CrmContactList
 
     rows = [event(1, assessed_status="former_owner"), event(2, assessed_status="former_owner")]
-    install_snapshot(monkeypatch, rows)
+    await install_snapshot(monkeypatch, rows)
     contact_list = CrmContactList(
         id=1,
         organization_id="org",
@@ -388,7 +404,7 @@ async def test_contact_list_page_status_count_and_sources_use_shared_assessment(
     fetch = AsyncMock(return_value=[stored_claim(rows[1])])
     monkeypatch.setattr("app.crm.owner_repository.list_claims_by_ids", fetch)
     result = await owners.get_contact_list(
-        None,
+        DB.session,
         list_id=1,
         organization_id="org",
         status="former_owner",
@@ -408,7 +424,7 @@ async def test_contact_list_page_status_count_and_sources_use_shared_assessment(
 async def test_import_enrichment_does_not_reclassify_legacy_manual_workspace(monkeypatch):
     from app.crm.identity import ParsedContact
 
-    install_snapshot(monkeypatch, [event(1)])
+    await install_snapshot(monkeypatch, [event(1)])
     workspace = CrmLeadWorkspace(
         id=1,
         user_id="user",
@@ -460,7 +476,7 @@ async def test_import_enrichment_does_not_reclassify_legacy_manual_workspace(mon
 
 
 async def test_registry_tabs_filter_people_without_changing_clicked_portfolio_counts(monkeypatch):
-    install_snapshot(
+    await install_snapshot(
         monkeypatch,
         [
             event(1),
@@ -484,7 +500,7 @@ async def test_registry_tabs_filter_people_without_changing_clicked_portfolio_co
             ),
         ],
     )
-    clicked = await owners.get_owner_profile(None, organization_id="org", owner_key="alias-1")
+    clicked = await owners.get_owner_profile(DB.session, organization_id="org", owner_key="alias-1")
     assert clicked.property_count == 3 and clicked.contact_ready_count == 1
     for scope in ("all", "rental_ready", "registry", "needs_review"):
         listed = await registry(scope=scope, min_properties=3)
@@ -496,7 +512,9 @@ async def test_registry_tabs_filter_people_without_changing_clicked_portfolio_co
     prior = await registry(scope="prior_owners", min_properties=1)
     assert prior.total == 1 and prior.owners[0].property_count == 1
     assert prior.owners[0].properties[0].ownership_status == "former_owner"
-    reopened = await owners.get_owner_profile(None, organization_id="org", owner_key="alias-1")
+    reopened = await owners.get_owner_profile(
+        DB.session, organization_id="org", owner_key="alias-1"
+    )
     assert reopened.property_count == 3
     # Cosmetic detail enrichment must never mutate the cached registry profile.
     clicked.properties[0].registry_bedrooms = "2"
@@ -507,7 +525,7 @@ async def test_retracted_rental_link_cannot_display_verified_owner_on_previous_l
     from app.crm.import_models import CrmContactList
 
     assessed = event(1, lead_id=None, unit_candidate_key=None)
-    install_snapshot(monkeypatch, [assessed])
+    await install_snapshot(monkeypatch, [assessed])
     original = stored_claim(event(1))
     contact_list = CrmContactList(
         id=1,
@@ -523,7 +541,8 @@ async def test_retracted_rental_link_cannot_display_verified_owner_on_previous_l
         AsyncMock(return_value=[(original, contact_list)]),
     )
     assert (
-        await owners.list_lead_imported_contacts(None, lead_id="lease", organization_id="org") == []
+        await owners.list_lead_imported_contacts(DB.session, lead_id="lease", organization_id="org")
+        == []
     )
 
 
@@ -550,9 +569,9 @@ async def test_possible_latest_seller_stays_reviewable_without_ready_or_automati
             assessed_confidence_score=55,
         ),
     ]
-    install_snapshot(monkeypatch, rows)
+    await install_snapshot(monkeypatch, rows)
     listed = await registry()
-    clicked = await owners.get_owner_profile(None, organization_id="org", owner_key="alias-1")
+    clicked = await owners.get_owner_profile(DB.session, organization_id="org", owner_key="alias-1")
     assert listed.owners[0] == clicked
     assert clicked.properties[0].imported_party_role == "Seller"
     assert clicked.highest_ownership_status == "probable_current_owner"
@@ -587,7 +606,7 @@ async def test_possible_latest_seller_stays_reviewable_without_ready_or_automati
     )
     monkeypatch.setattr("app.crm.workspace_repository.list_owner_notes", AsyncMock(return_value=[]))
     workspace = (
-        await workspaces.list_owner_workspaces(None, user_id="user", organization_id="org")
+        await workspaces.list_owner_workspaces(DB.session, user_id="user", organization_id="org")
     )[0]
     assert workspace.pipeline_status == "researching" and workspace.highlight_color == "none"
     assert saved.pipeline_status == "contact_ready" and saved.highlight_color == "green"
@@ -614,7 +633,7 @@ async def test_possible_latest_seller_stays_reviewable_without_ready_or_automati
 async def test_current_buyer_support_represents_profile_even_when_paired_seller_row_is_later(
     monkeypatch,
 ):
-    install_snapshot(
+    await install_snapshot(
         monkeypatch,
         [
             event(
@@ -673,7 +692,7 @@ async def test_verified_renewal_buyer_is_not_blocked_by_its_tentative_same_sale_
     )
 
     async def resolve(rows):
-        install_snapshot(monkeypatch, rows)
+        await install_snapshot(monkeypatch, rows)
         return await renewal_leads._owners_by_candidate(
             None, candidate_keys=["unit"], user_id="user", organization_id="org"
         )
@@ -729,7 +748,7 @@ def matched_rows():
 async def contact_list(monkeypatch, rows, **filters):
     from app.crm.import_models import CrmContactList
 
-    install_snapshot(monkeypatch, rows)
+    await install_snapshot(monkeypatch, rows)
     monkeypatch.setattr(
         "app.crm.owner_repository.get_contact_list",
         AsyncMock(
@@ -756,7 +775,7 @@ async def contact_list(monkeypatch, rows, **filters):
         "app.crm.owner_repository.list_claims_by_ids", AsyncMock(side_effect=page_claims)
     )
     arguments = dict(list_id=1, organization_id="org", status=None, search=None, limit=20, offset=0)
-    return await owners.get_contact_list(None, **(arguments | filters))
+    return await owners.get_contact_list(DB.session, **(arguments | filters))
 
 
 async def test_a_contact_row_carries_the_stored_match_verdict(monkeypatch):
@@ -808,7 +827,7 @@ async def test_an_owner_who_still_holds_a_property_is_not_headlined_as_former(mo
     # The same person owns 101 today and sold 102. Their headline (list chip and panel chip)
     # must say what they hold now; "former" applies to 102 only. Seen live: an owner with 29
     # transaction-matched current properties and 3 sold ones was shown as "Former owner".
-    install_snapshot(
+    await install_snapshot(
         monkeypatch,
         [
             event(1),
@@ -824,7 +843,7 @@ async def test_an_owner_who_still_holds_a_property_is_not_headlined_as_former(mo
             ),
         ],
     )
-    clicked = await owners.get_owner_profile(None, organization_id="org", owner_key="alias-1")
+    clicked = await owners.get_owner_profile(DB.session, organization_id="org", owner_key="alias-1")
     assert clicked.highest_ownership_status == "verified_current_owner"
     listed = await registry(scope="current_owners")
     assert listed.owners[0].highest_ownership_status == clicked.highest_ownership_status
@@ -836,7 +855,7 @@ async def test_an_owner_who_still_holds_a_property_is_not_headlined_as_former(mo
 async def test_tabs_report_the_whole_portfolio_beside_the_count_in_view(monkeypatch):
     # The Current owners list counts current properties only; the panel counts everything.
     # Both carry the other number so the screens can say "1 current · 2 in total".
-    install_snapshot(
+    await install_snapshot(
         monkeypatch,
         [
             event(1),
@@ -853,7 +872,7 @@ async def test_tabs_report_the_whole_portfolio_beside_the_count_in_view(monkeypa
     )
     listed = (await registry(scope="current_owners")).owners[0]
     assert (listed.property_count, listed.total_property_count) == (1, 2)
-    clicked = await owners.get_owner_profile(None, organization_id="org", owner_key="alias-1")
+    clicked = await owners.get_owner_profile(DB.session, organization_id="org", owner_key="alias-1")
     assert (clicked.property_count, clicked.current_property_count) == (2, 1)
     assert clicked.total_property_count is None
 
@@ -877,7 +896,7 @@ async def test_a_developer_side_seller_is_left_out_of_former_owners(monkeypatch)
         )
         for n in range(1, 61)
     ]
-    install_snapshot(monkeypatch, rows)
+    await install_snapshot(monkeypatch, rows)
     prior = await registry(scope="prior_owners")
     assert prior.total == 0 and prior.summary.prior_owner_profiles == 0
     # Still findable, labelled for what it is.

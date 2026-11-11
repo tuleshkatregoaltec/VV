@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import orjson
-from sqlalchemy import ARRAY, String, any_, exists, func, literal, or_, text
+from sqlalchemy import ARRAY, Integer, String, any_, exists, func, literal, or_, text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -28,6 +28,7 @@ async def list_owner_history_rows(
     canonical_emails: list[str] | None = None,
     additional_property_keys: list[str] | None = None,
     unit_candidate_keys: list[str] | None = None,
+    claim_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
     """Read only the history projection's fields, without raw contact/source JSON.
 
@@ -36,7 +37,7 @@ async def list_owner_history_rows(
 
     ``unit_candidate_keys`` reads just the claims of those lease units plus every
     other claim on the same properties (so a competing owner still counts), instead
-    of the organization's whole claim table.
+    of the organization's whole claim table. ``claim_ids`` reads exactly those claims.
     """
     claim = CrmPropertyContactClaim
     scope = [claim.organization_id == organization_id]
@@ -140,7 +141,12 @@ async def list_owner_history_rows(
         )
         .where(claim.import_id.in_(sources))
     )
-    if unit_scope is not None:
+    if claim_ids is not None:
+        statement = statement.where(
+            claim.organization_id == organization_id,
+            claim.id == any_(literal(sorted(set(claim_ids)), ARRAY(Integer))),
+        )
+    elif unit_scope is not None:
         # Every claim on a property that has a claim on one of the units; that already
         # includes the units' own claims.
         statement = statement.where(

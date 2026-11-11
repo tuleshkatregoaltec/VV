@@ -21,6 +21,10 @@ CrmOwnershipStatus = Literal[
 ]
 
 
+# JSONB on PostgreSQL, plain JSON where the unit tests create tables in SQLite
+_JSONB = JSON().with_variant(JSONB(), "postgresql")
+
+
 class CrmContactImport(SQLModel, table=True):
     __tablename__ = "crm_contact_imports"
     __table_args__ = (
@@ -69,6 +73,138 @@ class CrmOwnerAssessmentRevision(SQLModel, table=True):
 
     organization_id: str = SQLField(primary_key=True)
     revision: int = SQLField(sa_type=BigInteger)
+
+
+class CrmOwnerAssessmentState(SQLModel, table=True):
+    """Which stored assessment generation is current for a tenant, and what it was built from."""
+
+    __tablename__ = "crm_owner_assessment_state"
+
+    organization_id: str = SQLField(primary_key=True)
+    generation: int = SQLField(sa_type=BigInteger)
+    revision: str
+    warehouse_revision: str
+    checked_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    warehouse_status: str
+    built_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    summary: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    import_summaries: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    list_counts: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    source_audit: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+
+
+class CrmOwnerAssessedClaim(SQLModel, table=True):
+    """One claim's assessed row for one generation; see ``app.crm.owner_store``."""
+
+    __tablename__ = "crm_owner_assessed_claims"
+    __table_args__ = (
+        Index(
+            "ix_crm_assessed_claim_canonical",
+            "organization_id",
+            "generation",
+            "canonical_owner_key",
+        ),
+        Index("ix_crm_assessed_claim_owner", "organization_id", "generation", "owner_key"),
+        Index("ix_crm_assessed_claim_list", "organization_id", "generation", "list_id", "ord"),
+        Index("ix_crm_assessed_claim_import", "organization_id", "generation", "import_id", "ord"),
+        Index(
+            "ix_crm_assessed_claim_identity",
+            "organization_id",
+            "generation",
+            "identity_key",
+            "identity_area",
+        ),
+        Index("ix_crm_assessed_claim_property", "organization_id", "generation", "property_key"),
+        Index(
+            "ix_crm_assessed_claim_lead",
+            "organization_id",
+            "generation",
+            "lead_id",
+            postgresql_where=text("lead_id IS NOT NULL"),
+        ),
+    )
+
+    organization_id: str = SQLField(primary_key=True)
+    generation: int = SQLField(sa_column=Column(BigInteger, primary_key=True))
+    claim_id: int = SQLField(primary_key=True)
+    list_id: int
+    import_id: int
+    owner_key: str
+    canonical_owner_key: str
+    property_key: str
+    identity_area: str | None = None
+    identity_key: str | None = None
+    group_ident: str
+    is_source: bool
+    ord: int = SQLField(sa_type=BigInteger)
+    assessed_status: str
+    party_role: str
+    transaction_date: date | None = None
+    event_conf: int
+    pref_support: bool
+    pref_buyer: bool
+    ready_row: bool
+    lead_id: str | None = None
+    building_name: str | None = None
+    project_name: str | None = None
+    unit_number: str | None = None
+    area_name: str | None = None
+    match_colour: str | None = None
+    match_outcome: str | None = None
+    search_text: str = SQLField(sa_column=Column(Text, nullable=False))
+    props_search_text: str = SQLField(sa_column=Column(Text, nullable=False))
+    row: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+
+
+class CrmOwnerRegistryOwner(SQLModel, table=True):
+    """One owner's profile in one generation; ``list_id`` 0 is the whole tenant."""
+
+    __tablename__ = "crm_owner_registry_owners"
+    __table_args__ = (
+        Index("ix_crm_registry_owner_key", "organization_id", "generation", "list_id", "owner_key"),
+    )
+
+    organization_id: str = SQLField(primary_key=True)
+    generation: int = SQLField(sa_column=Column(BigInteger, primary_key=True))
+    list_id: int = SQLField(primary_key=True)
+    canonical_owner_key: str = SQLField(primary_key=True)
+    owner_key: str
+    profile: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    search_text: str = SQLField(sa_column=Column(Text, nullable=False))
+    property_count: int
+    contact_ready_count: int
+    highest_confidence_score: int
+    next_lease_end: date | None = None
+    developer_side_seller: bool
+    invalid_identity_sources: bool
+    no_properties: bool
+    in_rental: bool
+    in_registry: bool
+    in_prior: bool
+    in_review: bool
+    in_multi: bool
+
+
+class CrmOwnerRegistryProperty(SQLModel, table=True):
+    """What the registry filters on for one property of an owner's profile."""
+
+    __tablename__ = "crm_owner_registry_properties"
+
+    organization_id: str = SQLField(primary_key=True)
+    generation: int = SQLField(sa_column=Column(BigInteger, primary_key=True))
+    list_id: int = SQLField(primary_key=True)
+    canonical_owner_key: str = SQLField(primary_key=True)
+    ordinal: int = SQLField(primary_key=True)
+    status: str
+    ready: bool
+    rental_linked: bool
+    lease_end: date | None = None
+    annual_rent_aed: int | None = SQLField(default=None, sa_type=BigInteger)
+    sale_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
+    match_status: str | None = None
+    location_text: str = SQLField(sa_column=Column(Text, nullable=False))
+    headline_rank: int
+    confidence: int
 
 
 class CrmContactList(SQLModel, table=True):

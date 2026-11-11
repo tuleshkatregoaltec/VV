@@ -297,17 +297,23 @@ def _encode(snapshot: OwnerAssessmentSnapshot) -> str:
     ).decode()
 
 
+def restore_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Give a JSON-decoded assessment row back its date, datetime and identity types."""
+    for name in _DATE_FIELDS:
+        if row.get(name):
+            row[name] = date.fromisoformat(row[name])
+    for name in _DATETIME_FIELDS:
+        if row.get(name):
+            row[name] = datetime.fromisoformat(row[name])
+    if row.get("property_identity"):
+        row["property_identity"] = tuple(row["property_identity"])
+    return row
+
+
 def _decode(payload: str) -> OwnerAssessmentSnapshot:
     data = orjson.loads(zlib.decompress(base64.b64decode(payload)))
     for row in data["rows"]:
-        for name in _DATE_FIELDS:
-            if row.get(name):
-                row[name] = date.fromisoformat(row[name])
-        for name in _DATETIME_FIELDS:
-            if row.get(name):
-                row[name] = datetime.fromisoformat(row[name])
-        if row.get("property_identity"):
-            row["property_identity"] = tuple(row["property_identity"])
+        restore_row(row)
     return OwnerAssessmentSnapshot(
         rows=data["rows"],
         summary=CrmOwnerHistorySummary.model_validate(data["summary"]),
