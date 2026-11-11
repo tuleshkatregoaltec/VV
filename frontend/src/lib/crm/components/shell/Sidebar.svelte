@@ -4,6 +4,7 @@ import CalendarDays from 'lucide-svelte/icons/calendar-days'
 import ChartNoAxesColumn from 'lucide-svelte/icons/chart-no-axes-column'
 import CircleDot from 'lucide-svelte/icons/circle-dot'
 import FileText from 'lucide-svelte/icons/file-text'
+import Files from 'lucide-svelte/icons/files'
 import House from 'lucide-svelte/icons/house'
 import Inbox from 'lucide-svelte/icons/inbox'
 import LayoutGrid from 'lucide-svelte/icons/layout-grid'
@@ -69,7 +70,8 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 				countLabel: 'today'
 			},
 			{ href: '/crm/assistant', label: 'Assistant', icon: Send, count: null },
-			{ href: '/crm/assets', label: 'Assets', icon: LayoutGrid, count: null }
+			{ href: '/crm/assets', label: 'Assets', icon: LayoutGrid, count: null },
+			{ href: '/crm/documents', label: 'Documents', icon: Files, count: null }
 		]
 	},
 	{
