@@ -69,6 +69,9 @@ class Settings(BaseSettings):
 
     # CORS
     ALLOWED_ORIGINS: Annotated[list[AnyUrl] | str, BeforeValidator(parse_cors)] = []
+    # Optional full-match regex for extra origins, e.g. Cloudflare Pages previews:
+    # ^https://[a-z0-9-]+\.vv-pilot\.pages\.dev$
+    ALLOWED_ORIGIN_REGEX: str | None = None
 
     # Honeybadger
     HONEYBADGER_API_KEY: str | None = None
