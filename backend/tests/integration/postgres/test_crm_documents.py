@@ -71,3 +71,34 @@ async def test_unknown_document_type_is_rejected_by_the_database(pg_session):
     with pytest.raises(IntegrityError):
         await pg_session.commit()
     await pg_session.rollback()
+
+
+async def test_late_save_from_an_old_revision_is_refused(pg_session, monkeypatch):
+    from crm_document_helpers import listing
+    from fastapi import HTTPException
+
+    from app.crm import documents
+    from app.crm.document_models import DocumentFields, ListingDocumentInfoUpdate
+
+    async def fake_get(db, organization_id, listing_key):
+        return listing(listing_key)
+
+    monkeypatch.setattr(documents, "get_company_listing", fake_get)
+    org = await _org(pg_session)
+
+    def payload(name, revision):
+        return ListingDocumentInfoUpdate(
+            source="property_finder",
+            listing_key="123",
+            fields=DocumentFields.model_validate({"owner": {"full_name": name}}),
+            expected_revision=revision,
+        )
+
+    save = documents.save_document_info
+    await save(pg_session, organization_id=org, user_id="a", payload=payload("First", 0))
+    await save(pg_session, organization_id=org, user_id="b", payload=payload("B", 1))
+    with pytest.raises(HTTPException) as error:
+        await save(pg_session, organization_id=org, user_id="a", payload=payload("A late", 1))
+    assert error.value.status_code == 409
+    info = await documents.get_document_info(pg_session, organization_id=org, listing_key="123")
+    assert (info.revision, info.fields.owner.full_name) == (2, "B")
