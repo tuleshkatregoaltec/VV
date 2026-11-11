@@ -17,6 +17,7 @@ from datetime import timedelta
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+import app.postgres.models  # noqa: F401 - registers every table the documents reference
 from app.crm.documents import reconcile_stale_documents
 from app.postgres import close_postgres, get_postgres_engine
 
