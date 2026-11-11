@@ -130,3 +130,13 @@ async def test_idempotency_key_is_unique_per_organization(db):
     db.add(_document(info, key))
     with pytest.raises(IntegrityError):
         await db.commit()
+
+
+def test_real_property_finder_listing_ids_are_valid_keys():
+    update = ListingDocumentInfoUpdate(
+        source="property_finder",
+        listing_key="E4PE3H23YAHTAQDKRCMSMVTDK4",
+        fields={},
+        expected_revision=0,
+    )
+    assert update.listing_key == "E4PE3H23YAHTAQDKRCMSMVTDK4"

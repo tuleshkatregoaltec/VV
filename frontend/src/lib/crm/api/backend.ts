@@ -2343,7 +2343,8 @@ export async function selectCompanyListingSource(broker_id: string) {
 /* ── listing documents (/company-listings/{key}, /listing-document-info, /documents) ── */
 
 /** A company card's id is `PF-<Property Finder listing id>`; documents use the bare id. */
-export const listingKeyOf = (id: string): string | null => /^PF-(\d{1,20})$/.exec(id)?.[1] ?? null
+export const listingKeyOf = (id: string): string | null =>
+	/^PF-([A-Za-z0-9]{1,40})$/.exec(id)?.[1] ?? null
 
 export async function getCompanyListing(listingKey: string): Promise<ListingDetail> {
 	const r = await client.get<CrmCompanyListingDetail>(`${CRM}/company-listings/${listingKey}`)

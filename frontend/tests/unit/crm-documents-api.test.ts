@@ -45,6 +45,16 @@ describe('listing detail', () => {
 		expect(listing.leads).toEqual([])
 	})
 
+	it('accepts real Property Finder ids (26 letters and digits)', async () => {
+		const get = vi
+			.spyOn(client, 'get')
+			.mockResolvedValue({ ...DETAIL, reference: 'PF-E4PE3H23YAHTAQDKRCMSMVTDK4' })
+
+		await crm.listings.get('PF-E4PE3H23YAHTAQDKRCMSMVTDK4')
+
+		expect(get).toHaveBeenCalledWith('/api/v1/crm/company-listings/E4PE3H23YAHTAQDKRCMSMVTDK4')
+	})
+
 	it('keeps other listings unavailable instead of inventing them', async () => {
 		const get = vi.spyOn(client, 'get')
 		await expect(crm.listings.get('L-9')).rejects.toThrow()

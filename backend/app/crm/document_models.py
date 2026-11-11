@@ -23,7 +23,8 @@ DocStatus = Literal["generating", "ready", "failed"]
 Source = Literal["property_finder"]
 DOC_TYPES: tuple[str, ...] = ("noc", "brochure", "lease", "a2a")
 DOC_STATUSES: tuple[str, ...] = ("generating", "ready", "failed")
-LISTING_KEY_PATTERN = r"^\d{1,20}$"
+# Property Finder listing ids: 26 letters and digits today; bounded, no separators.
+LISTING_KEY_PATTERN = r"^[A-Za-z0-9]{1,40}$"
 
 ListingKey = Annotated[str, StringConstraints(pattern=LISTING_KEY_PATTERN)]
 Text = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
