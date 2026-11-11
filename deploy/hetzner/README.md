@@ -78,3 +78,32 @@ ALLOWED_ORIGIN_REGEX=^https://[a-z0-9-]+\.vv-pilot\.pages\.dev$
   `cd ~/vv && git reset --hard <previous-sha> && sudo systemctl restart vv-api vv-whatsapp-worker`.
 - **Backend with migrations:** restore the `~/backups/vitevue-pre-deploy-*.dump` printed by the
   failed run (`pg_restore --clean`), then reset the code as above.
+
+## Nightly database backups
+
+`vv-backup.sh` runs from systemd timer `vv-backup.timer` every night at about 01:30 UTC.
+
+1. It dumps Postgres to `~/backups/nightly` and checks that the dump can be read back (`pg_restore --list`).
+2. It keeps 14 days of local copies.
+3. If `~/.config/vv-backup/r2.env` exists, it also copies each dump to the private R2 bucket
+   `vv-db-backups` (Western Europe). The bucket deletes objects after 30 days.
+
+Install:
+
+```bash
+install -m 755 deploy/hetzner/vv-backup.sh ~/deploy/
+sudo apt-get install -y rclone
+```
+
+The systemd units are `/etc/systemd/system/vv-backup.{service,timer}`, with `User=maan`,
+`OnCalendar=*-*-* 01:30:00 UTC` and `Persistent=true`.
+
+To turn on the off-server copy, create an R2 API token with *Object Read & Write* on
+`vv-db-backups` only, then:
+
+```bash
+ssh -t maan@100.117.68.71 'mkdir -p ~/.config/vv-backup && umask 077 && read -p "Access Key ID: " a && read -s -p "Secret Access Key: " s && printf "R2_ACCESS_KEY_ID=%s\nR2_SECRET_ACCESS_KEY=%s\n" "$a" "$s" > ~/.config/vv-backup/r2.env && echo && ~/deploy/vv-backup.sh'
+```
+
+Restore: `docker exec -i vv-postgres-1 pg_restore -U vitevue -d vitevue --clean --if-exists < <dump>`.
+Take a fresh dump first.
