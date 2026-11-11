@@ -7,9 +7,9 @@
   @page {
     size: A4;
     margin: 22mm 18mm 24mm;
-    @bottom-left { content: "{{ spec.title }} · {{ listing.reference }}"; font-size: 8pt; color: #666; }
-    @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #666; }
-    {% if draft %}@top-center { content: "DRAFT – not client approved ({{ spec.version }})"; font-size: 8pt; color: #b00; }{% endif %}
+    @bottom-left { font-family: "Noto Sans", "Noto Sans Arabic", "Geeza Pro", "SF Arabic", "DejaVu Sans", sans-serif; content: "{{ spec.title }} · {{ listing.reference }}"; font-size: 8pt; color: #666; }
+    @bottom-right { font-family: "Noto Sans", "Noto Sans Arabic", "Geeza Pro", "SF Arabic", "DejaVu Sans", sans-serif; content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #666; }
+    {% if draft %}@top-center { font-family: "Noto Sans", "Noto Sans Arabic", "Geeza Pro", "SF Arabic", "DejaVu Sans", sans-serif; content: "DRAFT – not client approved ({{ spec.version }})"; font-size: 8pt; color: #b00; }{% endif %}
   }
   body { font-family: "Noto Sans", "Noto Sans Arabic", "Geeza Pro", "SF Arabic", "DejaVu Sans", sans-serif; font-size: 10.5pt; line-height: 1.45; color: #111; }
   h1 { font-size: 18pt; margin: 0 0 2mm; }
