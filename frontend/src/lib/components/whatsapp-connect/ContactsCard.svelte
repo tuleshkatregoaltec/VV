@@ -20,7 +20,9 @@ import {
 	selectionAfterToggle,
 	selectVisible
 } from '$lib/whatsapp/blocklist'
+import { formatPhone } from '$lib/whatsapp/chat'
 import { contactsSyncPending } from '$lib/whatsapp/connect-state'
+import BlockFromFile from './BlockFromFile.svelte'
 
 let { status }: { status: AgentConnectionStatus } = $props()
 const queryClient = getQueryClient()
@@ -52,7 +54,7 @@ const toBlock = $derived(chosen.filter((row) => !row.blocked))
 const toUnblock = $derived(chosen.filter((row) => row.blocked))
 
 function label(contact: SyncedContact) {
-	return contact.name?.trim() || `+${contact.wa_id}`
+	return contact.name?.trim() || formatPhone(contact.wa_id)
 }
 
 async function apply(blocked: boolean, ids: ReadonlySet<string>, numbers: string[] = []) {
@@ -121,7 +123,7 @@ async function retrySync() {
 
 <section class="card" aria-labelledby="contacts-h">
 	<div class="ch">
-		<h2 id="contacts-h">Choose who to block <span class="ct">{status.contacts.blocked} blocked</span></h2>
+		<h2 id="contacts-h">Block list <span class="ct">{status.contacts.blocked} blocked</span></h2>
 	</div>
 	<div class="stack">
 		<p class="lead">Messages from blocked contacts are never read or stored. Everyone else is treated as a possible enquiry.</p>
@@ -154,7 +156,7 @@ async function retrySync() {
 				{#if search}No contacts match “{search}”. You can still block that number below.
 				{:else if view === 'blocked'}You have not blocked anyone yet.
 				{:else if pending}Contacts will appear here as they arrive.
-				{:else}No contacts were synced from WhatsApp. Add numbers to block below.{/if}
+				{:else}Nobody is on your block list yet. Import your phone’s contacts or type numbers below.{/if}
 			</div>
 		{:else}
 			<div class="listbox">
@@ -187,7 +189,7 @@ async function retrySync() {
 							<div class="who">
 								<b>{label(contact)}</b>
 								{#if contact.name || contact.in_address_book}
-									<span class="sub">{#if contact.name}<span class="num">+{contact.wa_id}</span>{/if}{#if contact.name && contact.in_address_book}{' · '}{/if}{#if contact.in_address_book}Saved{/if}</span>
+									<span class="sub">{#if contact.name}<span class="num">{formatPhone(contact.wa_id)}</span>{/if}{#if contact.name && contact.in_address_book}{' · '}{/if}{#if contact.in_address_book}Saved{/if}</span>
 								{/if}
 							</div>
 							{#if contact.blocked}<span class="chip red">Blocked</span>{/if}
@@ -209,14 +211,16 @@ async function retrySync() {
 			</div>
 		{/if}
 
+		<BlockFromFile {working} onblock={(numbers) => apply(true, new Set(), numbers)} />
+
 		<form class="add" onsubmit={blockNumbers}>
 			<label class="sr" for="wa-block-number">Block a number that is not in the list</label>
 			<div class="addrow">
-				<input id="wa-block-number" type="text" inputmode="tel" bind:value={numberText} placeholder="Block another number, e.g. +971 50 123 4567" aria-describedby={numberError ? 'wa-block-error' : 'wa-block-help'} aria-invalid={numberError ? 'true' : undefined} />
+				<input id="wa-block-number" type="text" inputmode="tel" bind:value={numberText} placeholder="Type a number, e.g. +971 50 123 4567" aria-describedby={numberError ? 'wa-block-error' : 'wa-block-help'} aria-invalid={numberError ? 'true' : undefined} />
 				<button type="submit" class="btn ghost" disabled={working || !numberText.trim()}>Block number</button>
 			</div>
 			{#if numberError}<span id="wa-block-error" class="err" role="alert">{numberError}</span>{/if}
-			<span id="wa-block-help" class="help">For a number that is not in the list. Separate several with commas or new lines.</span>
+			<span id="wa-block-help" class="help">Separate several numbers with commas or new lines.</span>
 		</form>
 	</div>
 </section>

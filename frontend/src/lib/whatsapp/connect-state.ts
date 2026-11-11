@@ -14,8 +14,16 @@ export function stepStates(
 	return ['done', 'current', 'upcoming']
 }
 
-export function contactsSyncPending(status: AgentConnectionStatus): boolean {
-	return !status.contacts.synced_at
+const SYNC_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Contacts are on their way only after a sync was requested, and Meta answers within 24 hours or
+ * not at all. Numbers attached without Embedded Signup never get a sync, so they never wait.
+ */
+export function contactsSyncPending(status: AgentConnectionStatus, now = Date.now()): boolean {
+	const requested = status.contacts.sync_requested_at
+	if (!requested || status.contacts.synced_at) return false
+	return now - Date.parse(requested) < SYNC_WINDOW_MS
 }
 
 export function sendingWarning(

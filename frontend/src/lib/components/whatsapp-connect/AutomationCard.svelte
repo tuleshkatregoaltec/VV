@@ -73,7 +73,7 @@ async function set(enabled: boolean) {
 		</p>
 	{/if}
 
-	<a class="more" href="/dashboard/whatsapp">What the assistant may say</a>
+	<a class="more" href="/crm/whatsapp?tab=listings">What the assistant may share</a>
 </section>
 
 <style>
