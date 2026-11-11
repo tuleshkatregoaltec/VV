@@ -635,6 +635,21 @@ export interface ListingDetail extends ListingCard {
 	matched: LeadRow[]
 	from_lead: { id: number; name: string; lead_type: LeadType } | null
 	can_publish: boolean
+	/** Company listing of the organization's connected company: may hold private documents. */
+	managed?: boolean
+	/** Property Finder listing id (company listings). */
+	listing_key?: string
+}
+
+/** Generated listing documents (Assets › listing › Documents, CRM › Documents). */
+export type DocType = 'noc' | 'brochure' | 'lease' | 'a2a'
+
+export interface DocumentListParams {
+	listingKey?: string
+	docType?: DocType
+	search?: string
+	limit?: number
+	offset?: number
 }
 
 export interface ListingListResponse {

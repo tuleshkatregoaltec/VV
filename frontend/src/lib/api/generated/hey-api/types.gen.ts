@@ -5,6 +5,58 @@ export type ClientOptions = {
 };
 
 /**
+ * A2AFields
+ */
+export type A2aFieldsInput = {
+    /**
+     * Other Brokerage
+     */
+    other_brokerage?: string | null;
+    /**
+     * Other Broker Name
+     */
+    other_broker_name?: string | null;
+    /**
+     * Other Broker Brn
+     */
+    other_broker_brn?: string | null;
+    /**
+     * Commission Split Pct
+     */
+    commission_split_pct?: number | string | null;
+    /**
+     * Valid Until
+     */
+    valid_until?: string | null;
+};
+
+/**
+ * A2AFields
+ */
+export type A2aFieldsOutput = {
+    /**
+     * Other Brokerage
+     */
+    other_brokerage?: string | null;
+    /**
+     * Other Broker Name
+     */
+    other_broker_name?: string | null;
+    /**
+     * Other Broker Brn
+     */
+    other_broker_brn?: string | null;
+    /**
+     * Commission Split Pct
+     */
+    commission_split_pct?: string | null;
+    /**
+     * Valid Until
+     */
+    valid_until?: string | null;
+};
+
+/**
  * AcceptInviteRequest
  *
  * Request to accept invitation
@@ -1537,6 +1589,88 @@ export type CrmCompanyListingCompany = {
 };
 
 /**
+ * CrmCompanyListingDetail
+ *
+ * One Property Finder listing; `managed` when it belongs to the organization's connected company.
+ *
+ * Only managed listings may carry private owner and agreement documents.
+ */
+export type CrmCompanyListingDetail = {
+    /**
+     * Reference
+     */
+    reference: string;
+    /**
+     * Agent Name
+     */
+    agent_name: string;
+    /**
+     * Agent Phone
+     */
+    agent_phone: string | null;
+    /**
+     * Mode
+     */
+    mode: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Bedrooms
+     */
+    bedrooms: number | null;
+    /**
+     * Size Sqft
+     */
+    size_sqft: number | null;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Building Name
+     */
+    building_name: string | null;
+    /**
+     * Unit Number
+     */
+    unit_number: string | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Listed At
+     */
+    listed_at: string;
+    /**
+     * Listing Key
+     */
+    listing_key: string;
+    /**
+     * Broker Id
+     */
+    broker_id: string;
+    /**
+     * Broker Name
+     */
+    broker_name: string;
+    /**
+     * Managed
+     */
+    managed: boolean;
+};
+
+/**
  * CrmCompanyListingResponse
  *
  * A company listing as Assets › Company listings shows it.
@@ -2888,13 +3022,13 @@ export type CrmOwnerProperty = {
      */
     valuation_confidence?: 'high' | 'medium' | 'low' | null;
     /**
-     * Valuation Status
-     */
-    valuation_status?: string | null;
-    /**
      * Valued At
      */
     valued_at?: string | null;
+    /**
+     * Valuation Status
+     */
+    valuation_status?: string | null;
     /**
      * Later Sale Date
      */
@@ -4269,6 +4403,44 @@ export type DimensionBreakdown = {
 };
 
 /**
+ * DocumentDownloadResponse
+ */
+export type DocumentDownloadResponse = {
+    /**
+     * Url
+     */
+    url: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+};
+
+/**
+ * DocumentFields
+ *
+ * Everything the Documents tab collects for one listing (all optional until a template needs it).
+ */
+export type DocumentFieldsInput = {
+    owner?: OwnerFields;
+    lease?: LeaseFields;
+    a2a?: A2aFieldsInput;
+    marketing?: MarketingFields;
+};
+
+/**
+ * DocumentFields
+ *
+ * Everything the Documents tab collects for one listing (all optional until a template needs it).
+ */
+export type DocumentFieldsOutput = {
+    owner?: OwnerFields;
+    lease?: LeaseFields;
+    a2a?: A2aFieldsOutput;
+    marketing?: MarketingFields;
+};
+
+/**
  * EmailEvent
  */
 export type EmailEvent = {
@@ -5578,6 +5750,32 @@ export type GisLandUse = {
 };
 
 /**
+ * GenerateDocumentRequest
+ */
+export type GenerateDocumentRequest = {
+    /**
+     * Source
+     */
+    source: 'property_finder';
+    /**
+     * Listing Key
+     */
+    listing_key: string;
+    /**
+     * Doc Type
+     */
+    doc_type: 'noc' | 'brochure' | 'lease' | 'a2a';
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Idempotency Key
+     */
+    idempotency_key: string;
+};
+
+/**
  * GenerateStudyRequest
  */
 export type GenerateStudyRequest = {
@@ -5613,6 +5811,80 @@ export type GenerateStudyResponse = {
     chat?: {
         [key: string]: unknown;
     };
+};
+
+/**
+ * GeneratedDocumentListResponse
+ */
+export type GeneratedDocumentListResponse = {
+    /**
+     * Items
+     */
+    items: Array<GeneratedDocumentResponse>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+};
+
+/**
+ * GeneratedDocumentResponse
+ *
+ * What the lists show; never the private snapshot or the storage key.
+ */
+export type GeneratedDocumentResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Listing Key
+     */
+    listing_key: string;
+    /**
+     * Listing Title
+     */
+    listing_title: string;
+    /**
+     * Doc Type
+     */
+    doc_type: 'noc' | 'brochure' | 'lease' | 'a2a';
+    /**
+     * Template Version
+     */
+    template_version: string;
+    /**
+     * Status
+     */
+    status: 'generating' | 'ready' | 'failed';
+    /**
+     * Failure Code
+     */
+    failure_code: string | null;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number | null;
+    /**
+     * Created By User Id
+     */
+    created_by_user_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
 };
 
 /**
@@ -6686,6 +6958,44 @@ export type LandSaleEvidence = {
 };
 
 /**
+ * LeaseFields
+ */
+export type LeaseFields = {
+    /**
+     * Tenant Name
+     */
+    tenant_name?: string | null;
+    /**
+     * Tenant Phone
+     */
+    tenant_phone?: string | null;
+    /**
+     * Tenant Email
+     */
+    tenant_email?: string | null;
+    /**
+     * Start Date
+     */
+    start_date?: string | null;
+    /**
+     * End Date
+     */
+    end_date?: string | null;
+    /**
+     * Annual Rent Aed
+     */
+    annual_rent_aed?: number | null;
+    /**
+     * Cheques
+     */
+    cheques?: number | null;
+    /**
+     * Security Deposit Aed
+     */
+    security_deposit_aed?: number | null;
+};
+
+/**
  * ListingAnalyticsResponse
  */
 export type ListingAnalyticsResponse = {
@@ -6745,6 +7055,10 @@ export type ListingAnalyticsResponse = {
      * Snapshot At
      */
     snapshot_at?: string | null;
+    /**
+     * Data As Of
+     */
+    data_as_of?: string | null;
     /**
      * Trend
      */
@@ -6908,6 +7222,38 @@ export type ListingCardResponse = {
      */
     urgency_terms?: Array<string>;
     /**
+     * Valuation Method
+     */
+    valuation_method?: 'dld_sales' | 'asking_peers';
+    /**
+     * Estimated Value Aed
+     */
+    estimated_value_aed?: number | null;
+    /**
+     * Estimated Value Low Aed
+     */
+    estimated_value_low_aed?: number | null;
+    /**
+     * Estimated Value High Aed
+     */
+    estimated_value_high_aed?: number | null;
+    /**
+     * Valuation Confidence
+     */
+    valuation_confidence?: 'high' | 'medium' | 'low' | null;
+    /**
+     * Value Gap Pct
+     */
+    value_gap_pct?: number | null;
+    /**
+     * Is Off Plan
+     */
+    is_off_plan?: boolean;
+    /**
+     * Valued At
+     */
+    valued_at?: string | null;
+    /**
      * Is Available
      */
     is_available?: boolean | null;
@@ -6927,6 +7273,34 @@ export type ListingCardResponse = {
      * Share Url
      */
     share_url?: string | null;
+};
+
+/**
+ * ListingComparableSale
+ *
+ * A DLD sale behind a listing's estimate: same building, type and bedrooms, closest size.
+ */
+export type ListingComparableSale = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Unit
+     */
+    unit?: string | null;
+    /**
+     * Size Sqft
+     */
+    size_sqft: number;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Psf
+     */
+    psf: number;
 };
 
 /**
@@ -7086,6 +7460,38 @@ export type ListingDetailResponse = {
      */
     urgency_terms?: Array<string>;
     /**
+     * Valuation Method
+     */
+    valuation_method?: 'dld_sales' | 'asking_peers';
+    /**
+     * Estimated Value Aed
+     */
+    estimated_value_aed?: number | null;
+    /**
+     * Estimated Value Low Aed
+     */
+    estimated_value_low_aed?: number | null;
+    /**
+     * Estimated Value High Aed
+     */
+    estimated_value_high_aed?: number | null;
+    /**
+     * Valuation Confidence
+     */
+    valuation_confidence?: 'high' | 'medium' | 'low' | null;
+    /**
+     * Value Gap Pct
+     */
+    value_gap_pct?: number | null;
+    /**
+     * Is Off Plan
+     */
+    is_off_plan?: boolean;
+    /**
+     * Valued At
+     */
+    valued_at?: string | null;
+    /**
      * Is Available
      */
     is_available?: boolean | null;
@@ -7170,6 +7576,41 @@ export type ListingDetailResponse = {
     source_metadata?: {
         [key: string]: unknown;
     };
+    /**
+     * Valuation Comparables
+     */
+    valuation_comparables?: Array<ListingComparableSale>;
+};
+
+/**
+ * ListingDocumentInfoResponse
+ */
+export type ListingDocumentInfoResponse = {
+    listing: CrmCompanyListingDetail;
+    fields: DocumentFieldsOutput;
+    /**
+     * Revision
+     */
+    revision: number;
+};
+
+/**
+ * ListingDocumentInfoUpdate
+ */
+export type ListingDocumentInfoUpdate = {
+    /**
+     * Source
+     */
+    source: 'property_finder';
+    /**
+     * Listing Key
+     */
+    listing_key: string;
+    fields: DocumentFieldsInput;
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
 };
 
 /**
@@ -7283,6 +7724,10 @@ export type ListingListResponse = {
      */
     offset: number;
     filters?: ListingFiltersResponse;
+    /**
+     * Data As Of
+     */
+    data_as_of?: string | null;
 };
 
 /**
@@ -7837,6 +8282,16 @@ export type MarketTrendResponse = {
      * Avg Price Sqm Change Pct
      */
     avg_price_sqm_change_pct?: number | null;
+};
+
+/**
+ * MarketingFields
+ */
+export type MarketingFields = {
+    /**
+     * Description
+     */
+    description?: string | null;
 };
 
 /**
@@ -8478,6 +8933,32 @@ export type OrganizationUserDetailResponse = {
      * Usage Percentage
      */
     usage_percentage: number;
+};
+
+/**
+ * OwnerFields
+ */
+export type OwnerFields = {
+    /**
+     * Full Name
+     */
+    full_name?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Title Deed Number
+     */
+    title_deed_number?: string | null;
+    /**
+     * Id Number
+     */
+    id_number?: string | null;
 };
 
 /**
@@ -11492,6 +11973,500 @@ export type WebhookStatusResponse = {
 };
 
 /**
+ * WhatsAppAudienceLead
+ */
+export type WhatsAppAudienceLead = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Wa Number
+     */
+    wa_number: string;
+    /**
+     * Intent
+     */
+    intent: string;
+    /**
+     * Source
+     */
+    source: string;
+};
+
+/**
+ * WhatsAppAudienceResponse
+ *
+ * Leads a campaign may go to, and how many were left out and why.
+ */
+export type WhatsAppAudienceResponse = {
+    /**
+     * Items
+     */
+    items: Array<WhatsAppAudienceLead>;
+    /**
+     * No Consent
+     */
+    no_consent: number;
+    /**
+     * Opted Out
+     */
+    opted_out: number;
+    /**
+     * No Number
+     */
+    no_number: number;
+};
+
+/**
+ * WhatsAppCampaignCounts
+ *
+ * Recipients by where sending got to, then sent messages by what Meta reported.
+ */
+export type WhatsAppCampaignCounts = {
+    /**
+     * Total
+     */
+    total?: number;
+    /**
+     * Pending
+     */
+    pending?: number;
+    /**
+     * Sent
+     */
+    sent?: number;
+    /**
+     * Delivered
+     */
+    delivered?: number;
+    /**
+     * Read
+     */
+    read?: number;
+    /**
+     * Failed
+     */
+    failed?: number;
+    /**
+     * Skipped
+     */
+    skipped?: number;
+    /**
+     * Unknown
+     */
+    unknown?: number;
+    /**
+     * Replies
+     */
+    replies?: number;
+};
+
+/**
+ * WhatsAppCampaignCreate
+ */
+export type WhatsAppCampaignCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Template Name
+     */
+    template_name: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Params
+     */
+    params?: Array<string>;
+    /**
+     * Enquiry Ids
+     */
+    enquiry_ids: Array<number>;
+};
+
+/**
+ * WhatsAppCampaignDetail
+ */
+export type WhatsAppCampaignDetail = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Template Name
+     */
+    template_name: string;
+    /**
+     * Template Language
+     */
+    template_language: string;
+    /**
+     * Status
+     */
+    status: 'sending' | 'completed';
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Completed At
+     */
+    completed_at: string | null;
+    counts: WhatsAppCampaignCounts;
+    /**
+     * Template Body
+     */
+    template_body: string;
+    /**
+     * Params
+     */
+    params: Array<string>;
+    /**
+     * Recipients
+     */
+    recipients: Array<WhatsAppCampaignRecipientResponse>;
+};
+
+/**
+ * WhatsAppCampaignRecipientResponse
+ */
+export type WhatsAppCampaignRecipientResponse = {
+    /**
+     * Enquiry Id
+     */
+    enquiry_id: number | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Wa Number
+     */
+    wa_number: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Error
+     */
+    error: string | null;
+};
+
+/**
+ * WhatsAppCampaignResponse
+ */
+export type WhatsAppCampaignResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Template Name
+     */
+    template_name: string;
+    /**
+     * Template Language
+     */
+    template_language: string;
+    /**
+     * Status
+     */
+    status: 'sending' | 'completed';
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Completed At
+     */
+    completed_at: string | null;
+    counts: WhatsAppCampaignCounts;
+};
+
+/**
+ * WhatsAppChatResponse
+ */
+export type WhatsAppChatResponse = {
+    /**
+     * Wa Id
+     */
+    wa_id: string;
+    /**
+     * Contact Name
+     */
+    contact_name: string | null;
+    /**
+     * Lead Id
+     */
+    lead_id: number | null;
+    /**
+     * Lead Name
+     */
+    lead_name: string | null;
+    /**
+     * Last Body
+     */
+    last_body: string;
+    /**
+     * Last Direction
+     */
+    last_direction: 'in' | 'out';
+    /**
+     * Last At
+     */
+    last_at: string;
+    /**
+     * Window Ends At
+     */
+    window_ends_at: string | null;
+    /**
+     * Unread
+     */
+    unread: number;
+};
+
+/**
+ * WhatsAppMessageResponse
+ */
+export type WhatsAppMessageResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Direction
+     */
+    direction: 'in' | 'out';
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * At
+     */
+    at: string;
+    /**
+     * Status
+     */
+    status: 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | null;
+    /**
+     * Template
+     */
+    template: string | null;
+    /**
+     * Error
+     */
+    error: string | null;
+};
+
+/**
+ * WhatsAppMetaNumber
+ *
+ * A number as Meta lists it under the business account (setup only).
+ */
+export type WhatsAppMetaNumber = {
+    /**
+     * Phone Number Id
+     */
+    phone_number_id: string;
+    /**
+     * Display Number
+     */
+    display_number: string;
+    /**
+     * Verified Name
+     */
+    verified_name: string | null;
+    /**
+     * Quality Rating
+     */
+    quality_rating: string | null;
+};
+
+/**
+ * WhatsAppNumberResponse
+ */
+export type WhatsAppNumberResponse = {
+    /**
+     * Phone Number Id
+     */
+    phone_number_id: string;
+    /**
+     * Display Number
+     */
+    display_number: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Purpose
+     */
+    purpose: 'agent' | 'campaign';
+    /**
+     * User Id
+     */
+    user_id: string | null;
+    /**
+     * Active
+     */
+    active: boolean;
+};
+
+/**
+ * WhatsAppNumberWrite
+ */
+export type WhatsAppNumberWrite = {
+    /**
+     * Display Number
+     */
+    display_number: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Purpose
+     */
+    purpose: 'agent' | 'campaign';
+    /**
+     * User Id
+     */
+    user_id?: string | null;
+    /**
+     * Active
+     */
+    active?: boolean;
+};
+
+/**
+ * WhatsAppReply
+ */
+export type WhatsAppReply = {
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
+ * WhatsAppSendResponse
+ */
+export type WhatsAppSendResponse = {
+    /**
+     * Ok
+     */
+    ok: boolean;
+};
+
+/**
+ * WhatsAppStatusResponse
+ *
+ * Whether the signed-in user can message: the server is connected and they have a number.
+ */
+export type WhatsAppStatusResponse = {
+    /**
+     * Configured
+     */
+    configured: boolean;
+    /**
+     * Connected
+     */
+    connected: boolean;
+    /**
+     * Business Name
+     */
+    business_name: string | null;
+    /**
+     * Display Number
+     */
+    display_number: string | null;
+};
+
+/**
+ * WhatsAppTemplateResponse
+ */
+export type WhatsAppTemplateResponse = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Category
+     */
+    category: 'marketing' | 'utility' | 'authentication';
+    /**
+     * Review
+     */
+    review: 'approved' | 'pending' | 'rejected' | 'paused';
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
+ * WhatsAppTemplateSend
+ */
+export type WhatsAppTemplateSend = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Params
+     */
+    params?: Array<string>;
+};
+
+/**
+ * WhatsAppThreadResponse
+ */
+export type WhatsAppThreadResponse = {
+    /**
+     * Wa Number
+     */
+    wa_number: string | null;
+    /**
+     * Opted Out
+     */
+    opted_out: boolean;
+    /**
+     * Window Ends At
+     */
+    window_ends_at: string | null;
+    /**
+     * Messages
+     */
+    messages: Array<WhatsAppMessageResponse>;
+};
+
+/**
  * OrganizationMemberResponse
  */
 export type AppAdminModelsOrganizationMemberResponse = {
@@ -13133,6 +14108,226 @@ export type CrmCrmCompanyListingsResponses = {
 };
 
 export type CrmCrmCompanyListingsResponse = CrmCrmCompanyListingsResponses[keyof CrmCrmCompanyListingsResponses];
+
+export type CrmCrmCompanyListingData = {
+    body?: never;
+    path: {
+        /**
+         * Listing Key
+         */
+        listing_key: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/company-listings/{listing_key}';
+};
+
+export type CrmCrmCompanyListingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCompanyListingError = CrmCrmCompanyListingErrors[keyof CrmCrmCompanyListingErrors];
+
+export type CrmCrmCompanyListingResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmCompanyListingDetail;
+};
+
+export type CrmCrmCompanyListingResponse = CrmCrmCompanyListingResponses[keyof CrmCrmCompanyListingResponses];
+
+export type CrmCrmListingDocumentInfoData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'property_finder';
+        /**
+         * Listing Key
+         */
+        listing_key: string;
+    };
+    url: '/api/v1/crm/listing-document-info';
+};
+
+export type CrmCrmListingDocumentInfoErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmListingDocumentInfoError = CrmCrmListingDocumentInfoErrors[keyof CrmCrmListingDocumentInfoErrors];
+
+export type CrmCrmListingDocumentInfoResponses = {
+    /**
+     * Successful Response
+     */
+    200: ListingDocumentInfoResponse;
+};
+
+export type CrmCrmListingDocumentInfoResponse = CrmCrmListingDocumentInfoResponses[keyof CrmCrmListingDocumentInfoResponses];
+
+export type CrmCrmSaveListingDocumentInfoData = {
+    body: ListingDocumentInfoUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/listing-document-info';
+};
+
+export type CrmCrmSaveListingDocumentInfoErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmSaveListingDocumentInfoError = CrmCrmSaveListingDocumentInfoErrors[keyof CrmCrmSaveListingDocumentInfoErrors];
+
+export type CrmCrmSaveListingDocumentInfoResponses = {
+    /**
+     * Successful Response
+     */
+    200: ListingDocumentInfoResponse;
+};
+
+export type CrmCrmSaveListingDocumentInfoResponse = CrmCrmSaveListingDocumentInfoResponses[keyof CrmCrmSaveListingDocumentInfoResponses];
+
+export type CrmCrmDocumentsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Listing Key
+         */
+        listing_key?: string | null;
+        /**
+         * Doc Type
+         */
+        doc_type?: 'noc' | 'brochure' | 'lease' | 'a2a' | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/documents';
+};
+
+export type CrmCrmDocumentsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDocumentsError = CrmCrmDocumentsErrors[keyof CrmCrmDocumentsErrors];
+
+export type CrmCrmDocumentsResponses = {
+    /**
+     * Successful Response
+     */
+    200: GeneratedDocumentListResponse;
+};
+
+export type CrmCrmDocumentsResponse = CrmCrmDocumentsResponses[keyof CrmCrmDocumentsResponses];
+
+export type CrmCrmGenerateDocumentData = {
+    body: GenerateDocumentRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/documents';
+};
+
+export type CrmCrmGenerateDocumentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmGenerateDocumentError = CrmCrmGenerateDocumentErrors[keyof CrmCrmGenerateDocumentErrors];
+
+export type CrmCrmGenerateDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    201: GeneratedDocumentResponse;
+};
+
+export type CrmCrmGenerateDocumentResponse = CrmCrmGenerateDocumentResponses[keyof CrmCrmGenerateDocumentResponses];
+
+export type CrmCrmDocumentData = {
+    body?: never;
+    path: {
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/documents/{document_id}';
+};
+
+export type CrmCrmDocumentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDocumentError = CrmCrmDocumentErrors[keyof CrmCrmDocumentErrors];
+
+export type CrmCrmDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    200: GeneratedDocumentResponse;
+};
+
+export type CrmCrmDocumentResponse = CrmCrmDocumentResponses[keyof CrmCrmDocumentResponses];
+
+export type CrmCrmDownloadDocumentData = {
+    body?: never;
+    path: {
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/documents/{document_id}/download';
+};
+
+export type CrmCrmDownloadDocumentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDownloadDocumentError = CrmCrmDownloadDocumentErrors[keyof CrmCrmDownloadDocumentErrors];
+
+export type CrmCrmDownloadDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    200: DocumentDownloadResponse;
+};
+
+export type CrmCrmDownloadDocumentResponse = CrmCrmDownloadDocumentResponses[keyof CrmCrmDownloadDocumentResponses];
 
 export type CrmCrmClearCompanyListingSourceData = {
     body?: never;
@@ -14892,6 +16087,587 @@ export type CrmAssistantCancelAssistantActionResponses = {
 
 export type CrmAssistantCancelAssistantActionResponse = CrmAssistantCancelAssistantActionResponses[keyof CrmAssistantCancelAssistantActionResponses];
 
+export type CrmWhatsappCrmWhatsappStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/whatsapp/status';
+};
+
+export type CrmWhatsappCrmWhatsappStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppStatusResponse;
+};
+
+export type CrmWhatsappCrmWhatsappStatusResponse = CrmWhatsappCrmWhatsappStatusResponses[keyof CrmWhatsappCrmWhatsappStatusResponses];
+
+export type CrmWhatsappCrmWhatsappTemplatesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/whatsapp/templates';
+};
+
+export type CrmWhatsappCrmWhatsappTemplatesResponses = {
+    /**
+     * Response Crm-Whatsapp-Crm Whatsapp Templates
+     *
+     * Successful Response
+     */
+    200: Array<WhatsAppTemplateResponse>;
+};
+
+export type CrmWhatsappCrmWhatsappTemplatesResponse = CrmWhatsappCrmWhatsappTemplatesResponses[keyof CrmWhatsappCrmWhatsappTemplatesResponses];
+
+export type CrmWhatsappCrmWhatsappChatsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/whatsapp/chats';
+};
+
+export type CrmWhatsappCrmWhatsappChatsResponses = {
+    /**
+     * Response Crm-Whatsapp-Crm Whatsapp Chats
+     *
+     * Successful Response
+     */
+    200: Array<WhatsAppChatResponse>;
+};
+
+export type CrmWhatsappCrmWhatsappChatsResponse = CrmWhatsappCrmWhatsappChatsResponses[keyof CrmWhatsappCrmWhatsappChatsResponses];
+
+export type CrmWhatsappCrmWhatsappChatData = {
+    body?: never;
+    path: {
+        /**
+         * Wa Id
+         */
+        wa_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/chats/{wa_id}';
+};
+
+export type CrmWhatsappCrmWhatsappChatErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappChatError = CrmWhatsappCrmWhatsappChatErrors[keyof CrmWhatsappCrmWhatsappChatErrors];
+
+export type CrmWhatsappCrmWhatsappChatResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppThreadResponse;
+};
+
+export type CrmWhatsappCrmWhatsappChatResponse = CrmWhatsappCrmWhatsappChatResponses[keyof CrmWhatsappCrmWhatsappChatResponses];
+
+export type CrmWhatsappCrmWhatsappChatReplyData = {
+    body: WhatsAppReply;
+    path: {
+        /**
+         * Wa Id
+         */
+        wa_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/chats/{wa_id}/reply';
+};
+
+export type CrmWhatsappCrmWhatsappChatReplyErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappChatReplyError = CrmWhatsappCrmWhatsappChatReplyErrors[keyof CrmWhatsappCrmWhatsappChatReplyErrors];
+
+export type CrmWhatsappCrmWhatsappChatReplyResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppSendResponse;
+};
+
+export type CrmWhatsappCrmWhatsappChatReplyResponse = CrmWhatsappCrmWhatsappChatReplyResponses[keyof CrmWhatsappCrmWhatsappChatReplyResponses];
+
+export type CrmWhatsappCrmWhatsappChatTemplateData = {
+    body: WhatsAppTemplateSend;
+    path: {
+        /**
+         * Wa Id
+         */
+        wa_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/chats/{wa_id}/template';
+};
+
+export type CrmWhatsappCrmWhatsappChatTemplateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappChatTemplateError = CrmWhatsappCrmWhatsappChatTemplateErrors[keyof CrmWhatsappCrmWhatsappChatTemplateErrors];
+
+export type CrmWhatsappCrmWhatsappChatTemplateResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppSendResponse;
+};
+
+export type CrmWhatsappCrmWhatsappChatTemplateResponse = CrmWhatsappCrmWhatsappChatTemplateResponses[keyof CrmWhatsappCrmWhatsappChatTemplateResponses];
+
+export type CrmWhatsappCrmWhatsappLeadThreadData = {
+    body?: never;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/leads/{enquiry_id}/thread';
+};
+
+export type CrmWhatsappCrmWhatsappLeadThreadErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappLeadThreadError = CrmWhatsappCrmWhatsappLeadThreadErrors[keyof CrmWhatsappCrmWhatsappLeadThreadErrors];
+
+export type CrmWhatsappCrmWhatsappLeadThreadResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppThreadResponse;
+};
+
+export type CrmWhatsappCrmWhatsappLeadThreadResponse = CrmWhatsappCrmWhatsappLeadThreadResponses[keyof CrmWhatsappCrmWhatsappLeadThreadResponses];
+
+export type CrmWhatsappCrmWhatsappLeadReplyData = {
+    body: WhatsAppReply;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/leads/{enquiry_id}/reply';
+};
+
+export type CrmWhatsappCrmWhatsappLeadReplyErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappLeadReplyError = CrmWhatsappCrmWhatsappLeadReplyErrors[keyof CrmWhatsappCrmWhatsappLeadReplyErrors];
+
+export type CrmWhatsappCrmWhatsappLeadReplyResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppSendResponse;
+};
+
+export type CrmWhatsappCrmWhatsappLeadReplyResponse = CrmWhatsappCrmWhatsappLeadReplyResponses[keyof CrmWhatsappCrmWhatsappLeadReplyResponses];
+
+export type CrmWhatsappCrmWhatsappLeadTemplateData = {
+    body: WhatsAppTemplateSend;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/leads/{enquiry_id}/template';
+};
+
+export type CrmWhatsappCrmWhatsappLeadTemplateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappLeadTemplateError = CrmWhatsappCrmWhatsappLeadTemplateErrors[keyof CrmWhatsappCrmWhatsappLeadTemplateErrors];
+
+export type CrmWhatsappCrmWhatsappLeadTemplateResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppSendResponse;
+};
+
+export type CrmWhatsappCrmWhatsappLeadTemplateResponse = CrmWhatsappCrmWhatsappLeadTemplateResponses[keyof CrmWhatsappCrmWhatsappLeadTemplateResponses];
+
+export type CrmWhatsappCrmWhatsappNumbersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/whatsapp/numbers';
+};
+
+export type CrmWhatsappCrmWhatsappNumbersResponses = {
+    /**
+     * Response Crm-Whatsapp-Crm Whatsapp Numbers
+     *
+     * Successful Response
+     */
+    200: Array<WhatsAppNumberResponse>;
+};
+
+export type CrmWhatsappCrmWhatsappNumbersResponse = CrmWhatsappCrmWhatsappNumbersResponses[keyof CrmWhatsappCrmWhatsappNumbersResponses];
+
+export type CrmWhatsappCrmWhatsappSaveNumberData = {
+    body: WhatsAppNumberWrite;
+    path: {
+        /**
+         * Phone Number Id
+         */
+        phone_number_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/numbers/{phone_number_id}';
+};
+
+export type CrmWhatsappCrmWhatsappSaveNumberErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappSaveNumberError = CrmWhatsappCrmWhatsappSaveNumberErrors[keyof CrmWhatsappCrmWhatsappSaveNumberErrors];
+
+export type CrmWhatsappCrmWhatsappSaveNumberResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppNumberResponse;
+};
+
+export type CrmWhatsappCrmWhatsappSaveNumberResponse = CrmWhatsappCrmWhatsappSaveNumberResponses[keyof CrmWhatsappCrmWhatsappSaveNumberResponses];
+
+export type CrmWhatsappCrmWhatsappMetaNumbersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/whatsapp/meta/numbers';
+};
+
+export type CrmWhatsappCrmWhatsappMetaNumbersResponses = {
+    /**
+     * Response Crm-Whatsapp-Crm Whatsapp Meta Numbers
+     *
+     * Successful Response
+     */
+    200: Array<WhatsAppMetaNumber>;
+};
+
+export type CrmWhatsappCrmWhatsappMetaNumbersResponse = CrmWhatsappCrmWhatsappMetaNumbersResponses[keyof CrmWhatsappCrmWhatsappMetaNumbersResponses];
+
+export type CrmWhatsappCrmWhatsappSubscribeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/whatsapp/meta/subscribe';
+};
+
+export type CrmWhatsappCrmWhatsappSubscribeResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppSendResponse;
+};
+
+export type CrmWhatsappCrmWhatsappSubscribeResponse = CrmWhatsappCrmWhatsappSubscribeResponses[keyof CrmWhatsappCrmWhatsappSubscribeResponses];
+
+export type CrmWhatsappCrmWhatsappCampaignAudienceData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Intent
+         */
+        intent?: string | null;
+    };
+    url: '/api/v1/crm/whatsapp/campaign/audience';
+};
+
+export type CrmWhatsappCrmWhatsappCampaignAudienceErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappCampaignAudienceError = CrmWhatsappCrmWhatsappCampaignAudienceErrors[keyof CrmWhatsappCrmWhatsappCampaignAudienceErrors];
+
+export type CrmWhatsappCrmWhatsappCampaignAudienceResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppAudienceResponse;
+};
+
+export type CrmWhatsappCrmWhatsappCampaignAudienceResponse = CrmWhatsappCrmWhatsappCampaignAudienceResponses[keyof CrmWhatsappCrmWhatsappCampaignAudienceResponses];
+
+export type CrmWhatsappCrmWhatsappCampaignsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/whatsapp/campaigns';
+};
+
+export type CrmWhatsappCrmWhatsappCampaignsResponses = {
+    /**
+     * Response Crm-Whatsapp-Crm Whatsapp Campaigns
+     *
+     * Successful Response
+     */
+    200: Array<WhatsAppCampaignResponse>;
+};
+
+export type CrmWhatsappCrmWhatsappCampaignsResponse = CrmWhatsappCrmWhatsappCampaignsResponses[keyof CrmWhatsappCrmWhatsappCampaignsResponses];
+
+export type CrmWhatsappCrmWhatsappCreateCampaignData = {
+    body: WhatsAppCampaignCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/whatsapp/campaigns';
+};
+
+export type CrmWhatsappCrmWhatsappCreateCampaignErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappCreateCampaignError = CrmWhatsappCrmWhatsappCreateCampaignErrors[keyof CrmWhatsappCrmWhatsappCreateCampaignErrors];
+
+export type CrmWhatsappCrmWhatsappCreateCampaignResponses = {
+    /**
+     * Successful Response
+     */
+    201: WhatsAppCampaignDetail;
+};
+
+export type CrmWhatsappCrmWhatsappCreateCampaignResponse = CrmWhatsappCrmWhatsappCreateCampaignResponses[keyof CrmWhatsappCrmWhatsappCreateCampaignResponses];
+
+export type CrmWhatsappCrmWhatsappCampaignData = {
+    body?: never;
+    path: {
+        /**
+         * Campaign Id
+         */
+        campaign_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/campaigns/{campaign_id}';
+};
+
+export type CrmWhatsappCrmWhatsappCampaignErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappCampaignError = CrmWhatsappCrmWhatsappCampaignErrors[keyof CrmWhatsappCrmWhatsappCampaignErrors];
+
+export type CrmWhatsappCrmWhatsappCampaignResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppCampaignDetail;
+};
+
+export type CrmWhatsappCrmWhatsappCampaignResponse = CrmWhatsappCrmWhatsappCampaignResponses[keyof CrmWhatsappCrmWhatsappCampaignResponses];
+
+export type CrmWhatsappCrmWhatsappResumeCampaignData = {
+    body?: never;
+    path: {
+        /**
+         * Campaign Id
+         */
+        campaign_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/campaigns/{campaign_id}/resume';
+};
+
+export type CrmWhatsappCrmWhatsappResumeCampaignErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappResumeCampaignError = CrmWhatsappCrmWhatsappResumeCampaignErrors[keyof CrmWhatsappCrmWhatsappResumeCampaignErrors];
+
+export type CrmWhatsappCrmWhatsappResumeCampaignResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppCampaignDetail;
+};
+
+export type CrmWhatsappCrmWhatsappResumeCampaignResponse = CrmWhatsappCrmWhatsappResumeCampaignResponses[keyof CrmWhatsappCrmWhatsappResumeCampaignResponses];
+
+export type CrmWhatsappCrmWhatsappCampaignChatsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/whatsapp/campaign/chats';
+};
+
+export type CrmWhatsappCrmWhatsappCampaignChatsResponses = {
+    /**
+     * Response Crm-Whatsapp-Crm Whatsapp Campaign Chats
+     *
+     * Successful Response
+     */
+    200: Array<WhatsAppChatResponse>;
+};
+
+export type CrmWhatsappCrmWhatsappCampaignChatsResponse = CrmWhatsappCrmWhatsappCampaignChatsResponses[keyof CrmWhatsappCrmWhatsappCampaignChatsResponses];
+
+export type CrmWhatsappCrmWhatsappCampaignChatData = {
+    body?: never;
+    path: {
+        /**
+         * Wa Id
+         */
+        wa_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/campaign/chats/{wa_id}';
+};
+
+export type CrmWhatsappCrmWhatsappCampaignChatErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappCampaignChatError = CrmWhatsappCrmWhatsappCampaignChatErrors[keyof CrmWhatsappCrmWhatsappCampaignChatErrors];
+
+export type CrmWhatsappCrmWhatsappCampaignChatResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppThreadResponse;
+};
+
+export type CrmWhatsappCrmWhatsappCampaignChatResponse = CrmWhatsappCrmWhatsappCampaignChatResponses[keyof CrmWhatsappCrmWhatsappCampaignChatResponses];
+
+export type CrmWhatsappCrmWhatsappCampaignReplyData = {
+    body: WhatsAppReply;
+    path: {
+        /**
+         * Wa Id
+         */
+        wa_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/whatsapp/campaign/chats/{wa_id}/reply';
+};
+
+export type CrmWhatsappCrmWhatsappCampaignReplyErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappCampaignReplyError = CrmWhatsappCrmWhatsappCampaignReplyErrors[keyof CrmWhatsappCrmWhatsappCampaignReplyErrors];
+
+export type CrmWhatsappCrmWhatsappCampaignReplyResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsAppSendResponse;
+};
+
+export type CrmWhatsappCrmWhatsappCampaignReplyResponse = CrmWhatsappCrmWhatsappCampaignReplyResponses[keyof CrmWhatsappCrmWhatsappCampaignReplyResponses];
+
+export type CrmWhatsappCrmWhatsappWebhookVerifyData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Hub.Mode
+         */
+        'hub.mode'?: string | null;
+        /**
+         * Hub.Verify Token
+         */
+        'hub.verify_token'?: string | null;
+        /**
+         * Hub.Challenge
+         */
+        'hub.challenge'?: string;
+    };
+    url: '/api/v1/crm/whatsapp/webhook';
+};
+
+export type CrmWhatsappCrmWhatsappWebhookVerifyErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmWhatsappCrmWhatsappWebhookVerifyError = CrmWhatsappCrmWhatsappWebhookVerifyErrors[keyof CrmWhatsappCrmWhatsappWebhookVerifyErrors];
+
+export type CrmWhatsappCrmWhatsappWebhookVerifyResponses = {
+    /**
+     * Successful Response
+     */
+    200: string;
+};
+
+export type CrmWhatsappCrmWhatsappWebhookVerifyResponse = CrmWhatsappCrmWhatsappWebhookVerifyResponses[keyof CrmWhatsappCrmWhatsappWebhookVerifyResponses];
+
+export type CrmWhatsappCrmWhatsappWebhookData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/whatsapp/webhook';
+};
+
+export type CrmWhatsappCrmWhatsappWebhookResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type FiltersGetSalesFilterOptionsData = {
     body?: never;
     path?: never;
@@ -15162,6 +16938,14 @@ export type ListingsListListingsData = {
          * Price Max
          */
         price_max?: number | null;
+        /**
+         * Market Position
+         */
+        market_position?: 'below_market' | 'near_market' | 'above_market' | 'insufficient_data' | null;
+        /**
+         * Sort
+         */
+        sort?: 'default' | 'value_gap';
     };
     url: '/api/v1/listings';
 };
