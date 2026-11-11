@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from holocron.market import dxbi_profile, transforms
 from holocron.platform.bronze import coerce_money
 from holocron.platform.census import SCHEMA_SQL, parse_expected_schema
@@ -146,6 +148,62 @@ def test_profile_tables_match_their_column_lists() -> None:
         (dxbi_profile.RENTAL_PROFILE_SQL, dxbi_profile.RENTAL_PROFILE_COLUMNS),
     ):
         assert f"SELECT {', '.join(columns)}\nFROM (" in sql
+
+
+def test_profile_work_tables_are_built_before_they_are_read() -> None:
+    # ClickHouse evaluates a CTE again at every reference, so what several statements read is a
+    # work table; each step may read only the ones before it, and the statement the ones it names.
+    for table, steps in dxbi_profile.PROFILE_WORK.items():
+        created: list[str] = []
+        for name, select in steps:
+            read = set(re.findall(rf"{dxbi_profile.WORK}\w+", select))
+            assert read <= set(created), (table, name, read - set(created))
+            created.append(name)
+        statement = dxbi_profile.PROFILE_STATEMENTS[table]
+        assert set(re.findall(rf"{dxbi_profile.WORK}\w+", statement)) <= set(created)
+    # The sale base is read by every step that follows it and is built once.
+    assert dxbi_profile.SALE_PROFILE_SQL.count("dxbi_profile_work_sale_base") == 1
+    assert "building_votes AS (" not in dxbi_profile.SALE_PROFILE_SQL
+
+
+def test_profile_evidence_probes_only_the_days_it_keeps() -> None:
+    # The profile keeps evidence within SALE_EVIDENCE_DAYS, so the probes stop there (7 dates, not
+    # 61); the pairing rounds keep their 30 days.
+    days = transforms.SALE_EVIDENCE_DAYS
+    assert f"toInt32(i) - {days}, range({2 * days + 1})" in transforms._SALE_EVIDENCE_INPUTS
+    assert "toInt32(i) - 30, range(61)" in transforms._SALE_MATCH_INPUTS
+    assert f"day_gap <= {days} AND size_gap <= 0.01" in dxbi_profile.SALE_PROFILE_SQL or (
+        f"day_gap <= {days} AND size_gap <= 0.01" in dxbi_profile._SALE_BASE_CTES
+    )
+
+
+def test_work_tables_are_dropped_even_when_the_build_fails() -> None:
+    class Failing:
+        def __init__(self) -> None:
+            self.commands: list[str] = []
+
+        def command(self, sql: str) -> None:
+            self.commands.append(sql)
+            if sql.lstrip().startswith("INSERT INTO"):
+                raise RuntimeError("MEMORY_LIMIT_EXCEEDED")
+
+    client = Failing()
+    steps = dxbi_profile.PROFILE_WORK["dxbi_sale_profile"]
+    with pytest.raises(RuntimeError, match="MEMORY_LIMIT_EXCEEDED"):
+        dxbi_profile.build_profile(client, "dxbi_sale_profile")
+    names = [name for name, _ in steps]
+    created = [
+        c.split()[2] for c in client.commands if c.startswith("CREATE TABLE dxbi_profile_work_")
+    ]
+    dropped = [
+        c.split()[-1]
+        for c in client.commands
+        if c.startswith("DROP TABLE IF EXISTS dxbi_profile_work_")
+    ]
+    assert created == names
+    assert dropped[-len(names) :] == names
+    # The served table is never touched by a failed build.
+    assert not any("EXCHANGE" in c for c in client.commands)
 
 
 def test_every_profile_value_names_its_source() -> None:

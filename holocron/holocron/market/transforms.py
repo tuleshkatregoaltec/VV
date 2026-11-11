@@ -452,14 +452,53 @@ DXBI_SALES_BASE = """
 # the dates are within 3 days, or within 30 days with the same size (±1%). The price may differ
 # by one dirham: DLD sends fils (723,726.89) and DXBI shows the rounded price, while bronze rows
 # loaded before coerce_money hold the truncated one.
-_SALE_MATCH_INPUTS = f"""
+_DLD_SALES_CTE = f"""
     dld_sales AS (
         SELECT line_id AS dld_key, toDate(instance_date) AS d,
                toInt64(trans_value) AS price, procedure_area * {SQFT_PER_SQM} AS sqft,
                lowerUTF8(trimBoth(project_en)) AS dld_project
         FROM ({DLD_SALES_BASE})
         WHERE group_en = 'Sales' AND trans_value > 0
+    )"""
+
+
+def _same_price_cte(max_day_gap: int = 30) -> str:
+    """Every DLD sale within a dirham of the price and ``max_day_gap`` days of the date."""
+    return f"""same_price AS (
+        SELECT x.sale_key AS sale_key, s.dld_key AS dld_key,
+               toInt32(abs(x.offset_days)) AS day_gap,
+               toInt32(abs(s.price - x.sale_amount_aed)) AS price_gap,
+               toUInt8(x.building_project != '' AND s.dld_project != x.building_project)
+                   AS project_gap,
+               abs(x.size_sqft - s.sqft) / greatest(s.sqft, 1.0) AS size_gap
+        FROM (
+            SELECT sale_key, transaction_date + toIntervalDay(offset_days) AS probe_date,
+                   sale_amount_aed + price_offset AS probe_price,
+                   offset_days, sale_amount_aed, size_sqft, building_project
+            FROM dx
+            ARRAY JOIN arrayMap(i -> toInt32(i) - {max_day_gap}, range({2 * max_day_gap + 1})) AS offset_days
+            ARRAY JOIN [0, -1, 1] AS price_offset
+        ) AS x
+        INNER JOIN dld_sales AS s ON s.d = x.probe_date AND s.price = x.probe_price
+    )"""
+
+
+# What the profile build needs of pairing: only the exact-terms evidence (same price, date within
+# SALE_EVIDENCE_DAYS), so the probes cover those days alone and the previous build's building
+# projects (they only break ties among candidates the profile does not rank by) are left out.
+SALE_EVIDENCE_DAYS = 3
+_SALE_EVIDENCE_INPUTS = f"""
+    {_DLD_SALES_CTE},
+    dx AS (
+        SELECT b.sale_key AS sale_key, b.transaction_date AS transaction_date,
+               toInt64(b.sale_amount_aed) AS sale_amount_aed, b.size_sqft AS size_sqft,
+               '' AS building_project
+        FROM ({DXBI_SALES_BASE}) AS b
     ),
+    {_same_price_cte(SALE_EVIDENCE_DAYS)}"""
+
+_SALE_MATCH_INPUTS = f"""
+    {_DLD_SALES_CTE},
     -- The DLD project most of a DXBI building's paired sales sit in (previous profile build,
     -- >= 80% of >= 10, the Analytics rule for a building's project). Among equally good
     -- candidates the one in that project wins: sister phases launched together at one price
@@ -487,23 +526,7 @@ _SALE_MATCH_INPUTS = f"""
             ON bp.building_key = concat(lowerUTF8(trimBoth(b.building_name)), '|', b.area_key)
     ),
     -- Every DLD sale within a dirham of the price and 30 days of the date.
-    same_price AS (
-        SELECT x.sale_key AS sale_key, s.dld_key AS dld_key,
-               toInt32(abs(x.offset_days)) AS day_gap,
-               toInt32(abs(s.price - x.sale_amount_aed)) AS price_gap,
-               toUInt8(x.building_project != '' AND s.dld_project != x.building_project)
-                   AS project_gap,
-               abs(x.size_sqft - s.sqft) / greatest(s.sqft, 1.0) AS size_gap
-        FROM (
-            SELECT sale_key, transaction_date + toIntervalDay(offset_days) AS probe_date,
-                   sale_amount_aed + price_offset AS probe_price,
-                   offset_days, sale_amount_aed, size_sqft, building_project
-            FROM dx
-            ARRAY JOIN arrayMap(i -> toInt32(i) - 30, range(61)) AS offset_days
-            ARRAY JOIN [0, -1, 1] AS price_offset
-        ) AS x
-        INNER JOIN dld_sales AS s ON s.d = x.probe_date AND s.price = x.probe_price
-    )"""
+    {_same_price_cte()}"""
 
 # The candidates are computed once per release into a work table that every round reads (the
 # release lock keeps one build at a time; the name is not a staged table's, so it is not renamed).
