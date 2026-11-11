@@ -36,6 +36,12 @@ from app.crm.company_listings import (
     list_company_listings,
     select_company_source,
 )
+from app.crm.document_models import (
+    LISTING_KEY_PATTERN,
+    ListingDocumentInfoResponse,
+    ListingDocumentInfoUpdate,
+)
+from app.crm.documents import get_document_info, save_document_info
 from app.crm.email_models import (
     EmailInboundListResponse,
     EmailLeadListResponse,
@@ -720,6 +726,31 @@ async def crm_company_listing(
     if listing is None:
         raise HTTPException(status_code=404, detail="Listing not found")
     return listing
+
+
+@router.get("/listing-document-info", response_model=ListingDocumentInfoResponse)
+async def crm_listing_document_info(
+    source: Literal["property_finder"] = Query(),
+    listing_key: str = Query(pattern=LISTING_KEY_PATTERN),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """A managed listing with the document information saved for it (revision 0 = none yet)."""
+    _, organization_id = _auth_ids(context)
+    return await get_document_info(db, organization_id=organization_id, listing_key=listing_key)
+
+
+@router.put("/listing-document-info", response_model=ListingDocumentInfoResponse)
+async def crm_save_listing_document_info(
+    payload: ListingDocumentInfoUpdate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Save a listing's document information; 409 `stale_revision` if someone saved first."""
+    user_id, organization_id = _auth_ids(context)
+    return await save_document_info(
+        db, organization_id=organization_id, user_id=user_id, payload=payload
+    )
 
 
 @router.put("/company-listings/source", response_model=CrmCompanyListingSourceResponse)
