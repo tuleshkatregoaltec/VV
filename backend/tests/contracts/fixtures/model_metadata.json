@@ -120,7 +120,7 @@
       "CREATE INDEX ix_crm_inbound_enquiries_source_import_id ON crm_inbound_enquiries (source_import_id)",
       "CREATE INDEX ix_crm_inbound_enquiries_source_lead_id ON crm_inbound_enquiries (source_lead_id)",
       "CREATE INDEX ix_crm_inbound_enquiries_status ON crm_inbound_enquiries (status)",
-      "CREATE UNIQUE INDEX uq_crm_inbound_sold_owner ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Owner file \u00b7 recently sold'",
+      "CREATE UNIQUE INDEX uq_crm_inbound_sold_owner ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Owner file · recently sold'",
       "CREATE UNIQUE INDEX uq_crm_inbound_vitevue_lease_unit ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Vitevue lease lead'"
     ]
   },
@@ -285,14 +285,21 @@
     ]
   },
   "whatsapp_connections": {
-    "ddl": "\nCREATE TABLE whatsapp_connections (\n\tid VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tphone_number_id VARCHAR NOT NULL, \n\taccount_id VARCHAR NOT NULL, \n\tdisplay_name VARCHAR NOT NULL, \n\tenabled BOOLEAN NOT NULL, \n\tmarket_data_enabled BOOLEAN NOT NULL, \n\tapproved_knowledge JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (phone_number_id)\n)\n\n",
+    "ddl": "\nCREATE TABLE whatsapp_connections (\n\tid VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tphone_number_id VARCHAR NOT NULL, \n\taccount_id VARCHAR NOT NULL, \n\tdisplay_name VARCHAR NOT NULL, \n\tenabled BOOLEAN NOT NULL, \n\tmarket_data_enabled BOOLEAN NOT NULL, \n\tapproved_knowledge JSON NOT NULL, \n\treply_voice JSON, \n\tstatus VARCHAR NOT NULL, \n\tonboarding_type VARCHAR, \n\tbusiness_id VARCHAR, \n\tdisplay_phone_number VARCHAR, \n\taccess_token_encrypted TEXT, \n\tquality_rating VARCHAR, \n\thealth JSON, \n\tlast_account_event VARCHAR, \n\tconnected_at TIMESTAMP WITH TIME ZONE, \n\tdisconnected_at TIMESTAMP WITH TIME ZONE, \n\tcontacts_sync_requested_at TIMESTAMP WITH TIME ZONE, \n\tcontacts_synced_at TIMESTAMP WITH TIME ZONE, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (phone_number_id)\n)\n\n",
     "indexes": [
+      "CREATE INDEX ix_whatsapp_connections_account_id ON whatsapp_connections (account_id)",
       "CREATE INDEX ix_whatsapp_connections_organization_id ON whatsapp_connections (organization_id)",
       "CREATE INDEX ix_whatsapp_connections_user_id ON whatsapp_connections (user_id)"
     ]
   },
+  "whatsapp_contacts": {
+    "ddl": "\nCREATE TABLE whatsapp_contacts (\n\tid VARCHAR NOT NULL, \n\tconnection_id VARCHAR NOT NULL, \n\twa_id VARCHAR, \n\tbsuid VARCHAR, \n\tname VARCHAR, \n\tin_address_book BOOLEAN NOT NULL, \n\tblocked BOOLEAN NOT NULL, \n\tblocked_at TIMESTAMP WITH TIME ZONE, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_whatsapp_contact_wa_id UNIQUE (connection_id, wa_id), \n\tCONSTRAINT uq_whatsapp_contact_bsuid UNIQUE (connection_id, bsuid), \n\tFOREIGN KEY(connection_id) REFERENCES whatsapp_connections (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_whatsapp_contact_blocked ON whatsapp_contacts (connection_id, blocked)"
+    ]
+  },
   "whatsapp_customer_messages": {
-    "ddl": "\nCREATE TABLE whatsapp_customer_messages (\n\tid VARCHAR(512) NOT NULL, \n\tthread_id VARCHAR NOT NULL, \n\tcontent TEXT, \n\tsent_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\treply TEXT, \n\trisk VARCHAR, \n\ttopic VARCHAR, \n\treason VARCHAR, \n\tevidence_ids JSON NOT NULL, \n\tevidence_snapshots JSON NOT NULL, \n\trevision INTEGER NOT NULL, \n\tsend_after TIMESTAMP WITH TIME ZONE, \n\tnotification_created_at TIMESTAMP WITH TIME ZONE, \n\tnotification_seen_at TIMESTAMP WITH TIME ZONE, \n\toutbound_id VARCHAR, \n\terror_code VARCHAR, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(thread_id) REFERENCES whatsapp_customer_threads (id) ON DELETE CASCADE\n)\n\n",
+    "ddl": "\nCREATE TABLE whatsapp_customer_messages (\n\tid VARCHAR(512) NOT NULL, \n\tthread_id VARCHAR NOT NULL, \n\tcontent TEXT, \n\tsent_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\treply TEXT, \n\trisk VARCHAR, \n\ttopic VARCHAR, \n\treason VARCHAR, \n\tevidence_ids JSON NOT NULL, \n\tevidence_snapshots JSON NOT NULL, \n\trevision INTEGER NOT NULL, \n\tsend_after TIMESTAMP WITH TIME ZONE, \n\tnotification_created_at TIMESTAMP WITH TIME ZONE, \n\tnotification_seen_at TIMESTAMP WITH TIME ZONE, \n\toutbound_id VARCHAR, \n\terror_code VARCHAR, \n\thandoff_summary TEXT, \n\tasked_detail VARCHAR, \n\ttyping_started_at TIMESTAMP WITH TIME ZONE, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(thread_id) REFERENCES whatsapp_customer_threads (id) ON DELETE CASCADE\n)\n\n",
     "indexes": [
       "CREATE INDEX ix_whatsapp_customer_message_queue ON whatsapp_customer_messages (status, send_after)",
       "CREATE INDEX ix_whatsapp_customer_message_thread ON whatsapp_customer_messages (thread_id, created_at)"

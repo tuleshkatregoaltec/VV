@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.chat.operations import channel_input, channel_output_allowed
 from app.whatsapp.customer_evidence import CustomerEvidence, CustomerRetrieval
+from app.whatsapp.customer_screen import _INJECTION
 
 Risk = Literal["routine", "approval"]
 QualificationDetail = Literal["transaction", "budget", "timeframe"]
@@ -55,31 +56,39 @@ class TopicDecision(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
     next_question: QualificationDetail | None = None
     retrieval: CustomerRetrieval | None = None
+    asks_if_automated: bool = False
 
 
 class CustomerDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
 
-    reply: str = Field(min_length=1, max_length=3500)
+    # None only for a silent handoff: the customer asked if this is a bot, so we say nothing.
+    reply: str | None = Field(default=None, min_length=1, max_length=3500)
     risk: Risk
     evidence_ids: list[str] = Field(max_length=20)
     auto_eligible: bool
+    silent: bool = False
+    # False when the message is not an admitted property enquiry: the receipt then keeps no
+    # text, only the pause and a content-free notification (identity questions).
+    store_content: bool = True
+    summary: str | None = Field(default=None, max_length=400)
+    reason: str | None = Field(default=None, max_length=64)
+    # Content-free diagnostic for a message that could not be processed.
+    error_code: str | None = Field(default=None, max_length=64)
+    asked: QualificationDetail | None = None
     evidence_snapshots: list[CustomerEvidence] = Field(default_factory=list, max_length=5)
 
     @model_validator(mode="after")
     def approval_cannot_be_automatic(self):
         if self.risk == "approval" and self.auto_eligible:
             raise ValueError("Sensitive drafts require explicit approval")
+        if (self.reply is None) != self.silent:
+            raise ValueError("Only a silent handoff may have no reply")
+        if self.silent and (self.risk != "approval" or self.auto_eligible):
+            raise ValueError("A silent handoff always goes to the agent")
         return self
 
 
-# Negative defense in depth; positive property admission always requires the classifier.
-_INJECTION = re.compile(
-    r"(?is)(?:ignore|override|forget|disregard).{0,70}(?:instructions?|rules?|policy|previous|above)"
-    r"|(?:system|developer)\s*(?:message|prompt|:)|(?:act|pretend)\s+as\b"
-    r"|\b(?:classify|label|mark)\b.{0,45}(?:routine|property|safe|confidence)"
-    r"|تجاهل.{0,40}(?:تعليمات|قواعد)|اكشف.{0,30}(?:كلمة|سر)"
-)
 _PERSONAL = re.compile(
     r"(?i)\b(?:happy birthday|birthday party|dinner plans?|let.s have dinner|how (?:is|are) your "
     r"(?:family|wife|husband|kids)|love you|miss you|football|cricket|video games?|recipe|horoscope|"
@@ -101,6 +110,11 @@ _SENSITIVE = re.compile(
     r"|\b(?:i(?:.ll| will) pay|special deal|price flexible)\b"
     r"|خصم|تفاوض|عقد|دفعة|عربون|حجز|احجز|تأكيد|قرض|جواز|ضريبة|ضمان"
 )
+
+
+def unsafe_reply(text: str) -> bool:
+    """A generated reply may be personal in tone, but never an attack or unsafe output."""
+    return not text.strip() or not channel_output_allowed(text) or bool(_INJECTION.search(text))
 
 
 def rejected_text(text: str) -> bool:

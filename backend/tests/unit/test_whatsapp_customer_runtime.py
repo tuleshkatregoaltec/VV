@@ -13,6 +13,7 @@ from app.whatsapp.customer_models import (
     WhatsAppCustomerThread,
 )
 from app.whatsapp.models import utcnow
+from app.whatsapp.token_crypto import encrypt_token
 
 
 def config():
@@ -69,38 +70,52 @@ def event(
     }
 
 
+def first_message(payload):
+    return payload["entry"][0]["changes"][0]["value"]["messages"][0]
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"sender": "919111111111"},
-        {"account": "wrong"},
-        {"phone": "wrong"},
         {"age": 25},
         {"age": -1},
         {"body": "x" * 8001},
         {"body": ""},
     ],
 )
-def test_customer_receipts_cannot_cross_configured_account_number_or_recipient(kwargs):
-    assert queue.inbound_messages(event(**kwargs), config()) == []
+def test_customer_receipts_are_bounded_in_time_and_size(kwargs):
+    assert queue.inbound_text(first_message(event(**kwargs)), utcnow()) is None
+
+
+def test_pilot_test_recipient_applies_only_to_the_env_pilot_number():
+    pilot = WhatsAppConnection(
+        user_id="user",
+        organization_id="org",
+        phone_number_id="customer-number",
+        account_id="customer-account",
+        display_name="Kian",
+    )
+    other = pilot.model_copy(update={"phone_number_id": "other-agent-number"})
+    assert queue.pilot_recipient(pilot, config()) == "919000000000"
+    assert queue.pilot_recipient(other, config()) is None
 
 
 def test_echo_and_status_events_cannot_queue_customer_work():
+    from app.whatsapp import customer_intake as intake
+
     payload = event()
     payload["entry"][0]["changes"][0]["field"] = "smb_message_echoes"
-    assert queue.inbound_messages(payload, config()) == []
-    payload["entry"][0]["changes"][0]["field"] = "messages"
-    payload["entry"][0]["changes"][0]["value"].pop("messages")
-    assert queue.inbound_messages(payload, config()) == []
+    assert [field for _, field, _ in intake.parse(payload)] == ["smb_message_echoes"]
+    payload["entry"][0]["changes"][0]["field"] = "statuses"
+    assert intake.parse(payload) == []
 
 
 def test_unknown_sender_needs_no_saved_contact_when_test_restriction_is_removed():
-    c = config().model_copy(update={"WHATSAPP_CUSTOMER_TEST_RECIPIENT": None})
-    incoming = queue.inbound_messages(
-        event(body="Looking for a two bedroom apartment in Marina", sender="971501111111"), c
+    raw = first_message(
+        event(body="Looking for a two bedroom apartment in Marina", sender="971501111111")
     )
-    assert len(incoming) == 1
-    assert incoming[0][1] == "971501111111"
+    assert queue.sender_identity(raw) == ("971501111111", None)
+    assert queue.inbound_text(raw, utcnow())[1] == "Looking for a two bedroom apartment in Marina"
 
 
 def test_explicit_approval_bypasses_pause_but_never_optout_or_connection_disable():
@@ -112,6 +127,7 @@ def test_explicit_approval_bypasses_pause_but_never_optout_or_connection_disable
         account_id="customer-account",
         display_name="Kian",
         enabled=True,
+        access_token_encrypted="ciphertext",
     )
     thread = WhatsAppCustomerThread(connection_id=connection.id, sender="919000000000", paused=True)
     assert not queue.bound(connection, thread, c)
@@ -124,10 +140,13 @@ def test_explicit_approval_bypasses_pause_but_never_optout_or_connection_disable
 
 
 async def test_disabled_customer_receives_nothing_without_a_database(monkeypatch):
+    from app.whatsapp import customer_intake as intake
+
     db = AsyncMock()
     monkeypatch.setattr(automation, "get_db_session", db)
+    monkeypatch.setattr(intake, "get_db_session", db)
     c = config().model_copy(update={"WHATSAPP_CUSTOMER_AUTOMATION_ENABLED": False})
-    assert await automation.receive_customer(event(), c) == 0
+    assert await intake.receive_customer(event(), c) == 0
     assert await automation.run_customer_once(c) is False
     db.assert_not_called()
 
@@ -151,6 +170,7 @@ async def test_customer_send_uses_real_number_token_and_context(monkeypatch):
         phone_number_id="customer-number",
         account_id="customer-account",
         display_name="Business",
+        access_token_encrypted=encrypt_token("per-agent-token", config()),
     )
     thread = WhatsAppCustomerThread(connection_id=connection.id, sender="919000000000")
     message = WhatsAppCustomerMessage(
@@ -158,7 +178,8 @@ async def test_customer_send_uses_real_number_token_and_context(monkeypatch):
     )
     assert await automation.send_reply(connection, thread, message, config()) == "outbound"
     assert captured[0].url.path == "/v25.0/customer-number/messages"
-    assert captured[0].headers["authorization"] == "Bearer customer-token"
+    # The connection's own decrypted token, never the global env token.
+    assert captured[0].headers["authorization"] == "Bearer per-agent-token"
     assert b'"message_id":"inbound"' in captured[0].content
 
 

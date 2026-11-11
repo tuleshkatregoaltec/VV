@@ -1,7 +1,7 @@
 """Customer-channel persistence and authenticated review contracts; no credentials."""
 
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -9,6 +9,7 @@ from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Text, UniqueCo
 from sqlmodel import Field as SQLField
 from sqlmodel import SQLModel
 
+from app.whatsapp.customer_screen import injected
 from app.whatsapp.models import utcnow
 
 
@@ -19,13 +20,65 @@ class WhatsAppConnection(SQLModel, table=True):
     user_id: str = SQLField(index=True)
     organization_id: str = SQLField(index=True)
     phone_number_id: str = SQLField(unique=True)
-    account_id: str
+    account_id: str = SQLField(index=True)  # WABA ID; webhook entries route by it
     display_name: str
     enabled: bool = False
     market_data_enabled: bool = False
     approved_knowledge: list[dict[str, str]] = SQLField(
         default_factory=list, sa_column=Column(JSON, nullable=False)
     )
+    # Per-agent writing voice (VoiceProfile as JSON); null means the default voice.
+    reply_voice: dict | None = SQLField(default=None, sa_column=Column(JSON))
+    # Per-agent Meta asset state. `enabled` remains the agent's automation switch.
+    status: str = "connected"  # connected | disconnected
+    onboarding_type: str | None = None  # coexistence | cloud_api | env
+    business_id: str | None = None
+    display_phone_number: str | None = None
+    # Fernet ciphertext only; plaintext business tokens never reach the database.
+    access_token_encrypted: str | None = SQLField(default=None, sa_column=Column(Text), repr=False)
+    quality_rating: str | None = None
+    health: dict | None = SQLField(default=None, sa_column=Column(JSON))
+    last_account_event: str | None = None
+    connected_at: datetime | None = SQLField(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
+    disconnected_at: datetime | None = SQLField(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
+    contacts_sync_requested_at: datetime | None = SQLField(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
+    contacts_synced_at: datetime | None = SQLField(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
+    created_at: datetime = SQLField(
+        default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    updated_at: datetime = SQLField(
+        default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+
+
+class WhatsAppContact(SQLModel, table=True):
+    """Address-book entry synced from the agent's WhatsApp Business app, or a manual block."""
+
+    __tablename__ = "whatsapp_contacts"
+    __table_args__ = (
+        UniqueConstraint("connection_id", "wa_id", name="uq_whatsapp_contact_wa_id"),
+        UniqueConstraint("connection_id", "bsuid", name="uq_whatsapp_contact_bsuid"),
+        Index("ix_whatsapp_contact_blocked", "connection_id", "blocked"),
+    )
+
+    id: str = SQLField(default_factory=lambda: str(uuid4()), primary_key=True)
+    connection_id: str = SQLField(
+        sa_column=Column(ForeignKey("whatsapp_connections.id", ondelete="CASCADE"), nullable=False)
+    )
+    wa_id: str | None = None  # digits only, as Meta sends `from`
+    bsuid: str | None = None  # business-scoped user id, when Meta provides one
+    name: str | None = None
+    in_address_book: bool = True
+    blocked: bool = False
+    blocked_at: datetime | None = SQLField(default=None, sa_column=Column(DateTime(timezone=True)))
     created_at: datetime = SQLField(
         default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False)
     )
@@ -98,6 +151,14 @@ class WhatsAppCustomerMessage(SQLModel, table=True):
     )
     outbound_id: str | None = None
     error_code: str | None = None
+    # Short note for the agent on why the thread was handed over (admitted property text only).
+    handoff_summary: str | None = SQLField(default=None, sa_column=Column(Text))
+    # Qualification question this reply asked ("transaction" | "budget" | "timeframe").
+    asked_detail: str | None = None
+    # Set when the read receipt and typing indicator went out; the reply follows after a delay.
+    typing_started_at: datetime | None = SQLField(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
 
 
 class CustomerRequest(BaseModel):
@@ -117,6 +178,35 @@ class KnowledgeUpdate(CustomerRequest):
         if len({fact.id for fact in self.approved_knowledge}) != len(self.approved_knowledge):
             raise ValueError("Knowledge fact IDs must be unique")
         return self
+
+
+class VoiceProfile(CustomerRequest):
+    """How this agent writes. Free text is the agent's own; it is still screened for
+    instruction-like content before it can reach the drafter prompt."""
+
+    agent_name: str | None = Field(default=None, min_length=1, max_length=80)
+    tone: str | None = Field(default=None, min_length=1, max_length=200)
+    sign_off: str | None = Field(default=None, min_length=1, max_length=80)
+    languages: list[Annotated[str, Field(min_length=1, max_length=30)]] = Field(
+        default_factory=list, max_length=8
+    )
+    sample_messages: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(
+        default_factory=list, max_length=3
+    )
+    emoji: Literal["none", "light"] = "none"
+
+    @model_validator(mode="after")
+    def no_instructions(self):
+        texts = [self.agent_name, self.tone, self.sign_off, *self.languages, *self.sample_messages]
+        if any(text and injected(text) for text in texts):
+            raise ValueError("Voice fields must describe style, not give instructions")
+        return self
+
+
+class VoiceUpdate(CustomerRequest):
+    """`voice: null` resets the agent to the default voice."""
+
+    voice: VoiceProfile | None
 
 
 class ConnectionCreate(KnowledgeUpdate):
@@ -157,9 +247,14 @@ class ConnectionResponse(CustomerResponse):
     phone_number_id: str
     account_id: str
     display_name: str
+    # The agent's own switch. `automation_active` is whether replies are really running;
+    # `automation_paused_reason` says why a switched-on number is not.
     enabled: bool
+    automation_active: bool = False
+    automation_paused_reason: Literal["assistant_disabled", "intake_disabled"] | None = None
     market_data_enabled: bool = False
     approved_knowledge: list[ApprovedFact]
+    reply_voice: VoiceProfile | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -185,6 +280,7 @@ class CustomerMessageResponse(CustomerResponse):
     topic: str | None
     reason: str | None
     evidence_ids: list[str]
+    handoff_summary: str | None = None
     revision: int
     send_after: datetime | None
     notification_created_at: datetime | None
@@ -280,3 +376,140 @@ class PublishedListingResponse(CustomerResponse):
     revoked_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+# ─── Embedded Signup and per-agent connection contract ──────────────────────────
+
+SignupEvent = Literal["FINISH", "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", "FINISH_ONLY_WABA"]
+
+
+class SignupConfigResponse(BaseModel):
+    """Public values for FB.init/FB.login. `configured` is false until Meta is set up."""
+
+    configured: bool
+    missing: list[str]
+    app_id: str | None
+    config_id: str | None
+    graph_api_version: str | None
+    extras: dict
+    state: str | None
+
+
+class SignupComplete(CustomerRequest):
+    state: str = Field(min_length=1, max_length=512)
+    code: str = Field(min_length=1, max_length=2048)
+    phone_number_id: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^\d+$")
+    waba_id: str = Field(min_length=1, max_length=64, pattern=r"^\d+$")
+    business_id: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^\d+$")
+    event: SignupEvent
+
+
+class AutomationToggle(CustomerRequest):
+    enabled: bool
+
+
+class ContactCounts(BaseModel):
+    total: int
+    blocked: int
+    sync_requested_at: datetime | None
+    synced_at: datetime | None
+
+
+class AgentConnectionStatus(BaseModel):
+    """State of the signed-in agent's WhatsApp number.
+
+    state: not_configured (Meta setup missing on the server), not_connected,
+    connected, disconnected.
+    """
+
+    state: Literal["not_configured", "not_connected", "connected", "disconnected"]
+    signup_configured: bool
+    connection_id: str | None = None
+    phone_number_id: str | None = None
+    waba_id: str | None = None
+    business_id: str | None = None
+    display_phone_number: str | None = None
+    display_name: str | None = None
+    onboarding_type: str | None = None
+    # The agent's own switch. `automation_active` is whether replies are really running;
+    # `automation_paused_reason` says why a switched-on number is not ("assistant_disabled" or "intake_disabled").
+    automation_enabled: bool = False
+    automation_active: bool = False
+    automation_paused_reason: Literal["assistant_disabled", "intake_disabled"] | None = None
+    connected_at: datetime | None = None
+    disconnected_at: datetime | None = None
+    last_account_event: str | None = None
+    quality_rating: str | None = None
+    # Meta's phone-number health_status: can_send_message is AVAILABLE, LIMITED or BLOCKED.
+    can_send_message: str | None = None
+    health_errors: list[dict] = Field(default_factory=list)
+    # Replies are billed to the agent's own WABA payment method; Meta does not tell a
+    # Tech Provider whether one is on file, so this stays "unknown".
+    payment_method_status: Literal["unknown"] = "unknown"
+    contacts: ContactCounts | None = None
+
+
+class ContactResponse(CustomerResponse):
+    id: str
+    wa_id: str | None
+    name: str | None
+    in_address_book: bool
+    blocked: bool
+    blocked_at: datetime | None
+    updated_at: datetime
+
+
+class ContactPage(BaseModel):
+    items: list[ContactResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class BlockRequest(CustomerRequest):
+    contact_ids: list[str] = Field(default_factory=list, max_length=1000)
+    phone_numbers: list[str] = Field(default_factory=list, max_length=1000)
+    blocked: bool
+
+    @model_validator(mode="after")
+    def require_targets(self):
+        if not self.contact_ids and not self.phone_numbers:
+            raise ValueError("Provide contact_ids or phone_numbers")
+        return self
+
+
+class BlockResult(BaseModel):
+    updated: int
+    blocked_total: int
+
+
+class AdminConnectionRow(BaseModel):
+    connection_id: str
+    user_id: str
+    user_email: str | None
+    organization_id: str
+    organization_name: str | None
+    phone_number_id: str
+    display_phone_number: str | None
+    display_name: str
+    status: str
+    onboarding_type: str | None
+    automation_enabled: bool
+    automation_active: bool = False
+    automation_paused_reason: Literal["assistant_disabled", "intake_disabled"] | None = None
+    contacts_total: int
+    contacts_blocked: int
+    contacts_synced_at: datetime | None
+    last_message_at: datetime | None
+    connected_at: datetime | None
+    disconnected_at: datetime | None
+    can_send_message: str | None
+
+
+class AdminConnectionList(BaseModel):
+    total: int
+    connected: int
+    automation_on: int
+    # Switched on by the agent but not running because the assistant is disabled server-wide.
+    automation_paused: int = 0
+    items: list[AdminConnectionRow]

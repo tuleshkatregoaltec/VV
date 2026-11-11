@@ -118,6 +118,208 @@ export type AddNote = {
 };
 
 /**
+ * AdminConnectionList
+ */
+export type AdminConnectionList = {
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Connected
+     */
+    connected: number;
+    /**
+     * Automation On
+     */
+    automation_on: number;
+    /**
+     * Automation Paused
+     */
+    automation_paused?: number;
+    /**
+     * Items
+     */
+    items: Array<AdminConnectionRow>;
+};
+
+/**
+ * AdminConnectionRow
+ */
+export type AdminConnectionRow = {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * User Email
+     */
+    user_email: string | null;
+    /**
+     * Organization Id
+     */
+    organization_id: string;
+    /**
+     * Organization Name
+     */
+    organization_name: string | null;
+    /**
+     * Phone Number Id
+     */
+    phone_number_id: string;
+    /**
+     * Display Phone Number
+     */
+    display_phone_number: string | null;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Onboarding Type
+     */
+    onboarding_type: string | null;
+    /**
+     * Automation Enabled
+     */
+    automation_enabled: boolean;
+    /**
+     * Automation Active
+     */
+    automation_active?: boolean;
+    /**
+     * Automation Paused Reason
+     */
+    automation_paused_reason?: 'assistant_disabled' | 'intake_disabled' | null;
+    /**
+     * Contacts Total
+     */
+    contacts_total: number;
+    /**
+     * Contacts Blocked
+     */
+    contacts_blocked: number;
+    /**
+     * Contacts Synced At
+     */
+    contacts_synced_at: string | null;
+    /**
+     * Last Message At
+     */
+    last_message_at: string | null;
+    /**
+     * Connected At
+     */
+    connected_at: string | null;
+    /**
+     * Disconnected At
+     */
+    disconnected_at: string | null;
+    /**
+     * Can Send Message
+     */
+    can_send_message: string | null;
+};
+
+/**
+ * AgentConnectionStatus
+ *
+ * State of the signed-in agent's WhatsApp number.
+ *
+ * state: not_configured (Meta setup missing on the server), not_connected,
+ * connected, disconnected.
+ */
+export type AgentConnectionStatus = {
+    /**
+     * State
+     */
+    state: 'not_configured' | 'not_connected' | 'connected' | 'disconnected';
+    /**
+     * Signup Configured
+     */
+    signup_configured: boolean;
+    /**
+     * Connection Id
+     */
+    connection_id?: string | null;
+    /**
+     * Phone Number Id
+     */
+    phone_number_id?: string | null;
+    /**
+     * Waba Id
+     */
+    waba_id?: string | null;
+    /**
+     * Business Id
+     */
+    business_id?: string | null;
+    /**
+     * Display Phone Number
+     */
+    display_phone_number?: string | null;
+    /**
+     * Display Name
+     */
+    display_name?: string | null;
+    /**
+     * Onboarding Type
+     */
+    onboarding_type?: string | null;
+    /**
+     * Automation Enabled
+     */
+    automation_enabled?: boolean;
+    /**
+     * Automation Active
+     */
+    automation_active?: boolean;
+    /**
+     * Automation Paused Reason
+     */
+    automation_paused_reason?: 'assistant_disabled' | 'intake_disabled' | null;
+    /**
+     * Connected At
+     */
+    connected_at?: string | null;
+    /**
+     * Disconnected At
+     */
+    disconnected_at?: string | null;
+    /**
+     * Last Account Event
+     */
+    last_account_event?: string | null;
+    /**
+     * Quality Rating
+     */
+    quality_rating?: string | null;
+    /**
+     * Can Send Message
+     */
+    can_send_message?: string | null;
+    /**
+     * Health Errors
+     */
+    health_errors?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Payment Method Status
+     */
+    payment_method_status?: 'unknown';
+    contacts?: ContactCounts | null;
+};
+
+/**
  * AnalyticsResponse
  *
  * Complete analytics response for dashboard
@@ -576,6 +778,48 @@ export type AuthMeResponse = {
      * Subscription Status
      */
     subscription_status: string | null;
+};
+
+/**
+ * AutomationToggle
+ */
+export type AutomationToggle = {
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+};
+
+/**
+ * BlockRequest
+ */
+export type BlockRequest = {
+    /**
+     * Contact Ids
+     */
+    contact_ids?: Array<string>;
+    /**
+     * Phone Numbers
+     */
+    phone_numbers?: Array<string>;
+    /**
+     * Blocked
+     */
+    blocked: boolean;
+};
+
+/**
+ * BlockResult
+ */
+export type BlockResult = {
+    /**
+     * Updated
+     */
+    updated: number;
+    /**
+     * Blocked Total
+     */
+    blocked_total: number;
 };
 
 /**
@@ -1057,6 +1301,14 @@ export type ConnectionResponse = {
      */
     enabled: boolean;
     /**
+     * Automation Active
+     */
+    automation_active?: boolean;
+    /**
+     * Automation Paused Reason
+     */
+    automation_paused_reason?: 'assistant_disabled' | 'intake_disabled' | null;
+    /**
      * Market Data Enabled
      */
     market_data_enabled?: boolean;
@@ -1064,6 +1316,7 @@ export type ConnectionResponse = {
      * Approved Knowledge
      */
     approved_knowledge: Array<ApprovedFact>;
+    reply_voice?: VoiceProfile | null;
     /**
      * Created At
      */
@@ -1090,6 +1343,84 @@ export type ConnectionUpdate = {
      * Market Data Enabled
      */
     market_data_enabled?: boolean | null;
+};
+
+/**
+ * ContactCounts
+ */
+export type ContactCounts = {
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Blocked
+     */
+    blocked: number;
+    /**
+     * Sync Requested At
+     */
+    sync_requested_at: string | null;
+    /**
+     * Synced At
+     */
+    synced_at: string | null;
+};
+
+/**
+ * ContactPage
+ */
+export type ContactPage = {
+    /**
+     * Items
+     */
+    items: Array<ContactResponse>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+};
+
+/**
+ * ContactResponse
+ */
+export type ContactResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Wa Id
+     */
+    wa_id: string | null;
+    /**
+     * Name
+     */
+    name: string | null;
+    /**
+     * In Address Book
+     */
+    in_address_book: boolean;
+    /**
+     * Blocked
+     */
+    blocked: boolean;
+    /**
+     * Blocked At
+     */
+    blocked_at: string | null;
+    /**
+     * Updated At
+     */
+    updated_at: string;
 };
 
 /**
@@ -4237,6 +4568,10 @@ export type CustomerMessageResponse = {
      * Evidence Ids
      */
     evidence_ids: Array<string>;
+    /**
+     * Handoff Summary
+     */
+    handoff_summary?: string | null;
     /**
      * Revision
      */
@@ -10804,6 +11139,74 @@ export type SendMessageRequest = {
 };
 
 /**
+ * SignupComplete
+ */
+export type SignupComplete = {
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Phone Number Id
+     */
+    phone_number_id?: string | null;
+    /**
+     * Waba Id
+     */
+    waba_id: string;
+    /**
+     * Business Id
+     */
+    business_id?: string | null;
+    /**
+     * Event
+     */
+    event: 'FINISH' | 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' | 'FINISH_ONLY_WABA';
+};
+
+/**
+ * SignupConfigResponse
+ *
+ * Public values for FB.init/FB.login. `configured` is false until Meta is set up.
+ */
+export type SignupConfigResponse = {
+    /**
+     * Configured
+     */
+    configured: boolean;
+    /**
+     * Missing
+     */
+    missing: Array<string>;
+    /**
+     * App Id
+     */
+    app_id: string | null;
+    /**
+     * Config Id
+     */
+    config_id: string | null;
+    /**
+     * Graph Api Version
+     */
+    graph_api_version: string | null;
+    /**
+     * Extras
+     */
+    extras: {
+        [key: string]: unknown;
+    };
+    /**
+     * State
+     */
+    state: string | null;
+};
+
+/**
  * StudyContext
  */
 export type StudyContext = {
@@ -12095,6 +12498,48 @@ export type ViewingResponse = {
      * Delivery
      */
     delivery?: 'internal_only';
+};
+
+/**
+ * VoiceProfile
+ *
+ * How this agent writes. Free text is the agent's own; it is still screened for
+ * instruction-like content before it can reach the drafter prompt.
+ */
+export type VoiceProfile = {
+    /**
+     * Agent Name
+     */
+    agent_name?: string | null;
+    /**
+     * Tone
+     */
+    tone?: string | null;
+    /**
+     * Sign Off
+     */
+    sign_off?: string | null;
+    /**
+     * Languages
+     */
+    languages?: Array<string>;
+    /**
+     * Sample Messages
+     */
+    sample_messages?: Array<string>;
+    /**
+     * Emoji
+     */
+    emoji?: 'none' | 'light';
+};
+
+/**
+ * VoiceUpdate
+ *
+ * `voice: null` resets the agent to the default voice.
+ */
+export type VoiceUpdate = {
+    voice: VoiceProfile | null;
 };
 
 /**
@@ -17324,6 +17769,36 @@ export type WhatsappUpdateKnowledgeResponses = {
 
 export type WhatsappUpdateKnowledgeResponse = WhatsappUpdateKnowledgeResponses[keyof WhatsappUpdateKnowledgeResponses];
 
+export type WhatsappUpdateVoiceData = {
+    body: VoiceUpdate;
+    path: {
+        /**
+         * Connection Id
+         */
+        connection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/whatsapp/connections/{connection_id}/voice';
+};
+
+export type WhatsappUpdateVoiceErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappUpdateVoiceError = WhatsappUpdateVoiceErrors[keyof WhatsappUpdateVoiceErrors];
+
+export type WhatsappUpdateVoiceResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConnectionResponse;
+};
+
+export type WhatsappUpdateVoiceResponse = WhatsappUpdateVoiceResponses[keyof WhatsappUpdateVoiceResponses];
+
 export type WhatsappListThreadsData = {
     body?: never;
     path: {
@@ -17760,6 +18235,203 @@ export type WhatsappRevokeListingResponses = {
 };
 
 export type WhatsappRevokeListingResponse = WhatsappRevokeListingResponses[keyof WhatsappRevokeListingResponses];
+
+export type WhatsappSignupConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/whatsapp/signup/config';
+};
+
+export type WhatsappSignupConfigResponses = {
+    /**
+     * Successful Response
+     */
+    200: SignupConfigResponse;
+};
+
+export type WhatsappSignupConfigResponse = WhatsappSignupConfigResponses[keyof WhatsappSignupConfigResponses];
+
+export type WhatsappSignupCompleteData = {
+    body: SignupComplete;
+    path?: never;
+    query?: never;
+    url: '/api/v1/whatsapp/signup/complete';
+};
+
+export type WhatsappSignupCompleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappSignupCompleteError = WhatsappSignupCompleteErrors[keyof WhatsappSignupCompleteErrors];
+
+export type WhatsappSignupCompleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentConnectionStatus;
+};
+
+export type WhatsappSignupCompleteResponse = WhatsappSignupCompleteResponses[keyof WhatsappSignupCompleteResponses];
+
+export type WhatsappConnectionStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/whatsapp/connection';
+};
+
+export type WhatsappConnectionStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentConnectionStatus;
+};
+
+export type WhatsappConnectionStatusResponse = WhatsappConnectionStatusResponses[keyof WhatsappConnectionStatusResponses];
+
+export type WhatsappToggleAutomationData = {
+    body: AutomationToggle;
+    path?: never;
+    query?: never;
+    url: '/api/v1/whatsapp/connection/automation';
+};
+
+export type WhatsappToggleAutomationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappToggleAutomationError = WhatsappToggleAutomationErrors[keyof WhatsappToggleAutomationErrors];
+
+export type WhatsappToggleAutomationResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentConnectionStatus;
+};
+
+export type WhatsappToggleAutomationResponse = WhatsappToggleAutomationResponses[keyof WhatsappToggleAutomationResponses];
+
+export type WhatsappDisconnectData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/whatsapp/connection/disconnect';
+};
+
+export type WhatsappDisconnectResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentConnectionStatus;
+};
+
+export type WhatsappDisconnectResponse = WhatsappDisconnectResponses[keyof WhatsappDisconnectResponses];
+
+export type WhatsappListContactsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Blocked
+         */
+        blocked?: boolean | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/whatsapp/connection/contacts';
+};
+
+export type WhatsappListContactsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappListContactsError = WhatsappListContactsErrors[keyof WhatsappListContactsErrors];
+
+export type WhatsappListContactsResponses = {
+    /**
+     * Successful Response
+     */
+    200: ContactPage;
+};
+
+export type WhatsappListContactsResponse = WhatsappListContactsResponses[keyof WhatsappListContactsResponses];
+
+export type WhatsappSetBlockedData = {
+    body: BlockRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/whatsapp/connection/contacts/blocked';
+};
+
+export type WhatsappSetBlockedErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WhatsappSetBlockedError = WhatsappSetBlockedErrors[keyof WhatsappSetBlockedErrors];
+
+export type WhatsappSetBlockedResponses = {
+    /**
+     * Successful Response
+     */
+    200: BlockResult;
+};
+
+export type WhatsappSetBlockedResponse = WhatsappSetBlockedResponses[keyof WhatsappSetBlockedResponses];
+
+export type WhatsappRequestContactsSyncData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/whatsapp/connection/contacts/sync';
+};
+
+export type WhatsappRequestContactsSyncResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentConnectionStatus;
+};
+
+export type WhatsappRequestContactsSyncResponse = WhatsappRequestContactsSyncResponses[keyof WhatsappRequestContactsSyncResponses];
+
+export type AdminAdminConnectionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/whatsapp/connections';
+};
+
+export type AdminAdminConnectionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminConnectionList;
+};
+
+export type AdminAdminConnectionsResponse = AdminAdminConnectionsResponses[keyof AdminAdminConnectionsResponses];
 
 export type AdminListAllOrganizationsData = {
     body?: never;

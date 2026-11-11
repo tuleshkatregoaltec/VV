@@ -101,11 +101,10 @@ that cap. Model turns additionally use the existing shared durable user/tenant q
 An empty technical chat conversation scopes budgets, without copying customer text
 into the private web chat.
 
-Personal/uncertain messages can reach the webhook, be temporarily stored and be
-classified before their bodies are erased. Meta does not pre-filter the account to
-property messages. Property history remains in PostgreSQL. This is a one-number pilot,
-not customer-wide Embedded Signup onboarding. Keep the WSL computer, Docker and
-internet running; always-on production hosting and retention remain separate work.
+Superseded on 6 November 2026 (see “Multi-agent Embedded Signup” below): inbound text
+is no longer written anywhere before classification, and every connected agent number
+is served, not only the env-configured one. Meta does not pre-filter the account to
+property messages. Property history remains in PostgreSQL.
 
 ### API
 
@@ -117,6 +116,7 @@ and exact connection owner/user plus organization scope. Credentials are never e
 | `GET/POST /connections` | List/create the configured connection |
 | `PATCH /connections/{id}` | Enable/disable or rename |
 | `PUT /connections/{id}/knowledge` | Replace approved facts (20 unique facts, max 1,000 chars each) |
+| `PUT /connections/{id}/voice` | Set or reset (`{"voice": null}`) the agent's reply voice; see “Reply style” |
 | `GET /connections/{id}/threads` | Property conversations only |
 | `GET /threads/{id}/messages` | Conversation history, with ignored bodies redacted |
 | `GET /notifications` | Actionable review/failure notifications |
@@ -130,6 +130,274 @@ and exact connection owner/user plus organization scope. Credentials are never e
 Decisions require `expected_revision`; edits also require `reply`. Stale revisions
 return 409. Browser helpers follow paginated lists. No schema migration is needed
 for the selective policy; existing migration `31c7e90b42ad` provides its tables.
+
+## Multi-agent Embedded Signup (backend) — 6 November 2026
+
+Any Vitevue agent can connect their own WhatsApp Business number with Meta Embedded
+Signup in coexistence mode (they keep using the WhatsApp Business app on their phone).
+Flow: connect → contacts sync arrives → agent blocks contacts → agent turns automation
+on → property enquiries are answered from the agent's own number.
+
+### Privacy model
+
+- **Blocked contacts**: dropped in the webhook handler by phone number or business-scoped
+  user ID before the message text is read. No thread, message or log row is written
+  and nothing is queued. Blocking later also cancels unsent replies on that thread.
+- **Unclassified text is never persisted.** The webhook writes a content-free receipt
+  (`status = classifying`, `content = NULL`) for deduplication and the daily cap, commits,
+  answers Meta, then classifies in an in-process task that holds the text in memory only.
+  Text is written to `whatsapp_customer_messages.content` only once the classifier admits
+  it as a property enquiry and a reply is drafted. Personal/uncertain text ends as
+  `ignored` with no content. Nothing goes through Redis (the server's Redis uses AOF).
+- If the API process dies mid-classification the text is lost by design; the worker marks
+  the receipt `failed (worker_lost)` after ten minutes.
+- Agent replies typed in the phone app (`smb_message_echoes`) pause a thread that
+  already has a property enquiry and cancel its unsent draft. On any other thread they
+  cancel (`agent_replied`) messages still being classified that arrived at or before the
+  echo, so the buyer is never answered twice; the thread is not paused. Echo text is never
+  read or stored and no thread is created for personal chats. Message history sync is
+  never requested. Group messages are ignored.
+- Each webhook change commits on its own. If one change fails, it alone is rolled back:
+  receipts committed by the other changes are still classified, and the error is returned
+  afterwards so Meta retries the event (committed receipts are deduplicated).
+
+### Routing and sending
+
+Each webhook change is routed to the connection whose `account_id` (WABA ID, the entry
+`id`) **and** `phone_number_id` both match and whose `status = connected`. Spoofed or
+unknown pairs are dropped. Each agent's business token is stored Fernet-encrypted in
+`whatsapp_connections.access_token_encrypted` and decrypted only to send. The worker
+(`scripts.whatsapp_worker`) now only delivers due replies for every agent and recovers
+lost receipts; classification runs in the API process
+(`WHATSAPP_CLASSIFIER_CONCURRENCY`, default 4 per process).
+
+`account_update` `PARTNER_REMOVED` / `ACCOUNT_OFFBOARDED` disconnects the agent: automation
+off, unsent replies cancelled, token and synced contacts deleted. Disconnecting also clears
+`contacts_sync_requested_at` / `contacts_synced_at`, so reconnecting the same number
+requests a fresh contacts sync (coexistence) and leaves automation off until the agent
+re-reviews blocks and switches it on. A reconnect of a row disconnected by older code is
+reset the same way.
+
+### Environment
+
+| Variable | Purpose |
+| --- | --- |
+| `WHATSAPP_TOKEN_ENCRYPTION_KEY` | Fernet key(s), comma-separated; first encrypts, all decrypt. **Required outside `ENVIRONMENT=local`**; without it tokens cannot be stored or read and sending fails closed. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
+| `WHATSAPP_APP_ID` | Meta app ID (public; returned to the browser for `FB.init`). |
+| `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` | Facebook Login for Business configuration ID (public). Absent → signup reports `not_configured`. |
+| `WHATSAPP_CLASSIFIER_CONCURRENCY` | In-process classifier concurrency (default 4). |
+| `WHATSAPP_HUMAN_TIMING_ENABLED` | Read receipt, typing indicator, human-paced delays and two-text splitting for automatic replies (default `true`). |
+
+Existing: `WHATSAPP_APP_SECRET` (signature checks and code exchange),
+`WHATSAPP_GRAPH_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_CUSTOMER_AUTOMATION_ENABLED`
+(global kill switch). `WHATSAPP_CUSTOMER_PHONE_NUMBER_ID/ACCOUNT_ID/ACCESS_TOKEN` and
+`WHATSAPP_PILOT_USER_ID/ORGANIZATION_ID` are now only used to migrate the env pilot.
+
+### Env pilot migration (Kian's number)
+
+Migration `7a1d3c5e9b20` marks existing connections `onboarding_type = env`. On API and
+worker start-up, `bootstrap_env_connection` encrypts `WHATSAPP_CUSTOMER_ACCESS_TOKEN` into
+the row matching `WHATSAPP_CUSTOMER_PHONE_NUMBER_ID` (same user, organization and WABA),
+keeping its `enabled` state, or creates the row with automation off. It re-encrypts if the
+env token changes, never revives a disconnected row and never takes a number owned by
+someone else. On the server: set `WHATSAPP_TOKEN_ENCRYPTION_KEY`, run
+`alembic upgrade head`, restart API and worker. `WHATSAPP_CUSTOMER_TEST_RECIPIENT`, if set,
+still restricts only the env pilot number.
+
+### Agent API (`/api/v1/whatsapp`, active subscription; identity from the session)
+
+| Method and path | Request | Response |
+| --- | --- | --- |
+| `GET /signup/config` | — | `{configured, missing[], app_id, config_id, graph_api_version, extras, state}`; `state` is null when not configured |
+| `POST /signup/complete` | `{state, code, phone_number_id, waba_id, business_id?, event}`; `event` is `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, `FINISH` or `FINISH_ONLY_WABA` (rejected 422) | `AgentConnectionStatus` |
+| `GET /connection` | — | `AgentConnectionStatus` |
+| `PATCH /connection/automation` | `{enabled}` | `AgentConnectionStatus` |
+| `POST /connection/disconnect` | — | `AgentConnectionStatus` (`state = disconnected`) |
+| `GET /connection/contacts` | `search?` (name or digits), `blocked?`, `limit` 1–500 (50), `offset` | `{items[{id, wa_id, name, in_address_book, blocked, blocked_at, updated_at}], total, limit, offset}` |
+| `PUT /connection/contacts/blocked` | `{contact_ids[], phone_numbers[], blocked}` (at least one list, ≤1000 each) | `{updated, blocked_total}` |
+| `POST /connection/contacts/sync` | — | `AgentConnectionStatus`; retries the one-time contacts sync within 24 h if the automatic request failed |
+
+`AgentConnectionStatus`: `state` (`not_configured`, `not_connected`, `connected`,
+`disconnected`), `signup_configured`, `connection_id`, `phone_number_id`, `waba_id`,
+`business_id`, `display_phone_number`, `display_name`, `onboarding_type`
+(`coexistence`, `cloud_api`, `env`), `automation_enabled`, `connected_at`,
+`disconnected_at`, `last_account_event`, `quality_rating`, `can_send_message`
+(Meta health: `AVAILABLE`, `LIMITED`, `BLOCKED`), `health_errors[]`,
+`payment_method_status` (always `unknown`: billing is on the agent's own WABA),
+`contacts {total, blocked, sync_requested_at, synced_at}`.
+
+Signup completion (code expires in ~30 s, so call it immediately from the SDK callback):
+exchanges the code (`GET /oauth/access_token` with app ID/secret), checks that
+`phone_number_id` is in `GET /{waba_id}/phone_numbers`, subscribes the app
+(`POST /{waba_id}/subscribed_apps`), registers the number only for `FINISH` (Cloud API),
+stores the encrypted token, then requests the contacts sync once
+(`POST /{phone_number_id}/smb_app_data`, `sync_type = smb_app_state_sync`) and reads
+`health_status`. Errors: 400 expired state, 403 number not in the shared WABA, 409 number
+linked to another account or agent already connected, 502 Meta rejection, 503 not
+configured. Automation starts **off** so the agent can block contacts first.
+
+Errors elsewhere: 404 when the agent has no connected number; 409 when enabling without
+a decryptable token.
+
+### Admin
+
+`GET /api/v1/admin/whatsapp/connections` (system admin): `{total, connected, automation_on,
+items[{connection_id, user_id, user_email, organization_id, organization_name,
+phone_number_id, display_phone_number, display_name, status, onboarding_type,
+automation_enabled, contacts_total, contacts_blocked, contacts_synced_at, last_message_at,
+connected_at, disconnected_at, can_send_message}]}`.
+
+### Meta app settings needed
+
+- App Dashboard → WhatsApp → Configuration → Webhooks: callback
+  `https://api-pilot.vitevue.com/api/v1/webhooks/whatsapp`, verify token
+  `WHATSAPP_VERIFY_TOKEN`; subscribe `messages`, `smb_app_state_sync`,
+  `smb_message_echoes`, `account_update` (Meta lists `history` for coexistence too; we
+  never request history, so subscribing to it is optional and its events are ignored).
+- Facebook Login for Business → Configurations: create one with the **WhatsApp Embedded
+  Signup** login variation (or the “WhatsApp Embedded Signup Configuration With 60
+  Expiration Token” template), selecting only the WhatsApp assets/permissions needed;
+  put its ID in `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID`.
+- Facebook Login for Business → Settings → Client OAuth settings: Client OAuth login,
+  Web OAuth login, Enforce HTTPS, Embedded Browser OAuth Login, Strict Mode for redirect
+  URIs and Login with the JavaScript SDK all on; add `vv-pilot.pages.dev` (and any other
+  frontend domain) to Allowed domains and Valid OAuth redirect URIs.
+
+### Not done
+
+Delivery-status reconciliation, retention/purge of property history, senders identified
+only by business-scoped user ID (no phone number) are not automated, and per-thread
+ordering is guaranteed only within one API process.
+
+## Reply style: sounding like the agent (backend) — 6 November 2026
+
+Goal: an automatic reply reads as if the agent wrote it, without ever pretending to be a
+person. Rules agreed with the product owner:
+
+1. **Voice.** The drafter writes the message itself, short, in the buyer's language and
+   register (English, Arabic, Hindi/Hinglish, Russian and others), with varied phrasing.
+   No bot introduction, no "As an AI", no assistant boilerplate ("Thank you for reaching
+   out", "How can I assist you today"), no lists, headings, bold, em dashes or emoji (one
+   emoji at most if the agent's voice allows it).
+2. **Never claim to be human, never deny being automated.** If a buyer sincerely asks
+   whether they are talking to a bot, AI, machine or real person, in any language,
+   the automation sends **no reply**. The thread is paused, the message is stored as an
+   `approval_required` notification with `reply = null`, `reason = "identity_question"`
+   and a `handoff_summary`, and the agent answers personally. Detection is a deliberately
+   broad multilingual pattern set (`customer_voice.asks_if_automated`, applied before any
+   model call, including indirect forms such as "is a human replying?", "are these replies
+   automatic?", "you sound like a bot", "is this Kian or an assistant?") plus the
+   classifier's `asks_if_automated` flag. Either one is enough, whatever the topic,
+   confidence or prior history, and also when the classifier call fails. The message text
+   is kept only inside an accepted property conversation or when the classifier also admits
+   it as a property enquiry. Otherwise (for example a first message "Are you a bot?") the
+   row keeps no text: `topic = "identity"`, `content = null` and a content-free
+   `handoff_summary` ("A contact asked whether replies are automated..."); the thread is
+   listed for the agent so they can see who asked. A false positive costs a paused
+   thread, never a reply.
+3. **Sensitive topics are handed off with a summary.** Negotiation, offers, legal or
+   financial questions, payments, viewings/scheduling, reservations, promises and
+   requests for a person produce an `approval_required` draft: a brief true holding line
+   ("let me check with the owner and come back to you") and `handoff_summary`, a one or two
+   sentence note for the agent (what the buyer wants, any numbers they gave, why it was
+   handed over). Nothing is sent until the agent approves or edits it. The same applies
+   when the approved facts do not cover the question. Auto-sending holding lines is a
+   possible later product decision; it is not enabled.
+4. **Grounded.** The model may phrase facts naturally ("AED 2,450,000" as "2.45M") but
+   every reply is screened by `customer_voice.reply_violations` before it is stored and again
+   at the send boundary: any talk about the reply's own nature (`self_identity`: bot, AI,
+   automation, assistant, robot, machine, human, real person, "it's really me", in English,
+   Arabic, Hindi/Hinglish and Russian, including denials such as "not a bot, just quick on
+   my phone"; feature words such as "automated parking" or "washing machine" pass only next
+   to the same neighbouring word in the cited facts), references to being an AI/bot, claims
+   of being human, assistant boilerplate, commitments ("booked", "confirmed", "I promise", "in 10 minutes"), numbers
+   (including written numbers such as "three") that appear in neither the selected facts nor
+   the buyer's own messages, URLs/emails not in the facts, and availability or sold
+   claims the facts do not make. A reply that fails is never sent. A failed routine
+   answer becomes a handoff draft; a failed qualification question or holding line is
+   replaced by short fixed wording chosen from a few variants. Injection protection,
+   the conservative property/personal classification and the 0.95 confidence floor are
+   unchanged. The assistant stays on real-estate topics for this agent.
+
+### Qualification questions
+
+The drafter now words the buy/rent, budget and timeframe questions itself. The question
+a reply asked is stored in `whatsapp_customer_messages.asked_detail` and passed back in
+history as `asked`, so a bare "Rent" or "120k" is still recognised as the answer.
+
+### Human timing
+
+For an automatic reply, in order: wait a reading delay (4 to 20 s, longer for longer
+messages, jittered), call Graph to mark the buyer's message read and show the typing
+indicator, wait a typing delay (3 to 18 s, scaled to the reply length, jittered), then send.
+A long reply the drafter wrote as two paragraphs goes out as at most two texts, the second
+after a 1.5 to 5 s pause with a fresh indicator.
+
+Typing indicator request (verified against Meta's Cloud API docs, 6 November 2026):
+
+```
+POST /{version}/{phone_number_id}/messages
+{"messaging_product": "whatsapp", "status": "read",
+ "message_id": "<inbound wamid>", "typing_indicator": {"type": "text"}}
+```
+
+Meta clears the indicator when we reply or after 25 seconds, so every delay is below 25 s.
+The call is cosmetic: a failure is logged by class only and the reply is still sent.
+
+Implementation: the waits are `send_after` timestamps, not sleeps. `draft` sets
+`send_after` to the reading delay; the worker's first pass at that time sends the read and
+typing indicator and sets `typing_started_at` and a new `send_after` (typing delay); a
+second pass sends. The worker lane is free in between, so one agent's wait never delays
+another agent's reply. Eligibility (agent still enabled, thread not paused or opted out,
+24-hour window open, evidence still valid) is rechecked at the send pass, so an agent
+who answers from the phone during the wait cancels the automatic reply. Delays are
+skipped entirely when the 24-hour window would close within about four minutes.
+Agent-approved and agent-edited replies are sent promptly and exactly as written.
+`WHATSAPP_HUMAN_TIMING_ENABLED=false` disables all of this.
+
+### Per-agent voice: `PUT /api/v1/whatsapp/connections/{id}/voice`
+
+Request: `{"voice": VoiceProfile | null}`; `null` restores the default voice. Response:
+`ConnectionResponse`, now with `reply_voice` (`VoiceProfile | null`).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `agent_name` | string ≤ 80, optional | Name the agent goes by (defaults to the connection `display_name`) |
+| `tone` | string ≤ 200, optional | Style description, e.g. "warm, brief, a bit playful" |
+| `sign_off` | string ≤ 80, optional | Used now and then, never on every message |
+| `languages` | ≤ 8 strings ≤ 30 | Languages the agent works in. Replies still mirror the buyer's language |
+| `sample_messages` | ≤ 3 strings ≤ 300 | Messages the agent might send; the drafter imitates, never copies |
+| `emoji` | `"none"` (default) or `"light"` | `light` allows at most one emoji |
+
+Unknown fields are rejected (422), and fields that look like instructions ("ignore
+previous instructions", and the like) are rejected so a voice cannot weaken the policy.
+With nothing stored, the default is a friendly, brief, relaxed tone with no samples.
+Stored as JSON in `whatsapp_connections.reply_voice`. Changing the voice affects new drafts only.
+
+New nullable columns (migration `8b2e4f6a1c93`): `whatsapp_connections.reply_voice`,
+`whatsapp_customer_messages.handoff_summary`, `asked_detail`, `typing_started_at`.
+`CustomerMessageResponse` gains `handoff_summary` (redacted for ignored messages).
+A notification may now have `reply = null` (identity question); `approve` returns 409
+for it, and the agent can `PATCH` their own text or `cancel`.
+
+### Webhook text and observability audit
+
+Inbound message text exists only in the in-process classification job, and in PostgreSQL
+once a message is admitted as a property enquiry. Where it could have leaked, and what
+holds now:
+
+| Path | Status |
+| --- | --- |
+| Application logs | Every WhatsApp log line carries only the exception class or counts. No `exc_info` or `logger.exception`. Tests assert a sentinel buyer message never appears in captured logs when the classifier, drafter or background task fails. |
+| SQL logs and exception messages | `hide_parameters=True` on the engine (existing), so statement values never reach `logs/sql.log` or `DBAPIError` text. |
+| Uvicorn access log | Query string of the webhook path is stripped (existing `CallbackQueryFilter`). |
+| Unhandled webhook exception → server error log and Honeybadger middleware | **Fixed.** Previously an unexpected error in `receive_customer` propagated, so the traceback with its exception message (which can echo SQL values or text) went to the log and to Honeybadger with the request's query string (`hub.verify_token`) and headers. The route now catches it, logs the class only, notifies Honeybadger with the class and a fixed message, and returns 500 (Meta retries; duplicates are ignored). |
+| Honeybadger context for any webhook request | **Fixed.** `before_notify=scrub_notice` keeps only method and URL and replaces the exception with its class and a fixed message, dropping causes, headers, query string and body. |
+| Logfire / OpenTelemetry | `logfire.configure(send_to_logfire=False)` with the allowlist exporter (existing). Both WhatsApp agents are created with `instrument=False`; a test pins it. |
+| LLM provider | OpenRouter `zdr=true`, `data_collection=deny`, no fallbacks (existing). |
+
+Not covered: provider-side retention outside ZDR, and the CRM/web-chat paths, which are
+outside WhatsApp.
 
 ## Verification and current pilot state — 3 November 2026
 

@@ -12,6 +12,9 @@ from app.chat.service import create_conversation, stream_chat_response
 from app.crm.assistant import has_current_access
 from app.postgres import get_db_session
 
+# Raised by `channel_budget` when a turn cannot start yet; nothing was reserved or spent.
+AdmissionRefused = admission.AdmissionRefused
+
 
 def channel_input(message: str) -> str | None:
     return None if input_refusal(message) else message

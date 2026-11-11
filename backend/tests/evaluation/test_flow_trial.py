@@ -76,7 +76,13 @@ async def test_actual_customer_policy_qualifies_without_database_or_send(monkeyp
                 "next_question": "transaction",
             }
         else:
-            raise AssertionError("Fixed qualification should not invoke the drafter")
+            output = {
+                "response_kind": "clarify",
+                "missing_detail": "transaction",
+                "evidence_ids": [],
+                "risk": "routine",
+                "reply": "Nice area. Are you looking to buy or rent?",
+            }
         return ModelResponse(parts=[ToolCallPart(tool.name, output)])
 
     case = {
@@ -88,7 +94,7 @@ async def test_actual_customer_policy_qualifies_without_database_or_send(monkeyp
     }
     record = await run_flow_case(case, FunctionModel(respond))
     assert "error_type" not in record
-    assert record["answer"] == "Are you looking to buy or rent?"
+    assert record["answer"] == "Nice area. Are you looking to buy or rent?"
     assert record["turns"][0]["draft"]["auto_eligible"] is True
     assert customer_agent.classifier()._function_toolset.tools == {}
     assert customer_agent.drafter()._function_toolset.tools == {}

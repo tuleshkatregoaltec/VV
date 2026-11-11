@@ -180,6 +180,15 @@ class Settings(BaseSettings):
     WHATSAPP_CUSTOMER_ACCOUNT_ID: str | None = Field(default=None, pattern=r"^\d+$")
     WHATSAPP_CUSTOMER_ACCESS_TOKEN: str | None = Field(default=None, repr=False)
     WHATSAPP_CUSTOMER_TEST_RECIPIENT: str | None = Field(default=None, pattern=r"^\d{7,15}$")
+    # Multi-agent Embedded Signup. App and configuration IDs are public values the
+    # browser SDK needs; the app secret above exchanges codes server-side.
+    WHATSAPP_APP_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    # Comma-separated Fernet keys; the first encrypts, all decrypt (rotation).
+    WHATSAPP_TOKEN_ENCRYPTION_KEY: str | None = Field(default=None, repr=False)
+    WHATSAPP_CLASSIFIER_CONCURRENCY: int = Field(default=4, ge=1, le=32)
+    # Read receipt, typing indicator and a human-paced delay before automatic replies.
+    WHATSAPP_HUMAN_TIMING_ENABLED: bool = True
 
     # Frontend URLs for Stripe redirects
     FRONTEND_SUCCESS_URL: AnyUrl  # configMap

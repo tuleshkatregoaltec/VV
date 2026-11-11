@@ -44,6 +44,7 @@ from app.organization.models import Organization, OrganizationInvitation, Organi
 from app.token_usage.models import UserTokenUsage
 from app.whatsapp.customer_models import (
     WhatsAppConnection,
+    WhatsAppContact,
     WhatsAppCustomerMessage,
     WhatsAppCustomerThread,
     WhatsAppPublishedListing,
@@ -53,6 +54,7 @@ from app.whatsapp.models import WhatsAppTurn
 __all__ = [
     "WhatsAppPublishedListing",
     "WhatsAppConnection",
+    "WhatsAppContact",
     "WhatsAppCustomerThread",
     "WhatsAppCustomerMessage",
     "WhatsAppTurn",

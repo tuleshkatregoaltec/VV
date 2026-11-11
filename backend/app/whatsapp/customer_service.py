@@ -7,7 +7,11 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.whatsapp import customer_repository as repository
-from app.whatsapp.customer_models import CustomerMessageResponse, WhatsAppConnection
+from app.whatsapp.customer_models import (
+    ConnectionResponse,
+    CustomerMessageResponse,
+    WhatsAppConnection,
+)
 from app.whatsapp.models import utcnow
 
 
@@ -28,13 +32,37 @@ def configured_owner(user_id, organization_id, phone_number_id, account_id):
         raise HTTPException(403, "This WhatsApp asset is not configured for this account")
 
 
+def require_sendable(connection):
+    """Only a connected agent number with a stored token may enable or approve sends."""
+    if connection.status != "connected" or not connection.access_token_encrypted:
+        raise HTTPException(409, "Connect this WhatsApp number before sending")
+
+
 def message_response(row):
     response = CustomerMessageResponse.model_validate(row)
     if row.status == "ignored":
         response.content = None
         response.reply = None
         response.reason = None
+        response.handoff_summary = None
         response.evidence_ids = []
+    return response
+
+
+def automation_state(row, config):
+    """(active, paused_reason): the agent's switch alone is not proof replies are running."""
+    if not (row.enabled and row.status == "connected"):
+        return False, None
+    if not config.ASSISTANT_ENABLED:
+        return False, "assistant_disabled"
+    if not config.WHATSAPP_CUSTOMER_AUTOMATION_ENABLED:
+        return False, "intake_disabled"
+    return True, None
+
+
+def connection_response(row):
+    response = ConnectionResponse.model_validate(row)
+    response.automation_active, response.automation_paused_reason = automation_state(row, settings)
     return response
 
 
@@ -89,7 +117,7 @@ async def update_connection(db, *, connection_id, user_id, organization_id, requ
         await repository.lock_connection(db, connection_id, user_id, organization_id)
     )
     if request.enabled:
-        configured_owner(user_id, organization_id, row.phone_number_id, row.account_id)
+        require_sendable(row)
     if (
         request.market_data_enabled is not None
         and request.market_data_enabled != row.market_data_enabled
@@ -110,6 +138,18 @@ async def update_knowledge(db, *, connection_id, user_id, organization_id, reque
     )
     await invalidate_connection(db, row.id, "knowledge_changed")
     row.approved_knowledge = [fact.model_dump() for fact in request.approved_knowledge]
+    row.updated_at = utcnow()
+    await db.commit()
+    return row
+
+
+async def update_voice(db, *, connection_id, user_id, organization_id, request):
+    """Replace this agent's writing voice (None restores the default). Takes effect on the
+    next draft; replies already drafted keep the wording they were approved with."""
+    row = require_found(
+        await repository.lock_connection(db, connection_id, user_id, organization_id)
+    )
+    row.reply_voice = request.voice.model_dump() if request.voice else None
     row.updated_at = utcnow()
     await db.commit()
     return row
@@ -192,9 +232,7 @@ async def decide(db, *, message_id, user_id, organization_id, request, action):
     if action != "cancel" and (not connection.enabled or thread.opted_out):
         raise HTTPException(409, "Customer automation is disabled or the customer opted out")
     if action == "approve":
-        configured_owner(
-            user_id, organization_id, connection.phone_number_id, connection.account_id
-        )
+        require_sendable(connection)
         if not message.reply:
             raise HTTPException(409, "No draft is available")
         if message.sent_at <= utcnow() - timedelta(hours=24):

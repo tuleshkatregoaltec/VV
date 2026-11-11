@@ -18,6 +18,7 @@ from app.whatsapp.customer_models import (
     ReplyEdit,
     RevisionDecision,
     ThreadResponse,
+    VoiceUpdate,
 )
 
 router = APIRouter(prefix="/api/v1/whatsapp", tags=["WhatsApp review"])
@@ -32,7 +33,8 @@ async def list_connections(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    return await service.list_connections(db, **_identity(context))
+    rows = await service.list_connections(db, **_identity(context))
+    return [service.connection_response(row) for row in rows]
 
 
 @router.post("/connections", response_model=ConnectionResponse, status_code=201)
@@ -41,7 +43,8 @@ async def create_connection(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    return await service.create_connection(db, **_identity(context), request=request)
+    row = await service.create_connection(db, **_identity(context), request=request)
+    return service.connection_response(row)
 
 
 @router.get("/connections/{connection_id}", response_model=ConnectionResponse)
@@ -50,7 +53,8 @@ async def get_connection(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    return await service.get_connection(db, **_identity(context), connection_id=connection_id)
+    row = await service.get_connection(db, **_identity(context), connection_id=connection_id)
+    return service.connection_response(row)
 
 
 @router.patch("/connections/{connection_id}", response_model=ConnectionResponse)
@@ -60,9 +64,10 @@ async def update_connection(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    return await service.update_connection(
+    row = await service.update_connection(
         db, **_identity(context), connection_id=connection_id, request=request
     )
+    return service.connection_response(row)
 
 
 @router.put("/connections/{connection_id}/knowledge", response_model=ConnectionResponse)
@@ -72,9 +77,23 @@ async def update_knowledge(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    return await service.update_knowledge(
+    row = await service.update_knowledge(
         db, **_identity(context), connection_id=connection_id, request=request
     )
+    return service.connection_response(row)
+
+
+@router.put("/connections/{connection_id}/voice", response_model=ConnectionResponse)
+async def update_voice(
+    connection_id: str,
+    request: VoiceUpdate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    row = await service.update_voice(
+        db, **_identity(context), connection_id=connection_id, request=request
+    )
+    return service.connection_response(row)
 
 
 @router.delete("/connections/{connection_id}", status_code=204)

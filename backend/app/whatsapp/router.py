@@ -7,7 +7,8 @@ from fastapi.responses import PlainTextResponse
 
 from app.config import settings
 from app.whatsapp.automation import receive
-from app.whatsapp.customer_automation import receive_customer
+from app.whatsapp.customer_intake import receive_customer
+from app.whatsapp.logging import report_failure
 from app.whatsapp.service import event_counts, valid_signature
 
 # Third-party callbacks are excluded from the browser client's OpenAPI contract.
@@ -43,8 +44,9 @@ async def verify_webhook(
 @router.post("")
 async def receive_webhook(request: Request) -> dict[str, str]:
     require_demo()
+    # Customer webhooks are routed per agent from the database, not by an env number.
     if not settings.WHATSAPP_APP_SECRET or not (
-        settings.WHATSAPP_PHONE_NUMBER_ID or settings.WHATSAPP_CUSTOMER_PHONE_NUMBER_ID
+        settings.WHATSAPP_PHONE_NUMBER_ID or settings.WHATSAPP_CUSTOMER_AUTOMATION_ENABLED
     ):
         raise HTTPException(503, "Webhook reception is not configured")
     signature = request.headers.get("x-hub-signature-256", "")
@@ -73,6 +75,12 @@ async def receive_webhook(request: Request) -> dict[str, str]:
             raise HTTPException(503, "Automation configuration is incomplete") from None
         except (TypeError, AttributeError):
             raise HTTPException(400, "Invalid WhatsApp event") from None
+        except Exception as exc:
+            # Exception text can echo SQL values or customer text, and an unhandled error
+            # would reach Honeybadger and the server log with it. Report the class only.
+            logger.error("WhatsApp webhook processing failed (%s)", type(exc).__name__)
+            report_failure(exc)
+            raise HTTPException(500, "Webhook processing failed") from None
         return {"status": "queued" if queued else "ignored_or_duplicate"}
     # Diagnostic mode discards content and performs no CRM/AI/send actions.
     # Retries may repeat these counts. This is not a delivery ledger or inbox.

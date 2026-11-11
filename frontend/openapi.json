@@ -9761,6 +9761,56 @@
 				}
 			}
 		},
+		"/api/v1/whatsapp/connections/{connection_id}/voice": {
+			"put": {
+				"tags": ["whatsapp", "WhatsApp review"],
+				"summary": "Update Voice",
+				"operationId": "whatsapp-update_voice",
+				"parameters": [
+					{
+						"name": "connection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Connection Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/VoiceUpdate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConnectionResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/whatsapp/connections/{connection_id}/threads": {
 			"get": {
 				"tags": ["whatsapp", "WhatsApp review"],
@@ -10459,6 +10509,307 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/signup/config": {
+			"get": {
+				"tags": ["whatsapp", "WhatsApp connection"],
+				"summary": "Signup Config",
+				"description": "Start: public FB.login values plus a state the completion must return.",
+				"operationId": "whatsapp-signup_config",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SignupConfigResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/signup/complete": {
+			"post": {
+				"tags": ["whatsapp", "WhatsApp connection"],
+				"summary": "Signup Complete",
+				"operationId": "whatsapp-signup_complete",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SignupComplete"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentConnectionStatus"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connection": {
+			"get": {
+				"tags": ["whatsapp", "WhatsApp connection"],
+				"summary": "Connection Status",
+				"operationId": "whatsapp-connection_status",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentConnectionStatus"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connection/automation": {
+			"patch": {
+				"tags": ["whatsapp", "WhatsApp connection"],
+				"summary": "Toggle Automation",
+				"operationId": "whatsapp-toggle_automation",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AutomationToggle"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentConnectionStatus"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connection/disconnect": {
+			"post": {
+				"tags": ["whatsapp", "WhatsApp connection"],
+				"summary": "Disconnect",
+				"operationId": "whatsapp-disconnect",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentConnectionStatus"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connection/contacts": {
+			"get": {
+				"tags": ["whatsapp", "WhatsApp connection"],
+				"summary": "List Contacts",
+				"operationId": "whatsapp-list_contacts",
+				"parameters": [
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 100
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					},
+					{
+						"name": "blocked",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "boolean"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Blocked"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 50,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ContactPage"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connection/contacts/blocked": {
+			"put": {
+				"tags": ["whatsapp", "WhatsApp connection"],
+				"summary": "Set Blocked",
+				"operationId": "whatsapp-set_blocked",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/BlockRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/BlockResult"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/whatsapp/connection/contacts/sync": {
+			"post": {
+				"tags": ["whatsapp", "WhatsApp connection"],
+				"summary": "Request Contacts Sync",
+				"operationId": "whatsapp-request_contacts_sync",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentConnectionStatus"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/admin/whatsapp/connections": {
+			"get": {
+				"tags": ["admin", "admin"],
+				"summary": "Admin Connections",
+				"description": "How many agents are connected, and the state of each number.",
+				"operationId": "admin-admin_connections",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AdminConnectionList"
 								}
 							}
 						}
@@ -11870,6 +12221,416 @@
 				"required": ["lead_id", "body"],
 				"title": "AddNote"
 			},
+			"AdminConnectionList": {
+				"properties": {
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"connected": {
+						"type": "integer",
+						"title": "Connected"
+					},
+					"automation_on": {
+						"type": "integer",
+						"title": "Automation On"
+					},
+					"automation_paused": {
+						"type": "integer",
+						"title": "Automation Paused",
+						"default": 0
+					},
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/AdminConnectionRow"
+						},
+						"type": "array",
+						"title": "Items"
+					}
+				},
+				"type": "object",
+				"required": ["total", "connected", "automation_on", "items"],
+				"title": "AdminConnectionList"
+			},
+			"AdminConnectionRow": {
+				"properties": {
+					"connection_id": {
+						"type": "string",
+						"title": "Connection Id"
+					},
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"user_email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "User Email"
+					},
+					"organization_id": {
+						"type": "string",
+						"title": "Organization Id"
+					},
+					"organization_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Organization Name"
+					},
+					"phone_number_id": {
+						"type": "string",
+						"title": "Phone Number Id"
+					},
+					"display_phone_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Display Phone Number"
+					},
+					"display_name": {
+						"type": "string",
+						"title": "Display Name"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"onboarding_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Onboarding Type"
+					},
+					"automation_enabled": {
+						"type": "boolean",
+						"title": "Automation Enabled"
+					},
+					"automation_active": {
+						"type": "boolean",
+						"title": "Automation Active",
+						"default": false
+					},
+					"automation_paused_reason": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["assistant_disabled", "intake_disabled"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Automation Paused Reason"
+					},
+					"contacts_total": {
+						"type": "integer",
+						"title": "Contacts Total"
+					},
+					"contacts_blocked": {
+						"type": "integer",
+						"title": "Contacts Blocked"
+					},
+					"contacts_synced_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Contacts Synced At"
+					},
+					"last_message_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Message At"
+					},
+					"connected_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Connected At"
+					},
+					"disconnected_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Disconnected At"
+					},
+					"can_send_message": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Can Send Message"
+					}
+				},
+				"type": "object",
+				"required": [
+					"connection_id",
+					"user_id",
+					"user_email",
+					"organization_id",
+					"organization_name",
+					"phone_number_id",
+					"display_phone_number",
+					"display_name",
+					"status",
+					"onboarding_type",
+					"automation_enabled",
+					"contacts_total",
+					"contacts_blocked",
+					"contacts_synced_at",
+					"last_message_at",
+					"connected_at",
+					"disconnected_at",
+					"can_send_message"
+				],
+				"title": "AdminConnectionRow"
+			},
+			"AgentConnectionStatus": {
+				"properties": {
+					"state": {
+						"type": "string",
+						"enum": ["not_configured", "not_connected", "connected", "disconnected"],
+						"title": "State"
+					},
+					"signup_configured": {
+						"type": "boolean",
+						"title": "Signup Configured"
+					},
+					"connection_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Connection Id"
+					},
+					"phone_number_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone Number Id"
+					},
+					"waba_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Waba Id"
+					},
+					"business_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Business Id"
+					},
+					"display_phone_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Display Phone Number"
+					},
+					"display_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Display Name"
+					},
+					"onboarding_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Onboarding Type"
+					},
+					"automation_enabled": {
+						"type": "boolean",
+						"title": "Automation Enabled",
+						"default": false
+					},
+					"automation_active": {
+						"type": "boolean",
+						"title": "Automation Active",
+						"default": false
+					},
+					"automation_paused_reason": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["assistant_disabled", "intake_disabled"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Automation Paused Reason"
+					},
+					"connected_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Connected At"
+					},
+					"disconnected_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Disconnected At"
+					},
+					"last_account_event": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Account Event"
+					},
+					"quality_rating": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Quality Rating"
+					},
+					"can_send_message": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Can Send Message"
+					},
+					"health_errors": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array",
+						"title": "Health Errors"
+					},
+					"payment_method_status": {
+						"type": "string",
+						"const": "unknown",
+						"title": "Payment Method Status",
+						"default": "unknown"
+					},
+					"contacts": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/ContactCounts"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				"type": "object",
+				"required": ["state", "signup_configured"],
+				"title": "AgentConnectionStatus",
+				"description": "State of the signed-in agent's WhatsApp number.\n\nstate: not_configured (Meta setup missing on the server), not_connected,\nconnected, disconnected."
+			},
 			"AnalyticsResponse": {
 				"properties": {
 					"timeframe_days": {
@@ -12672,6 +13433,61 @@
 				],
 				"title": "AuthMeResponse"
 			},
+			"AutomationToggle": {
+				"properties": {
+					"enabled": {
+						"type": "boolean",
+						"title": "Enabled"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["enabled"],
+				"title": "AutomationToggle"
+			},
+			"BlockRequest": {
+				"properties": {
+					"contact_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 1000,
+						"title": "Contact Ids"
+					},
+					"phone_numbers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 1000,
+						"title": "Phone Numbers"
+					},
+					"blocked": {
+						"type": "boolean",
+						"title": "Blocked"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["blocked"],
+				"title": "BlockRequest"
+			},
+			"BlockResult": {
+				"properties": {
+					"updated": {
+						"type": "integer",
+						"title": "Updated"
+					},
+					"blocked_total": {
+						"type": "integer",
+						"title": "Blocked Total"
+					}
+				},
+				"type": "object",
+				"required": ["updated", "blocked_total"],
+				"title": "BlockResult"
+			},
 			"Body_crm-crm_contact_import": {
 				"properties": {
 					"file": {
@@ -13404,6 +14220,23 @@
 						"type": "boolean",
 						"title": "Enabled"
 					},
+					"automation_active": {
+						"type": "boolean",
+						"title": "Automation Active",
+						"default": false
+					},
+					"automation_paused_reason": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["assistant_disabled", "intake_disabled"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Automation Paused Reason"
+					},
 					"market_data_enabled": {
 						"type": "boolean",
 						"title": "Market Data Enabled",
@@ -13415,6 +14248,16 @@
 						},
 						"type": "array",
 						"title": "Approved Knowledge"
+					},
+					"reply_voice": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/VoiceProfile"
+							},
+							{
+								"type": "null"
+							}
+						]
 					},
 					"created_at": {
 						"type": "string",
@@ -13481,6 +14324,137 @@
 				"additionalProperties": false,
 				"type": "object",
 				"title": "ConnectionUpdate"
+			},
+			"ContactCounts": {
+				"properties": {
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"blocked": {
+						"type": "integer",
+						"title": "Blocked"
+					},
+					"sync_requested_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sync Requested At"
+					},
+					"synced_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Synced At"
+					}
+				},
+				"type": "object",
+				"required": ["total", "blocked", "sync_requested_at", "synced_at"],
+				"title": "ContactCounts"
+			},
+			"ContactPage": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/ContactResponse"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": ["items", "total", "limit", "offset"],
+				"title": "ContactPage"
+			},
+			"ContactResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"wa_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Wa Id"
+					},
+					"name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Name"
+					},
+					"in_address_book": {
+						"type": "boolean",
+						"title": "In Address Book"
+					},
+					"blocked": {
+						"type": "boolean",
+						"title": "Blocked"
+					},
+					"blocked_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Blocked At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"wa_id",
+					"name",
+					"in_address_book",
+					"blocked",
+					"blocked_at",
+					"updated_at"
+				],
+				"title": "ContactResponse"
 			},
 			"ConversationListResponse": {
 				"properties": {
@@ -18755,6 +19729,17 @@
 						},
 						"type": "array",
 						"title": "Evidence Ids"
+					},
+					"handoff_summary": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Handoff Summary"
 					},
 					"revision": {
 						"type": "integer",
@@ -29881,6 +30866,142 @@
 				"title": "SendMessageRequest",
 				"description": "Request model for sending a message in a conversation"
 			},
+			"SignupComplete": {
+				"properties": {
+					"state": {
+						"type": "string",
+						"maxLength": 512,
+						"minLength": 1,
+						"title": "State"
+					},
+					"code": {
+						"type": "string",
+						"maxLength": 2048,
+						"minLength": 1,
+						"title": "Code"
+					},
+					"phone_number_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 64,
+								"minLength": 1,
+								"pattern": "^\\d+$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone Number Id"
+					},
+					"waba_id": {
+						"type": "string",
+						"maxLength": 64,
+						"minLength": 1,
+						"pattern": "^\\d+$",
+						"title": "Waba Id"
+					},
+					"business_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 64,
+								"minLength": 1,
+								"pattern": "^\\d+$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Business Id"
+					},
+					"event": {
+						"type": "string",
+						"enum": ["FINISH", "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", "FINISH_ONLY_WABA"],
+						"title": "Event"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["state", "code", "waba_id", "event"],
+				"title": "SignupComplete"
+			},
+			"SignupConfigResponse": {
+				"properties": {
+					"configured": {
+						"type": "boolean",
+						"title": "Configured"
+					},
+					"missing": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Missing"
+					},
+					"app_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "App Id"
+					},
+					"config_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Config Id"
+					},
+					"graph_api_version": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Graph Api Version"
+					},
+					"extras": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Extras"
+					},
+					"state": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "State"
+					}
+				},
+				"type": "object",
+				"required": [
+					"configured",
+					"missing",
+					"app_id",
+					"config_id",
+					"graph_api_version",
+					"extras",
+					"state"
+				],
+				"title": "SignupConfigResponse",
+				"description": "Public values for FB.init/FB.login. `configured` is false until Meta is set up."
+			},
 			"StudyContext": {
 				"properties": {
 					"headline": {
@@ -32096,6 +33217,98 @@
 				"type": "object",
 				"required": ["id", "lead_id", "title", "location", "status", "starts_at", "ends_at"],
 				"title": "ViewingResponse"
+			},
+			"VoiceProfile": {
+				"properties": {
+					"agent_name": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 80,
+								"minLength": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Name"
+					},
+					"tone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200,
+								"minLength": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Tone"
+					},
+					"sign_off": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 80,
+								"minLength": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sign Off"
+					},
+					"languages": {
+						"items": {
+							"type": "string",
+							"maxLength": 30,
+							"minLength": 1
+						},
+						"type": "array",
+						"maxItems": 8,
+						"title": "Languages"
+					},
+					"sample_messages": {
+						"items": {
+							"type": "string",
+							"maxLength": 300,
+							"minLength": 1
+						},
+						"type": "array",
+						"maxItems": 3,
+						"title": "Sample Messages"
+					},
+					"emoji": {
+						"type": "string",
+						"enum": ["none", "light"],
+						"title": "Emoji",
+						"default": "none"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "VoiceProfile",
+				"description": "How this agent writes. Free text is the agent's own; it is still screened for\ninstruction-like content before it can reach the drafter prompt."
+			},
+			"VoiceUpdate": {
+				"properties": {
+					"voice": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/VoiceProfile"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["voice"],
+				"title": "VoiceUpdate",
+				"description": "`voice: null` resets the agent to the default voice."
 			},
 			"WebhookStatusResponse": {
 				"properties": {
