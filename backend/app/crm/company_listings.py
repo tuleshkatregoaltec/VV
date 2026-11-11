@@ -15,6 +15,7 @@ from app.crm.models import (
     CrmCompanyListing,
     CrmCompanyListingAgentInventory,
     CrmCompanyListingCompany,
+    CrmCompanyListingDetail,
     CrmCompanyListingResponse,
     CrmCompanyListingSource,
     CrmCompanyListingsResponse,
@@ -276,7 +277,9 @@ async def list_company_listings(
             listings=0,
             agents=0,
             last_scraped_at=None,
-        ) if source else None,
+        )
+        if source
+        else None,
     )
     company = next((item for item in companies if item.broker_id == broker_id), None)
     if broker_id and company is None:
@@ -330,7 +333,9 @@ async def list_company_listings(
         agents=agent_inventory,
         items=items,
         # A search counts its matches; otherwise the agent's or company's listing total.
-        total=int(rows[0]["matched_total"]) if rows else 0
+        total=int(rows[0]["matched_total"])
+        if rows
+        else 0
         if search and search.strip()
         else selected_agent.listings
         if selected_agent
@@ -343,6 +348,36 @@ async def list_company_listings(
         ),
         limit=limit,
         offset=offset,
+    )
+
+
+async def get_company_listing(
+    db: AsyncSession, organization_id: str, listing_key: str
+) -> CrmCompanyListingDetail | None:
+    """A currently published Property Finder listing by its listing id, or None."""
+    rows = await query(
+        f"""{_CURRENT_LISTINGS}
+        SELECT *
+        FROM current_listings
+        WHERE is_available = 1 AND listing_id = {{listing_key:String}} AND {_COMPANY_LISTING_FIELDS}
+        LIMIT 1
+        """,
+        {"listing_key": listing_key},
+    )
+    if not rows:
+        return None
+    row = rows[0]
+    source = await _selected_source(db, organization_id)
+    listing = CrmCompanyListingResponse.model_validate(
+        _listing(row, organization_id, datetime.now(timezone.utc)), from_attributes=True
+    )
+    broker_id = str(row["broker_id"])
+    return CrmCompanyListingDetail(
+        **listing.model_dump(),
+        listing_key=listing_key,
+        broker_id=broker_id,
+        broker_name=str(row["broker_name"]),
+        managed=source is not None and source.broker_id == broker_id,
     )
 
 
