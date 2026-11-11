@@ -1,0 +1,15 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "vv-pilot",
+	"pages_build_output_dir": ".svelte-kit/cloudflare",
+	"compatibility_date": "2026-01-14",
+	"compatibility_flags": ["nodejs_compat"],
+	"vars": {
+		"PUBLIC_API_BASE_URL": "https://api-pilot.vitevue.com",
+		"PUBLIC_AUTH_BASE_URL": "https://fxszmyazeonmxxeixzoh.supabase.co/auth/v1",
+		"PUBLIC_AUTH_PUBLISHABLE_KEY": "sb_publishable_vOfusDagrm47CoKarmjlig_FbGtJR75",
+		"PUBLIC_CRM_PRESENTATION_MODE": "false",
+		"PUBLIC_POSTHOG_KEY": "",
+		"PUBLIC_POSTHOG_HOST": ""
+	}
+}

@@ -368,7 +368,7 @@ class InboundActivityResponse(BaseModel):
 class InboundOwnershipEnrichmentResponse(BaseModel):
     matched: bool = False
     match_basis: Literal["phone", "email", "name", "none"] = "none"
-    verification: Literal["contact_exact", "name_only", "none"] = "none"
+    verification: Literal["contact_exact", "name_only", "none", "not_checked", "stored"] = "none"
     current_owner: bool = False
     former_owner: bool = False
     rental_owner: bool = False

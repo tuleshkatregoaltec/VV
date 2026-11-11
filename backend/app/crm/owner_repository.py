@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import orjson
-from sqlalchemy import String, exists, func, or_, text
+from sqlalchemy import ARRAY, Integer, String, any_, exists, func, literal, or_, text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -27,14 +27,26 @@ async def list_owner_history_rows(
     canonical_phone_digits: list[str] | None = None,
     canonical_emails: list[str] | None = None,
     additional_property_keys: list[str] | None = None,
+    unit_candidate_keys: list[str] | None = None,
+    claim_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
     """Read only the history projection's fields, without raw contact/source JSON.
 
     Context deliberately spans imports and owners of the selected properties. A
     selected file must not hide a later disposal or competing acquisition.
+
+    ``unit_candidate_keys`` reads just the claims of those lease units plus every
+    other claim on the same properties (so a competing owner still counts), instead
+    of the organization's whole claim table. ``claim_ids`` reads exactly those claims.
     """
     claim = CrmPropertyContactClaim
     scope = [claim.organization_id == organization_id]
+    unit_scope = None
+    if unit_candidate_keys is not None:
+        # One array parameter, not one bind per key: the key list grows with the
+        # agent's workspaces and asyncpg caps a statement at 32,767 parameters.
+        keys = any_(literal(sorted(set(unit_candidate_keys)), ARRAY(String)))
+        unit_scope = claim.unit_candidate_key == keys
     if owner_key is not None:
         scope.append(claim.owner_key == owner_key)
     if import_id is not None:
@@ -129,7 +141,23 @@ async def list_owner_history_rows(
         )
         .where(claim.import_id.in_(sources))
     )
-    if property_context:
+    if claim_ids is not None:
+        statement = statement.where(
+            claim.organization_id == organization_id,
+            claim.id == any_(literal(sorted(set(claim_ids)), ARRAY(Integer))),
+        )
+    elif unit_scope is not None:
+        # Every claim on a property that has a claim on one of the units; that already
+        # includes the units' own claims.
+        statement = statement.where(
+            claim.organization_id == organization_id,
+            claim.property_key.in_(
+                select(claim.property_key).where(
+                    claim.organization_id == organization_id, unit_scope
+                )
+            ),
+        )
+    elif property_context:
         statement = statement.where(claim.organization_id == organization_id)
         if import_id is not None and owner_key is None:
             # The selected import is already loaded. Read other imports once;

@@ -7,6 +7,7 @@ import FileText from 'lucide-svelte/icons/file-text'
 import House from 'lucide-svelte/icons/house'
 import Inbox from 'lucide-svelte/icons/inbox'
 import LayoutGrid from 'lucide-svelte/icons/layout-grid'
+import MessageCircle from 'lucide-svelte/icons/message-circle'
 import Plug from 'lucide-svelte/icons/plug'
 import Send from 'lucide-svelte/icons/send'
 import User from 'lucide-svelte/icons/user'
@@ -76,7 +77,8 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 				count: counts?.events_today ?? null,
 				countLabel: 'today'
 			},
-			{ href: '/crm/assistant', label: 'Assistant', icon: Send, count: null }
+			{ href: '/crm/assistant', label: 'Assistant', icon: Send, count: null },
+			{ href: '/crm/whatsapp', label: 'WhatsApp', icon: MessageCircle, count: null }
 		]
 	},
 	{

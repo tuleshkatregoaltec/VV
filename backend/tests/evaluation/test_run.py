@@ -61,3 +61,46 @@ async def test_stream_failure_still_cleans_up_only_its_created_conversation():
     assert result["error_type"] == "HTTPStatusError"
     assert calls[-1].method == "DELETE"
     assert calls[-1].url.path.endswith("owned-evaluation-conversation")
+
+
+async def test_http_flow_reuses_conversation_for_fresh_followup_and_persisted_history():
+    from scripts.evaluation.http_trial import load_http_flow_cases
+
+    case = load_http_flow_cases(["route_multiturn"])[0]
+    questions, created, deleted = [], [], []
+
+    def handle(request):
+        if request.method == "DELETE":
+            deleted.append(request.url.path)
+            return httpx.Response(204)
+        if request.url.path.endswith("/stream"):
+            assert request.headers["x-vv-evaluation-case"] == "route_multiturn"
+            assert "/77/messages/stream" in request.url.path
+            questions.append(json.loads(request.content)["message"])
+            return httpx.Response(
+                200,
+                text='data: {"type":"content","content":"Leena budget AED 1.2m"}\n\ndata: {"type":"done"}\n\n',
+            )
+        if request.method == "POST":
+            created.append(request.url.path)
+            return httpx.Response(200, json={"id": 77})
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "role": "assistant",
+                    "content": "Leena budget AED 1.2m",
+                    "meta_data": {"private": True},
+                }
+            ],
+        )
+
+    async with httpx.AsyncClient(
+        base_url="http://localhost", transport=httpx.MockTransport(handle)
+    ) as client:
+        result = await execute_case(client, case, 5)
+    assert questions == case.turns
+    assert len(created) == len(deleted) == 1
+    assert result["completed"] is True
+    assert len(result["turns"]) == 2
+    assert all("AED 1.2m" in turn["answer"] for turn in result["turns"])

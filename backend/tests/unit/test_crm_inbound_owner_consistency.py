@@ -117,3 +117,38 @@ async def test_inbound_registry_detail_agrees_with_shared_assessment(monkeypatch
     assert len(profiles) == 1
     assert profiles[0].ownership_status == "conflicting_claim"
     assert profiles[0].contact_name == "Example Person"
+
+
+async def test_disabled_enrichment_is_unchecked_and_does_not_load_owner_data(monkeypatch):
+    monkeypatch.setattr(inbound.settings, "CRM_INBOUND_OWNER_ENRICHMENT_MODE", "off")
+    lookup = AsyncMock(side_effect=AssertionError("Optional ownership lookup must not run"))
+    monkeypatch.setattr(inbound.inbound_repository, "find_identity_claims", lookup)
+    monkeypatch.setattr(inbound.inbound_repository, "find_contact_claims", lookup)
+    monkeypatch.setattr(inbound, "get_owner_assessment", lookup)
+    result = await inbound._bulk_ownership_enrichments(
+        None, organization_id="org", contacts=[_contact()], owner_keys={1: "source-owner"}
+    )
+    assert result[1].verification == "not_checked"
+    assert result[1].reasons == ["Ownership not checked"]
+    assert not result[1].matched
+    assert not result[1].current_owner
+    assert await inbound._registry_profiles(None, contact=_contact(), criteria={}) == []
+    lookup.assert_not_awaited()
+
+
+async def test_stored_mode_replays_saved_results_without_claiming_fresh_verification(monkeypatch):
+    monkeypatch.setattr(inbound.settings, "CRM_INBOUND_OWNER_ENRICHMENT_MODE", "stored")
+    claims = [_claim(1)]
+    monkeypatch.setattr(
+        inbound.inbound_repository, "find_identity_claims", AsyncMock(return_value=claims)
+    )
+    assessment = AsyncMock(side_effect=AssertionError("Demo must not rebuild the registry"))
+    monkeypatch.setattr(inbound, "get_owner_assessment", assessment)
+    result = await inbound._bulk_ownership_enrichments(
+        None, organization_id="org", contacts=[_contact()]
+    )
+    assert result[1].matched and result[1].current_owner
+    assert result[1].verification == "stored"
+    assert result[1].reasons[0] == "Ownership on file"
+    assert claims[0].ownership_status == "verified_current_owner"
+    assessment.assert_not_awaited()

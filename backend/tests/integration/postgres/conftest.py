@@ -61,7 +61,7 @@ def isolated_crm_owner_assessment_cache(request, monkeypatch):
     """PostgreSQL tests exercise committed evidence without a cross-loop Redis client."""
     if not request.path.name.startswith("test_crm_"):
         return
-    from app.crm import owner_assessment, owners
+    from app.crm import owner_assessment
 
     class AssessmentCache:
         def __init__(self):
@@ -76,7 +76,6 @@ def isolated_crm_owner_assessment_cache(request, monkeypatch):
     cache = AssessmentCache()
     monkeypatch.setattr(owner_assessment, "_cache_client", lambda: cache)
     monkeypatch.setattr(owner_assessment, "_recent", None)
-    monkeypatch.setattr(owners, "_owner_profiles_cache", None)
 
 
 @pytest.fixture

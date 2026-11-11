@@ -15,11 +15,11 @@ from app.chat.workflows import (
     research_market,
     retrieve_personal_crm,
 )
-from app.core.openrouter import create_openrouter_model
+from app.core.openrouter import create_assistant_model
 from app.market.periods import business_today
 
 agent = Agent(
-    create_openrouter_model(),
+    create_assistant_model(role="coordinator"),
     name="market_chat",
     deps_type=ChatDependencies | None,
     model_settings=SETTINGS,

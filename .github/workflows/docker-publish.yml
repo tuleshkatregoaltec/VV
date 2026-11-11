@@ -1,8 +1,10 @@
 name: Deploy
 
+# LEGACY: builds the old image and deploys to ph-box (the old vitevue.com backend).
+# The automatic trigger on pushes to `production` is switched off so a push can never
+# change the old live backend. The pilot deploys with deploy-backend.yml instead.
 on:
-  push:
-    branches: ["production"]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io

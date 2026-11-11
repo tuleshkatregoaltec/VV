@@ -1,4 +1,5 @@
 import os
+import re
 import warnings
 from functools import cached_property
 from pathlib import Path
@@ -25,6 +26,20 @@ def parse_cors(v: Any) -> list[str] | str:
     if isinstance(v, list | str):
         return v
     raise ValueError(v)
+
+
+def validate_assistant_model_id(value: str) -> str:
+    """Reject prohibited families and implicit model routing for every assistant role."""
+    value = value.strip()
+    normalized = "".join(character for character in value.lower() if character.isalnum())
+    if (
+        not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.:+-]+", value)
+        or "gemini" in normalized
+        or ("qwen38" in normalized and "max" in normalized)
+        or value.lower().startswith("openrouter/")
+    ):
+        raise ValueError("Assistant roles require an explicit non-Gemini, non-Qwen3.8-Max model")
+    return value
 
 
 class Settings(BaseSettings):
@@ -54,6 +69,9 @@ class Settings(BaseSettings):
 
     # CORS
     ALLOWED_ORIGINS: Annotated[list[AnyUrl] | str, BeforeValidator(parse_cors)] = []
+    # Optional full-match regex for extra origins, e.g. Cloudflare Pages previews:
+    # ^https://[a-z0-9-]+\.vv-pilot\.pages\.dev$
+    ALLOWED_ORIGIN_REGEX: str | None = None
 
     # Honeybadger
     HONEYBADGER_API_KEY: str | None = None
@@ -69,9 +87,40 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str  # Bitwarden Secrets
     DEFAULT_CHAT_MODEL: str  # configMap
 
+    # Assistant qualification candidates are isolated from feasibility and imports.
+    # Enable only after capped model evaluations and provider/privacy approval.
+    ASSISTANT_ENABLED: bool = False
+    ASSISTANT_TYPED_ROUTING_ENABLED: bool = False
+    ASSISTANT_ROUTER_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_COORDINATOR_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_MARKET_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_PRICING_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_CRM_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_FOLLOWUP_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_ACTION_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_WHATSAPP_CLASSIFIER_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_WHATSAPP_DRAFTER_MODEL: str = "openai/gpt-6-luna"
+
+    @field_validator(
+        "ASSISTANT_ROUTER_MODEL",
+        "ASSISTANT_COORDINATOR_MODEL",
+        "ASSISTANT_MARKET_MODEL",
+        "ASSISTANT_PRICING_MODEL",
+        "ASSISTANT_CRM_MODEL",
+        "ASSISTANT_FOLLOWUP_MODEL",
+        "ASSISTANT_ACTION_MODEL",
+        "ASSISTANT_WHATSAPP_CLASSIFIER_MODEL",
+        "ASSISTANT_WHATSAPP_DRAFTER_MODEL",
+    )
+    @classmethod
+    def validate_assistant_models(cls, value: str) -> str:
+        return validate_assistant_model_id(value)
+
     # Auth
     AUTH_URL: AnyUrl  # configMap
     AUTH_SERVICE_ROLE_KEY: str  # Bitwarden Secrets
+    # Hosted Supabase requires an `apikey` header on every /auth/v1 call; self-hosted GoTrue ignores it.
+    AUTH_PUBLISHABLE_KEY: str | None = None
     FIRST_SUPERUSER: EmailStr | None = None
     FIRST_SUPERUSER_PASSWORD: str | None = None
     FIRST_SUPERUSER_RENAME_FROM: EmailStr | None = None
@@ -102,6 +151,7 @@ class Settings(BaseSettings):
 
     # CRM worker-local resource budgets; account for all workers/replicas when sizing.
     CRM_RENTAL_BASE_ENABLED: bool = False
+    CRM_INBOUND_OWNER_ENRICHMENT_MODE: Literal["live", "stored", "off"] = "live"
     CRM_MAX_EXPENSIVE_REQUESTS: int = Field(default=2, ge=1, le=32)
     CRM_MAX_EXPENSIVE_REQUESTS_PER_ORG: int = Field(default=2, ge=1, le=16)
     CRM_MAX_CONCURRENT_QUERIES: int = Field(default=1, ge=1, le=8)
@@ -113,6 +163,37 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str  # Bitwarden Secrets
     STRIPE_PRICE_ID_TIER1: str  # configMap
     STRIPE_PRICE_ID_TIER2: str  # configMap
+
+    # Single-number WhatsApp connectivity demo. Credentials stay server-side.
+    WHATSAPP_DEMO_ENABLED: bool = False
+    WHATSAPP_VERIFY_TOKEN: str | None = Field(default=None, repr=False)
+    WHATSAPP_APP_SECRET: str | None = Field(default=None, repr=False)
+    WHATSAPP_ACCESS_TOKEN: str | None = Field(default=None, repr=False)
+    WHATSAPP_PHONE_NUMBER_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    WHATSAPP_TEST_RECIPIENT: str | None = Field(default=None, pattern=r"^\d{7,15}$")
+    WHATSAPP_GRAPH_API_VERSION: str | None = Field(default=None, pattern=r"^v\d+\.\d+$")
+    WHATSAPP_TEST_TEMPLATE: Literal["hello_world", "jaspers_market_order_confirmation_v1"] = (
+        "hello_world"
+    )
+    WHATSAPP_AUTOMATION_ENABLED: bool = False
+    WHATSAPP_PILOT_USER_ID: str | None = None
+    WHATSAPP_PILOT_ORGANIZATION_ID: str | None = None
+    WHATSAPP_MAX_DAILY_TURNS: int = Field(default=20, ge=1, le=100)
+    # Customer channel is separate from the private self-assistant pilot.
+    WHATSAPP_CUSTOMER_AUTOMATION_ENABLED: bool = False
+    WHATSAPP_CUSTOMER_PHONE_NUMBER_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    WHATSAPP_CUSTOMER_ACCOUNT_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    WHATSAPP_CUSTOMER_ACCESS_TOKEN: str | None = Field(default=None, repr=False)
+    WHATSAPP_CUSTOMER_TEST_RECIPIENT: str | None = Field(default=None, pattern=r"^\d{7,15}$")
+    # Multi-agent Embedded Signup. App and configuration IDs are public values the
+    # browser SDK needs; the app secret above exchanges codes server-side.
+    WHATSAPP_APP_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    # Comma-separated Fernet keys; the first encrypts, all decrypt (rotation).
+    WHATSAPP_TOKEN_ENCRYPTION_KEY: str | None = Field(default=None, repr=False)
+    WHATSAPP_CLASSIFIER_CONCURRENCY: int = Field(default=4, ge=1, le=32)
+    # Read receipt, typing indicator and a human-paced delay before automatic replies.
+    WHATSAPP_HUMAN_TIMING_ENABLED: bool = True
 
     # Frontend URLs for Stripe redirects
     FRONTEND_SUCCESS_URL: AnyUrl  # configMap

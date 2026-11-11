@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.config import settings
 from app.crm import inbound_repository, owner_queries
 from app.crm.identity import _identity_text, _location_key, _normalize_email, _normalize_phone
 from app.crm.import_models import CrmPropertyContactClaim
@@ -183,6 +184,9 @@ async def _assessed_inbound_claims(
 ) -> list[CrmPropertyContactClaim]:
     if not claims:
         return []
+    if settings.CRM_INBOUND_OWNER_ENRICHMENT_MODE == "stored":
+        # Replay saved evidence for a demo without claiming a fresh registry assessment.
+        return claims
     snapshot = await get_owner_assessment(db, organization_id=organization_id)
     valid_ids = {row["id"] for row in snapshot.rows if row["property_identity"] is not None}
     return _projected_claims([claim for claim in claims if claim.id in valid_ids], snapshot.rows)
@@ -230,6 +234,13 @@ async def _bulk_ownership_enrichments(
     """
     if not contacts:
         return {}
+    if settings.CRM_INBOUND_OWNER_ENRICHMENT_MODE == "off":
+        return {
+            contact.id or 0: InboundOwnershipEnrichmentResponse(
+                verification="not_checked", reasons=["Ownership not checked"]
+            )
+            for contact in contacts
+        }
     owner_keys = owner_keys or {}
     matches: dict[int, list[tuple[CrmPropertyContactClaim, str]]] = {}
     by_owner_key: dict[str, set[int]] = {}
@@ -294,10 +305,15 @@ async def _bulk_ownership_enrichments(
                 else "name"
             )
             matches.setdefault(contact_id, []).append((claim, basis))
-    return {
+    enrichments = {
         contact_id: _ownership_enrichment(contact_matches)
         for contact_id, contact_matches in matches.items()
     }
+    if settings.CRM_INBOUND_OWNER_ENRICHMENT_MODE == "stored":
+        for enrichment in enrichments.values():
+            enrichment.verification = "stored"
+            enrichment.reasons.insert(0, "Ownership on file")
+    return enrichments
 
 
 async def _registry_transaction_evidence(
@@ -537,6 +553,8 @@ async def _registry_profiles(
     contact: CrmInboundContact,
     criteria: dict[str, Any],
 ) -> list[InboundRegistryProfileResponse]:
+    if settings.CRM_INBOUND_OWNER_ENRICHMENT_MODE == "off":
+        return []
     claims = await inbound_repository.find_contact_claims(db, contact)
     claims = await _assessed_inbound_claims(db, contact.organization_id, list(claims))
     claims = [
@@ -544,7 +562,10 @@ async def _registry_profiles(
         for claim in claims
         if _identity_text(claim.contact_name) == _identity_text(contact.full_name)
     ]
-    sale_evidence, lease_evidence = await _registry_transaction_evidence(claims)
+    stored = settings.CRM_INBOUND_OWNER_ENRICHMENT_MODE == "stored"
+    sale_evidence, lease_evidence = (
+        ({}, {}) if stored else await _registry_transaction_evidence(claims)
+    )
     building = _token(criteria.get("building"))
     unit_number = _token(criteria.get("unit_number"))
     location_tokens = [_token(item) for item in _locations(criteria)]
@@ -606,7 +627,9 @@ async def _registry_profiles(
                 contact_name=claim.contact_name,
                 ownership_status=claim.ownership_status,
                 identity_strength=identity_strength,  # type: ignore[arg-type]
-                identity_reason=identity_reason,
+                identity_reason=f"Saved owner record: {identity_reason}"
+                if stored
+                else identity_reason,
                 area_name=claim.area_name,
                 project_name=claim.project_name,
                 building_name=claim.building_name,

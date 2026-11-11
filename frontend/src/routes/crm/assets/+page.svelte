@@ -7,7 +7,7 @@ import Search from 'lucide-svelte/icons/search'
 import UserRound from 'lucide-svelte/icons/user-round'
 import Users from 'lucide-svelte/icons/users'
 import X from 'lucide-svelte/icons/x'
-import { crm } from '$lib/crm/api'
+import { crm, crmPresentationMode } from '$lib/crm/api'
 import type {
 	CompanyListingAgentInventory,
 	ListingCard,
@@ -145,9 +145,12 @@ const facts = $derived.by(() => {
 })
 
 const TABS: { id: AssetTab; label: string }[] = [
-	{ id: 'mine', label: 'My listings · coming soon' },
-	{ id: 'company', label: 'Company listings · coming soon' },
-	{ id: 'portfolio', label: 'Portfolio · coming soon' },
+	{ id: 'mine', label: crmPresentationMode ? 'My listings' : 'My listings · coming soon' },
+	{
+		id: 'company',
+		label: crmPresentationMode ? 'Company listings' : 'Company listings · coming soon'
+	},
+	{ id: 'portfolio', label: crmPresentationMode ? 'Portfolio' : 'Portfolio · coming soon' },
 	{ id: 'renewals', label: 'Renewals' },
 	{ id: 'market', label: 'Market' }
 ]

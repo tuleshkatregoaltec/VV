@@ -17,8 +17,12 @@ from app.crm.import_job_models import CrmImportJob
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactList,
+    CrmOwnerAssessedClaim,
     CrmOwnerAssessmentRevision,
+    CrmOwnerAssessmentState,
     CrmOwnerNote,
+    CrmOwnerRegistryOwner,
+    CrmOwnerRegistryProperty,
     CrmOwnerWorkspace,
     CrmPropertyContactClaim,
 )
@@ -42,8 +46,22 @@ from app.feasibility.models import FeasibilitySavedStudy
 from app.news.models import NewsArticle
 from app.organization.models import Organization, OrganizationInvitation, OrganizationMembership
 from app.token_usage.models import UserTokenUsage
+from app.whatsapp.customer_models import (
+    WhatsAppConnection,
+    WhatsAppContact,
+    WhatsAppCustomerMessage,
+    WhatsAppCustomerThread,
+    WhatsAppPublishedListing,
+)
+from app.whatsapp.models import WhatsAppTurn
 
 __all__ = [
+    "WhatsAppPublishedListing",
+    "WhatsAppConnection",
+    "WhatsAppContact",
+    "WhatsAppCustomerThread",
+    "WhatsAppCustomerMessage",
+    "WhatsAppTurn",
     "AssistantAction",
     "AssistantListingDraft",
     "AssistantOutbox",
@@ -77,6 +95,10 @@ __all__ = [
     "CrmOwnerWorkspace",
     "CrmOwnerNote",
     "CrmOwnerAssessmentRevision",
+    "CrmOwnerAssessmentState",
+    "CrmOwnerAssessedClaim",
+    "CrmOwnerRegistryOwner",
+    "CrmOwnerRegistryProperty",
     "CrmInboundImport",
     "CrmInboundContact",
     "CrmInboundEnquiry",

@@ -463,3 +463,50 @@ async def test_concurrent_tenant_writers_serialize_revision_without_losing_eithe
     row = (await owner_assessment._source_rows(pg_session, org, final_token))[0]
     assert row["confidence_score"] == 31
     assert row["source_filename"] == "later.csv"
+
+
+async def test_scoped_history_rows_read_only_the_requested_units_and_their_properties(pg_session):
+    """The workspace list needs a few units' owners, not the organization's 311k claims."""
+    org, _, _, claims = await seed(pg_session, count=6)
+    for claim, (unit, prop, owner) in zip(
+        claims,
+        [
+            ("unit-a", "tower|a", "one"),
+            (None, "tower|a", "two"),  # a competing owner on the same property
+            ("unit-b", "tower|b", "one"),
+            ("unit-c", "tower|c", "one"),  # not requested
+            (None, "tower|d", "one"),  # not requested
+            ("unit-a", "tower|e", "three"),  # same unit, second property key
+        ],
+        strict=True,
+    ):
+        claim.unit_candidate_key, claim.property_key, claim.owner_key = unit, prop, owner
+    await pg_session.commit()
+    other_org, *_ = await seed(pg_session, count=1)
+    other = (
+        await pg_session.exec(
+            text(
+                "UPDATE crm_property_contact_claims SET unit_candidate_key='unit-a', property_key='tower|a' WHERE organization_id=:o RETURNING id"
+            ),
+            params={"o": other_org},
+        )
+    ).all()
+    assert other
+    await pg_session.commit()
+
+    rows = await owner_repository.list_owner_history_rows(
+        pg_session, organization_id=org, unit_candidate_keys=["unit-b", "unit-a", "unit-a"]
+    )
+    assert sorted((row["property_key"], row["owner_key"]) for row in rows) == [
+        ("tower|a", "one"),
+        ("tower|a", "two"),
+        ("tower|b", "one"),
+        ("tower|e", "three"),
+    ]
+    assert (
+        await owner_repository.list_owner_history_rows(
+            pg_session, organization_id=org, unit_candidate_keys=[]
+        )
+        == []
+    )
+    assert len(await owner_repository.list_owner_history_rows(pg_session, organization_id=org)) == 6

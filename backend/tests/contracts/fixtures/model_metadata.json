@@ -120,7 +120,7 @@
       "CREATE INDEX ix_crm_inbound_enquiries_source_import_id ON crm_inbound_enquiries (source_import_id)",
       "CREATE INDEX ix_crm_inbound_enquiries_source_lead_id ON crm_inbound_enquiries (source_lead_id)",
       "CREATE INDEX ix_crm_inbound_enquiries_status ON crm_inbound_enquiries (status)",
-      "CREATE UNIQUE INDEX uq_crm_inbound_sold_owner ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Owner file \u00b7 recently sold'",
+      "CREATE UNIQUE INDEX uq_crm_inbound_sold_owner ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Owner file · recently sold'",
       "CREATE UNIQUE INDEX uq_crm_inbound_vitevue_lease_unit ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Vitevue lease lead'"
     ]
   },
@@ -183,8 +183,24 @@
       "CREATE INDEX ix_crm_mutation_audit_org_time ON crm_mutation_audit (organization_id, occurred_at)"
     ]
   },
+  "crm_owner_assessed_claims": {
+    "ddl": "\nCREATE TABLE crm_owner_assessed_claims (\n\torganization_id VARCHAR NOT NULL, \n\tgeneration BIGINT NOT NULL, \n\tclaim_id INTEGER NOT NULL, \n\tlist_id INTEGER NOT NULL, \n\timport_id INTEGER NOT NULL, \n\towner_key VARCHAR NOT NULL, \n\tcanonical_owner_key VARCHAR NOT NULL, \n\tproperty_key VARCHAR NOT NULL, \n\tidentity_area VARCHAR, \n\tidentity_key VARCHAR, \n\tgroup_ident VARCHAR NOT NULL, \n\tis_source BOOLEAN NOT NULL, \n\tord BIGINT NOT NULL, \n\tassessed_status VARCHAR NOT NULL, \n\tparty_role VARCHAR NOT NULL, \n\ttransaction_date DATE, \n\tevent_conf INTEGER NOT NULL, \n\tpref_support BOOLEAN NOT NULL, \n\tpref_buyer BOOLEAN NOT NULL, \n\tready_row BOOLEAN NOT NULL, \n\tlead_id VARCHAR, \n\tbuilding_name VARCHAR, \n\tproject_name VARCHAR, \n\tunit_number VARCHAR, \n\tarea_name VARCHAR, \n\tmatch_colour VARCHAR, \n\tmatch_outcome VARCHAR, \n\tsearch_text TEXT NOT NULL, \n\tprops_search_text TEXT NOT NULL, \n\trow JSONB NOT NULL, \n\tPRIMARY KEY (organization_id, generation, claim_id)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_assessed_claim_canonical ON crm_owner_assessed_claims (organization_id, generation, canonical_owner_key)",
+      "CREATE INDEX ix_crm_assessed_claim_identity ON crm_owner_assessed_claims (organization_id, generation, identity_key, identity_area)",
+      "CREATE INDEX ix_crm_assessed_claim_import ON crm_owner_assessed_claims (organization_id, generation, import_id, ord)",
+      "CREATE INDEX ix_crm_assessed_claim_lead ON crm_owner_assessed_claims (organization_id, generation, lead_id) WHERE lead_id IS NOT NULL",
+      "CREATE INDEX ix_crm_assessed_claim_list ON crm_owner_assessed_claims (organization_id, generation, list_id, ord)",
+      "CREATE INDEX ix_crm_assessed_claim_owner ON crm_owner_assessed_claims (organization_id, generation, owner_key)",
+      "CREATE INDEX ix_crm_assessed_claim_property ON crm_owner_assessed_claims (organization_id, generation, property_key)"
+    ]
+  },
   "crm_owner_assessment_revisions": {
     "ddl": "\nCREATE TABLE crm_owner_assessment_revisions (\n\torganization_id VARCHAR NOT NULL, \n\trevision BIGINT NOT NULL, \n\tPRIMARY KEY (organization_id)\n)\n\n",
+    "indexes": []
+  },
+  "crm_owner_assessment_state": {
+    "ddl": "\nCREATE TABLE crm_owner_assessment_state (\n\torganization_id VARCHAR NOT NULL, \n\tgeneration BIGINT NOT NULL, \n\trevision VARCHAR NOT NULL, \n\twarehouse_revision VARCHAR NOT NULL, \n\tchecked_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\twarehouse_status VARCHAR NOT NULL, \n\tbuilt_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tsummary JSONB NOT NULL, \n\timport_summaries JSONB NOT NULL, \n\tlist_counts JSONB NOT NULL, \n\tsource_audit JSONB NOT NULL, \n\tPRIMARY KEY (organization_id)\n)\n\n",
     "indexes": []
   },
   "crm_owner_notes": {
@@ -194,6 +210,16 @@
       "CREATE INDEX ix_crm_owner_notes_user_id ON crm_owner_notes (user_id)",
       "CREATE INDEX ix_crm_owner_notes_workspace_id ON crm_owner_notes (workspace_id)"
     ]
+  },
+  "crm_owner_registry_owners": {
+    "ddl": "\nCREATE TABLE crm_owner_registry_owners (\n\torganization_id VARCHAR NOT NULL, \n\tgeneration BIGINT NOT NULL, \n\tlist_id INTEGER NOT NULL, \n\tcanonical_owner_key VARCHAR NOT NULL, \n\towner_key VARCHAR NOT NULL, \n\tprofile JSONB NOT NULL, \n\tsearch_text TEXT NOT NULL, \n\tproperty_count INTEGER NOT NULL, \n\tcontact_ready_count INTEGER NOT NULL, \n\thighest_confidence_score INTEGER NOT NULL, \n\tnext_lease_end DATE, \n\tdeveloper_side_seller BOOLEAN NOT NULL, \n\tinvalid_identity_sources BOOLEAN NOT NULL, \n\tno_properties BOOLEAN NOT NULL, \n\tin_rental BOOLEAN NOT NULL, \n\tin_registry BOOLEAN NOT NULL, \n\tin_prior BOOLEAN NOT NULL, \n\tin_review BOOLEAN NOT NULL, \n\tin_multi BOOLEAN NOT NULL, \n\tPRIMARY KEY (organization_id, generation, list_id, canonical_owner_key)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_registry_owner_key ON crm_owner_registry_owners (organization_id, generation, list_id, owner_key)"
+    ]
+  },
+  "crm_owner_registry_properties": {
+    "ddl": "\nCREATE TABLE crm_owner_registry_properties (\n\torganization_id VARCHAR NOT NULL, \n\tgeneration BIGINT NOT NULL, \n\tlist_id INTEGER NOT NULL, \n\tcanonical_owner_key VARCHAR NOT NULL, \n\tordinal INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tready BOOLEAN NOT NULL, \n\trental_linked BOOLEAN NOT NULL, \n\tlease_end DATE, \n\tannual_rent_aed BIGINT, \n\tsale_price_aed BIGINT, \n\tmatch_status VARCHAR, \n\tlocation_text TEXT NOT NULL, \n\theadline_rank INTEGER NOT NULL, \n\tconfidence INTEGER NOT NULL, \n\tPRIMARY KEY (organization_id, generation, list_id, canonical_owner_key, ordinal)\n)\n\n",
+    "indexes": []
   },
   "crm_owner_workspaces": {
     "ddl": "\nCREATE TABLE crm_owner_workspaces (\n\tid SERIAL NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\towner_key VARCHAR NOT NULL, \n\tpipeline_status VARCHAR NOT NULL, \n\thighlight_color VARCHAR NOT NULL, \n\tnext_follow_up DATE, \n\ttags JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_owner_workspace_identity UNIQUE (user_id, organization_id, owner_key)\n)\n\n",
@@ -282,6 +308,46 @@
     "indexes": [
       "CREATE INDEX ix_user_token_usage_totals_date ON user_token_usage_totals (date)",
       "CREATE INDEX ix_user_token_usage_totals_user_id ON user_token_usage_totals (user_id)"
+    ]
+  },
+  "whatsapp_connections": {
+    "ddl": "\nCREATE TABLE whatsapp_connections (\n\tid VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tphone_number_id VARCHAR NOT NULL, \n\taccount_id VARCHAR NOT NULL, \n\tdisplay_name VARCHAR NOT NULL, \n\tenabled BOOLEAN NOT NULL, \n\tmarket_data_enabled BOOLEAN NOT NULL, \n\tapproved_knowledge JSON NOT NULL, \n\treply_voice JSON, \n\tstatus VARCHAR NOT NULL, \n\tonboarding_type VARCHAR, \n\tbusiness_id VARCHAR, \n\tdisplay_phone_number VARCHAR, \n\taccess_token_encrypted TEXT, \n\tquality_rating VARCHAR, \n\thealth JSON, \n\tlast_account_event VARCHAR, \n\tconnected_at TIMESTAMP WITH TIME ZONE, \n\tdisconnected_at TIMESTAMP WITH TIME ZONE, \n\tcontacts_sync_requested_at TIMESTAMP WITH TIME ZONE, \n\tcontacts_synced_at TIMESTAMP WITH TIME ZONE, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (phone_number_id)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_whatsapp_connections_account_id ON whatsapp_connections (account_id)",
+      "CREATE INDEX ix_whatsapp_connections_organization_id ON whatsapp_connections (organization_id)",
+      "CREATE INDEX ix_whatsapp_connections_user_id ON whatsapp_connections (user_id)"
+    ]
+  },
+  "whatsapp_contacts": {
+    "ddl": "\nCREATE TABLE whatsapp_contacts (\n\tid VARCHAR NOT NULL, \n\tconnection_id VARCHAR NOT NULL, \n\twa_id VARCHAR, \n\tbsuid VARCHAR, \n\tname VARCHAR, \n\tin_address_book BOOLEAN NOT NULL, \n\tblocked BOOLEAN NOT NULL, \n\tblocked_at TIMESTAMP WITH TIME ZONE, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_whatsapp_contact_wa_id UNIQUE (connection_id, wa_id), \n\tCONSTRAINT uq_whatsapp_contact_bsuid UNIQUE (connection_id, bsuid), \n\tFOREIGN KEY(connection_id) REFERENCES whatsapp_connections (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_whatsapp_contact_blocked ON whatsapp_contacts (connection_id, blocked)"
+    ]
+  },
+  "whatsapp_customer_messages": {
+    "ddl": "\nCREATE TABLE whatsapp_customer_messages (\n\tid VARCHAR(512) NOT NULL, \n\tthread_id VARCHAR NOT NULL, \n\tcontent TEXT, \n\tsent_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\treply TEXT, \n\trisk VARCHAR, \n\ttopic VARCHAR, \n\treason VARCHAR, \n\tevidence_ids JSON NOT NULL, \n\tevidence_snapshots JSON NOT NULL, \n\trevision INTEGER NOT NULL, \n\tsend_after TIMESTAMP WITH TIME ZONE, \n\tnotification_created_at TIMESTAMP WITH TIME ZONE, \n\tnotification_seen_at TIMESTAMP WITH TIME ZONE, \n\toutbound_id VARCHAR, \n\terror_code VARCHAR, \n\thandoff_summary TEXT, \n\tasked_detail VARCHAR, \n\ttyping_started_at TIMESTAMP WITH TIME ZONE, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(thread_id) REFERENCES whatsapp_customer_threads (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_whatsapp_customer_message_queue ON whatsapp_customer_messages (status, send_after)",
+      "CREATE INDEX ix_whatsapp_customer_message_thread ON whatsapp_customer_messages (thread_id, created_at)"
+    ]
+  },
+  "whatsapp_customer_threads": {
+    "ddl": "\nCREATE TABLE whatsapp_customer_threads (\n\tid VARCHAR NOT NULL, \n\tconnection_id VARCHAR NOT NULL, \n\tsender VARCHAR NOT NULL, \n\tpaused BOOLEAN NOT NULL, \n\topted_out BOOLEAN NOT NULL, \n\tconversation_id INTEGER, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_whatsapp_customer_thread_sender UNIQUE (connection_id, sender), \n\tFOREIGN KEY(connection_id) REFERENCES whatsapp_connections (id) ON DELETE CASCADE, \n\tFOREIGN KEY(conversation_id) REFERENCES conversations (id) ON DELETE SET NULL\n)\n\n",
+    "indexes": []
+  },
+  "whatsapp_published_listings": {
+    "ddl": "\nCREATE TABLE whatsapp_published_listings (\n\tid VARCHAR NOT NULL, \n\tconnection_id VARCHAR NOT NULL, \n\ttitle VARCHAR NOT NULL, \n\tlocation VARCHAR NOT NULL, \n\tproperty_type VARCHAR NOT NULL, \n\ttransaction VARCHAR NOT NULL, \n\tbedrooms INTEGER, \n\tprice_aed FLOAT NOT NULL, \n\tarea_sqft FLOAT, \n\tavailability VARCHAR NOT NULL, \n\trevision INTEGER NOT NULL, \n\texpires_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\trevoked_at TIMESTAMP WITH TIME ZONE, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(connection_id) REFERENCES whatsapp_connections (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_whatsapp_listing_connection ON whatsapp_published_listings (connection_id, expires_at)"
+    ]
+  },
+  "whatsapp_turns": {
+    "ddl": "\nCREATE TABLE whatsapp_turns (\n\tid VARCHAR(512) NOT NULL, \n\tphone_number_id VARCHAR NOT NULL, \n\tsender VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tcontent TEXT NOT NULL, \n\tsent_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tconversation_id INTEGER, \n\treply TEXT, \n\toutbound_id VARCHAR, \n\terror_code VARCHAR, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(conversation_id) REFERENCES conversations (id) ON DELETE SET NULL\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_whatsapp_turns_organization_id ON whatsapp_turns (organization_id)",
+      "CREATE INDEX ix_whatsapp_turns_outbound_id ON whatsapp_turns (outbound_id)",
+      "CREATE INDEX ix_whatsapp_turns_queue ON whatsapp_turns (status, created_at)",
+      "CREATE INDEX ix_whatsapp_turns_user_id ON whatsapp_turns (user_id)"
     ]
   }
 }

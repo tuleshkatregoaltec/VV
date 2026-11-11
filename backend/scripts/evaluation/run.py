@@ -40,22 +40,44 @@ async def execute_case(client, case, timeout, parameters=None):
         conversation_id = response.json()["id"]
         record["conversation_id"] = conversation_id  # Private only; never remote metadata.
         record["trace_ids"]["create"] = response.headers.get("x-evaluation-trace-id")
+        questions = getattr(case, "turns", None) or [record["question"]]
+        record["turns"] = []
         async with asyncio.timeout(timeout):
-            async with client.stream(
-                "POST",
-                f"/api/v1/chat/conversations/{conversation_id}/messages/stream",
-                json={"message": record["question"]},
-            ) as response:
-                record["http_status"] = response.status_code
-                record["trace_ids"]["stream"] = response.headers.get("x-evaluation-trace-id")
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        record["events"].append(json.loads(line[6:]))
-        record["completed"] = bool(record["events"] and record["events"][-1]["type"] == "done")
-        record["answer"] = "".join(
-            event.get("content", "") for event in record["events"] if event["type"] == "content"
+            for question in questions:
+                turn_events = []
+                async with client.stream(
+                    "POST",
+                    f"/api/v1/chat/conversations/{conversation_id}/messages/stream",
+                    json={"message": question},
+                    headers={"x-vv-evaluation-case": case.id},
+                ) as response:
+                    record["http_status"] = response.status_code
+                    record["trace_ids"]["stream"] = response.headers.get("x-evaluation-trace-id")
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            event = json.loads(line[6:])
+                            record["events"].append(event)
+                            turn_events.append(event)
+                completed = bool(turn_events and turn_events[-1]["type"] == "done")
+                record["turns"].append(
+                    {
+                        "question": question,
+                        "events": turn_events,
+                        "completed": completed,
+                        "answer": "".join(
+                            event.get("content", "")
+                            for event in turn_events
+                            if event["type"] == "content"
+                        ),
+                    }
+                )
+                if not completed:
+                    break
+        record["completed"] = len(record["turns"]) == len(questions) and all(
+            turn["completed"] for turn in record["turns"]
         )
+        record["answer"] = "\n\n".join(turn["answer"] for turn in record["turns"])
         response = await client.get(f"/api/v1/chat/conversations/{conversation_id}/messages")
         response.raise_for_status()
         # Keep user/assistant content and usage; not database message IDs or timestamps.
@@ -85,9 +107,27 @@ async def run_benchmark(
     timeout=180,
     data_context="local-mutable-warehouse",
     bindings_path=None,
+    model=None,
+    prior=None,
+    snapshot_path=None,
+    flow_case_ids=None,
+    routing_mode="typed",
 ):
     from app.config import settings
+    from scripts.evaluation.fixture_snapshot import use_snapshot
+    from scripts.evaluation.http_trial import application_plan, case_costs, load_http_flow_cases
 
+    plan = application_plan(
+        model=model,
+        prior=prior,
+        snapshot_path=snapshot_path,
+        data_context=data_context,
+        settings=settings,
+        routing_mode=routing_mode,
+    )
+    plan["snapshot_verification_before"] = await use_snapshot(
+        path=snapshot_path, postgres_url=str(settings.POSTGRES_URL)
+    )
     if settings.ENVIRONMENT != "local":
         raise ValueError("Evaluation requires the local environment")
     if not settings.FIRST_SUPERUSER or not settings.FIRST_SUPERUSER_PASSWORD:
@@ -96,9 +136,17 @@ async def run_benchmark(
     if httpx.URL(auth_url).host not in {"localhost", "127.0.0.1", "::1"}:
         raise ValueError("Benchmark login must use local auth")
     benchmark = load_benchmark()
-    cases = [case for case in benchmark.cases if case_ids is None or case.id in case_ids]
-    if not cases or (case_ids and set(case_ids) != {case.id for case in cases}):
-        raise ValueError("Unknown/empty case selection")
+    cases = [
+        case
+        for case in benchmark.cases
+        if (case_ids is None and not flow_case_ids) or case.id in (case_ids or [])
+    ]
+    if case_ids and set(case_ids) != {case.id for case in cases}:
+        raise ValueError("Unknown case selection")
+    if flow_case_ids:
+        cases.extend(load_http_flow_cases(flow_case_ids))
+    if not cases:
+        raise ValueError("Empty case selection")
     bindings = json.loads(Path(bindings_path).read_text()) if bindings_path else {}
     if not isinstance(bindings, dict) or set(bindings) - {case.id for case in cases}:
         raise ValueError("Bindings must map selected case IDs to explicit parameter values")
@@ -126,9 +174,14 @@ async def run_benchmark(
         "dataset_sha256": benchmark.digest,
         "case_ids": [case.id for case in cases],
         "data_context": data_context,
+        "routing_mode": routing_mode,
+        "flow_variant": "HTTP follow-ups read the unchanged pinned CRM budget; synthetic fixture mutations are not applied",
         "remote_telemetry": False,
         "results": [],
     }
+    plan.update(run_id=run_id, case_ids=[case.id for case in cases])
+    manifest["campaign"] = plan
+    private_write(directory / "campaign.json", plan)
     private_write(directory / "run.json", manifest)
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
@@ -188,6 +241,8 @@ async def run_benchmark(
                 record = await execute_case(client, case, timeout, bindings.get(case.id))
                 record = json.loads(scrub_secrets(json.dumps(record), secrets))
                 record["run_id"] = run_id
+                record["model"] = model
+                record.update(case_costs(directory, run_id=run_id, case_id=case.id))
                 private_write(directory / f"{case.id}.json", record)
                 manifest["results"].append(
                     {
@@ -220,7 +275,23 @@ async def run_benchmark(
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait()
+        for case in cases:
+            path = directory / f"{case.id}.json"
+            if path.exists():
+                record = json.loads(path.read_text())
+                record.update(case_costs(directory, run_id=run_id, case_id=case.id))
+                private_write(path, record)
         manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
+        try:
+            manifest["snapshot_verification_after"] = await use_snapshot(
+                path=snapshot_path, postgres_url=str(settings.POSTGRES_URL)
+            )
+        except Exception as exc:
+            manifest["snapshot_verification_error"] = type(exc).__name__
+            private_write(directory / "run.json", manifest)
+            raise RuntimeError(
+                "Snapshot changed or verification failed; this run is incomparable"
+            ) from exc
         private_write(directory / "run.json", manifest)
     print(f"Private evidence: {directory}", flush=True)
     return directory

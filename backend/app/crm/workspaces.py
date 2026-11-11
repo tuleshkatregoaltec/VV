@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import opportunities, workspace_repository
-from app.crm.identity import ParsedContact, has_usable_contact
+from app.crm.identity import ParsedContact
 from app.crm.import_models import (
     CrmOwnerBulkUpdate,
     CrmOwnerNote,
@@ -26,8 +26,7 @@ from app.crm.models import (
     CrmWorkspaceUpdate,
 )
 from app.crm.opportunities import get_lead_detail, resolve_candidate_key
-from app.crm.owner_assessment import get_owner_assessment
-from app.crm.owners import _owner_read_keys, _source_contact_ready
+from app.crm.owner_store import open_store
 
 
 async def _enrich_workspaces(
@@ -150,29 +149,11 @@ async def list_owner_workspaces(
         db, organization_id, user_id, workspace_ids
     )
     summaries = _owner_workspace_summaries(workspaces, list(note_result))
-    snapshot = await get_owner_assessment(db, organization_id=organization_id)
-    read_keys = _owner_read_keys(snapshot.rows)
-    aliases: dict[str, set[str]] = {}
-    ready_keys: set[str] = set()
-    for row in snapshot.rows:
-        canonical = row["canonical_owner_key"]
-        aliases.setdefault(row["owner_key"], set()).add(canonical)
-        if (
-            row["property_identity"] is not None
-            and row.get("lead_id")
-            and row.get("unit_candidate_key")
-            and _source_contact_ready(row["assessed_status"], row.get("party_role"))
-            and _source_contact_ready(
-                row.get("event_assessed_status", row["assessed_status"]), row.get("party_role")
-            )
-            and has_usable_contact(
-                row.get("phone_primary"),
-                row.get("phone_alternate"),
-                row.get("email_primary"),
-                row.get("broker_contact"),
-            )
-        ):
-            ready_keys.add(read_keys[canonical])
+    store = await open_store(db, organization_id)
+    aliases = await store.owner_aliases([summary.owner_key for summary in summaries])
+    people = {canonical for found in aliases.values() for canonical in found}
+    read_keys = await store.read_keys(people)
+    ready_keys = {read_keys[canonical] for canonical in await store.ready_owners(people)}
     merged: dict[str, CrmOwnerWorkspaceSummary] = {}
     for summary in summaries:
         canonical = aliases.get(summary.owner_key, set())
@@ -206,25 +187,18 @@ async def bulk_update_owner_workspaces(
     if not any((payload.pipeline_status, payload.highlight_color, payload.note)):
         raise HTTPException(status_code=422, detail="Choose a CRM update to apply")
 
-    snapshot = await get_owner_assessment(db, organization_id=organization_id)
-    read_keys = _owner_read_keys(snapshot.rows)
-    aliases: dict[str, set[str]] = {}
-    for row in snapshot.rows:
-        aliases.setdefault(row["owner_key"], set()).add(row["canonical_owner_key"])
-        aliases.setdefault(row["canonical_owner_key"], set()).add(row["canonical_owner_key"])
+    store = await open_store(db, organization_id)
+    aliases = await store.owner_aliases(owner_keys, canonical_too=True)
     if any(len(aliases.get(key, set())) > 1 for key in owner_keys):
         raise HTTPException(
             status_code=409, detail="Choose a distinct owner identity in the registry"
         )
     selected = {next(iter(aliases[key])) for key in owner_keys if aliases.get(key)}
+    read_keys = await store.read_keys(selected)
     owner_keys = sorted({read_keys[key] for key in selected})
     if not owner_keys:
         raise HTTPException(status_code=404, detail="Selected owners were not found")
-    persisted_keys = {
-        row["owner_key"]
-        for row in snapshot.rows
-        if row["canonical_owner_key"] in selected and len(aliases[row["owner_key"]]) == 1
-    } | set(owner_keys)
+    persisted_keys = await store.unique_persisted_keys(selected) | set(owner_keys)
     workspace_result = await workspace_repository.list_owner_workspaces_for_keys(
         db, organization_id, sorted(persisted_keys), user_id
     )

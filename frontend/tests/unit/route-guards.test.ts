@@ -25,6 +25,13 @@ describe('getRouteCategory', () => {
 		expect(getRouteCategory('/reset')).toBe('public')
 	})
 
+	it('keeps the legal pages public for logged-out visitors', () => {
+		for (const path of ['/privacy', '/terms', '/data-deletion']) {
+			expect(getRouteCategory(path)).toBe('public')
+			expect(decideRouteAccess(path, null)).toEqual({ action: 'allow' })
+		}
+	})
+
 	it('classifies auth and protected paths', () => {
 		expect(getRouteCategory('/auth')).toBe('auth')
 		expect(getRouteCategory('/dashboard')).toBe('protected')
