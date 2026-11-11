@@ -144,3 +144,18 @@ async def test_document_list_limit_is_bounded(client, monkeypatch):
 
     assert response.status_code == 422
     service.assert_not_awaited()
+
+
+REAL_KEY = "E4PE3H23YAHTAQDKRCMSMVTDK4"  # Property Finder ids are 26 letters/digits
+
+
+async def test_real_property_finder_listing_ids_are_accepted(client, monkeypatch):
+    from crm_document_helpers import listing
+
+    service = AsyncMock(return_value=listing(REAL_KEY))
+    monkeypatch.setattr("app.crm.router.get_company_listing", service)
+
+    response = await client.get(f"/api/v1/crm/company-listings/{REAL_KEY}")
+
+    assert response.status_code == 200
+    assert service.await_args.args[2] == REAL_KEY

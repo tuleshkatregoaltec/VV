@@ -729,7 +729,7 @@ async def crm_company_listings(
 
 @router.get("/company-listings/{listing_key}", response_model=CrmCompanyListingDetail)
 async def crm_company_listing(
-    listing_key: str = Path(pattern=r"^\d{1,20}$"),
+    listing_key: str = Path(pattern=LISTING_KEY_PATTERN),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
