@@ -38,10 +38,12 @@ from app.crm.company_listings import (
 )
 from app.crm.document_models import (
     LISTING_KEY_PATTERN,
+    GeneratedDocumentResponse,
+    GenerateDocumentRequest,
     ListingDocumentInfoResponse,
     ListingDocumentInfoUpdate,
 )
-from app.crm.documents import get_document_info, save_document_info
+from app.crm.documents import generate_document, get_document_info, save_document_info
 from app.crm.email_models import (
     EmailInboundListResponse,
     EmailLeadListResponse,
@@ -751,6 +753,27 @@ async def crm_save_listing_document_info(
     return await save_document_info(
         db, organization_id=organization_id, user_id=user_id, payload=payload
     )
+
+
+@router.post("/documents", response_model=GeneratedDocumentResponse, status_code=201)
+async def crm_generate_document(
+    payload: GenerateDocumentRequest,
+    response: Response,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Generate one PDF from a managed listing's saved information.
+
+    201 = made now; 200 = this idempotency key already has a document (returned as is).
+    422 `missing_fields`, 409 `stale_revision`, 502 when rendering or storage failed.
+    """
+    user_id, organization_id = _auth_ids(context)
+    document, created = await generate_document(
+        db, organization_id=organization_id, user_id=user_id, payload=payload
+    )
+    if not created:
+        response.status_code = 200
+    return document
 
 
 @router.put("/company-listings/source", response_model=CrmCompanyListingSourceResponse)
