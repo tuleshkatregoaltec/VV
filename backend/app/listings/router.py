@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 
 from app.core.dependencies import AuthContext, require_active_subscription
@@ -7,6 +9,7 @@ from app.listings.models import (
     ListingDetailResponse,
     ListingFiltersResponse,
     ListingListResponse,
+    ListingMarketPosition,
     ListingMode,
 )
 from app.listings.service import (
@@ -31,9 +34,15 @@ async def list_listings(
     bedrooms: str | None = Query(default=None, max_length=40),
     price_min: int | None = Query(default=None, ge=0),
     price_max: int | None = Query(default=None, ge=0),
+    market_position: ListingMarketPosition | None = Query(default=None),
+    sort: Literal["default", "value_gap"] = Query(default="default"),
     context: AuthContext = Depends(require_active_subscription),
 ):
-    """List Property Finder listings from ph_box ClickHouse."""
+    """List Property Finder listings from ph_box ClickHouse.
+
+    Sale listings carry an estimated value from DLD sales; `market_position=below_market` with
+    `sort=value_gap` lists possible bargains, biggest discount first.
+    """
     return await list_listings_from_clickhouse(
         mode=mode,
         asset_class=asset_class,
@@ -47,6 +56,8 @@ async def list_listings(
         price_max=price_max,
         price_basis="annual" if mode == "rent" else "raw",
         include_filters=False,
+        market_position=market_position,
+        sort=sort,
     )
 
 

@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, Field
@@ -7,6 +8,9 @@ ListingAssetClass = Literal["residential", "commercial"]
 ListingMarketPosition = Literal["below_market", "near_market", "above_market", "insufficient_data"]
 ListingBenchmarkLevel = Literal["building_layout", "project_layout", "insufficient_data"]
 ListingUrgencySignal = Literal["explicit_urgency", "value_language", "none"]
+# dld_sales: estimated from DLD sales of similar homes (app.listings.valuation, 11 Nov 2026).
+# asking_peers: compared with the asking prices of peer listings (rent, commercial, off-plan).
+ListingValuationMethod = Literal["dld_sales", "asking_peers"]
 
 
 class ListingImageResponse(BaseModel):
@@ -89,11 +93,31 @@ class ListingCardResponse(BaseModel):
     benchmark_level: ListingBenchmarkLevel = "insufficient_data"
     urgency_signal: ListingUrgencySignal = "none"
     urgency_terms: list[str] = Field(default_factory=list)
+    valuation_method: ListingValuationMethod = "asking_peers"
+    estimated_value_aed: float | None = None
+    estimated_value_low_aed: float | None = None
+    estimated_value_high_aed: float | None = None
+    valuation_confidence: Literal["high", "medium", "low"] | None = None
+    # Asking price / estimated value - 1: -0.12 means asking 12% below the estimate.
+    value_gap_pct: float | None = None
+    is_off_plan: bool = False
+    # When the estimate was made; its evidence is the 12 months of sales before this date.
+    valued_at: date | None = None
     is_available: bool | None = None
     is_verified: bool | None = None
     is_featured: bool | None = None
     is_premium: bool | None = None
     share_url: str | None = None
+
+
+class ListingComparableSale(BaseModel):
+    """A DLD sale behind a listing's estimate: same building, type and bedrooms, closest size."""
+
+    date: date
+    unit: str | None = None
+    size_sqft: float
+    price_aed: int
+    psf: float
 
 
 class ListingDetailResponse(ListingCardResponse):
@@ -115,6 +139,7 @@ class ListingDetailResponse(ListingCardResponse):
     source_manifest_key: str | None = None
     scraped_at: AwareDatetime | None = None
     source_metadata: dict[str, Any] = Field(default_factory=dict)
+    valuation_comparables: list[ListingComparableSale] = Field(default_factory=list)
 
 
 class ListingListResponse(BaseModel):
@@ -123,6 +148,8 @@ class ListingListResponse(BaseModel):
     limit: int
     offset: int
     filters: ListingFiltersResponse = Field(default_factory=ListingFiltersResponse)
+    # When the listing data was last collected; listings may have sold or changed since.
+    data_as_of: AwareDatetime | None = None
 
 
 class ListingTrendPoint(BaseModel):
@@ -150,4 +177,5 @@ class ListingAnalyticsResponse(BaseModel):
     verified_count: int = 0
     area_count: int = 0
     snapshot_at: AwareDatetime | None = None
+    data_as_of: AwareDatetime | None = None
     trend: list[ListingTrendPoint] = Field(default_factory=list)

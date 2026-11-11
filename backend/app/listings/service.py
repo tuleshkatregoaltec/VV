@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
 
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -17,13 +18,16 @@ from app.listings.mapping import (
     _freshness_datetime,
     _images,
     _int_or_none,
+    _location_names,
     _parse_datetime,
     _party,
     _row_to_dict,
+    _valuation_date,
 )
 from app.listings.models import (
     ListingAnalyticsResponse,
     ListingAssetClass,
+    ListingComparableSale,
     ListingDetailResponse,
     ListingFiltersResponse,
     ListingFloorPlanResponse,
@@ -39,6 +43,115 @@ from app.listings.policy import (
 from app.listings.queries import (
     _achieved_trend,
 )
+from app.listings.valuation import RESIDENTIAL_SALE_CATEGORY, listing_subject
+
+_SALES_WINDOW_DAYS = 365
+
+
+def _valuation_input(row: dict[str, Any]) -> dict[str, Any]:
+    """The fields app.listings.valuation reads, taken from a listings row."""
+    raw = _as_dict(row.get("raw_property_json"))
+    return {
+        "listing_id": row.get("listing_id"),
+        "category_id": _int_or_none(row.get("category_id")),
+        "location_names": _location_names(row),
+        "property_type": raw.get("property_type"),
+        "completion_status": raw.get("completion_status"),
+        "bedrooms": row.get("bedrooms"),
+        "price_aed": _int_or_none(_as_dict(row.get("price_json")).get("value")),
+        "size_sqft": _float_or_none(_as_dict(row.get("size_json")).get("value")),
+    }
+
+
+_FLAGGED = frozenset({"below_market", "near_market", "above_market"})
+
+
+def _apply_dld_valuation(row: dict[str, Any]) -> None:
+    """Use the stored DLD-sales valuation (v_* columns) for a ready residential sale listing.
+
+    Rent and commercial listings keep the asking-peer benchmark. Off-plan sale listings and ready
+    ones without a usable valuation are never flagged from asking peers: that model is what Kian
+    called grossly inaccurate (11 Nov 2026). A suppressed estimate exposes no gap anywhere.
+    """
+    listing = _valuation_input(row)
+    unflagged = {
+        "market_position_override": "insufficient_data",
+        "market_delta_pct": None,
+        "market_estimate_aed": None,
+    }
+    if listing["category_id"] == RESIDENTIAL_SALE_CATEGORY and str(
+        listing["completion_status"] or ""
+    ).startswith("off_plan"):
+        row.update(unflagged)
+        return
+    estimate = _float_or_none(row.get("v_estimate_aed")) or 0
+    if estimate <= 0 and listing_subject(listing, date.today()) is None:
+        return
+    row["valuation_method"] = "dld_sales"
+    row.update(unflagged)
+    if estimate <= 0:
+        return
+    position = row.get("v_market_position") or "insufficient_data"
+    stored_asking = _int_or_none(row.get("v_asking_aed"))
+    price_changed = bool(stored_asking) and stored_asking != listing["price_aed"]
+    gap = _float_or_none(row.get("v_value_gap_pct"))
+    row.update(
+        estimated_value_aed=estimate,
+        estimated_value_low_aed=_float_or_none(row.get("v_low_aed")),
+        estimated_value_high_aed=_float_or_none(row.get("v_high_aed")),
+        valuation_confidence=row.get("v_confidence") or None,
+        valued_at=row.get("v_valued_at"),
+        comparable_count=_int_or_none(row.get("v_comparable_count")) or 0,
+    )
+    if position in _FLAGGED and not price_changed:
+        row.update(
+            market_position_override=position,
+            value_gap_pct=gap,
+            market_delta_pct=gap,
+            market_estimate_aed=estimate,
+        )
+
+
+async def _comparable_sales(row: dict[str, Any]) -> list[ListingComparableSale]:
+    """The closest ready DLD sales behind a listing's estimate (same building, type and beds)."""
+    building = str(row.get("v_building_key") or "")
+    valued_at = _valuation_date(row.get("v_valued_at")) or date.today()
+    subject = listing_subject(_valuation_input(row), valued_at)
+    if not building or subject is None:
+        return []
+    from app.crm.valuation_validation import closest_sales
+
+    sales = await queries.fetch_building_sales(
+        {
+            "building": building,
+            "type": subject.subject.property_type,
+            "beds": subject.subject.bedrooms,
+            # The same 12 months the stored estimate used, so the evidence matches the flag.
+            "since": valued_at - timedelta(days=_SALES_WINDOW_DAYS),
+            "until": valued_at + timedelta(days=1),
+        }
+    )
+    if row.get("v_basis") == "bedroom_price":
+        # Villas are valued by bedroom price; DLD size is often the plot, so show the latest
+        # same-bedroom sales rather than the closest in size.
+        chosen = sorted(
+            (s for s in sales if float(s.get("size_sqft") or 0) > 0),
+            key=lambda s: s["transaction_date"],
+            reverse=True,
+        )[:5]
+    else:
+        found = closest_sales({"unit_key": "", "size_sqft": subject.subject.size_sqft}, sales)
+        chosen = found["comparables"]
+    return [
+        ListingComparableSale(
+            date=sale["transaction_date"],
+            unit=sale.get("unit_number"),
+            size_sqft=float(sale["size_sqft"]),
+            price_aed=int(sale["sale_amount_aed"]),
+            psf=round(float(sale["sale_amount_aed"]) / float(sale["size_sqft"]), 1),
+        )
+        for sale in chosen
+    ]
 
 
 async def _filters(
@@ -96,7 +209,14 @@ async def list_listings_from_clickhouse(
     price_period: str | None = None,
     price_basis: str = "raw",
     include_filters: bool = True,
+    market_position: str | None = None,
+    sort: str = "default",
 ) -> ListingListResponse:
+    use_dld = mode == "sale" and await queries.valuations_available()
+    if market_position and not use_dld:
+        # A market-position view (e.g. possible bargains) needs DLD valuations; without them it
+        # is empty rather than every listing.
+        return ListingListResponse(listings=[], total=0, limit=limit, offset=offset)
     filters = dict(
         mode=mode,
         asset_class=asset_class,
@@ -109,10 +229,17 @@ async def list_listings_from_clickhouse(
         price_max=price_max,
         price_period=price_period,
         price_basis=price_basis,
+        market_position=market_position if use_dld else None,
     )
     count_task = asyncio.create_task(queries.fetch_listing_count(filters))
     filters_task = asyncio.create_task(_filters(mode, asset_class)) if include_filters else None
-    rows = await queries.fetch_listing_rows(filters, limit=limit, offset=offset)
+    rows = await queries.fetch_listing_rows(
+        filters,
+        limit=limit,
+        offset=offset,
+        sort=sort if use_dld else "default",
+        with_valuations=use_dld,
+    )
     normalized_rows = [_row_to_dict(row) for row in rows]
     benchmark_property_types = sorted(
         {str(row.get("benchmark_property_type") or "") for row in normalized_rows}
@@ -169,14 +296,18 @@ async def list_listings_from_clickhouse(
         ):
             row["market_estimate_aed"] = market_psf * size_sqft
             row["market_delta_pct"] = market_price / size_sqft / market_psf - 1
+        if use_dld:
+            _apply_dld_valuation(row)
     count_result = await count_task
     listing_filters = await filters_task if filters_task else ListingFiltersResponse()
+    data_as_of, _ = await get_inventory_freshness()
     return ListingListResponse(
         listings=[_card_from_row(row) for row in normalized_rows],
         total=count_result[0]["total"] if count_result else 0,
         limit=limit,
         offset=offset,
         filters=listing_filters,
+        data_as_of=data_as_of,
     )
 
 
@@ -221,6 +352,10 @@ async def listing_analytics_from_clickhouse(
         str(point.get("period") or ""): point for point in achieved_rows if point.get("period")
     }
     row = result[0] if result else {}
+    if mode == "sale" and asset_class == "residential" and await queries.valuations_available():
+        # Below / near / above market from the DLD-sales valuations, not asking peers.
+        counts = await queries.fetch_valuation_counts(filters)
+        row = {**row, **(counts[0] if counts else {})}
     return ListingAnalyticsResponse(
         total=_int_or_none(row.get("total")) or 0,
         average_price_aed=_float_or_none(row.get("average_price_aed")),
@@ -236,6 +371,7 @@ async def listing_analytics_from_clickhouse(
         verified_count=_int_or_none(row.get("verified_count")) or 0,
         area_count=_int_or_none(row.get("area_count")) or 0,
         snapshot_at=_parse_datetime(row.get("snapshot_at")),
+        data_as_of=_parse_datetime(row.get("snapshot_at")),
         trend=[
             ListingTrendPoint(
                 period=str(point.get("period") or ""),
@@ -273,7 +409,14 @@ async def get_listing_from_clickhouse(listing_id: str) -> ListingDetailResponse:
     if not rows:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    data = rows[0]
+    data = _row_to_dict(rows[0])
+    comparables: list[ListingComparableSale] = []
+    if await queries.valuations_available():
+        valuation = await queries.fetch_listing_valuation({"listing_id": listing_id})
+        data = {**data, **(valuation[0] if valuation else {})}
+        _apply_dld_valuation(data)
+        if data.get("valuation_method") == "dld_sales":
+            comparables = await _comparable_sales(data)
     raw_property = _as_dict(data.get("raw_property_json"))
     card = _card_from_row(data)
     amenities = raw_property.get("amenity_names") or raw_property.get("amenities")
@@ -304,6 +447,7 @@ async def get_listing_from_clickhouse(listing_id: str) -> ListingDetailResponse:
             "source": LISTINGS_SOURCE_LABEL,
             "run_id": data.get("run_id"),
         },
+        valuation_comparables=comparables,
     )
 
 

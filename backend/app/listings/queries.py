@@ -72,6 +72,108 @@ async def fetch_inventory_freshness(parameters):
 
 LISTINGS_TABLE = "pf_listings_bronze"
 
+# Estimated values of ready residential sale listings from DLD sales, written by
+# scripts/listings/value_listings.py (listing underpricing, 11 Nov 2026).
+VALUATIONS_TABLE = "listing_valuations"
+_VALUATION_COLUMNS = (
+    "estimate_aed",
+    "low_aed",
+    "high_aed",
+    "confidence",
+    "level",
+    "basis",
+    "comparable_count",
+    "market_position",
+    "value_gap_pct",
+    "building_key",
+    "asking_aed",
+    "valued_at",
+)
+_VALUATION_SELECT = ", ".join(f"{c} AS v_{c}" for c in _VALUATION_COLUMNS)
+_VALUATION_JOIN = f"""
+        LEFT JOIN (
+            SELECT listing_id AS v_listing_id, {_VALUATION_SELECT}
+            FROM {VALUATIONS_TABLE} FINAL
+        ) AS valuation ON listing_id = valuation.v_listing_id"""
+# One row per unit in a filtered view: the same home listed by several agents shows once.
+_SAME_UNIT = "building_key, bedrooms, round(log(size_sqft) * 100), asking_aed"
+_valuations_ready = False
+
+
+async def valuations_available() -> bool:
+    """Whether listing_valuations exists here; without it the listings keep asking-peer benchmarks."""
+    global _valuations_ready
+    if not _valuations_ready:
+        rows = await query(
+            "SELECT count() AS n FROM system.tables "
+            "WHERE database = currentDatabase() AND name = {name:String}",
+            {"name": VALUATIONS_TABLE},
+        )
+        _valuations_ready = bool(rows and rows[0].get("n"))
+    return _valuations_ready
+
+
+async def fetch_listing_valuation(parameters):
+    return await query(
+        f"""
+        SELECT {_VALUATION_SELECT}
+        FROM {VALUATIONS_TABLE} FINAL
+        WHERE listing_id = {{listing_id:String}}
+        """,
+        parameters,
+    )
+
+
+async def fetch_building_sales(parameters):
+    """Ready DLD sales of one building, type and bedroom count, for a listing's evidence."""
+    return await query(
+        """
+        SELECT replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '') AS unit_key, unit_number,
+               transaction_date, sale_amount_aed, size_sqft
+        FROM dxbi_sales_unit_events FINAL
+        WHERE building_key = {building:String} AND property_type = {type:String}
+          AND bedrooms = {beds:String} AND market_status = 'Ready' AND sale_amount_aed > 0
+          AND transaction_date >= {since:Date} AND transaction_date < {until:Date}
+        """,
+        parameters,
+    )
+
+
+async def fetch_ready_sales_for_buildings(building_keys: list[str], since) -> list[dict[str, Any]]:
+    """Ready DLD sales of many buildings at once, for the batch's exact comparables."""
+    if not building_keys:
+        return []
+    return await query(
+        """
+        SELECT building_key, property_type, bedrooms,
+               replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '') AS unit_key, unit_number,
+               transaction_date, sale_amount_aed, size_sqft
+        FROM dxbi_sales_unit_events FINAL
+        WHERE building_key IN {buildings:Array(String)} AND market_status = 'Ready'
+          AND sale_amount_aed > 0 AND transaction_date >= {since:Date}
+        """,
+        {"buildings": building_keys, "since": since},
+    )
+
+
+async def fetch_valuation_counts(filters):
+    where, parameters = _where_sql(**filters)
+    return await query(
+        f"""
+        SELECT
+            countIf(v_market_position = 'below_market') AS below_market_count,
+            countIf(v_market_position = 'near_market') AS near_market_count,
+            countIf(v_market_position = 'above_market') AS above_market_count,
+            countIf(v_market_position IN ('below_market', 'near_market', 'above_market'))
+                AS benchmarked_count
+        FROM {LISTINGS_TABLE}
+        {_VALUATION_JOIN}
+        WHERE {where}
+        """,
+        parameters,
+    )
+
+
 PRICE_VALUE_EXPR = "JSONExtractInt(price_json, 'value')"
 
 PRICE_PERIOD_EXPR = "lower(JSON_VALUE(price_json, '$.period'))"
@@ -171,6 +273,7 @@ def _where_sql(
     asset_class: ListingAssetClass | None = None,
     price_period: str | None = None,
     price_basis: str = "raw",
+    market_position: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     clauses = ["category_id IN {category_ids:Array(UInt16)}", "is_available = 1"]
     params: dict[str, Any] = {"category_ids": list(_category_ids(mode, asset_class))}
@@ -211,6 +314,17 @@ def _where_sql(
     if price_max is not None:
         clauses.append(f"{price_filter_expr} <= {{price_max:Int64}}")
         params["price_max"] = price_max
+    if market_position:
+        clauses.append(
+            f"""listing_id IN (
+                SELECT listing_id FROM {VALUATIONS_TABLE} FINAL
+                WHERE market_position = {{market_position:String}}
+                  AND listing_id IN (SELECT listing_id FROM {LISTINGS_TABLE} WHERE is_available = 1)
+                ORDER BY value_gap_pct ASC, listing_id
+                LIMIT 1 BY {_SAME_UNIT}
+            )"""
+        )
+        params["market_position"] = market_position
     return " AND ".join(clauses), params
 
 
@@ -374,11 +488,21 @@ async def fetch_listing_count(filters):
     )
 
 
-async def fetch_listing_rows(filters, *, limit: int, offset: int):
+async def fetch_listing_rows(
+    filters, *, limit: int, offset: int, sort: str = "default", with_valuations: bool = False
+):
     where, parameters = _where_sql(**filters)
     parameters = {**parameters, "limit": limit, "offset": offset}
     market_price_expr = _market_price_expr(filters["mode"])
     price_sort_expr = _price_expr(_price_basis(filters.get("price_basis", "raw")))
+    # Biggest discount to estimated value first; listings without an estimate go last.
+    # Only flagged listings whose price hasn't changed since valuation are ranked by their gap.
+    gap_order = (
+        "if(v_market_position IN ('below_market', 'near_market', 'above_market') "
+        f"AND v_asking_aed = {PRICE_VALUE_EXPR}, v_value_gap_pct, 999) ASC,"
+        if with_valuations and sort == "value_gap"
+        else ""
+    )
     return await query(
         f"""
         SELECT
@@ -422,9 +546,12 @@ async def fetch_listing_rows(filters, *, limit: int, offset: int):
             ) AS listing_age_days,
             if(market_price_aed > 0 AND size_sqft > 0, market_price_aed / size_sqft, NULL)
                 AS price_per_sqft_aed
+            {", valuation.*" if with_valuations else ""}
         FROM {LISTINGS_TABLE}
+        {_VALUATION_JOIN if with_valuations else ""}
         WHERE {where}
         ORDER BY
+            {gap_order}
             is_featured DESC,
             is_premium DESC,
             snapshot_at DESC NULLS LAST,
