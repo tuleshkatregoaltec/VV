@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
 	buildBlockRequest,
+	extractContactNumbers,
 	parsePhoneNumbers,
 	selectionAfterToggle,
 	selectVisible
@@ -65,5 +66,36 @@ describe('buildBlockRequest', () => {
 		const ids = new Set(Array.from({ length: 2300 }, (_, i) => `c${i}`))
 		const requests = buildBlockRequest({ ids, numbers: [], blocked: true })
 		expect(requests.map((r) => r.contact_ids?.length)).toEqual([1000, 1000, 300])
+	})
+})
+
+describe('extractContactNumbers', () => {
+	it('reads names and every number from a vCard export', () => {
+		const vcf = [
+			'BEGIN:VCARD',
+			'VERSION:3.0',
+			'FN:Mum',
+			'TEL;TYPE=CELL:+971 50 111 2222',
+			'END:VCARD',
+			'BEGIN:VCARD',
+			'FN:Office',
+			'TEL;TYPE=WORK:04 333 4444',
+			'TEL:00971 55 999 8888',
+			'END:VCARD'
+		].join('\r\n')
+		expect(extractContactNumbers(vcf)).toEqual([
+			{ name: 'Mum', number: '971501112222' },
+			{ name: 'Office', number: '97143334444' },
+			{ name: 'Office', number: '971559998888' }
+		])
+	})
+	it('reads a Name,Phone spreadsheet and skips the header and duplicates', () => {
+		const csv = 'Name,Phone\n"Ali Khan",+971 52 123 4567\nAli again,+971521234567\nNo number,n/a'
+		expect(extractContactNumbers(csv)).toEqual([{ name: 'Ali Khan', number: '971521234567' }])
+	})
+	it('uses the chosen country code for local numbers', () => {
+		expect(extractContactNumbers('0501234567', '91')).toEqual([
+			{ name: null, number: '91501234567' }
+		])
 	})
 })

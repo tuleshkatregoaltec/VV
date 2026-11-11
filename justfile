@@ -83,8 +83,8 @@ build-frontend:
 	set -a && source .env.dev && set +a && cd frontend && bun run build
 
 # Explicit public endpoints for the isolated pilot; do not source local credentials.
-build-pilot-frontend api_url auth_url:
-	cd frontend && PUBLIC_API_BASE_URL="$1" PUBLIC_AUTH_BASE_URL="$2" PUBLIC_CRM_PRESENTATION_MODE=true PUBLIC_POSTHOG_KEY= PUBLIC_POSTHOG_HOST= bun run build
+build-pilot-frontend api_url auth_url publishable_key="":
+	cd frontend && PUBLIC_API_BASE_URL="$1" PUBLIC_AUTH_BASE_URL="$2" PUBLIC_AUTH_PUBLISHABLE_KEY="$3" PUBLIC_CRM_PRESENTATION_MODE=true PUBLIC_POSTHOG_KEY= PUBLIC_POSTHOG_HOST= bun run build
 
 # Reuse restored accounts and saved ownership results without full reassessment.
 dev-pilot-backend:

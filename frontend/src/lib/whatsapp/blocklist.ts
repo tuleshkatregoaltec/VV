@@ -68,3 +68,71 @@ export function buildBlockRequest(input: {
 	}
 	return requests
 }
+
+export type FileContact = { name: string | null; number: string }
+
+const PHONE_RUN = /(?:\+|00)?\d[\d\s().-]{5,}\d/g
+const HAS_PHONE = /\d[\d\s().-]{5,}\d/
+
+/** Digits in international form, or null. Local numbers (one leading 0) take the default code. */
+export function normalizeNumber(raw: string, countryCode: string): string | null {
+	let digits = raw.replace(/\D/g, '')
+	if (raw.trim().startsWith('+')) {
+		// already international
+	} else if (digits.startsWith('00')) {
+		digits = digits.slice(2)
+	} else if (digits.startsWith('0')) {
+		digits = countryCode + digits.slice(1)
+	}
+	return digits.length >= 7 && digits.length <= 15 ? digits : null
+}
+
+function unfoldVcard(text: string): string[] {
+	// vCard lines may continue on the next line when it starts with a space or tab.
+	return text.replace(/\r?\n[ \t]/g, '').split(/\r?\n/)
+}
+
+function fromVcard(text: string, countryCode: string): FileContact[] {
+	const out: FileContact[] = []
+	let name: string | null = null
+	for (const line of unfoldVcard(text)) {
+		const upper = line.toUpperCase()
+		if (upper.startsWith('BEGIN:VCARD')) name = null
+		else if (upper.startsWith('FN:') || upper.startsWith('FN;')) {
+			name = line.slice(line.indexOf(':') + 1).trim() || null
+		} else if (upper.startsWith('TEL')) {
+			const number = normalizeNumber(line.slice(line.lastIndexOf(':') + 1), countryCode)
+			if (number) out.push({ name, number })
+		}
+	}
+	return out
+}
+
+function fromTable(text: string, countryCode: string): FileContact[] {
+	const out: FileContact[] = []
+	for (const line of text.split(/\r?\n/)) {
+		const numbers = [...line.matchAll(PHONE_RUN)].map((m) => m[0])
+		if (numbers.length === 0) continue
+		// The name is the first cell that is not a number, for "Name,Phone" style exports.
+		const cells = line.split(/[,;\t]/).map((c) => c.replace(/^"|"$/g, '').trim())
+		const name = cells.find((c) => c && /[a-z]/i.test(c) && !HAS_PHONE.test(c)) ?? null
+		for (const raw of numbers) {
+			const number = normalizeNumber(raw, countryCode)
+			if (number) out.push({ name, number })
+		}
+	}
+	return out
+}
+
+/** Numbers found in a phone's contacts export (.vcf) or a spreadsheet (.csv/.txt), deduplicated. */
+export function extractContactNumbers(text: string, countryCode = '971'): FileContact[] {
+	const found = /BEGIN:VCARD/i.test(text)
+		? fromVcard(text, countryCode)
+		: fromTable(text, countryCode)
+	const seen = new Map<string, FileContact>()
+	for (const contact of found) {
+		const prior = seen.get(contact.number)
+		if (!prior || (!prior.name && contact.name)) seen.set(contact.number, contact)
+	}
+	return [...seen.values()]
+}

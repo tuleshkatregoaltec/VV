@@ -54,10 +54,24 @@ describe('stepStates', () => {
 })
 
 describe('contactsSyncPending', () => {
-	it('is pending until the sync time is set', () => {
-		expect(contactsSyncPending(base)).toBe(true)
-		const synced = { ...base, contacts: { ...base.contacts, synced_at: '2026-11-06T09:05:00Z' } }
-		expect(contactsSyncPending(synced)).toBe(false)
+	const requested = {
+		...base,
+		contacts: { ...base.contacts, sync_requested_at: '2026-11-06T09:00:00Z' }
+	}
+	const soon = Date.parse('2026-11-06T10:00:00Z')
+	it('is pending after a request until the sync time is set', () => {
+		expect(contactsSyncPending(requested, soon)).toBe(true)
+		const synced = {
+			...requested,
+			contacts: { ...requested.contacts, synced_at: '2026-11-06T09:05:00Z' }
+		}
+		expect(contactsSyncPending(synced, soon)).toBe(false)
+	})
+	it('never waits when no sync was requested', () => {
+		expect(contactsSyncPending(base, soon)).toBe(false)
+	})
+	it('stops waiting once Meta’s 24-hour window has passed', () => {
+		expect(contactsSyncPending(requested, Date.parse('2026-11-07T09:00:01Z'))).toBe(false)
 	})
 })
 

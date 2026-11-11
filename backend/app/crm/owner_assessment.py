@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import copy
+import gc
 import hashlib
 import logging
 import time
@@ -41,6 +42,11 @@ _DATETIME_FIELDS = {"created_at", "updated_at"}
 logger = logging.getLogger(__name__)
 _cache: RedisCache | None = None
 _recent: tuple[str, float, OwnerAssessmentSnapshot] | None = None
+# Scoped assessments are per request-shape, so they are kept in this process only, one
+# per tenant and a handful overall; they are never written to Redis.
+SCOPED_CACHE_ENTRIES = 8
+SCOPED_CACHE_MAX_ROWS = 60_000
+_scoped_recent: dict[str, tuple[str, float, OwnerAssessmentSnapshot]] = {}
 
 
 @dataclass
@@ -291,17 +297,23 @@ def _encode(snapshot: OwnerAssessmentSnapshot) -> str:
     ).decode()
 
 
+def restore_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Give a JSON-decoded assessment row back its date, datetime and identity types."""
+    for name in _DATE_FIELDS:
+        if row.get(name):
+            row[name] = date.fromisoformat(row[name])
+    for name in _DATETIME_FIELDS:
+        if row.get(name):
+            row[name] = datetime.fromisoformat(row[name])
+    if row.get("property_identity"):
+        row["property_identity"] = tuple(row["property_identity"])
+    return row
+
+
 def _decode(payload: str) -> OwnerAssessmentSnapshot:
     data = orjson.loads(zlib.decompress(base64.b64decode(payload)))
     for row in data["rows"]:
-        for name in _DATE_FIELDS:
-            if row.get(name):
-                row[name] = date.fromisoformat(row[name])
-        for name in _DATETIME_FIELDS:
-            if row.get(name):
-                row[name] = datetime.fromisoformat(row[name])
-        if row.get("property_identity"):
-            row["property_identity"] = tuple(row["property_identity"])
+        restore_row(row)
     return OwnerAssessmentSnapshot(
         rows=data["rows"],
         summary=CrmOwnerHistorySummary.model_validate(data["summary"]),
@@ -444,11 +456,13 @@ async def _build(
     *,
     source_revision: str | None = None,
     warehouse_available: bool = True,
+    rows: list[dict[str, Any]] | None = None,
 ) -> OwnerAssessmentSnapshot:
     from app.crm.owner_projection import _property_identity
     from app.crm.source_audit import source_audit_for_row
 
-    rows = await _source_rows(db, organization_id, source_revision)
+    if rows is None:
+        rows = await _source_rows(db, organization_id, source_revision)
     valid = await run_in_thread(
         lambda: [
             (row, _candidate(row))
@@ -668,16 +682,89 @@ def _unavailable_snapshot(snapshot: OwnerAssessmentSnapshot) -> OwnerAssessmentS
     return _finish_assessment(snapshot.rows, valid, {}, datetime.now(timezone.utc), "unavailable")
 
 
+async def _scoped_assessment(
+    db: AsyncSession, organization_id: str, unit_candidate_keys: list[str]
+) -> OwnerAssessmentSnapshot:
+    """Assess only the claims on the given lease units (and their properties).
+
+    The whole-organization snapshot holds every claim as a Python dict: ~5 GB resident
+    for 311k claims and ~7 GB (13 GB with the cache encode and a second worker) while it
+    is built. A caller that needs a few thousand units must not pay for, cache or retain
+    that. The result is reused in this process for as long as its inputs are unchanged,
+    one scope per tenant, so repeated page loads do not repeat a ten second build.
+    """
+    tenant = hashlib.sha256(organization_id.encode()).hexdigest()
+    scope = hashlib.sha256("\0".join(sorted(set(unit_candidate_keys))).encode()).hexdigest()
+
+    async def identity():
+        revision = await _source_revision(db, organization_id)
+        source_only = await owner_repository.owner_sources_only(db, organization_id)
+        warehouse_revision = "not_requested" if source_only else await _warehouse_revision()
+        return revision, warehouse_revision, f"{revision}:{warehouse_revision}:{scope}"
+
+    def reusable(key: str) -> OwnerAssessmentSnapshot | None:
+        recent = _scoped_recent.get(tenant)
+        if (
+            recent
+            and recent[0] == key
+            and (recent[2].warehouse_status == "available" or recent[1] > time.monotonic())
+        ):
+            return recent[2]
+        return None
+
+    revision, warehouse_revision, key = await identity()
+    if (found := reusable(key)) is not None:
+        return found
+    async with _BUILD_LOCKS.setdefault(f"scoped:{tenant}", asyncio.Lock()):
+        # A queued identical request reuses the build that just finished.
+        if (found := reusable(key)) is not None:
+            return found
+        rows = await owner_repository.list_owner_history_rows(
+            db, organization_id=organization_id, unit_candidate_keys=unit_candidate_keys
+        )
+        row_count = len(rows)
+        snapshot = await _build(
+            db,
+            organization_id,
+            source_revision=revision,
+            warehouse_available=warehouse_revision is not None,
+            rows=rows,
+        )
+        del rows
+        current_revision = await _source_revision(db, organization_id)
+        current_warehouse = (
+            "not_requested"
+            if warehouse_revision == "not_requested"
+            else await _warehouse_revision()
+        )
+        if revision != current_revision or warehouse_revision != current_warehouse:
+            # Never publish confirmed ownership across changing evidence inputs.
+            return await run_in_thread(_unavailable_snapshot, snapshot)
+        if row_count <= SCOPED_CACHE_MAX_ROWS:
+            snapshot.cached_at = datetime.now(timezone.utc)
+            remaining = _remaining_lifetime(snapshot)
+            if remaining > 0:
+                _scoped_recent[tenant] = (key, time.monotonic() + remaining, snapshot)
+                while len(_scoped_recent) > SCOPED_CACHE_ENTRIES:
+                    _scoped_recent.pop(next(iter(_scoped_recent)))
+        return snapshot
+
+
 async def get_owner_assessment(
-    db: AsyncSession, *, organization_id: str
+    db: AsyncSession, *, organization_id: str, unit_candidate_keys: list[str] | None = None
 ) -> OwnerAssessmentSnapshot:
     """Reuse the bounded tenant/source/rules/evidence projection while inputs match.
 
     ``checked_at`` records evidence capture, independently of cache completion.
     Physical warehouse changes invalidate immediately; mutable inputs still lack
     an atomic publication contract. Metadata failure never reuses verified labels.
+
+    With ``unit_candidate_keys`` only those units' claims are assessed (see
+    ``_scoped_assessment``); the snapshot's rows then cover just those units.
     """
     global _recent
+    if unit_candidate_keys is not None:
+        return await _scoped_assessment(db, organization_id, unit_candidate_keys)
     tenant = hashlib.sha256(organization_id.encode()).hexdigest()
 
     async def cache_identity():
@@ -710,6 +797,10 @@ async def get_owner_assessment(
             and (_recent[2].warehouse_status == "available" or _recent[1] > time.monotonic())
         ):
             return _recent[2]
+        # Drop the stale whole-org snapshot before decoding or rebuilding, so the old and
+        # new copies are never resident together (a 311k-claim tenant OOM-killed the API).
+        _recent = None
+        gc.collect()
         payload = await cache.get(key)
         if payload:
             try:

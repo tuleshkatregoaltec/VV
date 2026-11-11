@@ -52,7 +52,7 @@ const groups: { label: string; items: Item[] }[] = [
 		items: [
 			{ href: '/radar', label: 'Radar map', icon: Target },
 			{ href: '/chat', label: 'AI chat', icon: MessageSquare },
-			{ href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageSquare },
+			{ href: '/crm/whatsapp', label: 'WhatsApp', icon: MessageSquare },
 			{ href: '/workflows', label: 'Workflows', icon: Workflow }
 		]
 	}

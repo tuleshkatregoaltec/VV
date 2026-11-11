@@ -1,5 +1,6 @@
 import { type AgentConnectionStatus, whatsappConnect } from '$lib/api/whatsapp-connect'
 import { currentUser } from '$lib/stores/user.svelte'
+import { contactsSyncPending } from '$lib/whatsapp/connect-state'
 
 const scope = () => {
 	const user = currentUser.data
@@ -35,7 +36,7 @@ export const whatsappConnectQueries = {
 		// Contacts arrive by webhook a few minutes after connecting; watch until they do.
 		refetchInterval: (query: { state: { data: AgentConnectionStatus | null | undefined } }) => {
 			const status = query.state.data
-			return status?.state === 'connected' && !status.contacts.synced_at ? SYNC_POLL_MS : false
+			return status?.state === 'connected' && contactsSyncPending(status) ? SYNC_POLL_MS : false
 		}
 	}),
 	contacts: (search: string, blockedOnly: boolean, enabled: boolean, pollMs: number | false) => ({

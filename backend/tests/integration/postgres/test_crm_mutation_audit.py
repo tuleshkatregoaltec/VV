@@ -226,7 +226,12 @@ async def test_every_private_store_has_statement_transition_and_no_truncate_trig
         SELECT table_name FROM information_schema.columns
         WHERE table_schema='public' AND table_name LIKE 'crm_%'
         AND column_name='organization_id'
-        AND table_name NOT IN ('crm_mutation_audit', 'crm_owner_assessment_revisions')
+        AND table_name NOT IN (
+            'crm_mutation_audit', 'crm_owner_assessment_revisions',
+            -- derived from the claims, rebuilt whenever they change; never a source of record
+            'crm_owner_assessment_state', 'crm_owner_assessed_claims',
+            'crm_owner_registry_owners', 'crm_owner_registry_properties'
+        )
     """)
             )
         )

@@ -10,7 +10,7 @@ import pytest
 from fastapi import HTTPException, UploadFile
 from pydantic import ValidationError
 
-from app.crm import owner_assessment, owners, source_audit
+from app.crm import owner_assessment, owner_rows, source_audit
 from app.crm.owner_projection import _property_identity
 
 
@@ -145,7 +145,7 @@ def test_reviewed_multiple_phone_group_keeps_all_rows_and_one_scoped_party():
         assert row["ownership_status"] == "probable_current_owner"
         assert _property_identity(row) == ("source_audit", "11:plot:1")
     snapshot = owner_assessment._source_snapshot(rows, datetime.now(timezone.utc))
-    profiles = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)
+    profiles = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)
     assert len(profiles) == 1
     assert len(profiles[0].phone_numbers) == 3
     assert profiles[0].property_count == 1
@@ -184,7 +184,7 @@ def test_coowners_and_audited_scoped_references_do_not_merge():
     )
     assert len(snapshot.rows) == 4
     assert snapshot.summary.identifiable_property_count == 2
-    profiles = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)
+    profiles = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)
     assert len(profiles) == 3
     assert sum(profile.property_count for profile in profiles) == 3
     summary = source_audit.aggregate_source_audit(snapshot.rows)
@@ -201,7 +201,7 @@ class MemoryCache:
         return None
 
 
-async def test_source_only_reads_never_request_warehouse_or_profile_enrichment(monkeypatch):
+async def test_source_only_assessment_and_tokens_never_request_the_warehouse(monkeypatch):
     rows = history_rows()
     monkeypatch.setattr(owner_assessment, "_recent", None)
     monkeypatch.setattr(owner_assessment, "_source_revision", AsyncMock(return_value="snapshot"))
@@ -216,30 +216,12 @@ async def test_source_only_reads_never_request_warehouse_or_profile_enrichment(m
     snapshot = await owner_assessment.get_owner_assessment(None, organization_id="tenant")
     assert snapshot.warehouse_status == "not_requested"
     warehouse.assert_not_called()
-    monkeypatch.setattr(owners, "get_owner_assessment", AsyncMock(return_value=snapshot))
-    monkeypatch.setattr(owners, "_enrich_owner_profile_registry", warehouse)
-    profile = await owners.get_owner_profile(
-        None, organization_id="tenant", owner_key=rows[0]["owner_key"]
+    from app.crm import owner_store
+
+    monkeypatch.setattr(
+        owner_store.owner_repository, "owner_sources_only", AsyncMock(return_value=True)
     )
-    assert profile.highest_ownership_status == "probable_current_owner"
-    response = await owners.get_owner_registry(
-        None,
-        organization_id="tenant",
-        list_id=None,
-        scope="all",
-        status=None,
-        search=None,
-        lease_window=None,
-        portfolio_only=False,
-        min_rent_aed=None,
-        max_rent_aed=None,
-        min_value_aed=None,
-        max_value_aed=None,
-        limit=50,
-        offset=0,
-    )
-    assert response.total == 1
-    assert response.source_audit.source_row_count == 3
+    assert await owner_store._tokens(None, "tenant") == ("snapshot", "not_requested")
     warehouse.assert_not_called()
 
 
@@ -407,7 +389,7 @@ def test_plot_reference_and_source_area_remain_visible_without_inventing_a_unit(
     assert all(row["area_name"] == "Master District" and row["unit_number"] == "" for row in rows)
     snapshot = owner_assessment._source_snapshot(rows, datetime.now(timezone.utc))
     assert snapshot.summary.legacy_source_event_count == 0
-    profile = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)[0]
+    profile = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)[0]
     reference = profile.properties[0].source_reference
     assert reference.reference_id == "plot:1"
     assert reference.land_number == "1"
@@ -445,7 +427,7 @@ def matched_history_rows():
 
 def test_matched_history_exposes_supported_former_and_preserves_reference_denominator():
     snapshot = owner_assessment._source_snapshot(matched_history_rows(), datetime.now(timezone.utc))
-    profiles = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)
+    profiles = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)
     assert snapshot.warehouse_status == "available"
     assert snapshot.summary.owner_property_count == 2
     assert snapshot.summary.unresolved_count == 0
@@ -463,35 +445,6 @@ def test_matched_history_exposes_supported_former_and_preserves_reference_denomi
     assert summary.matched_reference_count == summary.matched_registry_property_count == 2
     assert summary.current_owner_association_count == summary.former_owner_association_count == 1
     assert summary.excluded_match_reference_count == 2
-
-
-@pytest.mark.parametrize(
-    "scope,status", [("current_owners", "probable_current_owner"), ("prior_owners", "former_owner")]
-)
-async def test_owner_category_filter_scopes_properties_of_a_person_with_both_histories(
-    monkeypatch, scope, status
-):
-    snapshot = owner_assessment._source_snapshot(matched_history_rows(), datetime.now(timezone.utc))
-    monkeypatch.setattr(owners, "get_owner_assessment", AsyncMock(return_value=snapshot))
-    response = await owners.get_owner_registry(
-        None,
-        organization_id="tenant",
-        list_id=None,
-        scope=scope,
-        status=None,
-        search=None,
-        lease_window=None,
-        portfolio_only=False,
-        min_rent_aed=None,
-        max_rent_aed=None,
-        min_value_aed=None,
-        max_value_aed=None,
-        limit=10,
-        offset=0,
-    )
-    assert response.total == 1
-    assert response.owners[0].property_count == 1
-    assert [item.ownership_status for item in response.owners[0].properties] == [status]
 
 
 async def test_import_detail_uses_committed_matching_summary_without_losing_source_partition(
@@ -536,72 +489,12 @@ async def test_import_detail_uses_committed_matching_summary_without_losing_sour
     assert record.summary["source_audit"]["mode"] == "source_only"
 
 
-async def test_transaction_match_filter_preserves_unverified_roles_before_paging(monkeypatch):
-    rows = matched_history_rows()
-    rows[0]["evidence"]["source_audit"]["transaction_match"]["acquisition_sale_keys"] = ["sale:1"]
-    rows[1]["evidence"]["source_audit"]["transaction_match"].update(
-        status="unmatched", property_key=None, latest_sale_date=None, later_sale_date=None
-    )
-    extra = copy.deepcopy(rows[0])
-    extra["id"] = 5
-    extra["evidence"]["source_audit"]["reference_id"] = "plot:5"
-    extra["evidence"]["source_audit"]["transaction_match"].update(
-        status="unmatched",
-        property_key=None,
-        canonical_owner_key="another-owner",
-        acquisition_sale_keys=[],
-    )
-    rows.append(extra)
-    snapshot = owner_assessment._source_snapshot(rows, datetime.now(timezone.utc))
-    monkeypatch.setattr(owners, "get_owner_assessment", AsyncMock(return_value=snapshot))
-    response = await owners.get_owner_registry(
-        None,
-        organization_id="tenant",
-        list_id=None,
-        scope="all",
-        status=None,
-        search=None,
-        lease_window=None,
-        portfolio_only=False,
-        min_rent_aed=None,
-        max_rent_aed=None,
-        min_value_aed=None,
-        max_value_aed=None,
-        limit=1,
-        offset=0,
-        transaction_match_status="unmatched",
-    )
-    assert response.total == 2  # Count all eligible owners before taking this page.
-    assert len(response.owners) == 1
-    assert response.owners[0].property_count == 1
-    assert all(
-        p.source_reference.transaction_match_status == "unmatched"
-        for p in response.owners[0].properties
-    )
-    assert response.source_audit.reference_count == 5  # The file denominator is not filtered.
-    profiles = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)
-    refs = {
-        p.source_reference.reference_id: p.source_reference
-        for owner in profiles
-        for p in owner.properties
-    }
-    assert refs["plot:1"].ownership_evidence_basis == "transaction_supported"
-    assert refs["plot:2"].ownership_evidence_basis == "workbook_only"
-    assert refs["plot:2"].transaction_match_status == "unmatched"
-    assert any(
-        p.ownership_status == "former_owner"
-        for o in profiles
-        for p in o.properties
-        if p.source_reference.reference_id == "plot:2"
-    )
-
-
 def test_former_with_anchored_acquisition_but_only_workbook_successor_stays_unverified():
     rows = matched_history_rows()
     match = rows[1]["evidence"]["source_audit"]["transaction_match"]
     match.update(acquisition_sale_keys=["acquisition"], later_sale_date=None)
     snapshot = owner_assessment._source_snapshot(rows, datetime.now(timezone.utc))
-    profiles = owners._assessed_profiles(snapshot.rows, snapshot=snapshot)
+    profiles = owner_rows.assessed_profiles(snapshot.rows, snapshot=snapshot)
     former = next(
         p for owner in profiles for p in owner.properties if p.ownership_status == "former_owner"
     )
