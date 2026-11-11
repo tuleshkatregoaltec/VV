@@ -120,6 +120,28 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 		expect((await backend.listLeads({ lost: true })).items.map((l) => l.id)).toEqual([3])
 	})
 
+	it("gives the board its lost leads, so a lead moved to Lost shows in the board's Lost column", async () => {
+		// 11 Nov: a lead moved to Lost vanished from the board, whose Lost column could never fill.
+		serve({
+			'/api/v1/crm/inbound/enquiries': {
+				enquiries: [
+					enquiry({ id: 1, intent: 'buy', status: 'contacted' }),
+					enquiry({ id: 2, intent: 'buy', status: 'closed_lost' })
+				],
+				total: 2,
+				summary: {}
+			}
+		})
+		const res = await backend.listLeads({ include_lost: true })
+		expect(res.items.map((l) => [l.id, l.stage])).toEqual([
+			[1, 'contacted'],
+			[2, 'lost']
+		])
+		// The tab counts are unchanged: All still leaves lost leads out.
+		expect(res.counts.all).toBe(1)
+		expect(res.counts.lost).toBe(1)
+	})
+
 	it('reads criteria into the buyer brief the Leads table shows', async () => {
 		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry() })
 		const lead = await backend.getLead(7)
@@ -151,6 +173,47 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 		expect(patch.mock.calls[0][1]).toMatchObject({ status: 'offer' })
 		expect(post.mock.calls[0][1]).toEqual({ body: 'Offer AED 225,000 · Metro | Lake View' })
 		expect(r.data.stage).toBe('offer')
+	})
+
+	it('books the viewing in the calendar when a lead moves to Viewing', async () => {
+		// 11 Nov: the stage move kept the date only as a note, so the viewing never reached the
+		// agent's calendar (or Google Calendar) although the backend books viewings.
+		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry({ status: 'qualified' }) })
+		const patch = vi.spyOn(client, 'patch').mockResolvedValue(enquiry({ status: 'viewing' }))
+		const post = vi.spyOn(client, 'post').mockResolvedValue(enquiry({ status: 'viewing' }))
+		await backend.moveLeadStage(7, {
+			stage: 'viewing',
+			viewing: { date: '2026-11-14', time: '16:30', listing_id: 'L-9' },
+			note: 'Bring keys'
+		})
+		expect(patch.mock.calls[0][1]).toMatchObject({ status: 'viewing' })
+		expect(post).toHaveBeenCalledWith('/api/v1/crm/calendar/viewings/7', {
+			date: '2026-11-14',
+			time: '16:30',
+			listing_id: 'L-9',
+			note: 'Bring keys'
+		})
+		// The lead's history still says when the viewing is.
+		expect(post).toHaveBeenCalledWith('/api/v1/crm/inbound/enquiries/7/notes', {
+			body: 'Viewing 2026-11-14 16:30\nBring keys'
+		})
+	})
+
+	it('saves a buyer at Won with the agreed price, unit and target date as a note', async () => {
+		// Deals have no backend yet (11 Nov): Offer → Won used to try to open a deal and fail with
+		// "Creating a deal isn't available". The lead's own status records the win instead.
+		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry({ status: 'offer' }) })
+		const patch = vi.spyOn(client, 'patch').mockResolvedValue(enquiry({ status: 'won' }))
+		const post = vi.spyOn(client, 'post').mockResolvedValue(enquiry({ status: 'won' }))
+		const r = await backend.moveLeadStage(7, {
+			stage: 'won',
+			won: { value_aed: 225_000, unit: 'Metro | Lake View', due_date: '2026-12-02' }
+		})
+		expect(patch.mock.calls[0][1]).toMatchObject({ status: 'won' })
+		expect(post.mock.calls[0][1]).toEqual({
+			body: 'Won AED 225,000 · Metro | Lake View · target 2026-12-02'
+		})
+		expect(r.data.stage).toBe('won')
 	})
 
 	it("notes who a seller's offer came from", async () => {
@@ -1062,7 +1125,6 @@ describe('CRM areas with no backend yet', () => {
 		const { crm } = await import('$lib/crm/api')
 		const get = vi.spyOn(client, 'get')
 		expect((await crm.deals.list('pipeline')).items).toEqual([])
-		expect(await crm.events.list('2026-10-01', '2026-10-31')).toEqual([])
 		expect((await crm.listings.list('mine')).items).toEqual([])
 		expect(await crm.notifications.list()).toEqual([])
 		expect(get).not.toHaveBeenCalled()
@@ -1078,9 +1140,20 @@ describe('CRM areas with no backend yet', () => {
 				due_date: '2026-11-01'
 			} as never)
 		).rejects.toMatchObject({ status: 501 })
-		await expect(
-			crm.events.create({ title: 'Call', date: '2026-10-08', time: null, kind: 'call' })
-		).rejects.toMatchObject({ status: 501 })
+		await expect(crm.listings.create({} as never)).rejects.toMatchObject({ status: 501 })
+	})
+
+	it('reads and saves the calendar on the backend, now that it has one (Calendar Connector)', async () => {
+		// The calendar left this "no backend" list on 30 Oct: an event the agent adds must be
+		// stored, not refused with a 501 or shown as empty.
+		const { crm } = await import('$lib/crm/api')
+		const get = serve({ '/api/v1/crm/calendar/events': [] })
+		const post = vi.spyOn(client, 'post').mockResolvedValue({ id: 5 } as never)
+		await crm.events.list('2026-10-01', '2026-10-31')
+		expect(get).toHaveBeenCalledWith('/api/v1/crm/calendar/events?start=2026-10-01&end=2026-10-31')
+		const body = { title: 'Call', date: '2026-10-08', time: null, kind: 'call' } as const
+		expect((await crm.events.create(body)).data).toEqual({ id: 5 })
+		expect(post).toHaveBeenCalledWith('/api/v1/crm/calendar/events', body)
 	})
 
 	it("fill Home's new leads and the sidebar count from real leads", async () => {

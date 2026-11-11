@@ -55,6 +55,8 @@ const group = $derived<LeadGroup>(tabType ? groupOf(tabType) : ui.leadGroup)
 const params = $derived<LeadListParams>({
 	lead_type: tabType ?? '',
 	lost: ui.leadTab === 'lost' ? true : undefined,
+	// The board has a Lost column: give it the lost leads the list view keeps under the Lost tab.
+	include_lost: ui.leadView === 'board' ? true : undefined,
 	source: ui.source,
 	stage: ui.stage,
 	area: ui.area,

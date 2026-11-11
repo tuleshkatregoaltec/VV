@@ -238,6 +238,8 @@ export interface LeadListParams {
 	lead_type?: LeadType | ''
 	/** Lost tab: only lost leads. Every other tab leaves lost leads out. */
 	lost?: boolean
+	/** Board: keep lost leads in the items for its Lost column (counts are unchanged). */
+	include_lost?: boolean
 	source?: Source | ''
 	stage?: LeadStage | ''
 	area?: string
@@ -305,11 +307,13 @@ export interface LeadStageMove {
 	next_action?: string
 	/** Qualified: the type's fields (the money field is required). */
 	fields?: LeadFields
-	/** Viewing: adds a calendar event. */
+	/** Viewing: booked as a calendar event (/calendar/viewings) and noted on the lead. */
 	viewing?: { date: string; time: string; listing_id: string | null }
 	/** Offer: buyer/tenant amount + unit; seller/landlord amount received + from whom. */
 	/** `unit`: the chosen listing's name, written in the lead's note. */
 	offer?: { amount_aed: number; listing_id?: string | null; unit?: string; from?: string }
+	/** Won (buyer/tenant): agreed price, unit and target date, written in the lead's note (no deals backend yet). */
+	won?: { value_aed: number; unit?: string; due_date?: string | null }
 	/** Lost: the reason. */
 	lost_reason?: string
 	/** Listed (seller/landlord): the pocket listing to create and link, unless one is linked. */

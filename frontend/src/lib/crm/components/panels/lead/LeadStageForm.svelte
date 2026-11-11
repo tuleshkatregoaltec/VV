@@ -3,7 +3,6 @@ import { createQuery } from '@tanstack/svelte-query'
 import Building from 'lucide-svelte/icons/building-2'
 import House from 'lucide-svelte/icons/house'
 import { untrack } from 'svelte'
-import { goto } from '$app/navigation'
 import { crm } from '../../../api'
 import type {
 	LeadDetail,
@@ -15,9 +14,8 @@ import type {
 import { CONTACT_OUTCOMES, fieldShown, LEAD_TYPES, LOST_REASONS, stageOf } from '../../../config'
 import { addDays, fileSize } from '../../../format'
 import { crmQueries } from '../../../queries'
-import { panel } from '../../../stores/panel.svelte'
-import { ui } from '../../../stores/ui.svelte'
 import { optionPicks, unitPicks } from '../../../stagePickers'
+import { panel } from '../../../stores/panel.svelte'
 import { write } from '../../../write'
 import Chip from '../../ui/Chip.svelte'
 import MoneyInput from '../../ui/MoneyInput.svelte'
@@ -27,7 +25,8 @@ import SearchPicker from '../../ui/SearchPicker.svelte'
  * Moving a lead to a stage asks for what that stage needs, then saves (logged, with Undo).
  * Contacted → how it went + next action · Qualified → the type's fields · Viewing (buyer/tenant)
  * → date, time, unit · Listed (seller/landlord) → the pocket listing, linked to the lead · Offer →
- * amount + unit (or from whom) · Won → the deal (buyer/tenant) · Lost → why. The stage's documents
+ * amount + unit (or from whom) · Won → agreed price, unit, target
+ * date (buyer/tenant; saved on the lead until deals have a backend) · Lost → why. The stage's documents
  * can be added here or later.
  */
 let { lead, stage }: { lead: LeadDetail; stage: LeadStage } = $props()
@@ -166,32 +165,20 @@ async function submit(e: SubmitEvent) {
 	} else if (stage === 'lost') {
 		ok = Boolean(await move({ ...base, lost_reason: why }))
 	} else if (stage === 'won' && buyerSide) {
-		const r = await write({
-			call: () =>
-				crm.deals.create({
-					lead_id: lead.id,
-					listing_id: listingId || null,
-					value_aed: amount,
+		// Deals have no backend yet: Won is saved on the lead, with the terms as a note.
+		ok = Boolean(
+			await move({
+				...base,
+				won: {
+					value_aed: amount ?? 0,
+					unit: unitOptions.find((u) => u.id === listingId)?.label,
 					due_date: due || null
-				}),
-			success: (res) => `${res.data.id} opened — request the documents next`,
-			created: (res) => ({ kind: 'deal', id: res.data.id }),
-			event: 'deal_created'
-		})
-		saving = false
-		if (r) {
-			ui.dealTab = 'conveyancing'
-			ui.cvType = ''
-			ui.cvSel = r.data.id
-			await goto(`/crm/deals?deal=${r.data.id}&tab=documents`)
-		}
-		return
+				}
+			})
+		)
 	} else if (stage === 'won') {
-		const r = await move(base)
-		saving = false
-		if (r && !lead.own_listing) panel.open({ kind: 'new-listing', fromLeadId: lead.id })
-		else if (r) panel.setTab('overview')
-		return
+		// Own listings have no backend yet, so no "New listing" panel follows (it could only fail).
+		ok = Boolean(await move(base))
 	}
 	saving = false
 	if (ok) panel.setTab('overview')
@@ -367,7 +354,7 @@ function onPicked() {
 		<div class="small muted">
 			{lead.own_listing
 				? 'The listing is signed. The deal is made with the buyer or tenant who takes it.'
-				: 'Signed with us. Move to Listed first to create the listing.'}
+				: 'Signed with us. Listings are not stored yet, so the listing details stay in the notes.'}
 		</div>
 	{:else if stage === 'lost'}
 		<div class="fld">
@@ -384,7 +371,7 @@ function onPicked() {
 	</div>
 	<div class="form-actions">
 		<button type="submit" class="btn" disabled={saving}>
-			{stage === 'won' && buyerSide ? 'Move to deal' : `Move to ${target.label}`}
+			Move to {target.label}
 		</button>
 		<button type="button" class="btn ghost" onclick={() => panel.setTab('overview')}>Cancel</button>
 	</div>

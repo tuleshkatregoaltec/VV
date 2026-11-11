@@ -610,7 +610,9 @@ export async function listLeads(p: LeadListParams): Promise<LeadListResponse> {
 	for (const t of Object.keys(LEAD_TYPES) as LeadType[])
 		counts[t] = open.filter(({ row }) => row.lead_type === t).length
 
-	const items = (p.lost ? matching.filter(({ row }) => row.stage === 'lost') : open)
+	const items = (
+		p.lost ? matching.filter(({ row }) => row.stage === 'lost') : p.include_lost ? matching : open
+	)
 		.map(({ row }) => row)
 		.filter((row) => !p.lead_type || row.lead_type === p.lead_type)
 	return {
@@ -680,8 +682,9 @@ const contactType = (outcome?: string) =>
 	outcome === 'No answer' ? 'contact_attempt' : outcome?.includes('WhatsApp') ? 'whatsapp' : 'call'
 
 /**
- * A stage move is a status change plus what the form collected. The backend has no calendar or
- * own listings yet, so a viewing's date and a listing's details are kept as a note on the lead.
+ * A stage move is a status change plus what the form collected. A viewing is booked in the
+ * calendar and noted on the lead; the backend has no own listings yet, so a listing's details are
+ * kept as a note on the lead.
  */
 export async function moveLeadStage(id: number, body: LeadStageMove): Promise<Written<LeadDetail>> {
 	const status = statusOf(body.stage)
@@ -692,6 +695,8 @@ export async function moveLeadStage(id: number, body: LeadStageMove): Promise<Wr
 	if (body.next_action)
 		update.qualification = { ...current.qualification, next_action: body.next_action }
 	let e = await patchEnquiry(id, update)
+	// After the stage is saved: if booking fails, the lead is at Viewing and "Book viewing" retries.
+	if (body.viewing) await bookCalendarViewing(id, { ...body.viewing, note: body.note ?? '' })
 
 	const lines = [
 		body.viewing &&
@@ -704,6 +709,15 @@ export async function moveLeadStage(id: number, body: LeadStageMove): Promise<Wr
 				`Offer ${aed(body.offer.amount_aed)}`,
 				body.offer.unit,
 				body.offer.from && `from ${body.offer.from}`
+			]
+				.filter(Boolean)
+				.join(' · '),
+		// Deals have no backend yet: the lead's "won" status records the win, the terms go in a note.
+		body.won &&
+			[
+				`Won ${aed(body.won.value_aed)}`,
+				body.won.unit,
+				body.won.due_date && `target ${body.won.due_date}`
 			]
 				.filter(Boolean)
 				.join(' · '),
