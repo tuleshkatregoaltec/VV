@@ -12,7 +12,7 @@ from app.crm.inbound_models import (
 
 _FIRST_RESPONSE_MINUTES = 5
 
-_QUALIFIED_STATUSES = {"qualified", "viewing", "valuation", "signed", "active", "won"}
+_QUALIFIED_STATUSES = {"qualified", "viewing", "offer", "valuation", "signed", "active", "won"}
 
 _NON_KEY = re.compile(r"[^a-z0-9]+")
 

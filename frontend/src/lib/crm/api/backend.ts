@@ -273,6 +273,8 @@ function stageOf(status: Status, type: LeadType): LeadStage {
 			return 'qualified'
 		case 'viewing':
 			return groupOf(type) === 'sl' ? 'qualified' : 'viewing'
+		case 'offer':
+			return 'offer'
 		case 'signed':
 		case 'active':
 			return groupOf(type) === 'sl' ? 'listed' : 'qualified'
@@ -288,8 +290,6 @@ function stageOf(status: Status, type: LeadType): LeadStage {
 
 function statusOf(stage: LeadStage): Status {
 	switch (stage) {
-		case 'offer':
-			throw notSaved('The Offer stage')
 		case 'listed':
 			return 'signed'
 		case 'lost':
@@ -698,6 +698,15 @@ export async function moveLeadStage(id: number, body: LeadStageMove): Promise<Wr
 			`Viewing ${body.viewing.date}${body.viewing.time ? ` ${body.viewing.time}` : ''}`,
 		body.listing &&
 			`Listing: ${body.listing.unit}, ${body.listing.area} · ${aed(body.listing.price_aed)} · ${body.listing.status}`,
+		// The backend keeps the stage only; the offer itself goes on the lead as a note.
+		body.offer &&
+			[
+				`Offer ${aed(body.offer.amount_aed)}`,
+				body.offer.unit,
+				body.offer.from && `from ${body.offer.from}`
+			]
+				.filter(Boolean)
+				.join(' · '),
 		body.note
 	].filter(Boolean) as string[]
 	if (body.stage === 'contacted') {

@@ -138,13 +138,33 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 		expect(lead.deal).toBeNull()
 	})
 
-	it('refuses the Offer stage instead of reporting a move the backend cannot store', async () => {
-		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry() })
-		const patch = vi.spyOn(client, 'patch')
-		await expect(backend.moveLeadStage(7, { stage: 'offer' })).rejects.toMatchObject({
-			status: 501
+	it('saves the Offer stage, with the amount and unit as a note on the lead', async () => {
+		// The backend stores an "offer" status (11 Nov): Move to Offer used to fail with a
+		// misleading "server had a problem" before anything was sent.
+		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry({ status: 'viewing' }) })
+		const patch = vi.spyOn(client, 'patch').mockResolvedValue(enquiry({ status: 'offer' }))
+		const post = vi.spyOn(client, 'post').mockResolvedValue(enquiry({ status: 'offer' }))
+		const r = await backend.moveLeadStage(7, {
+			stage: 'offer',
+			offer: { amount_aed: 225_000, listing_id: 'L-9', unit: 'Metro | Lake View' }
 		})
-		expect(patch).not.toHaveBeenCalled()
+		expect(patch.mock.calls[0][1]).toMatchObject({ status: 'offer' })
+		expect(post.mock.calls[0][1]).toEqual({ body: 'Offer AED 225,000 · Metro | Lake View' })
+		expect(r.data.stage).toBe('offer')
+	})
+
+	it("notes who a seller's offer came from", async () => {
+		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry({ intent: 'sell', status: 'signed' }) })
+		vi.spyOn(client, 'patch').mockResolvedValue(enquiry({ intent: 'sell', status: 'offer' }))
+		const post = vi
+			.spyOn(client, 'post')
+			.mockResolvedValue(enquiry({ intent: 'sell', status: 'offer' }))
+		const r = await backend.moveLeadStage(7, {
+			stage: 'offer',
+			offer: { amount_aed: 2_100_000, from: 'Buyer agent' }
+		})
+		expect(post.mock.calls[0][1]).toEqual({ body: 'Offer AED 2,100,000 · from Buyer agent' })
+		expect(r.data.stage).toBe('offer')
 	})
 
 	it('gives the Edit form the saved areas, so the area matching uses can be seen and changed', async () => {

@@ -308,7 +308,8 @@ export interface LeadStageMove {
 	/** Viewing: adds a calendar event. */
 	viewing?: { date: string; time: string; listing_id: string | null }
 	/** Offer: buyer/tenant amount + unit; seller/landlord amount received + from whom. */
-	offer?: { amount_aed: number; listing_id?: string | null; from?: string }
+	/** `unit`: the chosen listing's name, written in the lead's note. */
+	offer?: { amount_aed: number; listing_id?: string | null; unit?: string; from?: string }
 	/** Lost: the reason. */
 	lost_reason?: string
 	/** Listed (seller/landlord): the pocket listing to create and link, unless one is linked. */

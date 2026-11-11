@@ -1,5 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
+import Building from 'lucide-svelte/icons/building-2'
+import House from 'lucide-svelte/icons/house'
 import { untrack } from 'svelte'
 import { goto } from '$app/navigation'
 import { crm } from '../../../api'
@@ -15,9 +17,11 @@ import { addDays, fileSize } from '../../../format'
 import { crmQueries } from '../../../queries'
 import { panel } from '../../../stores/panel.svelte'
 import { ui } from '../../../stores/ui.svelte'
+import { optionPicks, unitPicks } from '../../../stagePickers'
 import { write } from '../../../write'
 import Chip from '../../ui/Chip.svelte'
 import MoneyInput from '../../ui/MoneyInput.svelte'
+import SearchPicker from '../../ui/SearchPicker.svelte'
 
 /**
  * Moving a lead to a stage asks for what that stage needs, then saves (logged, with Undo).
@@ -41,6 +45,18 @@ const units = $derived(
 	)
 )
 const docs = $derived(lead.stage_documents.find((s) => s.stage === stage)?.docs ?? [])
+/** Units that fit the lead (same area, within budget) come first in the unit picker. */
+const unitOptions = $derived(
+	unitPicks(units, {
+		area: lead.area,
+		budget:
+			Number(
+				lead.fields.budget_aed || lead.fields.target_price_aed || lead.fields.expected_rent_aed
+			) || null
+	})
+)
+/** Option lists longer than this get the searchable picker (property types: 25). */
+const LONG_LIST = 8
 
 const start = untrack(() => ({
 	money: Number(
@@ -139,7 +155,11 @@ async function submit(e: SubmitEvent) {
 			await move({
 				...base,
 				offer: buyerSide
-					? { amount_aed: amount ?? 0, listing_id: listingId || null }
+					? {
+							amount_aed: amount ?? 0,
+							listing_id: listingId || null,
+							unit: unitOptions.find((u) => u.id === listingId)?.label
+						}
 					: { amount_aed: amount ?? 0, from: from.trim() }
 			})
 		)
@@ -213,9 +233,20 @@ function onPicked() {
 	{:else if stage === 'qualified'}
 		{#each type.fields.filter((x) => fieldShown(x, draft)) as f (f.key)}
 			<div class="fld">
-				<label for="sf-{f.key}">{f.label}{f.money ? ' (AED)' : ''}</label>
+				{#if !(f.options && f.options.length > LONG_LIST)}<label for="sf-{f.key}">{f.label}{f.money ? ' (AED)' : ''}</label>{/if}
 				{#if f.money}
 					<MoneyInput id="sf-{f.key}" required bind:value={money[f.key]} />
+				{:else if f.options && f.options.length > LONG_LIST}
+					<SearchPicker
+						block
+						label={f.label}
+						icon={House}
+						options={optionPicks(f.key, f.options)}
+						value={draft[f.key] ?? ''}
+						onselect={(v) => (draft[f.key] = v)}
+						allLabel="Not stated"
+						noun="property types"
+					/>
 				{:else if f.options}
 					<select id="sf-{f.key}" bind:value={draft[f.key]}>
 						<option value="">Not stated</option>
@@ -238,11 +269,17 @@ function onPicked() {
 			</div>
 		</div>
 		<div class="fld">
-			<label for="sf-unit">Unit</label>
-			<select id="sf-unit" bind:value={listingId}>
-				<option value="">To confirm</option>
-				{#each units as x (x.id)}<option value={x.id}>{x.unit} · {x.area}</option>{/each}
-			</select>
+			<SearchPicker
+				block
+				label="Unit"
+				icon={Building}
+				options={unitOptions}
+				value={listingId}
+				onselect={(v) => (listingId = v)}
+				allLabel="To confirm"
+				allMeta="Choose later"
+				noun="listings"
+			/>
 		</div>
 	{:else if stage === 'listed'}
 		{#if lead.own_listing}
@@ -280,21 +317,28 @@ function onPicked() {
 				<label for="sf-amt">{buyerSide ? 'Offer (AED)' : 'Offer received (AED)'}</label>
 				<MoneyInput id="sf-amt" required bind:value={amount} />
 			</div>
-			{#if buyerSide}
-				<div class="fld">
-					<label for="sf-unit">Unit</label>
-					<select id="sf-unit" bind:value={listingId}>
-						<option value="">To confirm</option>
-						{#each units as x (x.id)}<option value={x.id}>{x.unit}</option>{/each}
-					</select>
-				</div>
-			{:else}
+			{#if !buyerSide}
 				<div class="fld">
 					<label for="sf-from">From</label>
 					<input id="sf-from" placeholder="Buyer or their agent" required bind:value={from} />
 				</div>
 			{/if}
 		</div>
+		{#if buyerSide}
+			<div class="fld">
+				<SearchPicker
+					block
+					label="Unit"
+					icon={Building}
+					options={unitOptions}
+					value={listingId}
+					onselect={(v) => (listingId = v)}
+					allLabel="To confirm"
+					allMeta="Choose later"
+					noun="listings"
+				/>
+			</div>
+		{/if}
 	{:else if stage === 'won' && buyerSide}
 		<div class="frow">
 			<div class="fld">
@@ -307,11 +351,17 @@ function onPicked() {
 			</div>
 		</div>
 		<div class="fld">
-			<label for="sf-unit">Unit</label>
-			<select id="sf-unit" bind:value={listingId}>
-				<option value="">Off-market · to confirm</option>
-				{#each units as x (x.id)}<option value={x.id}>{x.unit}</option>{/each}
-			</select>
+			<SearchPicker
+				block
+				label="Unit"
+				icon={Building}
+				options={unitOptions}
+				value={listingId}
+				onselect={(v) => (listingId = v)}
+				allLabel="Off-market · to confirm"
+				allMeta="Choose later"
+				noun="listings"
+			/>
 		</div>
 	{:else if stage === 'won'}
 		<div class="small muted">
