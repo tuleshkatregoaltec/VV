@@ -78,6 +78,7 @@ async function mockApi(page: Page, api: Api) {
 				json(200, { listing, fields: EMPTY_FIELDS, revision: api.revision })
 			);
 		if (path === '/listing-document-info' && request.method() === 'PUT') {
+			if (body.expected_revision !== api.revision) return route.fulfill(json(409, { detail: 'stale_revision' }));
 			api.revision += 1;
 			return route.fulfill(json(200, { listing, fields: body.fields, revision: api.revision }));
 		}
