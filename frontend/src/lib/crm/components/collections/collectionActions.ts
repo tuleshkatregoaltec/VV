@@ -72,7 +72,7 @@ export async function deleteCollection(id: string, onDeleted: () => void) {
 }
 
 export const removeItem = (id: string, itemId: string) =>
-	run(id, () => crm.collections.removeItem(id, itemId))
+	run(id, () => crm.collections.removeItem(id, itemId), 'Removed from collection')
 
 export const addListing = (id: string, listingKey: string) =>
 	run(
@@ -93,6 +93,17 @@ export async function copyShareLink(
 		},
 		'Link copied'
 	)
+}
+
+/** Opens the client's page in a new tab, so the agent sees exactly what the client sees. */
+export async function openClientView(
+	id: string,
+	open: (url: string) => void = (u) => window.open(u, '_blank', 'noopener,noreferrer')
+) {
+	return run(id, async () => {
+		const { url } = await crm.collections.shareLink(id)
+		open(url)
+	})
 }
 
 export async function rotateShareLink(id: string) {

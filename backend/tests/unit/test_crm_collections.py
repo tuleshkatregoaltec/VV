@@ -278,3 +278,40 @@ async def test_delete_removes_collection(db, listings):
         404,
         "collection_not_found",
     )
+
+
+# The list card shows a cover built from the first properties' photos, so agents can tell
+# collections apart at a glance. Only listings we may republish (managed) give a cover.
+async def test_list_covers_use_first_three_managed_photos(db, listings):
+    for key in ("1", "2", "3", "4"):
+        listings[key] = listing(key).model_copy(update={"photos": [f"https://p/{key}a.jpg", "x"]})
+    col = await make(db)
+    for key in ("1", "2", "3", "4"):
+        await collections.add_item(db, actor=ALICE, collection_id=col.id, payload=add(key))
+    # The org later switched company: "2" is no longer ours to republish.
+    listings["2"] = listings["2"].model_copy(update={"managed": False})
+
+    [row] = (await collections.list_collections(db, actor=ALICE, limit=10, offset=0)).items
+
+    # First three items in the order they were added; the unmanaged one gives no photo.
+    assert row.cover_photos == ["https://p/1a.jpg", "https://p/3a.jpg"]
+
+
+async def test_list_still_loads_without_covers_when_warehouse_is_down(db, listings, monkeypatch):
+    col = await make(db)
+    await collections.add_item(db, actor=ALICE, collection_id=col.id, payload=add("123"))
+
+    async def down(db, organization_id, keys):
+        raise OSError("warehouse unreachable")
+
+    monkeypatch.setattr(collections, "listings_by_keys", down)
+    [row] = (await collections.list_collections(db, actor=ALICE, limit=10, offset=0)).items
+
+    assert row.item_count == 1
+    assert row.cover_photos == []
+
+
+async def test_empty_collection_has_no_cover(db, listings):
+    await make(db)
+    [row] = (await collections.list_collections(db, actor=ALICE, limit=10, offset=0)).items
+    assert row.cover_photos == []

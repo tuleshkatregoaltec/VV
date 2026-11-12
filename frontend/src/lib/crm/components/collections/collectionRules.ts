@@ -26,9 +26,12 @@ export interface MenuItemState {
 	hint: string | null
 }
 
-/** One collection in the Add-to-collection menu. A full collection is disabled with "50 / 50". */
+/**
+ * One collection in the Add-to-collection menu: a toggle. Already in it → ticked, click removes.
+ * Otherwise a full collection is disabled with "50 / 50".
+ */
 export function menuItemState(c: { item_count: number }, contains: boolean): MenuItemState {
-	if (contains) return { checked: true, disabled: true, hint: null }
+	if (contains) return { checked: true, disabled: false, hint: 'Remove' }
 	const full = isCollectionFull(c.item_count)
 	return { checked: false, disabled: full, hint: full ? countLabel(c.item_count) : null }
 }
@@ -42,20 +45,17 @@ export function addButtonClick(e: Event, toggle: () => void) {
 export interface MenuRowState extends MenuItemState {
 	/** The collection's items have not loaded yet: membership is unknown, so the row is not clickable. */
 	pending: boolean
+	/** The collection item holding this listing, so a click on a ticked row removes it. */
+	itemId: string | null
 }
 
 /** A menu row from the collection's live detail (undefined while loading). */
 export function menuRowState(
 	c: { item_count: number },
-	detail: { items: { listing_key: string }[] } | undefined,
+	detail: { items: { id: string; listing_key: string }[] } | undefined,
 	listingKey: string
 ): MenuRowState {
-	if (!detail) return { checked: false, disabled: true, hint: null, pending: true }
-	return {
-		...menuItemState(
-			c,
-			detail.items.some((i) => i.listing_key === listingKey)
-		),
-		pending: false
-	}
+	if (!detail) return { checked: false, disabled: true, hint: null, pending: true, itemId: null }
+	const item = detail.items.find((i) => i.listing_key === listingKey)
+	return { ...menuItemState(c, Boolean(item)), pending: false, itemId: item?.id ?? null }
 }

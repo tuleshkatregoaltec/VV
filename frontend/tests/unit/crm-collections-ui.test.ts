@@ -101,7 +101,12 @@ describe('collections UI', () => {
 			hint: '50 / 50'
 		})
 		expect(menuItemState({ item_count: 3 }, false).disabled).toBe(false)
-		expect(menuItemState({ item_count: 50 }, true)).toMatchObject({ checked: true, disabled: true })
+		// Already in it: the row is a toggle that removes the property, even when the collection is full.
+		expect(menuItemState({ item_count: 50 }, true)).toEqual({
+			checked: true,
+			disabled: false,
+			hint: 'Remove'
+		})
 	})
 
 	it('a string-detail 409 shows the friendly collection_full text', async () => {
@@ -133,6 +138,11 @@ describe('collections UI', () => {
 		expect(off).toContain('1 / 50')
 	})
 
+	it('removing from the add menu confirms with a toast', async () => {
+		await removeItem('c1', 'i1')
+		expect(toast.message).toBe('Removed from collection')
+	})
+
 	it('remove calls removeItem and invalidates', async () => {
 		await removeItem('c1', 'i1')
 		expect(crm.collections.removeItem).toHaveBeenCalledWith('c1', 'i1')
@@ -153,11 +163,21 @@ describe('collections UI', () => {
 			checked: false,
 			disabled: true,
 			hint: null,
-			pending: true
+			pending: true,
+			itemId: null
 		})
-		const detail = { items: [{ listing_key: '111' }] }
-		expect(menuRowState(c, detail, '111')).toMatchObject({ checked: true, disabled: true })
-		expect(menuRowState(c, detail, '222')).toMatchObject({ checked: false, disabled: false })
+		const detail = { items: [{ id: 'i9', listing_key: '111' }] }
+		// The row carries the item id so a second click removes exactly that property.
+		expect(menuRowState(c, detail, '111')).toMatchObject({
+			checked: true,
+			disabled: false,
+			itemId: 'i9'
+		})
+		expect(menuRowState(c, detail, '222')).toMatchObject({
+			checked: false,
+			disabled: false,
+			itemId: null
+		})
 		expect(menuRowState({ item_count: 50 }, detail, '222')).toMatchObject({
 			disabled: true,
 			hint: '50 / 50'
@@ -173,5 +193,46 @@ describe('collections UI', () => {
 		expect(qc.removeQueries).toHaveBeenCalledWith({ queryKey: crmKeys.collection('c1') })
 		const keys = qc.invalidateQueries.mock.calls.map((c) => c[0].queryKey)
 		expect(keys).toEqual([crmKeys.collectionsAll()])
+	})
+})
+
+describe('collection list cards', () => {
+	const card = (over: Record<string, unknown>) => ({
+		items: [
+			{
+				id: 'c1',
+				name: 'Dubai Marina',
+				sharing_enabled: true,
+				item_count: 3,
+				created_by_user_id: 'u1',
+				agent_name: 'A',
+				agent_email: null,
+				agent_phone: null,
+				created_at: '2026-11-12T00:00:00Z',
+				updated_at: '2026-11-12T00:00:00Z',
+				cover_photos: [],
+				...over
+			}
+		],
+		total: 1,
+		limit: 50,
+		offset: 0
+	})
+
+	it('shows the first property photo as the cover and says the link is live', () => {
+		q.byKey.default = ok(card({ cover_photos: ['https://p/1.jpg', 'https://p/2.jpg'] }))
+		const html = render(CollectionList, { props: { onopen: () => {} } }).body
+		expect(html).toContain('https://p/1.jpg')
+		expect(html).not.toContain('https://p/2.jpg') // later photos are fallbacks only
+		expect(html).toContain('Link live')
+		expect(html).not.toContain('Shared')
+	})
+
+	it('falls back to the letter badge and Private when there are no photos and sharing is off', () => {
+		q.byKey.default = ok(card({ sharing_enabled: false }))
+		const html = render(CollectionList, { props: { onopen: () => {} } }).body
+		expect(html).not.toContain('<img')
+		expect(html).toContain('>D<')
+		expect(html).toContain('Private')
 	})
 })

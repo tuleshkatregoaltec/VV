@@ -1263,6 +1263,10 @@ export type CollectionDetailResponse = {
      */
     updated_at: string;
     /**
+     * Cover Photos
+     */
+    cover_photos?: Array<string>;
+    /**
      * Items
      */
     items: Array<CollectionItemResponse>;
@@ -1377,6 +1381,10 @@ export type CollectionResponse = {
      * Updated At
      */
     updated_at: string;
+    /**
+     * Cover Photos
+     */
+    cover_photos?: Array<string>;
 };
 
 /**
@@ -1850,6 +1858,10 @@ export type CrmCompanyListingDetail = {
      */
     listed_at: string;
     /**
+     * Photos
+     */
+    photos?: Array<string>;
+    /**
      * Listing Key
      */
     listing_key: string;
@@ -1865,10 +1877,6 @@ export type CrmCompanyListingDetail = {
      * Managed
      */
     managed: boolean;
-    /**
-     * Photos
-     */
-    photos?: Array<string>;
     /**
      * Description
      */
@@ -1941,6 +1949,10 @@ export type CrmCompanyListingResponse = {
      * Listed At
      */
     listed_at: string;
+    /**
+     * Photos
+     */
+    photos?: Array<string>;
 };
 
 /**

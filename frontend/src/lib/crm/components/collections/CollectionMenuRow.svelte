@@ -9,7 +9,12 @@ let {
 	collection,
 	listingKey,
 	onpick
-}: { collection: CollectionResponse; listingKey: string; onpick: (id: string) => void } = $props()
+}: {
+	collection: CollectionResponse
+	listingKey: string
+	/** itemId set → the listing is already in this collection and the click removes it. */
+	onpick: (id: string, itemId: string | null) => void
+} = $props()
 
 const detail = createQuery(() => crmQueries.collection(collection.id))
 const s = $derived(menuRowState(collection, detail.data, listingKey))
@@ -21,7 +26,8 @@ const s = $derived(menuRowState(collection, detail.data, listingKey))
 	class="mi"
 	disabled={s.disabled}
 	aria-busy={s.pending}
-	onclick={() => onpick(collection.id)}
+	title={s.itemId ? 'Remove from this collection' : undefined}
+	onclick={() => onpick(collection.id, s.itemId)}
 >
 	<span class="ck">{s.checked ? '✓' : ''}</span>
 	<span class="nm">{collection.name}</span>
@@ -33,5 +39,8 @@ const s = $derived(menuRowState(collection, detail.data, listingKey))
 	.mi:disabled { opacity: 0.55; cursor: not-allowed; }
 	.ck { width: 14px; }
 	.nm { flex: 1; }
-	.hint { font-size: 12px; color: var(--mute, #6b7280); }
+	.hint { font-size: 12px; color: var(--text3, #6b7280); }
+	.mi:hover .hint { color: var(--red, #a32424); }
+	.mi:hover { background: var(--hover); }
+	.mi { border-radius: 6px; color: var(--text); }
 </style>

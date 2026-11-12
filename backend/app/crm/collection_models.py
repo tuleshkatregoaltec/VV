@@ -129,6 +129,8 @@ class CollectionResponse(BaseModel):
     agent_phone: str | None
     created_at: datetime
     updated_at: datetime
+    # List view only: first photo of each of the first few available properties.
+    cover_photos: list[str] = Field(default_factory=list)
 
 
 class CollectionDetailResponse(CollectionResponse):

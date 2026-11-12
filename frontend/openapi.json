@@ -14701,6 +14701,13 @@
 						"format": "date-time",
 						"title": "Updated At"
 					},
+					"cover_photos": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Cover Photos"
+					},
 					"items": {
 						"items": {
 							"$ref": "#/components/schemas/CollectionItemResponse"
@@ -14866,6 +14873,13 @@
 						"type": "string",
 						"format": "date-time",
 						"title": "Updated At"
+					},
+					"cover_photos": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Cover Photos"
 					}
 				},
 				"type": "object",
@@ -15628,6 +15642,14 @@
 						"format": "date-time",
 						"title": "Listed At"
 					},
+					"photos": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Photos",
+						"default": []
+					},
 					"listing_key": {
 						"type": "string",
 						"title": "Listing Key"
@@ -15643,14 +15665,6 @@
 					"managed": {
 						"type": "boolean",
 						"title": "Managed"
-					},
-					"photos": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Photos",
-						"default": []
 					},
 					"description": {
 						"anyOf": [
@@ -15793,6 +15807,14 @@
 						"type": "string",
 						"format": "date-time",
 						"title": "Listed At"
+					},
+					"photos": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Photos",
+						"default": []
 					}
 				},
 				"type": "object",

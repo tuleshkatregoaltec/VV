@@ -39,17 +39,18 @@ const latestUpdate = $derived(
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
-<main class="mx-auto max-w-3xl space-y-6 px-4 py-8">
+<main class="min-h-screen bg-app text-fg-1">
+<div class="mx-auto max-w-3xl space-y-6 px-4 py-8">
 	{#if query.isPending}
-		<p class="text-neutral-500">Loading…</p>
+		<p class="text-fg-4">Loading…</p>
 	{:else if unavailable}
-		<p class="text-neutral-700">This collection is no longer available.</p>
+		<p class="text-fg-2">This collection is no longer available.</p>
 	{:else if query.isError}
 		<div class="space-y-3">
-			<p class="text-neutral-700">We couldn't load these properties right now.</p>
+			<p class="text-fg-2">We couldn't load these properties right now.</p>
 			<button
 				type="button"
-				class="rounded-lg bg-neutral-900 px-4 py-2 text-white"
+				class="rounded-lg bg-inverse px-4 py-2 text-app"
 				onclick={() => query.refetch()}
 			>
 				Retry
@@ -58,9 +59,9 @@ const latestUpdate = $derived(
 	{:else if query.data}
 		{@const collection = query.data}
 		<header class="space-y-3">
-			<h1 class="text-2xl font-semibold text-neutral-900">{collection.name}</h1>
-			<div class="rounded-xl bg-neutral-100 p-4 text-sm text-neutral-700">
-				<p class="font-medium text-neutral-900">{collection.agent.name}</p>
+			<h1 class="text-2xl font-semibold text-fg-1">{collection.name}</h1>
+			<div class="rounded-xl border border-border bg-panel p-4 text-sm text-fg-2">
+				<p class="font-medium text-fg-1">{collection.agent.name}</p>
 				{#if collection.agent.email}
 					<p><a class="underline" href={`mailto:${collection.agent.email}`}>{collection.agent.email}</a></p>
 				{/if}
@@ -71,16 +72,17 @@ const latestUpdate = $derived(
 		</header>
 
 		{#if collection.items.length === 0}
-			<p class="text-neutral-600">No properties in this collection yet.</p>
+			<p class="text-fg-3">No properties in this collection yet.</p>
 		{:else}
 			<ul class="space-y-4">
 				{#each collection.items as item}
 					<PublicPropertyCard {item} />
 				{/each}
 			</ul>
-			<footer class="text-xs text-neutral-500">
+			<footer class="text-xs text-fg-4">
 				Listing details from Property Finder, updated {latestUpdate ? relativeTime(latestUpdate) : 'recently'}.
 			</footer>
 		{/if}
 	{/if}
+</div>
 </main>

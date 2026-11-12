@@ -24,6 +24,8 @@ export type HomeTodo = 'gaps' | 'file'
 export type MatchTabId = 'ready' | 'offplan' | 'sell'
 
 export const ui = $state({
+	/** The listing whose Add-to-collection menu is open; only one menu is open at a time. */
+	addMenuFor: null as string | null,
 	leadTab: 'all' as LeadTab,
 	leadView: 'list' as 'list' | 'board',
 	/** Leads › Board: which group's columns show (6 Oct). */

@@ -156,12 +156,67 @@ async def list_collections(
             .offset(offset)
         )
     ).all()
+    covers = await _cover_photos(db, actor.organization_id, [row.id for row, _ in rows])
     return CollectionListResponse(
-        items=[_response(row, int(count)) for row, count in rows],
+        items=[
+            _response(row, int(count)).model_copy(update={"cover_photos": covers.get(row.id, [])})
+            for row, count in rows
+        ],
         total=total,
         limit=limit,
         offset=offset,
     )
+
+
+COVER_PHOTOS = 3
+
+
+async def _cover_photos(
+    db: AsyncSession, organization_id: str, collection_ids: list[UUID]
+) -> dict[UUID, list[str]]:
+    """First photo of each of the first COVER_PHOTOS items per collection, in one warehouse query.
+
+    Covers are decoration: if the warehouse is unavailable the list still loads, without them.
+    """
+    if not collection_ids:
+        return {}
+    first = (
+        select(
+            CrmCollectionItem.collection_id,
+            CrmCollectionItem.listing_key,
+            func.row_number()
+            .over(
+                partition_by=CrmCollectionItem.collection_id,
+                order_by=(col(CrmCollectionItem.added_at), col(CrmCollectionItem.id)),
+            )
+            .label("n"),
+        )
+        .where(
+            col(CrmCollectionItem.collection_id).in_(collection_ids),
+            CrmCollectionItem.organization_id == organization_id,
+        )
+        .subquery()
+    )
+    picks = (
+        await db.exec(
+            select(first.c.collection_id, first.c.listing_key)
+            .where(first.c.n <= COVER_PHOTOS)
+            .order_by(first.c.collection_id, first.c.n)
+        )
+    ).all()
+    if not picks:
+        return {}
+    try:
+        current = await listings_by_keys(db, organization_id, list({key for _, key in picks}))
+    except WAREHOUSE_ERRORS:
+        logger.warning("crm.collection.covers_unavailable")
+        return {}
+    covers: dict[UUID, list[str]] = {}
+    for collection_id, key in picks:
+        listing = current.get(key)
+        if listing and listing.managed and listing.photos:
+            covers.setdefault(collection_id, []).append(listing.photos[0])
+    return covers
 
 
 async def create_collection(

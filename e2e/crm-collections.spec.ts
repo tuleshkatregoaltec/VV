@@ -172,7 +172,7 @@ test('agent shares a live collection that an anonymous client sees at one stable
 			.then((r) => (r.ok() ? null : `delete returned ${r.status()}`))
 			.catch((error) => `${error}`);
 		const clicked = await page
-			.getByRole('button', { name: 'Delete', exact: true })
+			.getByRole('button', { name: 'Delete collection', exact: true })
 			.click({ timeout: 10_000 })
 			.then(() => null)
 			.catch((error) => `${error}`);
