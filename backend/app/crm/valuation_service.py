@@ -47,7 +47,11 @@ def _unit_key(value: Any) -> str:
 
 def _stats(row: dict[str, Any]) -> CompStats:
     p25, p50, p75 = (float(v) for v in row["psf"])
-    return CompStats(int(row["count"]), p25, p50, p75)
+    prices = [float(v) for v in row.get("price") or []]
+    size = float(row["size_p50"]) if row.get("size_p50") else None
+    if len(prices) == 3:
+        return CompStats(int(row["count"]), p25, p50, p75, *prices, size_p50=size)
+    return CompStats(int(row["count"]), p25, p50, p75, size_p50=size)
 
 
 def _quarter(day: date) -> date:
@@ -122,26 +126,33 @@ async def _value_chunk(
             size_sqft=size if size > 0 else None,
             building_key=str(row.get("building_key") or ""),
             area_key=str(row.get("area_key") or ""),
+            market_status=str(row.get("market_status") or ""),
         )
     if not subjects:
         return
-    stat_rows = await valuation_queries.fetch_comparable_stats(
-        sorted({s.building_key for s in subjects.values() if s.building_key}),
-        sorted({s.area_key for s in subjects.values() if s.area_key}),
-        valued_at - timedelta(days=_WINDOW_DAYS),
-        valued_at + timedelta(days=1),
-    )
-    stats: dict[tuple[str, str, str, str, str], CompStats] = {}
-    for row in stat_rows:
-        stats[
-            (
-                row["level"],
-                row["building_key"],
-                row["area_key"],
-                row["property_type"],
-                row["bedrooms"],
-            )
-        ] = _stats(row)
+    stats: dict[tuple[str, str, str, str, str, bool], CompStats] = {}
+    for ready in (True, False):
+        group = [s for s in subjects.values() if (s.market_status == "Ready") == ready]
+        if not group:
+            continue
+        stat_rows = await valuation_queries.fetch_comparable_stats(
+            sorted({s.building_key for s in group if s.building_key}),
+            sorted({s.area_key for s in group if s.area_key}),
+            valued_at - timedelta(days=_WINDOW_DAYS),
+            valued_at + timedelta(days=1),
+            ready_only=ready,
+        )
+        for row in stat_rows:
+            stats[
+                (
+                    row["level"],
+                    row["building_key"],
+                    row["area_key"],
+                    row["property_type"],
+                    row["bedrooms"],
+                    ready,
+                )
+            ] = _stats(row)
     quarters = await valuation_queries.fetch_area_psf_by_quarter(
         sorted({s.area_key for s in subjects.values() if s.area_key}),
         sorted({s.property_type for s in subjects.values()}),
@@ -162,13 +173,16 @@ async def _value_chunk(
             subject.property_type,
             subject.bedrooms,
         )
+        r = subject.market_status == "Ready"
         comps = {
-            "building_type_beds": stats.get(("building_type_beds", b, "", t, beds))
+            "building_type_beds": stats.get(("building_type_beds", b, "", t, beds, r))
             if b and beds
             else None,
-            "building_type": stats.get(("building_type", b, "", t, "")) if b else None,
-            "area_type_beds": stats.get(("area_type_beds", "", a, t, beds)) if a and beds else None,
-            "area_type": stats.get(("area_type", "", a, t, "")) if a else None,
+            "building_type": stats.get(("building_type", b, "", t, "", r)) if b else None,
+            "area_type_beds": stats.get(("area_type_beds", "", a, t, beds, r))
+            if a and beds
+            else None,
+            "area_type": stats.get(("area_type", "", a, t, "", r)) if a else None,
         }
         result = estimate(
             subject,

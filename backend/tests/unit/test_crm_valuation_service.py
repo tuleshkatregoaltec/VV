@@ -38,8 +38,9 @@ def _claim(claim_id: int, *, status="verified_current_owner", import_id=1, unit=
     )
 
 
-def _sale(unit="187", building="reem", size=1000.0, beds="3 Bed"):
+def _sale(unit="187", building="reem", size=1000.0, beds="3 Bed", status="Offplan"):
     return {
+        "market_status": status,
         "transaction_date": SOLD,
         "sale_amount_aed": 1_600_000,
         "unit_key": unit,
@@ -70,8 +71,9 @@ def world(monkeypatch):
     async def sales(parameters):
         return state["sales"]
 
-    async def stats(building_keys, area_keys, since, until):
-        return state["stats"]
+    async def stats(building_keys, area_keys, since, until, ready_only=True):
+        state.setdefault("ready_calls", []).append(ready_only)
+        return state["ready_stats" if ready_only and "ready_stats" in state else "stats"]
 
     async def quarters(area_keys, property_types):
         return state["quarters"]
@@ -192,3 +194,22 @@ async def test_import_completion_survives_valuation_failure(monkeypatch):
     monkeypatch.setattr(imports, "value_owner_claims", broken)
     await imports._value_import(_Session(), organization_id="org", import_id=7)
     assert rolled_back == [True]
+
+
+def test_stats_row_carries_price_quartiles():
+    stats = valuation_service._stats(
+        {"count": 6, "psf": [900.0, 935.0, 980.0], "price": [1_950_000.0, 2_100_000.0, 2_250_000.0]}
+    )
+    assert (stats.price_p25, stats.price_p50, stats.price_p75) == (1_950_000, 2_100_000, 2_250_000)
+
+
+async def test_ready_home_is_valued_from_ready_sales_only(world):
+    ready, offplan = _claim(1), _claim(2, unit="188")
+    world["claims"] = [ready, offplan]
+    world["sales"] = [_sale(status="Ready"), _sale(unit="188", status="Offplan")]
+    world["stats"] = [_building_stats(p50=3000.0)]  # all sales, off-plan premium included
+    world["ready_stats"] = [_building_stats(p50=2000.0)]
+    await _run()
+    assert ready.estimated_value_aed == 2_000_000
+    assert offplan.estimated_value_aed == 3_000_000
+    assert sorted(world["ready_calls"]) == [False, True]

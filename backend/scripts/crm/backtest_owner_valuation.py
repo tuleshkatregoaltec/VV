@@ -18,6 +18,7 @@ from datetime import date, timedelta
 from app.clickhouse.client import close_clickhouse, query
 from app.crm.valuation import CompStats, ValuationSubject, estimate
 from app.crm.valuation_queries import fetch_area_psf_by_quarter, fetch_comparable_stats
+from app.crm.valuation_service import _stats
 
 
 def _quarter(day: date) -> date:
@@ -29,17 +30,18 @@ async def _sample(months: int, size: int) -> list[dict]:
         """
         WITH unit_sales AS (
             SELECT building_key, area_key, replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '') AS unit_key,
-                   transaction_date, sale_amount_aed, property_type, bedrooms, size_sqft
+                   transaction_date, sale_amount_aed, property_type, bedrooms, size_sqft, market_status
             FROM dxbi_sales_unit_events FINAL
             WHERE property_type IN ('Apartment', 'Villa', 'Townhouse') AND unit_number != ''
               AND building_key != '' AND sale_amount_aed > 0
         )
-        SELECT s.*, p.purchase_date, p.purchase_price
+        SELECT s.*, p.purchase_date, p.purchase_price, p.purchase_status
         FROM unit_sales AS s
         INNER JOIN (
             SELECT building_key, unit_key,
                    max(transaction_date) AS purchase_date,
-                   argMax(sale_amount_aed, transaction_date) AS purchase_price
+                   argMax(sale_amount_aed, transaction_date) AS purchase_price,
+                   argMax(market_status, transaction_date) AS purchase_status
             FROM unit_sales
             WHERE transaction_date < toStartOfMonth(today()) - toIntervalMonth({months:UInt8})
             GROUP BY building_key, unit_key
@@ -75,33 +77,34 @@ async def main() -> None:
         errors: dict[str, list[float]] = defaultdict(list)
         for month, rows in sorted(by_month.items()):
             # Comparables strictly before the month of the sale: the sale cannot value itself.
-            stat_rows = await fetch_comparable_stats(
-                sorted({r["building_key"] for r in rows}),
-                sorted({r["area_key"] for r in rows}),
-                month - timedelta(days=365),
-                month,
-            )
-            stats = {
-                (
-                    r["level"],
-                    r["building_key"],
-                    r["area_key"],
-                    r["property_type"],
-                    r["bedrooms"],
-                ): CompStats(int(r["count"]), *(float(v) for v in r["psf"]))
-                for r in stat_rows
-            }
+            # A home bought ready is valued from ready sales only, as in valuation_service.
+            stats = {}
+            for ready in (True, False):
+                group = [r for r in rows if (r["purchase_status"] == "Ready") == ready]
+                if not group:
+                    continue
+                stat_rows = await fetch_comparable_stats(
+                    sorted({r["building_key"] for r in group}),
+                    sorted({r["area_key"] for r in group}),
+                    month - timedelta(days=365),
+                    month,
+                    ready_only=ready,
+                )
+                for r in stat_rows:
+                    key = (r["level"], r["building_key"], r["area_key"], r["property_type"])
+                    stats[(*key, r["bedrooms"], ready)] = _stats(r)
             for r in rows:
                 b, a, t, beds = r["building_key"], r["area_key"], r["property_type"], r["bedrooms"]
+                rd = r["purchase_status"] == "Ready"
                 comps = {
-                    "building_type_beds": stats.get(("building_type_beds", b, "", t, beds))
+                    "building_type_beds": stats.get(("building_type_beds", b, "", t, beds, rd))
                     if beds
                     else None,
-                    "building_type": stats.get(("building_type", b, "", t, "")),
-                    "area_type_beds": stats.get(("area_type_beds", "", a, t, beds))
+                    "building_type": stats.get(("building_type", b, "", t, "", rd)),
+                    "area_type_beds": stats.get(("area_type_beds", "", a, t, beds, rd))
                     if beds
                     else None,
-                    "area_type": stats.get(("area_type", "", a, t, "")),
+                    "area_type": stats.get(("area_type", "", a, t, "", rd)),
                 }
                 subject = ValuationSubject(
                     claim_id=0,
@@ -112,6 +115,7 @@ async def main() -> None:
                     size_sqft=float(r["size_sqft"]) or None,
                     building_key=b,
                     area_key=a,
+                    market_status=r["purchase_status"],
                 )
                 result = estimate(
                     subject,

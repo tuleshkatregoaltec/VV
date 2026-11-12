@@ -184,3 +184,44 @@ def test_wider_comparable_range_is_kept():
         TODAY,
     )
     assert (result.low_aed, result.high_aed) == (1_700_000, 2_400_000)
+
+
+def test_villa_valued_from_bedroom_price_not_size():
+    # DLD size 1,215 sqft is the plot; 4BR villas in the building sell for about 2.1M (Verona).
+    stats = CompStats(
+        6, 900, 935, 980, price_p25=1_950_000, price_p50=2_100_000, price_p75=2_250_000
+    )
+    result = estimate(
+        _subject(property_type="Villa", bedrooms="4 Bed", size_sqft=1215.0),
+        _comps(building_type_beds=stats),
+        None,
+        None,
+        TODAY,
+    )
+    assert result.estimated_value_aed == 2_100_000
+    assert (result.low_aed, result.high_aed) == (1_950_000, 2_250_000)
+    assert result.detail["basis"] == "bedroom_price"
+
+
+def test_apartment_still_uses_psf_times_size():
+    stats = CompStats(6, 1800, 2000, 2200, price_p25=1, price_p50=1, price_p75=1)
+    result = estimate(
+        _subject(property_type="Apartment"), _comps(building_type_beds=stats), None, None, TODAY
+    )
+    assert result.estimated_value_aed == 2_000_000
+    assert result.detail["basis"] == "psf_size"
+
+
+def test_villa_without_bedroom_level_keeps_psf_times_size():
+    stats = CompStats(6, 1800, 2000, 2200, price_p25=1, price_p50=1, price_p75=1)
+    result = estimate(_subject(), _comps(building_type=stats), None, None, TODAY)
+    assert result.estimated_value_aed == 2_000_000
+    assert result.detail["basis"] == "psf_size"
+
+
+def test_detail_carries_the_comparables_typical_size():
+    stats = CompStats(6, 1800, 2000, 2200, size_p50=1356.0)
+    result = estimate(
+        _subject(property_type="Apartment"), _comps(building_type_beds=stats), None, None, TODAY
+    )
+    assert result.detail["comparable_size_sqft"] == 1356

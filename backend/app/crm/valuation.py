@@ -12,8 +12,9 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal
 
-VALUATION_VERSION = "owner-value-v2"
+VALUATION_VERSION = "owner-value-v3"
 RESIDENTIAL_TYPES = frozenset({"Apartment", "Villa", "Townhouse"})
+PRICED_BY_BEDROOM = frozenset({"Villa", "Townhouse"})
 # Comparable groups from the most to the least specific: (name, minimum sales, confidence).
 LADDER: tuple[tuple[str, int, Literal["high", "medium", "low"]], ...] = (
     ("building_type_beds", 5, "high"),
@@ -39,6 +40,13 @@ class CompStats:
     p25: float
     p50: float
     p75: float
+    # Sale-price quartiles of the same group. Villas and townhouses at a bedroom level are valued
+    # from these: DLD often records a villa's plot as its size, which breaks price x size.
+    price_p25: float | None = None
+    price_p50: float | None = None
+    price_p75: float | None = None
+    # Typical size of the sales, so a caller can tell whether a home is comparable in size.
+    size_p50: float | None = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +59,9 @@ class ValuationSubject:
     size_sqft: float | None  # registry size only; imported files may give sq m
     building_key: str
     area_key: str
+    # DLD market status of the unit's own record. A "Ready" home is valued from ready sales only;
+    # off-plan launches sell at a premium. Off-plan or unknown homes use all sales.
+    market_status: str = ""
 
 
 @dataclass(frozen=True)
@@ -77,11 +88,20 @@ def _from_comparables(
         if stats is None or stats.count < minimum:
             continue
         size = subject.size_sqft
-        value = stats.p50 * size
+        by_price = (
+            subject.property_type in PRICED_BY_BEDROOM
+            and level.endswith("_beds")
+            and stats.price_p50 is not None
+        )
+        if by_price:
+            value = float(stats.price_p50)
+            low, high = float(stats.price_p25 or value), float(stats.price_p75 or value)
+        else:
+            value, low, high = stats.p50 * size, stats.p25 * size, stats.p75 * size
         return Valuation(
             estimated_value_aed=_aed(value),
-            low_aed=_aed(min(stats.p25 * size, value * (1 - MIN_RANGE))),
-            high_aed=_aed(max(stats.p75 * size, value * (1 + MIN_RANGE))),
+            low_aed=_aed(min(low, value * (1 - MIN_RANGE))),
+            high_aed=_aed(max(high, value * (1 + MIN_RANGE))),
             method="comparables",
             confidence=confidence,
             detail={
@@ -89,6 +109,8 @@ def _from_comparables(
                 "comparable_count": stats.count,
                 "psf_p50": round(stats.p50, 1),
                 "size_sqft": round(size, 1),
+                "basis": "bedroom_price" if by_price else "psf_size",
+                "comparable_size_sqft": round(stats.size_p50) if stats.size_p50 else None,
             },
         )
     return None
