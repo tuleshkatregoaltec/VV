@@ -73,6 +73,11 @@ def url(token):
     return f"/api/v1/public/collections/{token}"
 
 
+def server_log(caplog) -> str:
+    # The httpx test client logs the request URL itself; only the server's records matter.
+    return "\n".join(r.getMessage() for r in caplog.records if not r.name.startswith("httpx"))
+
+
 def assert_headers(response):
     for name, value in HEADERS.items():
         assert response.headers[name] == value
@@ -157,3 +162,41 @@ def test_access_log_redacts_token():
 def test_access_log_filter_is_attached():
     filters = logging.getLogger("uvicorn.access").filters
     assert any(isinstance(f, collection_public_router.RedactCollectionToken) for f in filters)
+
+
+async def test_public_db_error_is_503_without_token_in_logs(
+    client_no_auth, db, current, monkeypatch, caplog
+):
+    from sqlalchemy.exc import OperationalError as DbOperationalError
+
+    token = await token_for(db)
+
+    async def broken(*args, **kwargs):
+        raise DbOperationalError("SELECT ... WHERE share_token = :t", {"t": token}, Exception())
+
+    monkeypatch.setattr(db, "exec", broken)
+    with caplog.at_level(logging.DEBUG):
+        response = await client_no_auth.get(url(token))
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "listings_unavailable"}
+    assert_headers(response)
+    assert token not in server_log(caplog)
+
+
+async def test_public_unexpected_error_is_500_with_headers(
+    client_no_auth, db, current, monkeypatch, caplog
+):
+    token = await token_for(db)
+
+    async def boom(db, token):
+        raise RuntimeError(f"bad {token}")
+
+    monkeypatch.setattr(collections, "public_collection", boom)
+    with caplog.at_level(logging.DEBUG):
+        response = await client_no_auth.get(url(token))
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "internal_error"}
+    assert_headers(response)
+    assert token not in server_log(caplog)

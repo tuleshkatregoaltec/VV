@@ -17,6 +17,7 @@ from clickhouse_connect.driver.exceptions import ClickHouseError
 from fastapi import HTTPException
 from sqlalchemy import delete, func, update
 from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -374,19 +375,28 @@ async def public_collection(db: AsyncSession, token: str) -> PublicCollectionRes
     A warehouse failure is 503, never an empty list.
     """
     unavailable = HTTPException(status_code=404, detail=COLLECTION_UNAVAILABLE)
-    row = (await db.exec(select(CrmCollection).where(CrmCollection.share_token == token))).first()
-    if row is None or not row.sharing_enabled:
-        raise unavailable
-    organization = await db.get(Organization, row.organization_id)
-    if organization is None or organization.subscription_status not in PUBLIC_SUBSCRIPTION_STATUSES:
-        raise unavailable
-    items = (
-        await db.exec(
-            select(CrmCollectionItem)
-            .where(CrmCollectionItem.collection_id == row.id)
-            .order_by(col(CrmCollectionItem.added_at), col(CrmCollectionItem.id))
-        )
-    ).all()
+    try:
+        row = (
+            await db.exec(select(CrmCollection).where(CrmCollection.share_token == token))
+        ).first()
+        if row is None or not row.sharing_enabled:
+            raise unavailable
+        organization = await db.get(Organization, row.organization_id)
+        if (
+            organization is None
+            or organization.subscription_status not in PUBLIC_SUBSCRIPTION_STATUSES
+        ):
+            raise unavailable
+        items = (
+            await db.exec(
+                select(CrmCollectionItem)
+                .where(CrmCollectionItem.collection_id == row.id)
+                .order_by(col(CrmCollectionItem.added_at), col(CrmCollectionItem.id))
+            )
+        ).all()
+    except SQLAlchemyError:
+        # `from None`: the driver error text embeds the bound parameters, i.e. the token.
+        raise HTTPException(status_code=503, detail=LISTINGS_UNAVAILABLE) from None
     try:
         current = await listings_by_keys(
             db, row.organization_id, [item.listing_key for item in items]

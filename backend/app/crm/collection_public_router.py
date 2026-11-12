@@ -14,10 +14,14 @@ from threading import Lock
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import collections as collection_service
+from app.crm.collection_models import PublicCollectionResponse
 from app.postgres import get_db_session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/public/collections")
 
@@ -56,11 +60,25 @@ def _allow(client: str) -> bool:
         return True
 
 
+class PublicError(BaseModel):
+    detail: str
+
+
 def _reply(status: int, content) -> JSONResponse:
     return JSONResponse(content, status_code=status, headers=PUBLIC_HEADERS)
 
 
-@router.get("/{token}")
+@router.get(
+    "/{token}",
+    response_model=None,
+    responses={
+        200: {"model": PublicCollectionResponse},
+        404: {"model": PublicError},
+        429: {"model": PublicError},
+        500: {"model": PublicError},
+        503: {"model": PublicError},
+    },
+)
 async def public_collection(
     token: str, request: Request, db: AsyncSession = Depends(get_db_session)
 ) -> JSONResponse:
@@ -72,6 +90,10 @@ async def public_collection(
         result = await collection_service.public_collection(db, token)
     except HTTPException as exc:
         return _reply(exc.status_code, {"detail": exc.detail})
+    except Exception:
+        # Fixed message only: exception text or a traceback could carry the token.
+        logger.error("crm.collection.public_read_failed")
+        return _reply(500, {"detail": "internal_error"})
     return _reply(200, jsonable_encoder(result))
 
 
