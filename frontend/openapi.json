@@ -21764,6 +21764,28 @@
 						"type": "string",
 						"title": "Listing Title"
 					},
+					"company_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Company Name"
+					},
+					"listing_area": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Listing Area"
+					},
 					"doc_type": {
 						"type": "string",
 						"enum": ["noc", "brochure", "lease", "a2a"],

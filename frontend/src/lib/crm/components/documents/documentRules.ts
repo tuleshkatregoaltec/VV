@@ -92,3 +92,39 @@ export async function generate(
 		}
 	}
 }
+
+export type PropertyGroup = {
+	listingKey: string
+	title: string
+	area: string | null
+	documents: GeneratedDocumentResponse[]
+}
+export type CompanyGroup = { company: string; properties: PropertyGroup[] }
+
+/**
+ * Company → property → documents. Input is newest first, so groups keep the order of their
+ * most recent document and each property's documents stay newest first.
+ */
+export function groupDocuments(items: GeneratedDocumentResponse[]): CompanyGroup[] {
+	const companies = new Map<string, Map<string, PropertyGroup>>()
+	for (const doc of items) {
+		const company = doc.company_name?.trim() || 'Company not recorded'
+		let properties = companies.get(company)
+		if (!properties) companies.set(company, (properties = new Map()))
+		let property = properties.get(doc.listing_key)
+		if (!property) {
+			property = {
+				listingKey: doc.listing_key,
+				title: doc.listing_title,
+				area: doc.listing_area ?? null,
+				documents: []
+			}
+			properties.set(doc.listing_key, property)
+		}
+		property.documents.push(doc)
+	}
+	return [...companies].map(([company, properties]) => ({
+		company,
+		properties: [...properties.values()]
+	}))
+}

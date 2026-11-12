@@ -175,6 +175,8 @@ class GeneratedDocumentResponse(BaseModel):
     source: str
     listing_key: str
     listing_title: str
+    company_name: str | None = None
+    listing_area: str | None = None
     doc_type: DocType
     template_version: str
     status: DocStatus

@@ -76,3 +76,39 @@ describe('generate', () => {
 		expect(call).toHaveBeenCalledTimes(1)
 	})
 })
+
+describe('grouping for CRM › Documents', () => {
+	const d = (id: string, listing_key: string, company_name: string | null, created_at: string) =>
+		({
+			id,
+			listing_key,
+			listing_title: `Listing ${listing_key}`,
+			listing_area: 'Marina',
+			company_name,
+			created_at
+		}) as never
+
+	it('groups company → property → documents, most recent activity first', async () => {
+		const { groupDocuments } = await import('$lib/crm/components/documents/documentRules')
+		const groups = groupDocuments([
+			d('d4', 'B', 'White & Co', '2026-11-12T10:00:00Z'),
+			d('d3', 'A', 'White & Co', '2026-11-12T09:00:00Z'),
+			d('d2', 'C', 'Big Firm', '2026-11-11T09:00:00Z'),
+			d('d1', 'B', 'White & Co', '2026-11-10T09:00:00Z')
+		])
+
+		expect(groups.map((g) => g.company)).toEqual(['White & Co', 'Big Firm'])
+		expect(groups[0].properties.map((p) => [p.listingKey, p.documents.map((x) => x.id)])).toEqual([
+			['B', ['d4', 'd1']],
+			['A', ['d3']]
+		])
+		expect(groups[0].properties[0]).toMatchObject({ title: 'Listing B', area: 'Marina' })
+	})
+
+	it('puts documents without a recorded company under one honest heading', async () => {
+		const { groupDocuments } = await import('$lib/crm/components/documents/documentRules')
+		expect(groupDocuments([d('d1', 'A', null, '2026-11-12T10:00:00Z')])[0].company).toBe(
+			'Company not recorded'
+		)
+	})
+})

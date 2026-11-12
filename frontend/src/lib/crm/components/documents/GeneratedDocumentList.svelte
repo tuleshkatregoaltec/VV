@@ -4,13 +4,13 @@ import { createQuery } from '@tanstack/svelte-query'
 import type { GeneratedDocumentResponse } from '$lib/api/generated/hey-api/types.gen'
 import { crm } from '../../api'
 import type { DocType } from '../../api/types'
-import { fileSize } from '../../format'
+import { fileSize, plural } from '../../format'
 import { crmQueries } from '../../queries'
 import { toast } from '../../stores/toast.svelte'
 import { errorText } from '../../write'
 import Chip from '../ui/Chip.svelte'
 import ErrorLine from '../ui/ErrorLine.svelte'
-import { docLabel } from './documentRules'
+import { docLabel, groupDocuments } from './documentRules'
 
 const PAGE = 50
 
@@ -77,6 +77,42 @@ async function preview(d: GeneratedDocumentResponse) {
 }
 </script>
 
+{#snippet row(d: GeneratedDocumentResponse)}
+		<div class="doc">
+			<div>
+				<div class="nm">{docLabel(d.doc_type)}</div>
+				<div class="fn">
+					{when(d.created_at)}{d.size_bytes ? ` · ${fileSize(d.size_bytes)}` : ''} · {d.template_version}
+				</div>
+			</div>
+			<div class="acts">
+				{#if d.status === 'ready'}
+					<button
+						type="button"
+						class="btn ghost sm"
+						disabled={previewing === d.id}
+						aria-label="Preview {docLabel(d.doc_type)}"
+						onclick={() => preview(d)}
+					>
+						{previewing === d.id ? 'Opening…' : 'Preview'}
+					</button>
+					<button
+						type="button"
+						class="btn ghost sm"
+						disabled={downloading === d.id}
+						onclick={() => download(d)}
+					>
+						{downloading === d.id ? 'Preparing…' : 'Download'}
+					</button>
+				{:else if d.status === 'failed'}
+					<Chip tone="red">Failed</Chip>
+				{:else}
+					<Chip tone="amber">Generating</Chip>
+				{/if}
+			</div>
+		</div>
+{/snippet}
+
 <section class="sec">
 	<h3>Generated documents{docs.data ? ` · ${docs.data.total}` : ''}</h3>
 	{#if docs.isError}
@@ -84,46 +120,36 @@ async function preview(d: GeneratedDocumentResponse) {
 	{:else if docs.data && !docs.data.items.length}
 		<div class="small muted">{showListing ? 'No documents match.' : 'No PDFs generated for this listing yet.'}</div>
 	{:else if docs.data}
-		<div class="docs">
-			{#each docs.data.items as d (d.id)}
-				<div class="doc">
-					<div>
-						<div class="nm">{docLabel(d.doc_type)}</div>
-						<div class="fn">
-							{#if showListing}
-								<a href="/crm/assets?listing=PF-{d.listing_key}&tab=documents">{d.listing_title}</a> ·
-							{/if}
-							{when(d.created_at)}{d.size_bytes ? ` · ${fileSize(d.size_bytes)}` : ''} · {d.template_version}
+		{#if showListing}
+			{#each groupDocuments(docs.data.items) as g (g.company)}
+				{@const count = g.properties.reduce((n, p) => n + p.documents.length, 0)}
+				<section class="company" aria-label={g.company}>
+					<h4 class="company-name">
+						{g.company}
+						<span class="small muted">· {plural(g.properties.length, 'property', 'properties')} · {plural(count, 'document')}</span>
+					</h4>
+					{#each g.properties as p (p.listingKey)}
+						<div class="property">
+							<div class="property-head">
+								<a href="/crm/assets?listing=PF-{p.listingKey}&tab=documents">{p.title}</a>
+								<span class="small muted">{p.area ? `${p.area} · ` : ''}{plural(p.documents.length, 'document')}</span>
+							</div>
+							<div class="docs">
+								{#each p.documents as d (d.id)}
+									{@render row(d)}
+								{/each}
+							</div>
 						</div>
-					</div>
-					<div class="acts">
-						{#if d.status === 'ready'}
-							<button
-								type="button"
-								class="btn ghost sm"
-								disabled={previewing === d.id}
-								aria-label="Preview {docLabel(d.doc_type)}"
-								onclick={() => preview(d)}
-							>
-								{previewing === d.id ? 'Opening…' : 'Preview'}
-							</button>
-							<button
-								type="button"
-								class="btn ghost sm"
-								disabled={downloading === d.id}
-								onclick={() => download(d)}
-							>
-								{downloading === d.id ? 'Preparing…' : 'Download'}
-							</button>
-						{:else if d.status === 'failed'}
-							<Chip tone="red">Failed</Chip>
-						{:else}
-							<Chip tone="amber">Generating</Chip>
-						{/if}
-					</div>
-				</div>
+					{/each}
+				</section>
 			{/each}
-		</div>
+		{:else}
+			<div class="docs">
+				{#each docs.data.items as d (d.id)}
+					{@render row(d)}
+				{/each}
+			</div>
+		{/if}
 		{#if docs.data.total > PAGE}
 			<div class="pager">
 				<button type="button" class="btn ghost sm" disabled={offset === 0} onclick={() => (offset -= PAGE)}>Previous</button>
@@ -142,6 +168,26 @@ async function preview(d: GeneratedDocumentResponse) {
 </section>
 
 <style>
+	.company + .company {
+		margin-top: 1.5rem;
+	}
+	.company-name {
+		margin: 0.25rem 0 0.75rem;
+		font-size: 1rem;
+	}
+	.property {
+		margin: 0 0 1rem;
+		padding-left: 0.75rem;
+		border-left: 2px solid var(--line, rgba(127, 127, 127, 0.3));
+	}
+	.property-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.5rem;
+		margin-bottom: 0.5rem;
+		font-weight: 600;
+	}
 	.pager {
 		display: flex;
 		align-items: center;
