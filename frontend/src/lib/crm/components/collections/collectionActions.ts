@@ -45,8 +45,21 @@ export const renameCollection = (id: string, name: string) =>
 export const setSharing = (id: string, enabled: boolean) =>
 	run(id, () => crm.collections.update(id, { sharing_enabled: enabled }))
 
-export const deleteCollection = (id: string) =>
-	run(id, () => crm.collections.remove(id), 'Collection deleted')
+/** After a delete the detail is gone: leave it first, drop it from the cache (never refetch it), refresh the list. */
+export async function deleteCollection(id: string, onDeleted: () => void) {
+	const qc = getQueryClient()
+	try {
+		await crm.collections.remove(id)
+	} catch (e) {
+		toast.show(failure(e), { tone: 'error' })
+		return false
+	}
+	onDeleted()
+	qc.removeQueries({ queryKey: crmKeys.collection(id) })
+	await qc.invalidateQueries({ queryKey: crmKeys.collectionsAll() })
+	toast.show('Collection deleted')
+	return true
+}
 
 export const removeItem = (id: string, itemId: string) =>
 	run(id, () => crm.collections.removeItem(id, itemId))

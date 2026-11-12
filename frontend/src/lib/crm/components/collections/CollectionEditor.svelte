@@ -30,7 +30,7 @@ async function rotate() {
 
 async function remove(name: string) {
 	if (!confirm(`Delete "${name}"? Its link will stop working.`)) return
-	if (await deleteCollection(id)) onback()
+	await deleteCollection(id, onback)
 }
 </script>
 

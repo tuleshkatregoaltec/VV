@@ -38,3 +38,24 @@ export function addButtonClick(e: Event, toggle: () => void) {
 	e.stopPropagation()
 	toggle()
 }
+
+export interface MenuRowState extends MenuItemState {
+	/** The collection's items have not loaded yet: membership is unknown, so the row is not clickable. */
+	pending: boolean
+}
+
+/** A menu row from the collection's live detail (undefined while loading). */
+export function menuRowState(
+	c: { item_count: number },
+	detail: { items: { listing_key: string }[] } | undefined,
+	listingKey: string
+): MenuRowState {
+	if (!detail) return { checked: false, disabled: true, hint: null, pending: true }
+	return {
+		...menuItemState(
+			c,
+			detail.items.some((i) => i.listing_key === listingKey)
+		),
+		pending: false
+	}
+}

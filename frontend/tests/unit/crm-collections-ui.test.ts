@@ -16,6 +16,7 @@ vi.mock('$lib/crm/api', () => ({
 	crm: {
 		collections: {
 			removeItem: vi.fn().mockResolvedValue(undefined),
+			remove: vi.fn().mockResolvedValue(undefined),
 			addItem: vi.fn().mockResolvedValue({}),
 			shareLink: vi.fn().mockResolvedValue({ url: 'https://app.test/collections/tok' }),
 			update: vi.fn().mockResolvedValue({})
@@ -23,17 +24,25 @@ vi.mock('$lib/crm/api', () => ({
 	}
 }))
 vi.mock('$lib/queries/client', () => ({ getQueryClient: () => qc }))
-const qc = vi.hoisted(() => ({ invalidateQueries: vi.fn().mockResolvedValue(undefined) }))
+const qc = vi.hoisted(() => ({
+	invalidateQueries: vi.fn().mockResolvedValue(undefined),
+	removeQueries: vi.fn()
+}))
 
 import { crm } from '$lib/crm/api'
 import CollectionEditor from '$lib/crm/components/collections/CollectionEditor.svelte'
 import CollectionList from '$lib/crm/components/collections/CollectionList.svelte'
-import { copyShareLink, removeItem } from '$lib/crm/components/collections/collectionActions'
+import {
+	copyShareLink,
+	deleteCollection,
+	removeItem
+} from '$lib/crm/components/collections/collectionActions'
 import {
 	addButtonClick,
 	canAddToCollection,
 	isCollectionFull,
-	menuItemState
+	menuItemState,
+	menuRowState
 } from '$lib/crm/components/collections/collectionRules'
 import { crmKeys } from '$lib/crm/queries'
 import { toast } from '$lib/crm/stores/toast.svelte'
@@ -126,5 +135,33 @@ describe('collections UI', () => {
 		q.byKey.default = ok({ items: [], total: 0, limit: 50, offset: 0 })
 		const html = render(CollectionList, { props: { onopen: () => {} } }).body
 		expect(html).toContain('No collections yet — add properties from Company listings.')
+	})
+
+	it('menu row state: loading, in collection, full, free', () => {
+		const c = { item_count: 3 }
+		expect(menuRowState(c, undefined, '111')).toEqual({
+			checked: false,
+			disabled: true,
+			hint: null,
+			pending: true
+		})
+		const detail = { items: [{ listing_key: '111' }] }
+		expect(menuRowState(c, detail, '111')).toMatchObject({ checked: true, disabled: true })
+		expect(menuRowState(c, detail, '222')).toMatchObject({ checked: false, disabled: false })
+		expect(menuRowState({ item_count: 50 }, detail, '222')).toMatchObject({
+			disabled: true,
+			hint: '50 / 50'
+		})
+	})
+
+	it('delete leaves first, drops the detail from cache and never refetches it', async () => {
+		const order: string[] = []
+		qc.removeQueries.mockImplementation(() => order.push('remove'))
+		await deleteCollection('c1', () => order.push('back'))
+		expect(crm.collections.remove).toHaveBeenCalledWith('c1')
+		expect(order).toEqual(['back', 'remove'])
+		expect(qc.removeQueries).toHaveBeenCalledWith({ queryKey: crmKeys.collection('c1') })
+		const keys = qc.invalidateQueries.mock.calls.map((c) => c[0].queryKey)
+		expect(keys).toEqual([crmKeys.collectionsAll()])
 	})
 })
