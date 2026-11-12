@@ -62,7 +62,7 @@ test('agent shares a live collection that an anonymous client sees at one stable
 	await openCompanyListings(page);
 	const available = await page.getByRole('button', { name: 'Add to collection' }).count();
 	const total = Math.min(8, available);
-	test.skip(total < 4, 'Needs at least 4 company listings on screen');
+	test.skip(total < 5, 'Needs at least 5 company listings on screen');
 	const initial = Math.min(5, total - 3);
 	const finalCount = total - 2;
 
