@@ -8,8 +8,9 @@ import { test, expect, type Browser, type Page } from '@playwright/test';
  * Property Finder company is the one browsed in Company listings.
  */
 
-const NAME = 'Ahmed — Marina 2BR';
-const RENAMED = 'Ahmed — Marina 2BR (updated)';
+// Unique per run so a collection left behind by an earlier run cannot collide with this one.
+const NAME = `Ahmed — Marina 2BR ${Date.now()}`;
+const RENAMED = `${NAME} (updated)`;
 const UNAVAILABLE = 'This collection is no longer available.';
 
 async function openCompanyListings(page: Page) {
@@ -24,12 +25,24 @@ async function openCollections(page: Page) {
 	await page.getByRole('tab', { name: 'Collections' }).click();
 }
 
+/** Clicks a collection menu item and waits for the add request itself, not its toast. */
+async function chooseCollection(page: Page, item: ReturnType<Page['getByRole']>) {
+	const added = page.waitForResponse(
+		(r) => /\/collections\/[^/]+\/items\/?(\?|$)/.test(r.url()) && r.request().method() === 'PUT'
+	);
+	await item.click();
+	const response = await added;
+	expect(response.ok(), `add to collection failed: ${response.status()}`).toBe(true);
+}
+
 /** Adds the company-listing cards with these positions to the named collection. */
 async function addCards(page: Page, name: string, positions: number[]) {
 	for (const i of positions) {
 		await page.getByRole('button', { name: 'Add to collection' }).nth(i).click();
-		await page.getByRole('menuitem', { name: new RegExp(name.replace(/[()]/g, '\\$&')) }).click();
-		await expect(page.getByText('Added to collection').last()).toBeVisible();
+		await chooseCollection(
+			page,
+			page.getByRole('menuitem', { name: new RegExp(name.replace(/[()]/g, '\\$&')) })
+		);
 	}
 }
 
@@ -77,8 +90,7 @@ test('agent shares a live collection that an anonymous client sees at one stable
 	await expect(page.getByRole('button', { name: 'Add to collection' }).first()).toBeVisible();
 	await page.getByRole('button', { name: 'Add to collection' }).first().click();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
-	await page.getByRole('menuitem', { name: NAME }).click();
-	await expect(page.getByText('Added to collection').last()).toBeVisible();
+	await chooseCollection(page, page.getByRole('menuitem', { name: NAME }));
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await addCards(page, NAME, Array.from({ length: initial - 1 }, (_, i) => i + 1));
 
@@ -94,7 +106,7 @@ test('agent shares a live collection that an anonymous client sees at one stable
 	const anon = await anonymousPage(browser);
 	try {
 		await anon.page.goto(shareUrl);
-		await expect(anon.page.getByRole('heading', { level: 1, name: NAME })).toBeVisible();
+		await expect(anon.page.getByRole('heading', { level: 1, name: NAME, exact: true })).toBeVisible();
 		await expect(anon.page.locator('main ul > li')).toHaveCount(initial);
 		await expect(anon.page).not.toHaveURL(/\/auth/);
 		await expect(anon.page.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
@@ -120,7 +132,7 @@ test('agent shares a live collection that an anonymous client sees at one stable
 
 		// Same URL, live state.
 		await anon.page.reload();
-		await expect(anon.page.getByRole('heading', { level: 1, name: RENAMED })).toBeVisible();
+		await expect(anon.page.getByRole('heading', { level: 1, name: RENAMED, exact: true })).toBeVisible();
 		await expect(anon.page.locator('main ul > li')).toHaveCount(finalCount);
 
 		// Disable: the link stops working.
@@ -133,7 +145,7 @@ test('agent shares a live collection that an anonymous client sees at one stable
 		await page.getByLabel(/^Sharing/).check();
 		await expect(page.getByLabel(/^Sharing on/)).toBeChecked();
 		await anon.page.reload();
-		await expect(anon.page.getByRole('heading', { level: 1, name: RENAMED })).toBeVisible();
+		await expect(anon.page.getByRole('heading', { level: 1, name: RENAMED, exact: true })).toBeVisible();
 		await expect(anon.page.locator('main ul > li')).toHaveCount(finalCount);
 
 		// Rotate: the old URL is dead, the new one works.
@@ -146,13 +158,30 @@ test('agent shares a live collection that an anonymous client sees at one stable
 		await anon.page.reload();
 		await expect(anon.page.getByText(UNAVAILABLE)).toBeVisible();
 		await anon.page.goto(newUrl);
-		await expect(anon.page.getByRole('heading', { level: 1, name: RENAMED })).toBeVisible();
+		await expect(anon.page.getByRole('heading', { level: 1, name: RENAMED, exact: true })).toBeVisible();
 
 		expect(anon.posthogRequests, 'anonymous page must not call PostHog').toEqual([]);
 	} finally {
 		await anon.context.close();
 		// Clean up so reruns start from an empty list.
 		page.once('dialog', (d) => d.accept());
-		await page.getByRole('button', { name: 'Delete', exact: true }).click().catch(() => {});
+		const deleted = page
+			.waitForResponse((r) => /\/collections\/[^/]+$/.test(r.url()) && r.request().method() === 'DELETE', {
+				timeout: 10_000
+			})
+			.then((r) => (r.ok() ? null : `delete returned ${r.status()}`))
+			.catch((error) => `${error}`);
+		const clicked = await page
+			.getByRole('button', { name: 'Delete', exact: true })
+			.click({ timeout: 10_000 })
+			.then(() => null)
+			.catch((error) => `${error}`);
+		const problem = clicked ?? (await deleted);
+		if (problem) {
+			// Do not hide it: a leftover collection must be visible in the report.
+			const message = `Cleanup failed, delete collection "${NAME}" / "${RENAMED}" by hand: ${problem}`;
+			test.info().annotations.push({ type: 'cleanup-failed', description: message });
+			console.error(message);
+		}
 	}
 });
