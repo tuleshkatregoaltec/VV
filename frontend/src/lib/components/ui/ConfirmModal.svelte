@@ -48,20 +48,20 @@ $effect(() => {
 
 const confirmButtonClasses =
 	confirmVariant === 'danger'
-		? 'bg-error hover:bg-[#8a1f1f] text-on-navy'
-		: 'bg-navy hover:bg-primary-hover text-on-navy'
+		? 'bg-error hover:opacity-90 text-app'
+		: 'bg-action hover:bg-action-hover text-on-action'
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-[color:rgba(5,13,24,0.45)] p-4"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
 		onclick={handleBackdropClick}
 		role="presentation"
 	>
 		<div
-			class="w-full max-w-md rounded-xl border border-border bg-white shadow-xl"
+			class="w-full max-w-md rounded-xl border border-border bg-elevated shadow-xl"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="confirm-title"
@@ -81,7 +81,7 @@ const confirmButtonClasses =
 				{#if cancelText}
 					<button
 						onclick={onCancel}
-						class="rounded-md border border-border bg-white px-4 py-2 text-sm font-medium text-fg-2 transition hover:bg-slate-50"
+						class="rounded-md border border-border bg-card px-4 py-2 text-sm font-medium text-fg-2 transition hover:bg-panel"
 					>
 						{cancelText}
 					</button>
