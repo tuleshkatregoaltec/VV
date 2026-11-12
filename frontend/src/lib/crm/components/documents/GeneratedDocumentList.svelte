@@ -1,6 +1,8 @@
 <script lang="ts">
 /** Generated PDFs, newest first: one listing's (Documents tab) or the agency's (CRM › Documents). */
 import { createQuery } from '@tanstack/svelte-query'
+import ChevronDown from 'lucide-svelte/icons/chevron-down'
+import { SvelteSet } from 'svelte/reactivity'
 import type { GeneratedDocumentResponse } from '$lib/api/generated/hey-api/types.gen'
 import { crm } from '../../api'
 import type { DocType } from '../../api/types'
@@ -38,6 +40,9 @@ const docs = createQuery(() =>
 	})
 )
 let downloading = $state<string | null>(null)
+/** Properties whose documents are shown; all start folded so the page reads company → property. */
+const open = new SvelteSet<string>()
+const toggle = (key: string) => (open.has(key) ? open.delete(key) : open.add(key))
 let previewing = $state<string | null>(null)
 
 const when = (iso: string) =>
@@ -129,16 +134,29 @@ async function preview(d: GeneratedDocumentResponse) {
 						<span class="small muted">· {plural(g.properties.length, 'property', 'properties')} · {plural(count, 'document')}</span>
 					</h4>
 					{#each g.properties as p (p.listingKey)}
+						{@const expanded = open.has(p.listingKey)}
 						<div class="property">
 							<div class="property-head">
-								<a href="/crm/assets?listing=PF-{p.listingKey}&tab=documents">{p.title}</a>
-								<span class="small muted">{p.area ? `${p.area} · ` : ''}{plural(p.documents.length, 'document')}</span>
+								<button
+									type="button"
+									class="toggle"
+									aria-expanded={expanded}
+									aria-controls="docs-{p.listingKey}"
+									onclick={() => toggle(p.listingKey)}
+								>
+									<ChevronDown size={16} class={expanded ? 'chev up' : 'chev'} aria-hidden="true" />
+									<span class="title">{p.title}</span>
+									<span class="small muted">{p.area ? `${p.area} · ` : ''}{plural(p.documents.length, 'document')}</span>
+								</button>
+								<a class="small" href="/crm/assets?listing=PF-{p.listingKey}&tab=documents">Open listing</a>
 							</div>
-							<div class="docs">
-								{#each p.documents as d (d.id)}
-									{@render row(d)}
-								{/each}
-							</div>
+							{#if expanded}
+								<div class="docs" id="docs-{p.listingKey}">
+									{#each p.documents as d (d.id)}
+										{@render row(d)}
+									{/each}
+								</div>
+							{/if}
 						</div>
 					{/each}
 				</section>
@@ -182,11 +200,39 @@ async function preview(d: GeneratedDocumentResponse) {
 	}
 	.property-head {
 		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 0.5rem;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
 		margin-bottom: 0.5rem;
+	}
+	.toggle {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		min-height: 2.25rem;
+		padding: 0.25rem 0;
+		background: none;
+		border: 0;
+		color: inherit;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.toggle .title {
 		font-weight: 600;
+	}
+	.toggle :global(.chev) {
+		flex: none;
+		transition: transform 0.15s ease;
+	}
+	.toggle :global(.chev.up) {
+		transform: rotate(180deg);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.toggle :global(.chev) {
+			transition: none;
+		}
 	}
 	.pager {
 		display: flex;

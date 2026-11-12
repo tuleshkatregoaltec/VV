@@ -209,14 +209,23 @@ test('CRM › Documents lists generated PDFs, filters by type and links to the l
 	const company = page.getByRole('region', { name: 'Big Firm' });
 	await expect(company.getByRole('heading', { name: /Big Firm/ })).toContainText('1 property · 2 documents');
 	await expect(company.getByText('Dubai Marina · 2 documents')).toBeVisible();
+
+	// Only companies and properties at first; the arrow reveals a property's documents.
+	const toggle = company.getByRole('button', { name: /Marina Gate 2BR/ });
+	await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+	await expect(page.getByRole('button', { name: 'Download' })).toHaveCount(0);
+	await toggle.click();
+	await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 	await expect(page.getByText('Failed')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Download' })).toHaveCount(1);
+	await toggle.click();
+	await expect(page.getByRole('button', { name: 'Download' })).toHaveCount(0);
 
 	await page.getByRole('radio', { name: 'NOC' }).or(page.getByRole('button', { name: 'NOC', exact: true })).first().click();
 	await expect(page).toHaveURL(/type=noc/);
 	await expect(page.getByText('Generated documents · 1')).toBeVisible();
 
-	await expect(page.getByRole('link', { name: 'Marina Gate 2BR' })).toHaveAttribute(
+	await expect(page.getByRole('link', { name: 'Open listing' })).toHaveAttribute(
 		'href',
 		'/crm/assets?listing=PF-123&tab=documents'
 	);
@@ -229,10 +238,14 @@ test('Preview opens the PDF in a new tab instead of downloading it', async ({ pa
 	await usePersona('active-member');
 
 	await page.goto('/crm/documents');
+	await page.getByRole('button', { name: /Marina Gate 2BR/ }).click();
 	const tab = page.waitForEvent('popup');
+	// Headless Chrome has no PDF viewer, so assert the new tab fetched the preview link
+	// rather than what its address bar ends up showing.
+	const fetched = page.context().waitForEvent('request', (r) => r.url().includes('/__signed/preview.pdf'));
 	await page.getByRole('button', { name: 'Preview NOC' }).click();
 
 	const preview = await tab;
-	await expect.poll(() => preview.url()).toContain('/__signed/preview.pdf');
+	expect((await fetched).frame().page()).toBe(preview);
 	expect(api.calls.some((c) => c.path === '/documents/d-1/download?inline=true')).toBe(true);
 });
