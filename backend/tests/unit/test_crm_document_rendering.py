@@ -19,7 +19,7 @@ def snapshot(doc_type, fields=FULL):
     return build_snapshot(listing(), fields, doc_type)
 
 
-@pytest.mark.parametrize("doc_type", ["noc", "brochure", "lease", "a2a"])
+@pytest.mark.parametrize("doc_type", ["noc", "lease", "a2a"])
 def test_each_type_renders_a_pdf_with_its_own_details(doc_type):
     pdf = render_pdf(doc_type, snapshot(doc_type))
     _, text = text_of(pdf)
@@ -30,14 +30,6 @@ def test_each_type_renders_a_pdf_with_its_own_details(doc_type):
 def test_noc_names_the_owner_and_title_deed():
     _, text = text_of(render_pdf("noc", snapshot("noc")))
     assert "Aisha Khan" in text and "TD-2024-1" in text
-
-
-def test_long_text_spans_pages_and_keeps_its_end():
-    fields = FULL.model_copy(deep=True)
-    fields.marketing.description = ("Sea view. " * 190) + "THE-LAST-SENTENCE"
-    pages, text = text_of(render_pdf("brochure", snapshot("brochure", fields)))
-    assert pages > 1
-    assert "THE-LAST-SENTENCE" in text.replace("\n", "")
 
 
 def test_arabic_owner_name_is_in_the_pdf():

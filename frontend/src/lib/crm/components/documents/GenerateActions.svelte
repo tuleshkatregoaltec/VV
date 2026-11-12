@@ -7,11 +7,10 @@ import { toast } from '../../stores/toast.svelte'
 import { errorText } from '../../write'
 import { DOC_TYPES, docLabel, type GenerateOutcome, generate } from './documentRules'
 
-let { listingKey, only }: { listingKey: string; only?: DocType } = $props()
+let { listingKey }: { listingKey: string } = $props()
 
 const qc = useQueryClient()
 const info = createQuery(() => crmQueries.documentInfo(listingKey))
-const types = $derived(only ? DOC_TYPES.filter((d) => d.type === only) : DOC_TYPES)
 
 let pending = $state<DocType | null>(null)
 let problem = $state<{ type: DocType; outcome: Exclude<GenerateOutcome, { ok: true }> } | null>(
@@ -37,7 +36,7 @@ async function run(type: DocType) {
 		<div class="small muted">Save the document information first; PDFs use the saved details.</div>
 	{/if}
 	<div class="gen">
-		{#each types as d (d.type)}
+		{#each DOC_TYPES as d (d.type)}
 			<button
 				type="button"
 				class="btn ghost sm"

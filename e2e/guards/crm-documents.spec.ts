@@ -29,7 +29,7 @@ const LISTING = {
 	managed: true
 };
 
-const EMPTY_FIELDS = { owner: {}, lease: {}, a2a: {}, marketing: {} };
+const EMPTY_FIELDS = { owner: {}, lease: {}, a2a: {} };
 
 function doc(id: string, doc_type: string, status = 'ready') {
 	return {

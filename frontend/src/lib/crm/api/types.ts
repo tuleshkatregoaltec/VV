@@ -642,7 +642,7 @@ export interface ListingDetail extends ListingCard {
 }
 
 /** Generated listing documents (Assets › listing › Documents, CRM › Documents). */
-export type DocType = 'noc' | 'brochure' | 'lease' | 'a2a'
+export type DocType = 'noc' | 'lease' | 'a2a'
 
 export interface DocumentListParams {
 	listingKey?: string

@@ -271,9 +271,6 @@ function relist(x: ListingDetail) {
 				</button>
 				{#if !x.can_publish}<span class="small muted">{renew ? 'Renew the permit first' : 'Add a permit first'}</span>{/if}
 			{:else if x.status === 'live'}
-				<button type="button" class="btn" onclick={() => panel.open({ kind: 'brochure', id })}>
-					Brochure PDF
-				</button>
 				<button
 					type="button"
 					class="btn ghost"

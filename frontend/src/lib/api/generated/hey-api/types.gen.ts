@@ -4425,7 +4425,6 @@ export type DocumentFieldsInput = {
     owner?: OwnerFields;
     lease?: LeaseFields;
     a2a?: A2aFieldsInput;
-    marketing?: MarketingFields;
 };
 
 /**
@@ -4437,7 +4436,6 @@ export type DocumentFieldsOutput = {
     owner?: OwnerFields;
     lease?: LeaseFields;
     a2a?: A2aFieldsOutput;
-    marketing?: MarketingFields;
 };
 
 /**
@@ -5764,7 +5762,7 @@ export type GenerateDocumentRequest = {
     /**
      * Doc Type
      */
-    doc_type: 'noc' | 'brochure' | 'lease' | 'a2a';
+    doc_type: 'noc' | 'lease' | 'a2a';
     /**
      * Expected Revision
      */
@@ -5868,7 +5866,7 @@ export type GeneratedDocumentResponse = {
     /**
      * Doc Type
      */
-    doc_type: 'noc' | 'brochure' | 'lease' | 'a2a';
+    doc_type: 'noc' | 'lease' | 'a2a';
     /**
      * Template Version
      */
@@ -8290,16 +8288,6 @@ export type MarketTrendResponse = {
      * Avg Price Sqm Change Pct
      */
     avg_price_sqm_change_pct?: number | null;
-};
-
-/**
- * MarketingFields
- */
-export type MarketingFields = {
-    /**
-     * Description
-     */
-    description?: string | null;
 };
 
 /**
@@ -14217,7 +14205,7 @@ export type CrmCrmDocumentsData = {
         /**
          * Doc Type
          */
-        doc_type?: 'noc' | 'brochure' | 'lease' | 'a2a' | null;
+        doc_type?: 'noc' | 'lease' | 'a2a' | null;
         /**
          * Search
          */

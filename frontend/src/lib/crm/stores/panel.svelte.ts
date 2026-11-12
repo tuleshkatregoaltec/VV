@@ -50,7 +50,6 @@ export type PanelState =
 	| { kind: 'owner-lead'; id: string }
 	| { kind: 'add-record'; ownerId: string }
 	| { kind: 'send'; target: 'listing' | 'market'; id: string }
-	| { kind: 'brochure'; id: string }
 	| { kind: 'owner-report'; id: string }
 	| { kind: 'which-doc'; dealId: string; files: File[]; index: number }
 

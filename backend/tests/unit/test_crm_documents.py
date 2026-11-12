@@ -410,11 +410,23 @@ async def test_failed_document_has_no_download(db, listings, pipeline, signer, m
     assert signer == []
 
 
+A2A_READY = {
+    **NOC_READY,
+    "a2a": {
+        "other_brokerage": "Partner Realty",
+        "other_broker_name": "Sara",
+        "other_broker_brn": "BRN-1",
+        "commission_split_pct": "50",
+        "valid_until": "2027-01-31",
+    },
+}
+
+
 async def test_list_filters_by_listing_type_and_search_newest_first(db, listings, pipeline):
     listings["456"] = listing("456", title="Palm Villa")
-    await _saved(db)
+    await _saved(db, fields=A2A_READY)
     noc, _ = await _generate(db, generate_request())
-    brochure, _ = await _generate(db, generate_request("brochure"))
+    a2a, _ = await _generate(db, generate_request("a2a"))
     await documents.save_document_info(
         db,
         organization_id="org-a",
@@ -422,7 +434,7 @@ async def test_list_filters_by_listing_type_and_search_newest_first(db, listings
         payload=ListingDocumentInfoUpdate(
             source="property_finder",
             listing_key="456",
-            fields=DocumentFields(),
+            fields=DocumentFields.model_validate(NOC_READY),
             expected_revision=0,
         ),
     )
@@ -431,7 +443,7 @@ async def test_list_filters_by_listing_type_and_search_newest_first(db, listings
         GenerateDocumentRequest(
             source="property_finder",
             listing_key="456",
-            doc_type="brochure",
+            doc_type="noc",
             expected_revision=1,
             idempotency_key=uuid4(),
         ),
@@ -441,19 +453,62 @@ async def test_list_filters_by_listing_type_and_search_newest_first(db, listings
         return [item.id for item in page.items]
 
     everything = await documents.list_documents(db, organization_id="org-a")
-    assert ids(everything) == [palm.id, brochure.id, noc.id] and everything.total == 3
+    assert ids(everything) == [palm.id, a2a.id, noc.id] and everything.total == 3
     assert ids(await documents.list_documents(db, organization_id="org-a", listing_key="123")) == [
-        brochure.id,
+        a2a.id,
         noc.id,
     ]
-    assert ids(await documents.list_documents(db, organization_id="org-a", doc_type="noc")) == [
-        noc.id
+    assert ids(await documents.list_documents(db, organization_id="org-a", doc_type="a2a")) == [
+        a2a.id
     ]
     assert ids(await documents.list_documents(db, organization_id="org-a", search="palm")) == [
         palm.id
     ]
     second = await documents.list_documents(db, organization_id="org-a", limit=2, offset=2)
     assert (ids(second), second.total) == ([noc.id], 3)
+
+
+async def test_retired_brochure_documents_are_hidden(db, listings, pipeline):
+    record = await _saved(db)
+    noc, _ = await _generate(db, generate_request())
+    now = datetime.now(timezone.utc)
+    old = CrmGeneratedDocument(
+        organization_id="org-a",
+        info_id=(await documents.info_record(db, organization_id="org-a", listing_key="123")).id,
+        source="property_finder",
+        listing_key="123",
+        listing_title="Old brochure",
+        doc_type="brochure",
+        template_version="draft-1",
+        snapshot={},
+        input_revision=record.revision,
+        idempotency_key=uuid4(),
+        status="ready",
+        object_key="org-a/old.pdf",
+        created_by_user_id="u1",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(old)
+    await db.commit()
+
+    page = await documents.list_documents(db, organization_id="org-a")
+    assert [item.id for item in page.items] == [noc.id] and page.total == 1
+    for read in (documents.get_document, documents.download_document):
+        with pytest.raises(HTTPException) as error:
+            await read(db, organization_id="org-a", document_id=old.id)
+        assert error.value.status_code == 404
+
+
+def test_brochure_can_no_longer_be_requested():
+    with pytest.raises(ValueError):
+        generate_request("brochure")
+
+
+def test_saved_info_with_the_retired_marketing_group_still_loads():
+    fields = DocumentFields.model_validate({**NOC_READY, "marketing": {"description": "Sea view"}})
+    assert fields.owner.full_name == "Aisha Khan"
+    assert "marketing" not in fields.model_dump()
 
 
 async def test_preview_link_is_signed_inline_after_the_access_check(

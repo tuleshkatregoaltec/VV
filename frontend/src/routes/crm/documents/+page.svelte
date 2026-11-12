@@ -35,7 +35,7 @@ $effect(() => {
 })
 </script>
 
-<PageHeader title="Documents" facts="NOC, brochure, lease and A2A PDFs generated from your listings">
+<PageHeader title="Documents" facts="NOC, lease and A2A PDFs generated from your listings">
 	{#snippet right()}
 		<input class="search" type="search" placeholder="Search by listing" aria-label="Search by listing" bind:value={search} />
 	{/snippet}

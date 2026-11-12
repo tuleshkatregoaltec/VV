@@ -19,13 +19,8 @@ describe('field labels', () => {
 		expect(fieldLabel('owner.new_field')).toBe('owner.new_field')
 	})
 
-	it('offers the four documents in the reference order', () => {
-		expect(DOC_TYPES.map((d) => d.label)).toEqual([
-			'NOC',
-			'Brochure',
-			'Lease Agreement',
-			'A2A Agreement'
-		])
+	it('offers the three documents in the reference order', () => {
+		expect(DOC_TYPES.map((d) => d.label)).toEqual(['NOC', 'Lease Agreement', 'A2A Agreement'])
 	})
 })
 

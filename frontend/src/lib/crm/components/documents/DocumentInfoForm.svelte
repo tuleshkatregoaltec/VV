@@ -12,10 +12,10 @@ import { fieldLabel } from './documentRules'
 
 let { listingKey }: { listingKey: string } = $props()
 
-type Group = 'owner' | 'lease' | 'a2a' | 'marketing'
+type Group = 'owner' | 'lease' | 'a2a'
 type Field = {
 	key: string
-	type: 'text' | 'tel' | 'email' | 'date' | 'number' | 'textarea'
+	type: 'text' | 'tel' | 'email' | 'date' | 'number'
 	min?: number
 	max?: number
 }
@@ -56,8 +56,7 @@ const SECTIONS: { group: Group; title: string; fields: Field[] }[] = [
 			{ key: 'commission_split_pct', type: 'number', min: 0, max: 100 },
 			{ key: 'valid_until', type: 'date' }
 		]
-	},
-	{ group: 'marketing', title: 'Brochure', fields: [{ key: 'description', type: 'textarea' }] }
+	}
 ]
 
 type Draft = Record<Group, Record<string, string | number | null>>
@@ -75,8 +74,7 @@ function toDraft(r: ListingDocumentInfoResponse): Draft {
 	return {
 		owner: { ...f.owner },
 		lease: { ...f.lease },
-		a2a: { ...f.a2a },
-		marketing: { ...f.marketing }
+		a2a: { ...f.a2a }
 	}
 }
 
@@ -142,11 +140,9 @@ async function reload() {
 				<div class="frow wrap">
 					{#each s.fields as f (f.key)}
 						{@const id = `doc-${s.group}-${f.key}`}
-						<div class={['fld', f.type === 'textarea' && 'wide']}>
+						<div class="fld">
 							<label for={id}>{fieldLabel(`${s.group}.${f.key}`)}</label>
-							{#if f.type === 'textarea'}
-								<textarea {id} rows="4" maxlength="2000" bind:value={d[s.group][f.key]}></textarea>
-							{:else if f.type === 'number'}
+							{#if f.type === 'number'}
 								<input {id} type="number" min={f.min} max={f.max} bind:value={d[s.group][f.key]} />
 							{:else}
 								<input {id} type={f.type} maxlength="200" bind:value={d[s.group][f.key]} />
@@ -177,8 +173,5 @@ async function reload() {
 	}
 	.wrap .fld {
 		flex: 1 1 14rem;
-	}
-	.wrap .fld.wide {
-		flex-basis: 100%;
 	}
 </style>

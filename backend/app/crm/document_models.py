@@ -11,24 +11,23 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, model_validator
 from sqlalchemy import CheckConstraint, DateTime, Index, UniqueConstraint
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
 from app.crm.models import CrmCompanyListingDetail
 
-DocType = Literal["noc", "brochure", "lease", "a2a"]
+DocType = Literal["noc", "lease", "a2a"]
 DocStatus = Literal["generating", "ready", "failed"]
 Source = Literal["property_finder"]
-DOC_TYPES: tuple[str, ...] = ("noc", "brochure", "lease", "a2a")
+DOC_TYPES: tuple[str, ...] = ("noc", "lease", "a2a")
 DOC_STATUSES: tuple[str, ...] = ("generating", "ready", "failed")
 # Property Finder listing ids: 26 letters and digits today; bounded, no separators.
 LISTING_KEY_PATTERN = r"^[A-Za-z0-9]{1,40}$"
 
 ListingKey = Annotated[str, StringConstraints(pattern=LISTING_KEY_PATTERN)]
 Text = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
-LongText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
 
 
 class _Group(BaseModel):
@@ -62,17 +61,20 @@ class A2AFields(_Group):
     valid_until: date | None = None
 
 
-class MarketingFields(_Group):
-    description: LongText | None = None
-
-
 class DocumentFields(_Group):
     """Everything the Documents tab collects for one listing (all optional until a template needs it)."""
 
     owner: OwnerFields = Field(default_factory=OwnerFields)
     lease: LeaseFields = Field(default_factory=LeaseFields)
     a2a: A2AFields = Field(default_factory=A2AFields)
-    marketing: MarketingFields = Field(default_factory=MarketingFields)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_retired_groups(cls, data: Any) -> Any:
+        # "marketing" fed the retired listing brochure; older saved rows still carry it.
+        if isinstance(data, dict) and "marketing" in data:
+            data = {k: v for k, v in data.items() if k != "marketing"}
+        return data
 
 
 class CrmListingDocumentInfo(SQLModel, table=True):
@@ -106,6 +108,7 @@ class CrmGeneratedDocument(SQLModel, table=True):
         UniqueConstraint(
             "organization_id", "idempotency_key", name="uq_crm_generated_document_idempotency"
         ),
+        # Mirrors the database, which still allows the retired "brochure" type for old rows.
         CheckConstraint(
             "doc_type IN ('noc', 'brochure', 'lease', 'a2a')", name="ck_crm_generated_document_type"
         ),

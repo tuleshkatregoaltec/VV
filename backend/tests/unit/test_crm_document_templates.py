@@ -29,7 +29,6 @@ FULL = DocumentFields.model_validate(
             "commission_split_pct": "50",
             "valid_until": "2027-01-31",
         },
-        "marketing": {"description": "Sea view"},
     }
 )
 
@@ -39,11 +38,11 @@ def snapshot(doc_type, fields=FULL):
 
 
 def test_every_document_type_has_a_draft_template():
-    assert set(TEMPLATES) == {"noc", "brochure", "lease", "a2a"}
+    assert set(TEMPLATES) == {"noc", "lease", "a2a"}
     assert all(spec.version == "draft-1" for spec in TEMPLATES.values())
 
 
-@pytest.mark.parametrize("doc_type", ["noc", "brochure", "lease", "a2a"])
+@pytest.mark.parametrize("doc_type", ["noc", "lease", "a2a"])
 def test_complete_information_has_nothing_missing(doc_type):
     assert missing_fields(doc_type, snapshot(doc_type)) == []
 
@@ -66,14 +65,6 @@ def test_lease_lists_every_missing_term_in_order():
     missing = missing_fields("lease", snapshot("lease", DocumentFields()))
     assert missing[:2] == ["owner.full_name", "lease.tenant_name"]
     assert "lease.annual_rent_aed" in missing and "lease.tenant_email" not in missing
-
-
-def test_brochure_needs_only_listing_fields():
-    assert missing_fields("brochure", snapshot("brochure", DocumentFields())) == []
-
-
-def test_brochure_snapshot_carries_no_private_data():
-    assert set(snapshot("brochure")) == {"listing", "marketing"}
 
 
 def test_a2a_snapshot_carries_no_owner_or_lease_data():

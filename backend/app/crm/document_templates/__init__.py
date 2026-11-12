@@ -34,13 +34,6 @@ TEMPLATES: dict[str, TemplateSpec] = {
         groups=("owner",),
         required=(*_LISTING, "owner.full_name", "owner.title_deed_number", "owner.id_number"),
     ),
-    "brochure": TemplateSpec(
-        version="draft-1",
-        file="brochure.html",
-        title="Property Brochure",
-        groups=("marketing",),
-        required=_LISTING,
-    ),
     "lease": TemplateSpec(
         version="draft-1",
         file="lease.html",

@@ -455,8 +455,7 @@ export const crm = {
 		upload: (_id: string, _file: File, _docType: string) =>
 			notOnBackend<Written<ListingDetail>>('Listing documents'),
 		send: (_id: string, _leadIds: number[]) =>
-			notOnBackend<Written<{ sent: number }>>('Sending a listing'),
-		sendBrochure: (_id: string) => notOnBackend<{ sent: boolean }>('Sending a brochure')
+			notOnBackend<Written<{ sent: number }>>('Sending a listing')
 	},
 
 	/** Generated listing documents: private PDFs made from a managed listing's saved details. */

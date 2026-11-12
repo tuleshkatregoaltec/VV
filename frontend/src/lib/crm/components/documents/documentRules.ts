@@ -12,7 +12,6 @@ import type { DocType } from '../../api/types'
 
 export const DOC_TYPES: { type: DocType; label: string }[] = [
 	{ type: 'noc', label: 'NOC' },
-	{ type: 'brochure', label: 'Brochure' },
 	{ type: 'lease', label: 'Lease Agreement' },
 	{ type: 'a2a', label: 'A2A Agreement' }
 ]
@@ -42,8 +41,7 @@ export const FIELD_LABELS: Record<string, string> = {
 	'a2a.other_broker_name': 'Co-broking agent',
 	'a2a.other_broker_brn': 'Agent BRN',
 	'a2a.commission_split_pct': 'Commission split (%)',
-	'a2a.valid_until': 'Agreement valid until',
-	'marketing.description': 'Brochure description'
+	'a2a.valid_until': 'Agreement valid until'
 }
 
 export const fieldLabel = (path: string): string => FIELD_LABELS[path] ?? path

@@ -2,7 +2,6 @@
 import type { PanelState } from '../../stores/panel.svelte'
 import AddRecordPanel from './AddRecordPanel.svelte'
 import AreasPanel from './AreasPanel.svelte'
-import BrochurePanel from './BrochurePanel.svelte'
 import ClientPanel from './ClientPanel.svelte'
 import DayPanel from './DayPanel.svelte'
 import DealPanel from './DealPanel.svelte'
@@ -43,7 +42,6 @@ const key = $derived.by(() => {
 		case 'market':
 		case 'renewal':
 		case 'event':
-		case 'brochure':
 		case 'owner-report':
 			return `${p.kind}:${p.id}`
 		case 'owner-lead':
@@ -131,8 +129,6 @@ const key = $derived.by(() => {
 		<OwnerLeadPanel id={p.id} />
 	{:else if p.kind === 'send'}
 		<SendPanel target={p.target} id={p.id} />
-	{:else if p.kind === 'brochure'}
-		<BrochurePanel id={p.id} />
 	{:else if p.kind === 'owner-report'}
 		<OwnerReportPanel id={p.id} />
 	{:else if p.kind === 'which-doc'}

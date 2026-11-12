@@ -23,6 +23,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm.company_listings import get_company_listing
 from app.crm.document_models import (
+    DOC_TYPES,
     CrmGeneratedDocument,
     CrmListingDocumentInfo,
     DocType,
@@ -311,7 +312,11 @@ async def list_documents(
     offset: int = 0,
 ) -> GeneratedDocumentListResponse:
     """The organization's documents, newest first. Independent of the listing still existing."""
-    conditions = [CrmGeneratedDocument.organization_id == organization_id]
+    conditions = [
+        CrmGeneratedDocument.organization_id == organization_id,
+        # Older rows may hold retired types (the listing brochure); they are no longer shown.
+        CrmGeneratedDocument.doc_type.in_(DOC_TYPES),  # type: ignore[attr-defined]
+    ]
     if listing_key:
         conditions.append(CrmGeneratedDocument.listing_key == listing_key)
     if doc_type:
@@ -345,7 +350,11 @@ async def _owned_document(
     db: AsyncSession, organization_id: str, document_id: UUID
 ) -> CrmGeneratedDocument:
     document = await db.get(CrmGeneratedDocument, document_id)
-    if document is None or document.organization_id != organization_id:
+    if (
+        document is None
+        or document.organization_id != organization_id
+        or document.doc_type not in DOC_TYPES
+    ):
         raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
     return document
 

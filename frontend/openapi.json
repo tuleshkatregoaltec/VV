@@ -2931,7 +2931,7 @@
 						"schema": {
 							"anyOf": [
 								{
-									"enum": ["noc", "brochure", "lease", "a2a"],
+									"enum": ["noc", "lease", "a2a"],
 									"type": "string"
 								},
 								{
@@ -19630,9 +19630,6 @@
 					},
 					"a2a": {
 						"$ref": "#/components/schemas/A2AFields-Input"
-					},
-					"marketing": {
-						"$ref": "#/components/schemas/MarketingFields"
 					}
 				},
 				"additionalProperties": false,
@@ -19650,9 +19647,6 @@
 					},
 					"a2a": {
 						"$ref": "#/components/schemas/A2AFields-Output"
-					},
-					"marketing": {
-						"$ref": "#/components/schemas/MarketingFields"
 					}
 				},
 				"additionalProperties": false,
@@ -21632,7 +21626,7 @@
 					},
 					"doc_type": {
 						"type": "string",
-						"enum": ["noc", "brochure", "lease", "a2a"],
+						"enum": ["noc", "lease", "a2a"],
 						"title": "Doc Type"
 					},
 					"expected_revision": {
@@ -21788,7 +21782,7 @@
 					},
 					"doc_type": {
 						"type": "string",
-						"enum": ["noc", "brochure", "lease", "a2a"],
+						"enum": ["noc", "lease", "a2a"],
 						"title": "Doc Type"
 					},
 					"template_version": {
@@ -26452,25 +26446,6 @@
 				"required": ["data", "total_transactions"],
 				"title": "MarketTrendResponse",
 				"description": "Response for the market trend chart endpoint"
-			},
-			"MarketingFields": {
-				"properties": {
-					"description": {
-						"anyOf": [
-							{
-								"type": "string",
-								"maxLength": 2000
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Description"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"title": "MarketingFields"
 			},
 			"MasterProjectResponse": {
 				"properties": {
