@@ -144,7 +144,7 @@ async function preview(d: GeneratedDocumentResponse) {
 									aria-controls="docs-{p.listingKey}"
 									onclick={() => toggle(p.listingKey)}
 								>
-									<ChevronDown size={16} class={expanded ? 'chev up' : 'chev'} aria-hidden="true" />
+									<ChevronDown size={16} class={expanded ? 'chev open' : 'chev'} aria-hidden="true" />
 									<span class="title">{p.title}</span>
 									<span class="small muted">{p.area ? `${p.area} · ` : ''}{plural(p.documents.length, 'document')}</span>
 								</button>
@@ -222,12 +222,14 @@ async function preview(d: GeneratedDocumentResponse) {
 	.toggle .title {
 		font-weight: 600;
 	}
+	/* Folded: points right. Open: points down at the documents it reveals. */
 	.toggle :global(.chev) {
 		flex: none;
+		transform: rotate(-90deg);
 		transition: transform 0.15s ease;
 	}
-	.toggle :global(.chev.up) {
-		transform: rotate(180deg);
+	.toggle :global(.chev.open) {
+		transform: none;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.toggle :global(.chev) {
