@@ -11,6 +11,7 @@ from app.crm.assistant.models import (
     CrmAssistantMessage,
 )
 from app.crm.calendar_models import CrmCalendarConnection, CrmCalendarEvent
+from app.crm.collection_models import CrmCollection, CrmCollectionItem
 from app.crm.document_models import CrmGeneratedDocument, CrmListingDocumentInfo
 from app.crm.import_models import (
     CrmContactImport,
@@ -69,6 +70,8 @@ __all__ = [
     "CrmCompanyListingSource",
     "CrmListingDocumentInfo",
     "CrmGeneratedDocument",
+    "CrmCollection",
+    "CrmCollectionItem",
     "CrmContactImport",
     "CrmContactList",
     "CrmPropertyContactClaim",
