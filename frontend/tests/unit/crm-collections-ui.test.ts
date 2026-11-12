@@ -29,10 +29,12 @@ const qc = vi.hoisted(() => ({
 	removeQueries: vi.fn()
 }))
 
+import { ApiError } from '$lib/api/client'
 import { crm } from '$lib/crm/api'
 import CollectionEditor from '$lib/crm/components/collections/CollectionEditor.svelte'
 import CollectionList from '$lib/crm/components/collections/CollectionList.svelte'
 import {
+	addListing,
 	copyShareLink,
 	deleteCollection,
 	removeItem
@@ -100,6 +102,14 @@ describe('collections UI', () => {
 		})
 		expect(menuItemState({ item_count: 3 }, false).disabled).toBe(false)
 		expect(menuItemState({ item_count: 50 }, true)).toMatchObject({ checked: true, disabled: true })
+	})
+
+	it('a string-detail 409 shows the friendly collection_full text', async () => {
+		vi.mocked(crm.collections.addItem).mockRejectedValueOnce(
+			new ApiError('collection_full', 409, undefined, { detail: 'collection_full' })
+		)
+		expect(await addListing('c1', '111')).toBeNull()
+		expect(toast.message).toBe('This collection is full (50 / 50).')
 	})
 
 	it('copy link writes share url to clipboard', async () => {

@@ -12,8 +12,18 @@ const CODE_TEXT: Record<string, string> = {
 	collection_not_found: 'That collection isn’t there any more.'
 }
 
+/** The backend sends `{"detail": "collection_full"}`; the client only fills `code` from object details. */
+function errorCode(e: ApiError): string | undefined {
+	if (e.code) return e.code
+	const detail = (e.details as { detail?: unknown } | null | undefined)?.detail
+	return typeof detail === 'string' ? detail : undefined
+}
+
 function failure(e: unknown): string {
-	if (e instanceof ApiError && e.code && CODE_TEXT[e.code]) return CODE_TEXT[e.code]
+	if (e instanceof ApiError) {
+		const code = errorCode(e)
+		if (code && CODE_TEXT[code]) return CODE_TEXT[code]
+	}
 	return errorText(e)
 }
 
