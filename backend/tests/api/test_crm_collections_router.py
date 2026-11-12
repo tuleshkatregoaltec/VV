@@ -24,7 +24,7 @@ FOREIGN = CollectionActor("eve", "2", True, "Eve", "eve@example.com")
 
 @pytest.fixture
 async def db(client):
-    from conftest import get_app
+    from app.main import app
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
@@ -37,7 +37,7 @@ async def db(client):
         async def override():
             yield session
 
-        get_app().dependency_overrides[get_db_session] = override
+        app.dependency_overrides[get_db_session] = override
         yield session
     await engine.dispose()
 

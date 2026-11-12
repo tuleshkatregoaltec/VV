@@ -31,7 +31,7 @@ def fresh_limiter():
 
 @pytest.fixture
 async def db(client_no_auth):
-    from conftest import get_app
+    from app.main import app
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
@@ -43,7 +43,7 @@ async def db(client_no_auth):
         async def override():
             yield session
 
-        get_app().dependency_overrides[get_db_session] = override
+        app.dependency_overrides[get_db_session] = override
         yield session
     await engine.dispose()
 
