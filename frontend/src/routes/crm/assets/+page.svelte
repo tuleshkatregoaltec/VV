@@ -8,6 +8,7 @@ import UserRound from 'lucide-svelte/icons/user-round'
 import Users from 'lucide-svelte/icons/users'
 import X from 'lucide-svelte/icons/x'
 import { crm } from '$lib/crm/api'
+import { listingKeyOf } from '$lib/crm/api/backend'
 import type {
 	CompanyListingAgentInventory,
 	ListingCard,
@@ -15,6 +16,10 @@ import type {
 	RenewalOwnerFilter,
 	RenewalWindow
 } from '$lib/crm/api/types'
+import AddToCollectionMenu from '$lib/crm/components/collections/AddToCollectionMenu.svelte'
+import CollectionEditor from '$lib/crm/components/collections/CollectionEditor.svelte'
+import CollectionList from '$lib/crm/components/collections/CollectionList.svelte'
+import { canAddToCollection } from '$lib/crm/components/collections/collectionRules'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import FilterMenu from '$lib/crm/components/ui/FilterMenu.svelte'
@@ -152,6 +157,7 @@ const facts = $derived.by(() => {
 const TABS: { id: AssetTab; label: string }[] = [
 	{ id: 'mine', label: 'My listings' },
 	{ id: 'company', label: 'Company listings' },
+	{ id: 'collections', label: 'Collections' },
 	{ id: 'portfolio', label: 'Portfolio' },
 	{ id: 'renewals', label: 'Renewals' },
 	{ id: 'market', label: 'Market' }
@@ -423,6 +429,8 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 				{:else if visibleItems.length}
 					<div class="lcards">
 						{#each visibleItems as x (x.id)}
+							{@const addKey = scope === 'company' && canAddToCollection(data) ? listingKeyOf(x.id) : null}
+							<div class="lcell">
 							<button type="button" class="lcard" onclick={() => openListing(x.id)}>
 								<div class="img">
 									<span class="chip">{x.deal_type === 'sale' ? 'Sale' : 'Rent'}</span>
@@ -444,6 +452,10 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 									</div>
 								</div>
 							</button>
+							{#if addKey}
+								<div class="addc"><AddToCollectionMenu listingKey={addKey} /></div>
+							{/if}
+							</div>
 						{/each}
 					</div>
 					{#if scope === 'company' && data.total != null && visibleItems.length < data.total}
@@ -482,6 +494,14 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 				{/if}
 			{/snippet}
 		</QueryView>
+	</div>
+{:else if ui.assetTab === 'collections'}
+	<div class="wrap">
+		{#if ui.openCollectionId}
+			<CollectionEditor id={ui.openCollectionId} onback={() => (ui.openCollectionId = null)} />
+		{:else}
+			<CollectionList onopen={(id) => (ui.openCollectionId = id)} />
+		{/if}
 	</div>
 {:else if ui.assetTab === 'portfolio'}
 	<QueryView query={portfolio} rows={5}>
@@ -688,6 +708,10 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 {/if}
 
 <style>
+	/* Card + Add to collection: the button is the card's sibling, never inside it */
+	.lcell { display: flex; flex-direction: column; gap: 4px; }
+	.lcell > .lcard { flex: 1; }
+	.addc { display: flex; justify-content: flex-end; }
 	/* Company listings toolbar: company picker · key figures · buyer matching */
 	.ctool {
 		display: flex;

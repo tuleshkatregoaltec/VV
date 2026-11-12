@@ -19,7 +19,7 @@ import type {
 } from '../api/types'
 
 export type LeadTab = 'all' | LeadType | 'lost'
-export type AssetTab = 'mine' | 'company' | 'portfolio' | 'renewals' | 'market'
+export type AssetTab = 'mine' | 'company' | 'collections' | 'portfolio' | 'renewals' | 'market'
 export type HomeTodo = 'gaps' | 'file'
 export type MatchTabId = 'ready' | 'offplan' | 'sell'
 
@@ -44,6 +44,8 @@ export const ui = $state({
 	cvType: '' as DealType | '',
 	cvSel: '',
 	assetTab: 'mine' as AssetTab,
+	/** Assets › Collections: the collection being edited, or null for the list. */
+	openCollectionId: null as string | null,
 	assetStatus: 'live' as ListingStatus,
 	/** Assets › Renewals opens on vacant units of the last 60 days. */
 	renewalWindow: 'vacant' as RenewalWindow,
