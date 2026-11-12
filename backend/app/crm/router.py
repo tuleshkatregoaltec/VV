@@ -5,6 +5,7 @@ from typing import Literal
 from uuid import UUID
 
 import httpx
+from clickhouse_connect.driver.exceptions import ClickHouseError
 from fastapi import (
     APIRouter,
     Depends,
@@ -24,12 +25,23 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.config import settings
 from app.core.dependencies import AuthContext, require_active_owner, require_active_subscription
 from app.crm import calendar_service
+from app.crm import collections as collection_service
 from app.crm.calendar_models import (
     CalendarEventCreate,
     CalendarEventMove,
     CalendarEventResponse,
     CalendarViewingCreate,
     CrmCalendarConnection,
+)
+from app.crm.collection_models import (
+    CollectionCreate,
+    CollectionDetailResponse,
+    CollectionItemAdd,
+    CollectionItemResponse,
+    CollectionListResponse,
+    CollectionResponse,
+    CollectionUpdate,
+    ShareLinkResponse,
 )
 from app.crm.company_listings import (
     clear_company_source,
@@ -206,6 +218,18 @@ class GoogleCalendarStatus(BaseModel):
 
 def _auth_ids(auth: AuthContext) -> tuple[str, str]:
     return str(auth.user.id), str(auth.organization.id)
+
+
+def _collection_actor(auth: AuthContext) -> collection_service.CollectionActor:
+    user_id, organization_id = _auth_ids(auth)
+    name = f"{auth.user.first_name} {auth.user.last_name}".strip()
+    return collection_service.CollectionActor(
+        user_id=user_id,
+        organization_id=organization_id,
+        is_owner=auth.membership.role == "owner",
+        name=name or auth.user.email,
+        email=auth.user.email,
+    )
 
 
 @router.get("/calendar/google", response_model=GoogleCalendarStatus)
@@ -839,6 +863,129 @@ async def crm_download_document(
     # The link is a bearer credential: never cache it.
     response.headers["Cache-Control"] = "no-store"
     return link
+
+
+@router.get("/collections", response_model=CollectionListResponse)
+async def crm_collections(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Collections the signed-in user manages (own; all of the organization's for owners)."""
+    return await collection_service.list_collections(
+        db, actor=_collection_actor(context), limit=limit, offset=offset
+    )
+
+
+@router.post("/collections", response_model=CollectionResponse, status_code=201)
+async def crm_create_collection(
+    payload: CollectionCreate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await collection_service.create_collection(
+        db, actor=_collection_actor(context), payload=payload
+    )
+
+
+@router.get("/collections/{collection_id}", response_model=CollectionDetailResponse)
+async def crm_collection(
+    collection_id: UUID,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """The collection with its items resolved against current inventory.
+
+    503 `listings_unavailable` when the warehouse cannot be read.
+    """
+    try:
+        return await collection_service.get_collection(
+            db, actor=_collection_actor(context), collection_id=collection_id
+        )
+    except ClickHouseError as exc:
+        raise HTTPException(status_code=503, detail="listings_unavailable") from exc
+
+
+@router.patch("/collections/{collection_id}", response_model=CollectionResponse)
+async def crm_update_collection(
+    collection_id: UUID,
+    payload: CollectionUpdate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await collection_service.update_collection(
+        db, actor=_collection_actor(context), collection_id=collection_id, payload=payload
+    )
+
+
+@router.delete("/collections/{collection_id}", status_code=204)
+async def crm_delete_collection(
+    collection_id: UUID,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await collection_service.delete_collection(
+        db, actor=_collection_actor(context), collection_id=collection_id
+    )
+    return Response(status_code=204)
+
+
+@router.put("/collections/{collection_id}/items", response_model=CollectionItemResponse)
+async def crm_add_collection_item(
+    collection_id: UUID,
+    payload: CollectionItemAdd,
+    response: Response,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """201 when added, 200 when the listing was already in the collection."""
+    item, created = await collection_service.add_item(
+        db, actor=_collection_actor(context), collection_id=collection_id, payload=payload
+    )
+    response.status_code = 201 if created else 200
+    return item
+
+
+@router.delete("/collections/{collection_id}/items/{item_id}", status_code=204)
+async def crm_remove_collection_item(
+    collection_id: UUID,
+    item_id: UUID,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await collection_service.remove_item(
+        db, actor=_collection_actor(context), collection_id=collection_id, item_id=item_id
+    )
+    return Response(status_code=204)
+
+
+@router.post("/collections/{collection_id}/share-link", response_model=ShareLinkResponse)
+async def crm_collection_share_link(
+    collection_id: UUID,
+    response: Response,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """The public URL; 409 `sharing_disabled` until sharing is switched on."""
+    response.headers["Cache-Control"] = "no-store"
+    return await collection_service.share_url(
+        db, actor=_collection_actor(context), collection_id=collection_id
+    )
+
+
+@router.post("/collections/{collection_id}/share-link/rotate", response_model=ShareLinkResponse)
+async def crm_rotate_collection_share_link(
+    collection_id: UUID,
+    response: Response,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Replace the URL; the previous one stops working."""
+    response.headers["Cache-Control"] = "no-store"
+    return await collection_service.rotate_token(
+        db, actor=_collection_actor(context), collection_id=collection_id
+    )
 
 
 @router.put("/company-listings/source", response_model=CrmCompanyListingSourceResponse)
