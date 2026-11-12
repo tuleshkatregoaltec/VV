@@ -473,3 +473,14 @@ async def test_preview_link_is_signed_inline_after_the_access_check(
             db, organization_id="org-b", document_id=made.id, inline=True
         )
     assert seen == [True]
+
+
+async def test_list_names_the_company_and_area_each_document_was_made_for(db, listings, pipeline):
+    await _ready_noc(db)
+    # Even if the listing later changes or leaves Property Finder, the list keeps showing
+    # the company and area printed on the PDF.
+    listings.clear()
+
+    item = (await documents.list_documents(db, organization_id="org-a")).items[0]
+
+    assert (item.company_name, item.listing_area) == ("Big Firm", "Dubai Marina")

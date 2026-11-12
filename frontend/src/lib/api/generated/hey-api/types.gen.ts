@@ -5858,6 +5858,14 @@ export type GeneratedDocumentResponse = {
      */
     listing_title: string;
     /**
+     * Company Name
+     */
+    company_name?: string | null;
+    /**
+     * Listing Area
+     */
+    listing_area?: string | null;
+    /**
      * Doc Type
      */
     doc_type: 'noc' | 'brochure' | 'lease' | 'a2a';

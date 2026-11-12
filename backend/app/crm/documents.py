@@ -173,7 +173,12 @@ async def _by_idempotency_key(
 
 
 def _document_response(document: CrmGeneratedDocument) -> GeneratedDocumentResponse:
-    return GeneratedDocumentResponse.model_validate(document, from_attributes=True)
+    # Company and area as printed on the PDF, from its snapshot: stable after the listing changes.
+    printed = (document.snapshot or {}).get("listing") or {}
+    response = GeneratedDocumentResponse.model_validate(document, from_attributes=True)
+    response.company_name = printed.get("broker_name")
+    response.listing_area = printed.get("area_name")
+    return response
 
 
 async def _finish(db: AsyncSession, document: CrmGeneratedDocument, **values: Any) -> None:

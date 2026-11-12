@@ -37,6 +37,8 @@ function doc(id: string, doc_type: string, status = 'ready') {
 		source: 'property_finder',
 		listing_key: '123',
 		listing_title: 'Marina Gate 2BR',
+		company_name: 'Big Firm',
+		listing_area: 'Dubai Marina',
 		doc_type,
 		template_version: 'draft-1',
 		status,
@@ -203,6 +205,10 @@ test('CRM › Documents lists generated PDFs, filters by type and links to the l
 
 	await expect(page.getByRole('link', { name: /^Documents\b/ })).toHaveAttribute('aria-current', 'page');
 	await expect(page.getByText('Generated documents · 2')).toBeVisible();
+	// Grouped company → property → documents.
+	const company = page.getByRole('region', { name: 'Big Firm' });
+	await expect(company.getByRole('heading', { name: /Big Firm/ })).toContainText('1 property · 2 documents');
+	await expect(company.getByText('Dubai Marina · 2 documents')).toBeVisible();
 	await expect(page.getByText('Failed')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Download' })).toHaveCount(1);
 
