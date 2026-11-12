@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, model_validator
 from sqlalchemy import DateTime, ForeignKeyConstraint, Index, UniqueConstraint
 from sqlmodel import Column, SQLModel
 from sqlmodel import Field as SQLField
@@ -91,6 +91,14 @@ class CollectionUpdate(_Input):
     agent_name: ContactText | None = None
     agent_email: EmailStr | None = None
     agent_phone: ContactText | None = None
+
+    @model_validator(mode="after")
+    def _required_fields_are_not_cleared(self) -> CollectionUpdate:
+        # Omitted means unchanged; an explicit null only clears the optional contact fields.
+        for field in ("name", "sharing_enabled", "agent_name"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
 
 
 class CollectionItemAdd(_Input):

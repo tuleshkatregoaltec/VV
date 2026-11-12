@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Sequence
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -43,6 +45,7 @@ WITH latest_keys AS (
         p.listing_location_names_json,
         p.broker_json,
         p.agent_json,
+        p.images_json,
         p.is_available
     FROM pf_listings_bronze AS p
     INNER JOIN latest_keys AS k
@@ -87,6 +90,8 @@ WITH latest_keys AS (
         ) AS agent_phone,
         JSONExtractString(agent_json, 'email') AS agent_email,
         parseDateTimeBestEffortOrNull(scraped_at) AS scraped_at_dt,
+        images_json,
+        JSONExtractString(raw_property_json, 'description') AS description,
         coalesce(
             parseDateTimeBestEffortOrNull(JSON_VALUE(raw_property_json, '$.listed_date')),
             parseDateTimeBestEffortOrNull(scraped_at)
@@ -212,7 +217,7 @@ async def _company_rows(
         parameters["search"] = search.strip()
     return await query(
         f"""{_CURRENT_LISTINGS}
-        SELECT *, count() OVER () AS matched_total
+        SELECT * EXCEPT (images_json, description), count() OVER () AS matched_total
         FROM current_listings
         WHERE is_available = 1 AND {_COMPANY_LISTING_FIELDS}
           {broker_filter}
@@ -357,7 +362,7 @@ async def get_company_listing(
     """A currently published Property Finder listing by its listing id, or None."""
     rows = await query(
         f"""{_CURRENT_LISTINGS}
-        SELECT *
+        SELECT * EXCEPT (images_json, description)
         FROM current_listings
         WHERE is_available = 1 AND listing_id = {{listing_key:String}} AND {_COMPANY_LISTING_FIELDS}
         LIMIT 1
@@ -379,6 +384,69 @@ async def get_company_listing(
         broker_name=str(row["broker_name"]),
         managed=source is not None and source.broker_id == broker_id,
     )
+
+
+_PHOTO_URL_KEYS = ("medium_url", "url", "original_url", "small_url")
+
+
+def _photos(images_json: object) -> list[str]:
+    """Image URLs from Property Finder's `images_json` (a list of objects with sized URLs)."""
+    try:
+        images = json.loads(str(images_json or "[]"))
+    except ValueError:
+        return []
+    photos: list[str] = []
+    for image in images if isinstance(images, list) else []:
+        if not isinstance(image, dict):
+            continue
+        url = next((image[key] for key in _PHOTO_URL_KEYS if image.get(key)), None)
+        if isinstance(url, str) and url.startswith(("https://", "http://")):
+            photos.append(url)
+    return photos
+
+
+async def listings_by_keys(
+    db: AsyncSession, organization_id: str, keys: Sequence[str]
+) -> dict[str, CrmCompanyListingDetail]:
+    """Currently published listings by listing id, in one query; absent keys are not returned.
+
+    Photos come from the `images_json` column (sized URLs: medium_url, url, original_url,
+    small_url) and the description from `raw_property_json.description` (keys verified against
+    the listings module's own mapping and tests; the shared ClickHouse was not queried).
+    `managed` is set per row, so callers decide whether an unmanaged listing may be shown.
+    ClickHouse errors propagate.
+    """
+    unique = list(dict.fromkeys(keys))
+    if not unique:
+        return {}
+    rows = await query(
+        f"""{_CURRENT_LISTINGS}
+        SELECT *
+        FROM current_listings
+        WHERE is_available = 1 AND listing_id IN {{keys:Array(String)}} AND {_COMPANY_LISTING_FIELDS}
+        """,
+        {"keys": unique},
+    )
+    source = await _selected_source(db, organization_id)
+    now = datetime.now(timezone.utc)
+    found: dict[str, CrmCompanyListingDetail] = {}
+    for row in rows:
+        listing = CrmCompanyListingResponse.model_validate(
+            _listing(row, organization_id, now), from_attributes=True
+        )
+        broker_id = str(row["broker_id"])
+        key = str(row["listing_id"])
+        found[key] = CrmCompanyListingDetail(
+            **listing.model_dump(),
+            listing_key=key,
+            broker_id=broker_id,
+            broker_name=str(row["broker_name"]),
+            managed=source is not None and source.broker_id == broker_id,
+            photos=_photos(row.get("images_json")),
+            description=str(row.get("description") or "").strip() or None,
+            updated_at=_aware(row.get("scraped_at_dt")),
+        )
+    return found
 
 
 async def select_company_source(
@@ -486,7 +554,7 @@ async def find_matching_company_listings(
 
     rows = await query(
         f"""{_CURRENT_LISTINGS}
-        SELECT * FROM current_listings
+        SELECT * EXCEPT (images_json, description) FROM current_listings
         WHERE {" AND ".join(f"({item})" for item in clauses)}
         ORDER BY listed_at DESC NULLS LAST, listing_id ASC
         LIMIT {{limit:Int32}}

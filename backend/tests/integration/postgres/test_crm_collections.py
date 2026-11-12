@@ -1,13 +1,24 @@
 """Collection constraints against the migrated PostgreSQL schema."""
 
+import asyncio
 from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
+from crm_document_helpers import listing
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.crm.collection_models import CrmCollection, CrmCollectionItem
+from app.crm import collections
+from app.crm.collection_models import (
+    CollectionItemAdd,
+    CrmCollection,
+    CrmCollectionItem,
+)
+from app.crm.collections import CollectionActor
 from app.organization.models import Organization
 
 
@@ -86,5 +97,86 @@ async def test_deleting_collection_cascades_items(pg_session):
     await pg_session.commit()
     await pg_session.delete(col)
     await pg_session.commit()
-    count = await pg_session.scalar(select(func.count()).select_from(CrmCollectionItem))
+    count = await pg_session.scalar(
+        select(func.count())
+        .select_from(CrmCollectionItem)
+        .where(CrmCollectionItem.collection_id == col.id)
+    )
     assert count == 0
+
+
+ACTOR = CollectionActor("u1", "", False, "Agent One", "one@example.com")
+
+
+@pytest.fixture
+def listings(monkeypatch):
+    async def fake_managed(db, organization_id, listing_key):
+        return listing(listing_key)
+
+    monkeypatch.setattr(collections, "managed_listing", fake_managed)
+
+
+async def _concurrent_adds(url, org, collection_id, keys):
+    """One session per add, as two requests on two connections would be."""
+    engine = create_async_engine(url)
+    actor = ACTOR._replace(organization_id=org)
+
+    async def one(key):
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            try:
+                return await collections.add_item(
+                    session,
+                    actor=actor,
+                    collection_id=collection_id,
+                    payload=CollectionItemAdd(source="property_finder", listing_key=key),
+                )
+            except HTTPException as error:
+                return error
+
+    try:
+        return await asyncio.gather(*(one(key) for key in keys))
+    finally:
+        await engine.dispose()
+
+
+async def _count(session, collection_id) -> int:
+    await session.rollback()  # fresh snapshot
+    return await session.scalar(
+        select(func.count())
+        .select_from(CrmCollectionItem)
+        .where(CrmCollectionItem.collection_id == collection_id)
+    )
+
+
+async def test_concurrent_duplicate_adds_produce_one_item(pg_session, postgres_test_url, listings):
+    org = await _org(pg_session)
+    col = await _collection(pg_session, org)
+    first, second = await _concurrent_adds(postgres_test_url, org, col.id, ["L1", "L1"])
+    assert sorted([first[1], second[1]]) == [False, True]
+    assert first[0].id == second[0].id
+    assert await _count(pg_session, col.id) == 1
+
+
+async def test_concurrent_adds_respect_limit(pg_session, postgres_test_url, listings):
+    org = await _org(pg_session)
+    col = await _collection(pg_session, org)
+    pg_session.add_all([_item(col.id, org, f"S{n}") for n in range(49)])
+    await pg_session.commit()
+    results = await _concurrent_adds(postgres_test_url, org, col.id, ["A", "B"])
+    errors = [r for r in results if isinstance(r, HTTPException)]
+    assert len(errors) == 1 and (errors[0].status_code, errors[0].detail) == (
+        409,
+        "collection_full",
+    )
+    assert len(results) - len(errors) == 1
+    assert await _count(pg_session, col.id) == 50
+
+
+async def test_concurrent_adds_of_different_listings_both_persist(
+    pg_session, postgres_test_url, listings
+):
+    org = await _org(pg_session)
+    col = await _collection(pg_session, org)
+    results = await _concurrent_adds(postgres_test_url, org, col.id, ["A", "B"])
+    assert [r[1] for r in results] == [True, True]
+    assert await _count(pg_session, col.id) == 2

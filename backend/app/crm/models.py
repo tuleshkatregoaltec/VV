@@ -484,6 +484,10 @@ class CrmCompanyListingDetail(CrmCompanyListingResponse):
     broker_id: str
     broker_name: str
     managed: bool
+    # Filled only by `listings_by_keys` (shared collections); other lookups leave them empty.
+    photos: list[str] = []
+    description: str | None = None
+    updated_at: datetime | None = None
 
 
 class CrmCompanyListingCompany(BaseModel):
