@@ -15,6 +15,14 @@ export const load: LayoutLoad = async ({ url }) => {
 
 	if (!browser) return { queryClient }
 
+	const pathname = url.pathname
+
+	// Shared collection links carry a bearer token in the URL: never send it to analytics.
+	if (pathname.startsWith('/collections/')) {
+		if (posthog.__loaded) posthog.opt_out_capturing()
+		return { queryClient }
+	}
+
 	// Initialize PostHog
 	if (env.PUBLIC_POSTHOG_KEY && env.PUBLIC_POSTHOG_HOST && !posthog.__loaded) {
 		try {
@@ -28,7 +36,6 @@ export const load: LayoutLoad = async ({ url }) => {
 		}
 	}
 
-	const pathname = url.pathname
 	if (getRouteCategory(pathname) === 'public') {
 		return { queryClient }
 	}
