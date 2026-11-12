@@ -1,6 +1,7 @@
-import { keepPreviousData } from '@tanstack/svelte-query'
+import { keepPreviousData, type QueryClient } from '@tanstack/svelte-query'
 import { crm } from './api'
 import type {
+	CollectionListParams,
 	CompanyListingFilter,
 	DealTab,
 	DealType,
@@ -74,6 +75,9 @@ export const crmKeys = {
 	documentInfo: (listingKey: string) => [...crmKeys.all, 'document-info', listingKey] as const,
 	documentsAll: () => [...crmKeys.all, 'documents'] as const,
 	documents: (p: DocumentListParams) => [...crmKeys.all, 'documents', p] as const,
+	collectionsAll: () => [...crmKeys.all, 'collections'] as const,
+	collections: (p: CollectionListParams) => [...crmKeys.collectionsAll(), 'list', p] as const,
+	collection: (id: string) => [...crmKeys.collectionsAll(), 'detail', id] as const,
 	portfolio: () => [...crmKeys.all, 'portfolio'] as const,
 	renewals: (p: RenewalListParams) => [...crmKeys.all, 'renewals', p] as const,
 	renewal: (id: string) => [...crmKeys.all, 'renewal', id] as const,
@@ -238,6 +242,15 @@ export const crmQueries = {
 		queryKey: crmKeys.documents(p),
 		queryFn: () => crm.documents.list(p)
 	}),
+	collections: (p: CollectionListParams = {}) => ({
+		queryKey: crmKeys.collections(p),
+		queryFn: () => crm.collections.list(p),
+		placeholderData: keepPreviousData
+	}),
+	collection: (id: string) => ({
+		queryKey: crmKeys.collection(id),
+		queryFn: () => crm.collections.get(id)
+	}),
 	portfolio: () => ({ queryKey: crmKeys.portfolio(), queryFn: crm.portfolio.get }),
 	renewals: (p: RenewalListParams) => ({
 		queryKey: crmKeys.renewals(p),
@@ -304,4 +317,12 @@ export const crmQueries = {
 	}),
 	notifications: () => ({ queryKey: crmKeys.notifications(), queryFn: crm.notifications.list }),
 	connections: () => ({ queryKey: crmKeys.connections(), queryFn: crm.connections })
+}
+
+/** Refresh one collection and the list after any change to it. Call from every mutation's onSettled. */
+export function invalidateCollection(qc: QueryClient, id: string) {
+	return Promise.all([
+		qc.invalidateQueries({ queryKey: crmKeys.collection(id) }),
+		qc.invalidateQueries({ queryKey: crmKeys.collectionsAll() })
+	])
 }

@@ -657,6 +657,11 @@ export interface DocumentListParams {
 	offset?: number
 }
 
+export interface CollectionListParams {
+	limit?: number
+	offset?: number
+}
+
 export interface ListingListResponse {
 	items: ListingCard[]
 	counts: { live: number; pocket: number; expired: number }

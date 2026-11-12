@@ -11,6 +11,13 @@ import { me as authMe } from '$lib/api/auth'
 import { ApiError, client } from '$lib/api/client'
 import type {
 	AuthMeResponse,
+	CollectionCreate,
+	CollectionDetailResponse,
+	CollectionItemAdd,
+	CollectionItemResponse,
+	CollectionListResponse,
+	CollectionResponse,
+	CollectionUpdate,
 	CrmAreaPreferencesResponse,
 	CrmCompanyListingDetail,
 	CrmContactImportResponse,
@@ -41,7 +48,8 @@ import type {
 	InboundMatchesResponse,
 	InboundMatchResponse,
 	ListingDocumentInfoResponse,
-	ListingDocumentInfoUpdate
+	ListingDocumentInfoUpdate,
+	ShareLinkResponse
 } from '$lib/api/generated/hey-api/types.gen'
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { groupOf, LEAD_TYPES, ownerPropertyKind, PROPERTY_TYPES, SOURCE_OPTIONS } from '../config'
@@ -57,6 +65,7 @@ import type {
 	CalendarEvent,
 	CalendarSide,
 	Chip,
+	CollectionListParams,
 	CompanyListingAgentInventory,
 	CompanyListingCompany,
 	CompanyListingFilter,
@@ -2386,6 +2395,37 @@ export async function getCompanyListing(listingKey: string): Promise<ListingDeta
 		can_publish: false
 	}
 }
+
+export function listCollections(p: CollectionListParams = {}) {
+	const params = new URLSearchParams()
+	if (p.limit) params.set('limit', String(p.limit))
+	if (p.offset) params.set('offset', String(p.offset))
+	const q = params.toString()
+	return client.get<CollectionListResponse>(`${CRM}/collections${q ? `?${q}` : ''}`)
+}
+
+export const getCollection = (id: string) =>
+	client.get<CollectionDetailResponse>(`${CRM}/collections/${id}`)
+
+export const createCollection = (body: CollectionCreate) =>
+	client.post<CollectionResponse>(`${CRM}/collections`, body)
+
+export const updateCollection = (id: string, body: CollectionUpdate) =>
+	client.patch<CollectionResponse>(`${CRM}/collections/${id}`, body)
+
+export const deleteCollection = (id: string) => client.delete<void>(`${CRM}/collections/${id}`)
+
+export const addCollectionItem = (id: string, body: CollectionItemAdd) =>
+	client.put<CollectionItemResponse>(`${CRM}/collections/${id}/items`, body)
+
+export const removeCollectionItem = (id: string, itemId: string) =>
+	client.delete<void>(`${CRM}/collections/${id}/items/${itemId}`)
+
+export const getCollectionShareLink = (id: string) =>
+	client.post<ShareLinkResponse>(`${CRM}/collections/${id}/share-link`)
+
+export const rotateCollectionShareLink = (id: string) =>
+	client.post<ShareLinkResponse>(`${CRM}/collections/${id}/share-link/rotate`)
 
 export const getDocumentInfo = (listingKey: string) =>
 	client.get<ListingDocumentInfoResponse>(
