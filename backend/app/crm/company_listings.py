@@ -386,7 +386,8 @@ async def get_company_listing(
     )
 
 
-_PHOTO_URL_KEYS = ("medium_url", "url", "original_url", "small_url")
+# The warehouse stores {"medium", "small", "classification_label"}; the *_url names are fallbacks.
+_PHOTO_URL_KEYS = ("medium", "medium_url", "original", "original_url", "url", "small", "small_url")
 
 
 def _photos(images_json: object) -> list[str]:
@@ -410,9 +411,9 @@ async def listings_by_keys(
 ) -> dict[str, CrmCompanyListingDetail]:
     """Currently published listings by listing id, in one query; absent keys are not returned.
 
-    Photos come from the `images_json` column (sized URLs: medium_url, url, original_url,
-    small_url) and the description from `raw_property_json.description` (keys verified against
-    the listings module's own mapping and tests; the shared ClickHouse was not queried).
+    Verified on the shared ClickHouse: `raw_property_json` has a `description` key, and
+    `images_json` is a list of objects `{"medium": url, "small": url, "classification_label": ""}`.
+    Photos use `medium`, falling back to the other size keys.
     `managed` is set per row, so callers decide whether an unmanaged listing may be shown.
     ClickHouse errors propagate.
     """

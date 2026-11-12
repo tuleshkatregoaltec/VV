@@ -189,7 +189,7 @@ def _keys_row(key: str, broker_id: str = "B1") -> dict:
     return {
         **_pf_row(broker_id),
         "listing_id": key,
-        "images_json": '[{"medium_url": "https://img/a.jpg"}, {"nope": 1}, {"url": "https://img/b.jpg"}]',
+        "images_json": '[{"medium": "https://img/a.jpg", "small": "https://img/s.jpg"}, {"nope": 1}, {"small": "https://img/b.jpg"}]',
         "description": " Sea view ",
         "scraped_at_dt": datetime(2026, 11, 10, 8, 0),
     }
