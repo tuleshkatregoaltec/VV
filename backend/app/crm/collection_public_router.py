@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.log_redaction import SHARE_TOKEN_PATTERN
 from app.crm import collections as collection_service
 from app.crm.collection_models import PublicCollectionResponse
 from app.postgres import get_db_session
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/public/collections")
 
-TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
+TOKEN_PATTERN = SHARE_TOKEN_PATTERN
 PUBLIC_HEADERS = {
     "Cache-Control": "private, no-store",
     "X-Robots-Tag": "noindex",
