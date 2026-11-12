@@ -182,6 +182,13 @@ async def test_public_db_error_is_503_without_token_in_logs(
     assert response.json() == {"detail": "listings_unavailable"}
     assert_headers(response)
     assert token not in server_log(caplog)
+    unavailable = [
+        r for r in caplog.records if r.getMessage() == "crm.collection.public_db_unavailable"
+    ]
+    assert len(unavailable) == 1
+    assert unavailable[0].levelno == logging.ERROR
+    assert unavailable[0].args == ()
+    assert unavailable[0].exc_info is None
 
 
 async def test_public_unexpected_error_is_500_with_headers(

@@ -395,7 +395,9 @@ async def public_collection(db: AsyncSession, token: str) -> PublicCollectionRes
             )
         ).all()
     except SQLAlchemyError:
-        # `from None`: the driver error text embeds the bound parameters, i.e. the token.
+        # Fixed message only: the driver error text embeds the bound parameters, i.e. the token.
+        logger.error("crm.collection.public_db_unavailable")
+        # `from None` for the same reason.
         raise HTTPException(status_code=503, detail=LISTINGS_UNAVAILABLE) from None
     try:
         current = await listings_by_keys(
