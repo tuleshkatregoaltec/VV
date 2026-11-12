@@ -7,6 +7,7 @@ import Search from 'lucide-svelte/icons/search'
 import UserRound from 'lucide-svelte/icons/user-round'
 import Users from 'lucide-svelte/icons/users'
 import X from 'lucide-svelte/icons/x'
+import PhotoSlider from '$lib/collections/PhotoSlider.svelte'
 import { crm } from '$lib/crm/api'
 import { listingKeyOf } from '$lib/crm/api/backend'
 import type {
@@ -432,7 +433,8 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 							{@const addKey = scope === 'company' && canAddToCollection(data) ? listingKeyOf(x.id) : null}
 							<div class="lcell">
 							<button type="button" class="lcard" onclick={() => openListing(x.id)}>
-								<div class="img">
+								<div class="img" class:has-ph={x.photos?.length}>
+									{#if x.photos?.length}<PhotoSlider photos={x.photos} controls={false} />{/if}
 									<span class="chip">{x.deal_type === 'sale' ? 'Sale' : 'Rent'}</span>
 									<span class="chip">{statusLabel(x.status)}</span>
 								</div>
@@ -711,6 +713,9 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 	/* Card + Add to collection: the button is the card's sibling, never inside it */
 	.lcell { display: flex; flex-direction: column; gap: 4px; }
 	.lcell > .lcard { flex: 1; }
+	.lcard .img { position: relative; overflow: hidden; }
+	.lcard .img.has-ph { height: 160px; }
+	.lcard .img .chip { position: relative; z-index: 3; }
 	.addc { display: flex; justify-content: flex-end; }
 	/* Company listings toolbar: company picker · key figures · buyer matching */
 	.ctool {

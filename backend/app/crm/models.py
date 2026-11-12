@@ -472,6 +472,8 @@ class CrmCompanyListingResponse(BaseModel):
     unit_number: str | None
     status: str
     listed_at: datetime
+    # Property Finder photo URLs; filled for company listing cards and shared collections.
+    photos: list[str] = []
 
 
 class CrmCompanyListingDetail(CrmCompanyListingResponse):
@@ -485,7 +487,6 @@ class CrmCompanyListingDetail(CrmCompanyListingResponse):
     broker_name: str
     managed: bool
     # Filled only by `listings_by_keys` (shared collections); other lookups leave them empty.
-    photos: list[str] = []
     description: str | None = None
     updated_at: datetime | None = None
 

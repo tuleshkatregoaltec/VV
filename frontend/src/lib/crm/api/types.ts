@@ -624,6 +624,8 @@ export interface ListingCard {
 	form_a_chip: Chip | null
 	comparables_note: string
 	from_lead_id: number | null
+	/** Property Finder photo URLs (company listings only). */
+	photos?: string[]
 }
 
 export interface ListingDetail extends ListingCard {

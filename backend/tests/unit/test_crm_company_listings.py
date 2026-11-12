@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -227,3 +228,51 @@ async def test_listings_by_keys_empty_input_skips_query(monkeypatch):
 
     monkeypatch.setattr(company_listings, "query", fail)
     assert await company_listings.listings_by_keys(None, "org", []) == {}
+
+
+# Company listing cards show a photo slider. Photos come from a second, small query for just
+# the page's listings, so the big paged query never reads the heavy images column.
+@pytest.mark.asyncio
+async def test_page_photos_come_from_one_small_query_and_are_capped(monkeypatch):
+    calls: list[tuple[str, dict]] = []
+    images = json.dumps([{"medium": f"https://p/{i}.jpg"} for i in range(9)])
+
+    async def fake_query(sql, parameters):
+        calls.append((sql, parameters))
+        return [
+            {"listing_id": "1", "images_json": images},
+            {"listing_id": "2", "images_json": "[]"},
+        ]
+
+    monkeypatch.setattr(company_listings, "query", fake_query)
+    photos = await company_listings._page_photos(["1", "2", "1"])
+
+    assert len(calls) == 1
+    assert calls[0][1]["keys"] == ["1", "2"]
+    assert photos["1"] == [f"https://p/{i}.jpg" for i in range(company_listings.CARD_PHOTOS)]
+    assert photos["2"] == []
+
+
+@pytest.mark.asyncio
+async def test_page_photos_failing_never_breaks_the_listing_grid(monkeypatch):
+    async def down(sql, parameters):
+        raise OSError("warehouse unreachable")
+
+    monkeypatch.setattr(company_listings, "query", down)
+    assert await company_listings._page_photos(["1"]) == {}
+
+
+@pytest.mark.asyncio
+async def test_page_photos_skip_the_query_for_an_empty_page(monkeypatch):
+    async def fail(sql, parameters):
+        raise AssertionError("no query expected")
+
+    monkeypatch.setattr(company_listings, "query", fail)
+    assert await company_listings._page_photos([]) == {}
+
+
+def test_paged_listing_query_never_reads_the_images_column():
+    import inspect
+
+    source = inspect.getsource(company_listings._company_rows)
+    assert "EXCEPT (images_json, description)" in source

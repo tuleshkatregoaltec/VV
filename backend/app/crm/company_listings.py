@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Sequence
 from datetime import datetime, timezone
 
+from clickhouse_connect.driver.exceptions import ClickHouseError
 from fastapi import HTTPException
 from sqlalchemy import update
 from sqlmodel import select
@@ -22,6 +24,8 @@ from app.crm.models import (
     CrmCompanyListingSource,
     CrmCompanyListingsResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 _CURRENT_LISTINGS = """
 WITH latest_keys AS (
@@ -325,10 +329,11 @@ async def list_company_listings(
         search=search,
     )
     now = datetime.now(timezone.utc)
+    photos = await _page_photos([str(row["listing_id"]) for row in rows if row.get("listing_id")])
     items = [
         CrmCompanyListingResponse.model_validate(
             _listing(row, organization_id, now), from_attributes=True
-        )
+        ).model_copy(update={"photos": photos.get(str(row.get("listing_id")), [])})
         for row in rows
     ]
     return CrmCompanyListingsResponse(
@@ -406,6 +411,33 @@ def _photos(images_json: object) -> list[str]:
     return photos
 
 
+CARD_PHOTOS = 5
+
+
+async def _page_photos(keys: Sequence[str]) -> dict[str, list[str]]:
+    """Up to CARD_PHOTOS photo URLs per listing, for one page of cards, in one small query.
+
+    Kept out of the paged query so ranking 228k listings never reads the heavy images column.
+    Photos are decoration: if the warehouse fails here, the cards still load without them.
+    """
+    unique = list(dict.fromkeys(keys))
+    if not unique:
+        return {}
+    try:
+        rows = await query(
+            f"""{_CURRENT_LISTINGS}
+            SELECT listing_id, images_json
+            FROM current_listings
+            WHERE listing_id IN {{keys:Array(String)}}
+            """,
+            {"keys": unique},
+        )
+    except (ClickHouseError, OSError):
+        logger.warning("crm.company_listings.photos_unavailable")
+        return {}
+    return {str(row["listing_id"]): _photos(row.get("images_json"))[:CARD_PHOTOS] for row in rows}
+
+
 async def listings_by_keys(
     db: AsyncSession, organization_id: str, keys: Sequence[str]
 ) -> dict[str, CrmCompanyListingDetail]:
@@ -438,7 +470,7 @@ async def listings_by_keys(
         broker_id = str(row["broker_id"])
         key = str(row["listing_id"])
         found[key] = CrmCompanyListingDetail(
-            **listing.model_dump(),
+            **listing.model_dump(exclude={"photos"}),
             listing_key=key,
             broker_id=broker_id,
             broker_name=str(row["broker_name"]),

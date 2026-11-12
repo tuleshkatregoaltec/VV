@@ -2290,6 +2290,7 @@ interface CompanyListingResponse {
 	unit_number: string | null
 	status: string
 	listed_at: string
+	photos?: string[]
 }
 
 interface CompanyListingsResponse {
@@ -2329,7 +2330,8 @@ function companyCard(r: CompanyListingResponse): ListingCard {
 		form_a_expires: null,
 		form_a_chip: null,
 		comparables_note: '',
-		from_lead_id: null
+		from_lead_id: null,
+		photos: r.photos ?? []
 	}
 }
 
