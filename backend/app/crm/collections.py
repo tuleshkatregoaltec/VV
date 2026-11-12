@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import NamedTuple
 from uuid import UUID, uuid4
 
+from clickhouse_connect.driver.exceptions import ClickHouseError
 from fastapi import HTTPException
 from sqlalchemy import delete, func, update
 from sqlalchemy.dialects import postgresql, sqlite
@@ -31,16 +32,26 @@ from app.crm.collection_models import (
     CollectionUpdate,
     CrmCollection,
     CrmCollectionItem,
+    PublicCollectionAgent,
+    PublicCollectionItem,
+    PublicCollectionResponse,
     ShareLinkResponse,
 )
 from app.crm.company_listings import listings_by_keys
 from app.crm.documents import managed_listing
+from app.crm.models import CrmCompanyListingDetail
+from app.organization.models import Organization
 
 logger = logging.getLogger(__name__)
 
 COLLECTION_NOT_FOUND = "collection_not_found"
 COLLECTION_FULL = "collection_full"
 SHARING_DISABLED = "sharing_disabled"
+COLLECTION_UNAVAILABLE = "collection_unavailable"
+LISTINGS_UNAVAILABLE = "listings_unavailable"
+# Anything that means "the warehouse could not be read" (driver errors, connection failures).
+WAREHOUSE_ERRORS = (ClickHouseError, OSError)
+PUBLIC_SUBSCRIPTION_STATUSES = ("active", "trialing")
 
 
 class CollectionActor(NamedTuple):
@@ -334,3 +345,59 @@ async def rotate_token(
     await db.commit()
     _log("rotate_token", row.id, actor)
     return _share_link(row.share_token)
+
+
+def _public_item(listing: CrmCompanyListingDetail | None) -> PublicCollectionItem:
+    if listing is None or not listing.managed:
+        return PublicCollectionItem(status="unavailable")
+    return PublicCollectionItem(
+        status="available",
+        title=listing.title,
+        area_name=listing.area_name,
+        building_name=listing.building_name,
+        property_type=listing.property_type,
+        bedrooms=listing.bedrooms,
+        size_sqft=listing.size_sqft,
+        price_aed=listing.price_aed,
+        mode=listing.mode,
+        rent_period="yearly" if listing.mode == "rent" else None,
+        photos=[url for url in listing.photos if url.startswith("https://")],
+        description=listing.description,
+        updated_at=listing.updated_at,
+    )
+
+
+async def public_collection(db: AsyncSession, token: str) -> PublicCollectionResponse:
+    """The client view of one collection, resolved against current inventory.
+
+    Unknown token, sharing off and a non-paying organization are indistinguishable (404).
+    A warehouse failure is 503, never an empty list.
+    """
+    unavailable = HTTPException(status_code=404, detail=COLLECTION_UNAVAILABLE)
+    row = (await db.exec(select(CrmCollection).where(CrmCollection.share_token == token))).first()
+    if row is None or not row.sharing_enabled:
+        raise unavailable
+    organization = await db.get(Organization, row.organization_id)
+    if organization is None or organization.subscription_status not in PUBLIC_SUBSCRIPTION_STATUSES:
+        raise unavailable
+    items = (
+        await db.exec(
+            select(CrmCollectionItem)
+            .where(CrmCollectionItem.collection_id == row.id)
+            .order_by(col(CrmCollectionItem.added_at), col(CrmCollectionItem.id))
+        )
+    ).all()
+    try:
+        current = await listings_by_keys(
+            db, row.organization_id, [item.listing_key for item in items]
+        )
+    except WAREHOUSE_ERRORS as exc:
+        raise HTTPException(status_code=503, detail=LISTINGS_UNAVAILABLE) from exc
+    return PublicCollectionResponse(
+        name=row.name,
+        agent=PublicCollectionAgent(
+            name=row.agent_name, email=row.agent_email, phone=row.agent_phone
+        ),
+        items=[_public_item(current.get(item.listing_key)) for item in items],
+        fetched_at=_now(),
+    )

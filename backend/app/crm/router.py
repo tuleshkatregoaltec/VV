@@ -5,7 +5,6 @@ from typing import Literal
 from uuid import UUID
 
 import httpx
-from clickhouse_connect.driver.exceptions import ClickHouseError
 from fastapi import (
     APIRouter,
     Depends,
@@ -903,7 +902,7 @@ async def crm_collection(
         return await collection_service.get_collection(
             db, actor=_collection_actor(context), collection_id=collection_id
         )
-    except ClickHouseError as exc:
+    except collection_service.WAREHOUSE_ERRORS as exc:
         raise HTTPException(status_code=503, detail="listings_unavailable") from exc
 
 

@@ -224,3 +224,17 @@ async def test_detail_warehouse_error_is_503(client, db, monkeypatch):
 
     assert response.status_code == 503
     assert response.json() == {"detail": "listings_unavailable"}
+
+
+async def test_detail_os_error_is_503(client, db, monkeypatch):
+    cid = (await make(db)).id
+
+    async def down(db, organization_id, keys):
+        raise ConnectionRefusedError("refused")
+
+    monkeypatch.setattr(collections, "listings_by_keys", down)
+
+    response = await client.get(f"{BASE}/{cid}")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "listings_unavailable"}
