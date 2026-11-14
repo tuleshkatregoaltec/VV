@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import and_, delete, func, or_
+from sqlalchemy import and_, delete, func, or_, text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -21,6 +23,85 @@ async def list_rental_refresh_claims(db: AsyncSession, import_id, organization_i
         statement = statement.where(CrmPropertyContactClaim.import_id == import_id)
     claims = (await db.exec(statement.with_for_update())).all()
     return claims
+
+
+def rental_link_statement(import_id, organization_id):
+    """The columns a lease-link refresh reads, locked for its transaction.
+
+    Loading whole claims (contact, source and owner-history payloads) for a 311k-claim tenant
+    takes ~12 GB; the refresh needs only the property key and the current link.
+    """
+    claim = CrmPropertyContactClaim
+    statement = select(
+        claim.id,
+        claim.import_id,
+        claim.property_key,
+        claim.unit_number,
+        claim.area_name,
+        claim.project_name,
+        claim.lead_id,
+        claim.unit_candidate_key,
+        claim.lease_end,
+        claim.annual_rent_aed,
+        claim.evidence["scoped_identity_collision"].as_boolean().label("scoped_identity_collision"),
+        claim.evidence["registry_property_scope"].label("registry_property_scope"),
+    ).where(claim.organization_id == organization_id)
+    if import_id is not None:
+        statement = statement.where(claim.import_id == import_id)
+    return statement.order_by(claim.id).with_for_update(of=claim)
+
+
+async def list_rental_link_rows(db: AsyncSession, import_id, organization_id) -> list[Any]:
+    rows = (await db.exec(rental_link_statement(import_id, organization_id))).all()
+    return [
+        SimpleNamespace(
+            **{
+                key: value
+                for key, value in row._mapping.items()
+                if key not in {"scoped_identity_collision", "registry_property_scope"}
+            },
+            evidence={
+                key: row._mapping[key]
+                for key in ("scoped_identity_collision", "registry_property_scope")
+                if row._mapping[key] is not None
+            },
+        )
+        for row in rows
+    ]
+
+
+_SAVE_RENTAL_LINKS = text(
+    """
+    UPDATE crm_property_contact_claims AS c
+    SET lead_id = v.lead_id,
+        unit_candidate_key = v.unit_candidate_key,
+        lease_end = v.lease_end,
+        annual_rent_aed = v.annual_rent_aed,
+        updated_at = :now
+    FROM jsonb_to_recordset(CAST(:payload AS jsonb)) AS v(
+        id integer, lead_id varchar, unit_candidate_key varchar, lease_end date,
+        annual_rent_aed bigint
+    )
+    WHERE c.id = v.id
+    """
+)
+RENTAL_LINK_BATCH = 5000
+
+
+async def save_rental_links(db: AsyncSession, changes: list[dict[str, Any]], now) -> None:
+    """Write only the four lease-link fields (and updated_at) of the changed claims."""
+    for start in range(0, len(changes), RENTAL_LINK_BATCH):
+        payload = [
+            {
+                **change,
+                "lease_end": change["lease_end"].isoformat() if change["lease_end"] else None,
+            }
+            for change in changes[start : start + RENTAL_LINK_BATCH]
+        ]
+        await db.exec(
+            _SAVE_RENTAL_LINKS,
+            params={"payload": json.dumps(payload), "now": now},
+        )
 
 
 async def list_claims_for_rematch(

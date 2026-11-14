@@ -1150,7 +1150,7 @@ async def refresh_property_contact_rentals(
     Missing current evidence clears an old rental link. Contact/source data,
     ownership assessments, sales evidence and agent workspaces remain intact.
     """
-    claims = await import_repository.list_rental_refresh_claims(db, import_id, organization_id)
+    claims = await import_repository.list_rental_link_rows(db, import_id, organization_id)
     units = sorted({claim.unit_number for claim in claims if claim.unit_number})
     rentals = await _rental_evidence_for_units(units)
     counts = {
@@ -1161,7 +1161,7 @@ async def refresh_property_contact_rentals(
         "removed_hits": 0,
         "changed_claims": 0,
     }
-    now = datetime.now(timezone.utc)
+    changes = []
     for claim in claims:
         before = (claim.lead_id, claim.unit_candidate_key, claim.lease_end, claim.annual_rent_aed)
         rental = (
@@ -1186,12 +1186,18 @@ async def refresh_property_contact_rentals(
         counts["added_hits"] += bool(after[0]) and not before[0]
         counts["removed_hits"] += bool(before[0]) and not after[0]
         if before != after:
-            (claim.lead_id, claim.unit_candidate_key, claim.lease_end, claim.annual_rent_aed) = (
-                after
+            changes.append(
+                dict(
+                    zip(
+                        ("lead_id", "unit_candidate_key", "lease_end", "annual_rent_aed"),
+                        after,
+                        strict=True,
+                    ),
+                    id=claim.id,
+                )
             )
-            claim.updated_at = now
-            import_repository.save(db, claim)
-            counts["changed_claims"] += 1
+    counts["changed_claims"] = len(changes)
+    await import_repository.save_rental_links(db, changes, datetime.now(timezone.utc))
     await db.flush()
     import_ids = {claim.import_id for claim in claims}
     if import_id is not None:

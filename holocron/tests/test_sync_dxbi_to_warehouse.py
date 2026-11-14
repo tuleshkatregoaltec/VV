@@ -20,7 +20,7 @@ def _run(root: Path, kind: str, name: str, days: list[str], *, success: bool = T
 
 
 class Recorder:
-    """Stands in for subprocess, the release build and the cache flush."""
+    """Stands in for subprocess, the release build, the cache flush and the Owners refresh."""
 
     def __init__(self, *, fail_on: str | None = None) -> None:
         self.calls: list[str] = []
@@ -42,6 +42,11 @@ class Recorder:
     def flush(self) -> None:
         self.calls.append("flush")
 
+    def owners(self) -> None:
+        self.calls.append("owners")
+        if self.fail_on == "owners":
+            raise RuntimeError("owners refresh failed")
+
 
 def _config(tmp_path: Path) -> sync.Config:
     return sync.Config(
@@ -58,6 +63,7 @@ def _go(config: sync.Config, recorder: Recorder) -> int:
         run_command=recorder.command,
         build_release=recorder.release,
         flush_cache=recorder.flush,
+        refresh_owners=recorder.owners,
     )
 
 
@@ -121,14 +127,17 @@ def test_rentals_load_into_the_active_table_with_a_run_id(tmp_path: Path) -> Non
     assert argv[argv.index("--replace-window") + 1 :][:2] == ["2026-11-07", "2026-11-14"]
 
 
-def test_a_loaded_run_is_not_loaded_again_and_nothing_else_runs(tmp_path: Path) -> None:
+def test_a_loaded_run_is_not_loaded_again_and_only_the_owners_refresh_runs(
+    tmp_path: Path,
+) -> None:
+    # Lease links age out of their window daily, so the Owners refresh runs on every sync.
     config = _config(tmp_path)
     _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
     (config.state_dir / "loaded").mkdir(parents=True)
     (config.state_dir / "loaded" / "sales-run=2026-11-14").touch()
     recorder = Recorder()
     assert _go(config, recorder) == 0
-    assert recorder.calls == []
+    assert recorder.calls == ["owners"]
 
 
 def test_a_load_that_fails_stops_that_report_and_skips_the_release(tmp_path: Path) -> None:
@@ -137,6 +146,7 @@ def test_a_load_that_fails_stops_that_report_and_skips_the_release(tmp_path: Pat
     _run(config.evidence_dir, "sales", "run=2026-11-13", ["2026-11-13"])
     recorder = Recorder(fail_on="run=2026-11-12")
     assert _go(config, recorder) == 1
+    # Nor do the Owners lease links follow a window that may be half loaded.
     assert recorder.calls == ["load_dxbi_sales_units.py:run=2026-11-12"]
     assert not (config.state_dir / "loaded" / "sales-run=2026-11-12").exists()
 
@@ -148,7 +158,7 @@ def test_the_release_and_cache_flush_follow_a_load_and_clear_the_pending_marker(
     _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
     recorder = Recorder()
     assert _go(config, recorder) == 0
-    assert recorder.calls[-2:] == ["release", "flush"]
+    assert recorder.calls[-3:] == ["release", "flush", "owners"]
     assert not (config.state_dir / "release-pending").exists()
 
 
@@ -159,7 +169,7 @@ def test_a_failed_release_is_retried_on_the_next_run_without_new_data(tmp_path: 
     assert (config.state_dir / "release-pending").exists()
     retry = Recorder()
     assert _go(config, retry) == 0
-    assert retry.calls == ["release", "flush"]
+    assert retry.calls == ["release", "flush", "owners"]
 
 
 def test_a_sales_load_failure_in_one_report_does_not_block_the_other(tmp_path: Path) -> None:
@@ -170,6 +180,7 @@ def test_a_sales_load_failure_in_one_report_does_not_block_the_other(tmp_path: P
     assert _go(config, recorder) == 1
     assert "load_dxbi_rental_events.py:run=2026-11-14" in recorder.calls
     assert "release" in recorder.calls
+    assert "owners" not in recorder.calls
 
 
 def test_stale_reports_name_a_report_with_no_recent_success(tmp_path: Path) -> None:
@@ -179,3 +190,36 @@ def test_stale_reports_name_a_report_with_no_recent_success(tmp_path: Path) -> N
     os.utime(old / "_SUCCESS", (stamp, stamp))
     _run(root, "sales", "run=2026-11-14", ["2026-11-14"])
     assert sync.stale_reports(root, max_age_hours=36) == ["rentals"]
+
+
+def test_a_failed_release_skips_the_owners_refresh(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _run(config.evidence_dir, "rentals", "run=2026-11-14", ["2026-11-14"])
+    recorder = Recorder(fail_on="release")
+    assert _go(config, recorder) == 1
+    assert "owners" not in recorder.calls
+
+
+def test_a_failed_owners_refresh_fails_the_run_and_keeps_the_loads(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
+    _run(config.evidence_dir, "rentals", "run=2026-11-14", ["2026-11-14"])
+    assert _go(config, Recorder(fail_on="owners")) == 1
+    assert (config.state_dir / "loaded" / "rentals-run=2026-11-14").exists()
+    assert not (config.state_dir / "release-pending").exists()
+    retry = Recorder()
+    assert _go(config, retry) == 0
+    assert retry.calls == ["owners"]
+
+
+def test_the_owners_refresh_runs_the_backend_script_with_its_own_state(tmp_path: Path) -> None:
+    repo = tmp_path / "vv"
+    argv, cwd, env = sync.owners_refresh_command(repo, tmp_path / "state")
+    assert argv == [
+        str(repo / "backend/.venv/bin/python"),
+        "scripts/crm/refresh_rental_imports.py",
+        "--state-dir",
+        str(tmp_path / "state" / "owners"),
+    ]
+    assert cwd == repo / "backend"
+    assert env["PYTHONPATH"] == str(repo / "backend")

@@ -643,3 +643,66 @@ async def test_claims_on_one_unit_number_are_assessed_in_the_same_chunk(
             assert homes.setdefault(unit_of[claim_id], index) == index, unit_of[claim_id]
     assert len(chunks) > 1
     assert sorted(claim for chunk in chunks for claim in chunk) == sorted(unit_of)
+
+
+async def test_a_lease_refresh_changes_only_lease_fields_and_reaches_the_published_store(
+    pg_session, tenant, monkeypatch
+):
+    """The post-load refresh: claims get today's lease, owner work is untouched, and the
+    republished assessment serves the new lease without a request building it."""
+    from unittest.mock import AsyncMock
+
+    from app.crm import ownership
+
+    org = tenant["org"]
+    first = await owner_store.publish_if_stale(pg_session.bind, org)
+    lease_fields = ("lead_id", "unit_candidate_key", "lease_end", "annual_rent_aed", "updated_at")
+    snapshot = text(
+        "SELECT id, to_jsonb(c) - CAST(:fields AS text[]) AS other, lead_id, lease_end, "
+        "annual_rent_aed FROM crm_property_contact_claims c WHERE organization_id = :o ORDER BY id"
+    )
+    params = {"o": org, "fields": list(lease_fields)}
+    before = (await pg_session.execute(snapshot, params)).mappings().all()
+    new_end = TODAY + timedelta(days=200)
+    monkeypatch.setattr(
+        ownership,
+        "_rental_evidence_for_units",
+        AsyncMock(
+            return_value={
+                "aspecttower|601": {
+                    "event_key": "lead-601",
+                    "unit_candidate_key": "unit-601",
+                    "lease_end": new_end,
+                    "annual_rent_aed": 120_000,
+                    "area_name": "Business Bay",
+                    "project_name": "Executive Towers",
+                }
+            }
+        ),
+    )
+    result = await ownership.refresh_property_contact_rentals(pg_session, organization_id=org)
+    assert result["added_hits"] >= 1 and result["removed_hits"] >= 1
+    after = (await pg_session.execute(snapshot, params)).mappings().all()
+    assert [row["other"] for row in after] == [row["other"] for row in before]
+    by_id = {row["id"]: row for row in after}
+    leased = [row for row in before if row["lead_id"] == "lead-602"]
+    assert leased and all(by_id[row["id"]]["lead_id"] is None for row in leased)
+    linked = [row for row in after if row["lead_id"] == "lead-601"]
+    assert linked and all(
+        (row["lease_end"], row["annual_rent_aed"]) == (new_end, 120_000) for row in linked
+    )
+
+    published = await owner_store.publish_if_stale(pg_session.bind, org)
+    assert published.generation > first.generation
+    served = await owner_store.open_store(pg_session, org)
+    assert served.state.generation == published.generation
+    assessed = (
+        await pg_session.exec(
+            text(
+                "SELECT DISTINCT lead_id FROM crm_owner_assessed_claims "
+                "WHERE organization_id = :o AND generation = :g AND lead_id IS NOT NULL"
+            ),
+            params={"o": org, "g": published.generation},
+        )
+    ).all()
+    assert [row[0] for row in assessed] == ["lead-601"]

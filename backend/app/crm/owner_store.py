@@ -534,6 +534,41 @@ def _is_current(state: StoreState | None, revision: str, warehouse: str) -> bool
     return state.warehouse_status != "unavailable" or age < UNAVAILABLE_LIFETIME_SECONDS
 
 
+async def publish_if_stale(
+    engine: AsyncEngine, organization_id: str, *, attempts: int = 3
+) -> StoreState | None:
+    """Publish a current assessment outside a request (after a warehouse or lease-link refresh).
+
+    The Owners page then reads the new generation instead of building it on a visitor's
+    request. A build held by another process (the API) is waited for, not repeated.
+    """
+    loop = asyncio.get_running_loop()
+    for attempt in range(1, attempts + 1):
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            state = await read_state(db, organization_id)
+            revision, warehouse = await _tokens(db, organization_id)
+        if _is_current(state, revision, warehouse):
+            return state
+        try:
+            built = await _build_exclusively(engine, organization_id)
+        except StoreUnavailable:
+            if attempt == attempts:
+                raise
+            logger.warning("Owner assessment inputs changed during the build; building again")
+            continue
+        if built is not None:
+            return built
+        deadline = loop.time() + BUILD_TIMEOUT_SECONDS
+        while loop.time() < deadline:
+            async with AsyncSession(engine, expire_on_commit=False) as db:
+                latest = await read_state(db, organization_id)
+            if _is_current(latest, revision, warehouse):
+                return latest
+            await asyncio.sleep(5.0)
+        raise StoreUnavailable("Another owner assessment build did not finish in time")
+    return None
+
+
 async def open_store(db: AsyncSession, organization_id: str) -> StoreReader:
     """The tenant's current assessment, built first when its inputs have changed.
 
