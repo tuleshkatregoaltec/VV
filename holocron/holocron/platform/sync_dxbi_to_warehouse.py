@@ -4,7 +4,10 @@ The scraper box writes ``<kind>/run=YYYY-MM-DD/`` (kind: ``sales`` or ``rentals`
 ``_SUCCESS`` in a run only when every shard finished. This job loads only those runs, oldest
 first, each replacing the dates its own checkpoint covers (a run re-reads a rolling window, so a
 later run supersedes an earlier one). After anything new was loaded it rebuilds the served
-market releases and the profiles, then clears the API caches that read them.
+market releases and the profiles, then clears the API caches that read them. Every run then
+refreshes the Owners lease links (imported claims' lease end, rent and lease id) and republishes
+the stored owner assessments; a lease link's window moves with the date, so this runs even when
+nothing new was loaded.
 
 A run's marker in ``<state>/loaded`` is written after its load succeeds, so a failed night is
 retried whole on the next run. ``<state>/release-pending`` keeps a failed release build owed.
@@ -135,6 +138,7 @@ def run_sync(
     run_command: Callable[[list[str]], int] = _default_run_command,
     build_release: Callable[[], None],
     flush_cache: Callable[[], None],
+    refresh_owners: Callable[[], None],
 ) -> int:
     config.loaded_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / "reconciliations").mkdir(parents=True, exist_ok=True)
@@ -163,6 +167,14 @@ def run_sync(
         config.release_pending.unlink()
     else:
         logger.info("Nothing new to load")
+    if failures:
+        logger.warning("A load failed; the Owners lease refresh waits for a complete load")
+    else:
+        try:
+            refresh_owners()
+        except Exception:
+            logger.exception("Owners lease refresh failed; it is retried next run")
+            failures += 1
     for kind in stale_reports(config.evidence_dir, max_age_hours=36):
         logger.warning("No finished %s run in the last 36 hours", kind)
         if kind == "sales":
@@ -201,6 +213,23 @@ def _flush_cache(backend_dir: Path) -> None:
     subprocess.run([str(python), "-c", code], cwd=backend_dir, check=True)
 
 
+def owners_refresh_command(repo_dir: Path, state_dir: Path) -> tuple[list[str], Path, dict]:
+    backend = repo_dir / "backend"
+    argv = [
+        str(backend / ".venv/bin/python"),
+        "scripts/crm/refresh_rental_imports.py",
+        "--state-dir",
+        str(state_dir / "owners"),
+    ]
+    return argv, backend, {**os.environ, "PYTHONPATH": str(backend)}
+
+
+def _refresh_owners(repo_dir: Path, state_dir: Path) -> None:
+    argv, cwd, env = owners_refresh_command(repo_dir, state_dir)
+    logger.info("Refreshing Owners lease links and assessments")
+    subprocess.run(argv, cwd=cwd, env=env, check=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-dir", type=Path, required=True)
@@ -226,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
             config,
             build_release=_build_release,
             flush_cache=lambda: _flush_cache(args.repo_dir / "backend"),
+            refresh_owners=lambda: _refresh_owners(args.repo_dir, args.state_dir),
         )
 
 

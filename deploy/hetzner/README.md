@@ -128,9 +128,19 @@ finished.
 3. **Release.** After anything was loaded: `materialize_market_sale_events`,
    `materialize_market_rental_events`, `build_profiles`, then the Redis `transactions:` and
    `analytics:` keys are cleared. `release-pending` in the state directory keeps a failed build owed.
+4. **Owners lease links.** Every run (unless a load or the release failed) then runs
+   `backend/scripts/crm/refresh_rental_imports.py --state-dir ~/.local/state/vv-dxbi-sync/owners`
+   from `~/vv/backend`. It gives each imported claim the current lease of its unit (lease id, lease
+   end, rent; the rule in `ownership.refresh_property_contact_rentals`: a source unit number or a
+   unique sale match, lease end between today - 365 and today + 90). Owners, contacts, statuses and
+   imports are not changed. Then every organization whose stored owner assessment is out of date
+   gets a new generation (`owner_store.publish_if_stale`), so the Owners page serves it without a
+   visitor's request building it. It runs on every sync because the lease window moves daily;
+   `owners/import-rental-matches.json` makes an unchanged day cheap. Peak memory ~1.2 GB.
 
-The unit fails (and the journal shows why) when a load or the release fails, or when there is no
-finished sales run in 36 hours. No finished rentals run in 36 hours is a logged warning.
+The unit fails (and the journal shows why) when a load, the release or the Owners refresh fails,
+or when there is no finished sales run in 36 hours. No finished rentals run in 36 hours is a
+logged warning.
 
 Install (16 GB server, as maan):
 
