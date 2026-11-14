@@ -154,6 +154,8 @@ class Settings(BaseSettings):
     CRM_INBOUND_OWNER_ENRICHMENT_MODE: Literal["live", "stored", "off"] = "live"
     CRM_MAX_EXPENSIVE_REQUESTS: int = Field(default=2, ge=1, le=32)
     CRM_MAX_EXPENSIVE_REQUESTS_PER_ORG: int = Field(default=2, ge=1, le=16)
+    # Requests beyond these budgets queue this long, then get 429 before any work starts.
+    CRM_ADMISSION_WAIT_SECONDS: float = Field(default=30.0, gt=0, le=90)
     CRM_MAX_CONCURRENT_QUERIES: int = Field(default=1, ge=1, le=8)
     CRM_QUERY_MAX_MEMORY_BYTES: int = Field(default=3_000_000_000, ge=67_108_864)
     CRM_QUERY_MAX_THREADS: int = Field(default=2, ge=1, le=16)
