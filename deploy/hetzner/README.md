@@ -136,7 +136,8 @@ finished.
    imports are not changed. Then every organization whose stored owner assessment is out of date
    gets a new generation (`owner_store.publish_if_stale`), so the Owners page serves it without a
    visitor's request building it. It runs on every sync because the lease window moves daily;
-   `owners/import-rental-matches.json` makes an unchanged day cheap. Peak memory ~1.2 GB.
+   `owners/import-rental-matches.json` makes an unchanged day cheap. Measured on the pilot
+   (311,665 claims): 10 min in all (link refresh ~2 min, then the new generation), peak RSS 1.4 GB.
 
 The unit fails (and the journal shows why) when a load, the release or the Owners refresh fails,
 or when there is no finished sales run in 36 hours. No finished rentals run in 36 hours is a
