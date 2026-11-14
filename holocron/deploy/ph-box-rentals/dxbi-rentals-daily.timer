@@ -1,0 +1,13 @@
+[Unit]
+Description=Schedule the ViteVue DXBI rental refresh daily
+
+[Timer]
+# 03:00 Dubai: after the sales scrape (22:30 UTC, ~6 min) and ~2 h before DXBI's origin goes
+# down at about 01:00 UTC. At 00:30 UTC the ~45-minute run ran into that outage every night.
+OnCalendar=*-*-* 23:00:00 UTC
+Persistent=true
+RandomizedDelaySec=5min
+Unit=dxbi-rentals-daily.service
+
+[Install]
+WantedBy=timers.target
