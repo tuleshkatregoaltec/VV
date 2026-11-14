@@ -149,8 +149,20 @@ async def _crm_actor(
         yield
 
 
-async def _expensive_crm(context: AuthContext = Depends(require_active_subscription)):
-    async with expensive_crm(str(context.organization.id)):
+async def _release_idle_connection(db: AsyncSession) -> None:
+    """End the read-only authentication transaction so a queued request holds no pool
+    connection; the next query begins a new one with the actor context applied."""
+    if db.in_transaction() and not (db.new or db.dirty or db.deleted):
+        await db.commit()
+
+
+async def _expensive_crm(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    async with expensive_crm(
+        str(context.organization.id), before_wait=lambda: _release_idle_connection(db)
+    ):
         yield
 
 
