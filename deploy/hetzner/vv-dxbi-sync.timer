@@ -4,7 +4,8 @@ Description=Daily DXBI warehouse sync
 [Timer]
 # The sales scrape finishes about 22:45 UTC and the rentals scrape by about 02:10 UTC;
 # the 12:00 run catches a late or repaired run. Nothing new means nothing is rebuilt.
-OnCalendar=*-*-* 04:00,12:00:00 UTC
+OnCalendar=*-*-* 04:00:00 UTC
+OnCalendar=*-*-* 12:00:00 UTC
 Persistent=true
 RandomizedDelaySec=5min
 
