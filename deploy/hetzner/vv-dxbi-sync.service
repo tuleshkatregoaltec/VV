@@ -1,0 +1,12 @@
+[Unit]
+Description=Pull finished DXBI scrapes and load them into the warehouse
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=maan
+EnvironmentFile=/home/maan/vv/.env.dev
+ExecStart=/home/maan/deploy/vv-dxbi-sync.sh
+TimeoutStartSec=90min
+Nice=10
