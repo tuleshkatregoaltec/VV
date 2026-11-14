@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 import time
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -62,6 +62,12 @@ PAGE_SIZE = 300
 COLLECTOR_VERSION = 3
 CENT = Decimal("0.01")
 RECOVERABLE_HTTP_STATUSES = {408, 429, 500, 502, 503, 504, 598}
+# Cloudflare's "origin unreachable" family. DXBI's origin goes down nightly at about
+# 01:00 UTC (05:00 Dubai), so these mean "the whole site is down", not "this slice is bad".
+ORIGIN_OUTAGE_STATUSES = {520, 521, 522, 523, 524, 525, 526, 530}
+# While the origin is down, wait this long between probes (the last value repeats), so an
+# outage costs DXBI at most one request every five minutes.
+OUTAGE_PROBE_SECONDS = (60, 120, 240, 300)
 FETCH_EVAL_TIMEOUT_MS = 120_000
 PAGINATION_PATTERN = re.compile(
     r"apex\.widget\.report\.paginate\('([^']+)'\s*,\s*'([^']+)'\s*,"
@@ -1039,6 +1045,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--delay-min", type=float, default=3.0)
     parser.add_argument("--delay-max", type=float, default=6.0)
     parser.add_argument("--max-requests", type=int, default=0)
+    parser.add_argument(
+        "--outage-wait-minutes",
+        type=float,
+        default=90,
+        help="How long to wait out a Cloudflare 52x (DXBI origin down) before failing the day.",
+    )
     parser.add_argument("--report", choices=tuple(REPORTS), default="rentals")
     parser.add_argument(
         "--account-id",
@@ -1093,6 +1105,43 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def outage_probe_delays(budget_seconds: float) -> list[int]:
+    """Seconds to wait before each probe while DXBI's origin is down, within the budget."""
+    delays: list[int] = []
+    waited = 0
+    while True:
+        delay = OUTAGE_PROBE_SECONDS[min(len(delays), len(OUTAGE_PROBE_SECONDS) - 1)]
+        if waited + delay > budget_seconds:
+            return delays
+        delays.append(delay)
+        waited += delay
+
+
+def wait_out_origin_outage(
+    key: str,
+    response: dict[str, Any],
+    retry: Callable[[], dict[str, Any]],
+    delays: list[int],
+    sleep: Callable[[float], None] | None = None,
+) -> dict[str, Any]:
+    """Keep retrying one slice while Cloudflare reports DXBI's origin as unreachable.
+
+    The nightly outage is site-wide: without waiting, every remaining day fails on its first
+    request. A response outside ORIGIN_OUTAGE_STATUSES ends the wait either way.
+    """
+    for delay in delays:
+        if response["status"] not in ORIGIN_OUTAGE_STATUSES:
+            break
+        print(
+            f"OUTAGE {key} status={response['status']} error={response.get('error', '')} "
+            f"wait={delay}s",
+            flush=True,
+        )
+        (sleep or time.sleep)(delay)
+        response = retry()
+    return response
+
+
 def scrape_configuration(
     *,
     page: Page,
@@ -1110,6 +1159,7 @@ def scrape_configuration(
     request_limit: int | None,
     collection_strategy: str = "split",
     template_cache: dict[str, dict[str, str]] | None = None,
+    outage_wait_seconds: float = 0,
 ) -> tuple[str, int]:
     state_path, shard_dir = configuration_paths(output_dir, configuration)
     state = load_state(state_path, configuration)
@@ -1249,6 +1299,42 @@ def scrape_configuration(
                     time.sleep(retry_delay)
                     continue
                 break
+
+            if (
+                response is not None
+                and response["status"] in ORIGIN_OUTAGE_STATUSES
+                and (request_limit is None or current_requests < request_limit)
+            ):
+
+                def retry_after_outage(shard: dict[str, Any] = shard) -> dict[str, Any]:
+                    nonlocal template, current_requests
+                    try:
+                        # The outage can end the APEX session; start a fresh one.
+                        login(page, credentials, report)
+                        context.storage_state(path=storage_path)
+                        template = capture_template(page, template_date, filters, report, location)
+                        if template_cache is not None:
+                            template_cache[template_key] = template
+                        result = fetch_rows(page, template, shard, filters, location, report)
+                    except Exception as error:
+                        return {
+                            "status": 520,
+                            "login_redirect": False,
+                            "rows": [],
+                            "error": f"STILL_DOWN {type(error).__name__}: {error}"[:300],
+                        }
+                    current_requests += 1
+                    state["requests"] = int(state.get("requests", 0)) + 1
+                    return result
+
+                delays = outage_probe_delays(outage_wait_seconds)
+                if request_limit is not None:
+                    delays = delays[: max(request_limit - current_requests, 0)]
+                response = wait_out_origin_outage(key, response, retry_after_outage, delays)
+                if response["status"] in ORIGIN_OUTAGE_STATUSES:
+                    # Waited the whole budget: the remaining days fail fast instead of each
+                    # waiting again.
+                    outage_wait_seconds = 0
 
             budget_exhausted = bool(
                 response
@@ -1615,6 +1701,7 @@ def main() -> int:
                     request_limit=remaining,
                     collection_strategy=args.collection_strategy,
                     template_cache=template_cache,
+                    outage_wait_seconds=args.outage_wait_minutes * 60,
                 )
                 total_requests += used
                 statuses.append(status)
