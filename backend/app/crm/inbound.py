@@ -44,6 +44,7 @@ from app.crm.inbound_policy import (
 )
 from app.crm.owner_assessment import get_owner_assessment
 from app.crm.owners import _projected_claims
+from app.organization.service import get_membership_for_user
 
 
 async def _find_or_create_contact(
@@ -350,6 +351,15 @@ async def _registry_transaction_evidence(
     return sales, leases
 
 
+async def _require_member(db: AsyncSession, organization_id: str, user_id: str) -> None:
+    """An enquiry is only ever assigned to a member of its own organization."""
+    membership = await get_membership_for_user(db, user_id)
+    if membership is None or str(membership.organization_id) != str(organization_id):
+        raise HTTPException(
+            status_code=422, detail="The assigned agent is not a member of this organization"
+        )
+
+
 async def create_inbound_enquiry(
     db: AsyncSession,
     *,
@@ -357,6 +367,8 @@ async def create_inbound_enquiry(
     user_id: str,
     organization_id: str,
 ) -> InboundEnquiryResponse:
+    if payload.assigned_user_id and payload.assigned_user_id != user_id:
+        await _require_member(db, organization_id, payload.assigned_user_id)
     contact = await _find_or_create_contact(
         db,
         organization_id=organization_id,
@@ -966,6 +978,8 @@ async def update_inbound_enquiry(
     if not enquiry or enquiry.organization_id != organization_id:
         raise HTTPException(status_code=404, detail="Inbound enquiry not found")
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("assigned_user_id") and changes["assigned_user_id"] != user_id:
+        await _require_member(db, organization_id, changes["assigned_user_id"])
     contact_changes = {
         key: changes.pop(key)
         for key in (

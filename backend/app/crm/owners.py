@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import date
 from typing import Any
@@ -7,7 +8,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.crm import owner_queries, owner_repository
+from app.crm import lead_cache, owner_queries, owner_repository
 from app.crm.identity import (
     _claim_owner_key,
     _claim_preference,
@@ -454,8 +455,83 @@ async def get_owner_registry(
     next_event_days: int | None = None,
     transaction_match_status: str | None = None,
 ) -> CrmOwnerRegistryResponse:
+    """One page of the owner file, cached per published assessment generation and day.
+
+    A generation is immutable once published (a rebuild or lease refresh publishes a new one),
+    so a repeat view never re-ranks every owner.
+    """
     store = await open_store(db, organization_id)
-    today = date.today()
+    today = _today()
+    params = {
+        "list_id": list_id,
+        "scope": scope,
+        "status": status,
+        "search": search,
+        "lease_window": lease_window,
+        "portfolio_only": portfolio_only,
+        "min_rent_aed": min_rent_aed,
+        "max_rent_aed": max_rent_aed,
+        "min_value_aed": min_value_aed,
+        "max_value_aed": max_value_aed,
+        "limit": limit,
+        "offset": offset,
+        "min_properties": min_properties,
+        "next_event_days": next_event_days,
+        "transaction_match_status": transaction_match_status,
+        "today": today,
+    }
+    tenant = hashlib.sha256(organization_id.encode()).hexdigest()[:24]
+    return await lead_cache.cached_for(
+        "owner_registry",
+        f"{tenant}-{store.state.generation}",
+        params,
+        CrmOwnerRegistryResponse,
+        lambda: _owner_registry_page(store, **params),
+        ttl=OWNER_PAGE_TTL_SECONDS,
+    )
+
+
+def _today() -> date:
+    return date.today()
+
+
+# A list row's properties: enough for the row and its page filters; the profile has them all.
+OWNER_LIST_PROPERTIES_MAX = 25
+OWNER_PAGE_TTL_SECONDS = 3600
+
+
+def _bounded(profile: CrmOwnerProfile) -> CrmOwnerProfile:
+    if len(profile.properties) <= OWNER_LIST_PROPERTIES_MAX:
+        return profile
+    return profile.model_copy(
+        update={
+            "properties": profile.properties[:OWNER_LIST_PROPERTIES_MAX],
+            "properties_truncated": True,
+            "total_property_count": profile.total_property_count or profile.property_count,
+        }
+    )
+
+
+async def _owner_registry_page(
+    store,
+    *,
+    list_id: int | None,
+    scope: str,
+    status: str | None,
+    search: str | None,
+    lease_window: str | None,
+    portfolio_only: bool,
+    min_rent_aed: int | None,
+    max_rent_aed: int | None,
+    min_value_aed: int | None,
+    max_value_aed: int | None,
+    limit: int,
+    offset: int,
+    min_properties: int | None,
+    next_event_days: int | None,
+    transaction_match_status: str | None,
+    today: date,
+) -> CrmOwnerRegistryResponse:
     page, total, counts = await store.registry_page(
         list_id=list_id,
         scope=scope,
@@ -499,11 +575,13 @@ async def get_owner_registry(
             )
         ]
         owners.append(
-            profile_with_properties(profile, properties).model_copy(
-                update={"total_property_count": full.property_count}
+            _bounded(
+                profile_with_properties(profile, properties).model_copy(
+                    update={"total_property_count": full.property_count}
+                )
+                if scope in {"current_owners", "prior_owners"} or transaction_match_status
+                else full
             )
-            if scope in {"current_owners", "prior_owners"} or transaction_match_status
-            else full
         )
     source_audit = store.state.source_audit.get("all" if list_id is None else str(list_id))
     return CrmOwnerRegistryResponse(

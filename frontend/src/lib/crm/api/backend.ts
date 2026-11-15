@@ -77,6 +77,7 @@ import type {
 	LeadStage,
 	LeadStageMove,
 	LeadType,
+	LeaseWindow,
 	ListingCard,
 	ListingListResponse,
 	ListingStatus,
@@ -186,7 +187,7 @@ function whoAmI(): Promise<AuthMeResponse> {
 
 export function clearCrmReadRequests(): void {
 	readsInFlight.clear()
-	renewalLeadsInFlight = null
+	renewalLeadsInFlight.clear()
 }
 
 onCrmIdentityChange(() => {
@@ -523,7 +524,11 @@ export async function listLeads(p: LeadListParams): Promise<LeadListResponse> {
 		),
 		whoAmI(),
 		// The agency's own leads still show when the lease data cannot load; the page says so.
-		p.vitevue ? renewalLeads().catch(() => 'failed' as const) : null
+		p.vitevue
+			? renewalLeads(p.lease_window ?? 'upcoming', p.lease_offset ?? 0).catch(
+					() => 'failed' as const
+				)
+			: null
 	])
 	const leases = leaseResult === 'failed' ? null : leaseResult
 	const stored = res.enquiries
@@ -593,9 +598,22 @@ export async function listLeads(p: LeadListParams): Promise<LeadListResponse> {
 		counts,
 		new_count: open.filter(({ row }) => row.stage === 'new').length,
 		areas: [...new Set(all.map(({ row }) => row.area).filter(Boolean))].sort(),
-		limited:
-			res.total > res.enquiries.length || Boolean(leases && leases.total > leases.items.length),
-		vitevue_unavailable: leaseResult === 'failed'
+		// Lease leads are paged by the server (lease_page); only stored leads can be cut off.
+		limited: res.total > res.enquiries.length,
+		vitevue_unavailable: leaseResult === 'failed',
+		lease_page: leases
+			? {
+					window: p.lease_window ?? 'upcoming',
+					offset: leases.offset,
+					limit: leases.limit,
+					total: leases.total,
+					counts: {
+						upcoming: leases.counts?.upcoming ?? 0,
+						expired: leases.counts?.expired ?? 0,
+						vacant: leases.counts?.vacant ?? 0
+					}
+				}
+			: undefined
 	}
 }
 
@@ -1124,7 +1142,8 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 		)
 			return false
 		if (p.units) {
-			const n = props.length
+			// A list row carries only the first properties of a large owner; count them all.
+			const n = o.total_property_count ?? o.property_count ?? props.length
 			if (p.units === '3' ? n < 3 : n !== Number(p.units)) return false
 		}
 		return true
@@ -1138,7 +1157,7 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 	const TABS: Record<OwnerTab, (x: (typeof all)[number]) => boolean> = {
 		all: () => true,
 		mine: ({ row }) => row.mine,
-		multi: ({ o }) => (o.properties ?? []).length >= 3,
+		multi: ({ o }) => (o.total_property_count ?? o.property_count ?? 0) >= 3,
 		event: ({ o }) => inEvent(o),
 		sold: ({ o }) => soldLater(o),
 		review: ({ o }) =>
@@ -1876,8 +1895,8 @@ export async function getRenewal(id: string): Promise<RenewalDetail> {
 		})),
 		reason: l.lead_reason,
 		action: l.recommended_action,
-		last_purchase: l.last_purchase_date
-			? { date: l.last_purchase_date, price_aed: l.latest_purchase_price_aed ?? null }
+		last_purchase: purchaseDate(l.last_purchase_date)
+			? { date: l.last_purchase_date as string, price_aed: l.latest_purchase_price_aed ?? null }
 			: null,
 		gross_yield_pct: l.gross_yield_pct ?? null,
 		history: detail.timeline.map((e) => ({
@@ -1930,24 +1949,26 @@ export async function feedAreas(): Promise<FeedArea[]> {
 	return rows.map((r) => ({ area: r.area, owners_in_90_day_window: r.upcoming_90_days }))
 }
 
-/** Largest page /renewal-leads serves. */
-const RENEWAL_LEADS_LIMIT = 500
+/** Lease leads per Leads page; the server pages through the rest. */
+export const LEASE_PAGE_SIZE = 100
 
 /**
- * Lease leads in My areas. Screens that load at the same moment (the Leads list and its feed
- * strip, or a save refreshing every CRM query) share one request.
+ * One page of lease leads in My areas. Screens that load the same page at the same moment (the
+ * Leads list and its feed strip, or a save refreshing every CRM query) share one request.
  */
-let renewalLeadsInFlight: Promise<CrmRenewalLeadsResponse> | null = null
-const renewalLeads = () => {
-	if (renewalLeadsInFlight) return renewalLeadsInFlight
-	const request = client
-		.get<CrmRenewalLeadsResponse>(
-			client.withQuery(`${CRM}/renewal-leads`, { limit: RENEWAL_LEADS_LIMIT })
-		)
-		.finally(() => {
-			if (renewalLeadsInFlight === request) renewalLeadsInFlight = null
-		})
-	renewalLeadsInFlight = request
+const renewalLeadsInFlight = new Map<string, Promise<CrmRenewalLeadsResponse>>()
+const renewalLeads = (window: LeaseWindow = 'upcoming', offset = 0) => {
+	const url = client.withQuery(`${CRM}/renewal-leads`, {
+		kind: window,
+		limit: LEASE_PAGE_SIZE,
+		offset
+	})
+	const pending = renewalLeadsInFlight.get(url)
+	if (pending) return pending
+	const request = client.get<CrmRenewalLeadsResponse>(url).finally(() => {
+		if (renewalLeadsInFlight.get(url) === request) renewalLeadsInFlight.delete(url)
+	})
+	renewalLeadsInFlight.set(url, request)
 	return request
 }
 
@@ -1957,11 +1978,18 @@ export async function feedSummary(): Promise<FeedSummary> {
 		areas: res.preferences.areas,
 		forward_days: res.preferences.forward_days ?? 60,
 		lookback_days: res.preferences.lookback_days ?? 30,
-		window_total: res.total,
+		window_total: res.counts?.all ?? res.total,
+		upcoming: res.counts?.upcoming ?? 0,
+		expired: res.counts?.expired ?? 0,
 		on_file: res.items.filter((i) => i.owner).length,
+		loaded: res.items.length,
 		entered_today: res.entered_today
 	}
 }
+
+/** ClickHouse's zero Date: a lease with no matched sale, never a real purchase. */
+const purchaseDate = (value: unknown): string | null =>
+	typeof value === 'string' && value && !value.startsWith('1970-01-01') ? value : null
 
 /* Vitevue lease leads in Leads: one shared lead per unit, created when an agent first opens it. */
 
@@ -1986,9 +2014,9 @@ function leaseOfLead(l: CrmLead): VitevueLease {
 		days_left: l.days_to_expiry,
 		vacant: l.lease_evidence_state === 'unlet_signal',
 		rent_aed: l.annual_rent_aed,
-		last_purchase: l.last_purchase_date
+		last_purchase: purchaseDate(l.last_purchase_date)
 			? {
-					date: l.last_purchase_date,
+					date: l.last_purchase_date as string,
 					price_aed: l.latest_purchase_price_aed ?? l.matched_sale_price_aed ?? null
 				}
 			: null,
@@ -2020,7 +2048,7 @@ function leaseOfEnquiry(e: InboundEnquiryResponse): VitevueLease | null {
 		days_left: days,
 		vacant: Boolean(v.vacant) && days < 0,
 		rent_aed: num(v.annual_rent_aed) ?? 0,
-		last_purchase: v.last_purchase_date
+		last_purchase: purchaseDate(v.last_purchase_date)
 			? { date: String(v.last_purchase_date), price_aed: num(v.last_purchase_price_aed) }
 			: null,
 		end_chip: leaseEndChip(days)

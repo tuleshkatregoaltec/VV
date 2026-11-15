@@ -1,10 +1,13 @@
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import DateTime, ForeignKey, Text, UniqueConstraint
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
+
+# ClickHouse Date's zero value, which a left join gives a lease with no matched sale.
+_ZERO_DATE = date(1970, 1, 1)
 
 LeadStatus = Literal["expired", "expiring_30", "expiring_60", "expiring_90"]
 LeadPriority = Literal["urgent", "high", "medium"]
@@ -78,6 +81,14 @@ class CrmLead(BaseModel):
     recommended_action: str
     sale_conversation: bool
     source: str = "Transaction registry"
+
+    @field_validator("last_purchase_date", "identity_sale_date", mode="before")
+    @classmethod
+    def _no_zero_date(cls, value: Any) -> Any:
+        """A lease without a matched sale reads Date's zero value (1970-01-01): no date."""
+        if value in (_ZERO_DATE, _ZERO_DATE.isoformat()):
+            return None
+        return value
 
 
 class CrmBreakdownItem(BaseModel):
@@ -558,8 +569,21 @@ class CrmRenewalLead(BaseModel):
     lead_record_id: int | None = None
 
 
+class CrmRenewalLeadCounts(BaseModel):
+    """Lead units in the agent's whole window, whichever page or kind was asked for."""
+
+    all: int = 0
+    # Lease still running (ends today or later), soonest first in the feed.
+    upcoming: int = 0
+    # Lease ended inside the look-back window.
+    expired: int = 0
+    # Ended with no later lease registered for the exact unit (a subset of expired).
+    vacant: int = 0
+
+
 class CrmRenewalLeadsResponse(BaseModel):
     items: list[CrmRenewalLead]
+    # Leads of the requested kind across every page (the pager's total).
     total: int
     limit: int
     offset: int
@@ -567,6 +591,8 @@ class CrmRenewalLeadsResponse(BaseModel):
     entered_today: int
     preferences: CrmAreaPreferencesResponse
     as_of: date
+    kind: Literal["all", "upcoming", "expired", "vacant"] = "all"
+    counts: CrmRenewalLeadCounts = Field(default_factory=CrmRenewalLeadCounts)
 
 
 class CrmRenewalsResponse(BaseModel):

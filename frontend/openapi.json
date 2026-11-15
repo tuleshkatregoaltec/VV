@@ -4494,7 +4494,7 @@
 			"get": {
 				"tags": ["crm", "crm"],
 				"summary": "Crm Renewal Leads",
-				"description": "Return lease-expiry leads in the current agent's areas and windows.\n\nkind=vacant: units whose lease ended with no later lease registered (Leads \u203a Vacant units).\nkind=upcoming: leases still running (the Inbox).",
+				"description": "Return one page of lease-expiry leads in the current agent's areas and windows.\n\nNo kind: leases still running first (soonest end on top), then ended ones (most recent\nfirst). kind=upcoming: leases still running. kind=expired: leases that ended inside the\nlook-back window. kind=vacant: ended with no later lease registered for the exact unit.\n`total` counts the requested kind across all pages; `counts` covers the whole window.",
 				"operationId": "crm-crm_renewal_leads",
 				"parameters": [
 					{
@@ -4505,7 +4505,7 @@
 							"anyOf": [
 								{
 									"type": "string",
-									"pattern": "^(vacant|upcoming)$"
+									"pattern": "^(vacant|upcoming|expired)$"
 								},
 								{
 									"type": "null"
@@ -17779,6 +17779,11 @@
 							}
 						],
 						"title": "Total Property Count"
+					},
+					"properties_truncated": {
+						"type": "boolean",
+						"title": "Properties Truncated",
+						"default": false
 					}
 				},
 				"type": "object",
@@ -18199,10 +18204,21 @@
 						"type": "integer",
 						"title": "Multi Property Owners",
 						"default": 0
+					},
+					"unfiled_profiles": {
+						"type": "integer",
+						"title": "Unfiled Profiles",
+						"default": 0
+					},
+					"folder_overlap": {
+						"type": "integer",
+						"title": "Folder Overlap",
+						"default": 0
 					}
 				},
 				"type": "object",
-				"title": "CrmOwnerRegistrySummary"
+				"title": "CrmOwnerRegistrySummary",
+				"description": "Folder counts. Folders overlap (an owner can be in Registry and Prior owners), and some\nowners are in no folder, so All = rental + registry + prior - folder_overlap + unfiled."
 			},
 			"CrmOwnerSourceReference": {
 				"properties": {
@@ -18683,6 +18699,33 @@
 				"required": ["lead"],
 				"title": "CrmRenewalLead"
 			},
+			"CrmRenewalLeadCounts": {
+				"properties": {
+					"all": {
+						"type": "integer",
+						"title": "All",
+						"default": 0
+					},
+					"upcoming": {
+						"type": "integer",
+						"title": "Upcoming",
+						"default": 0
+					},
+					"expired": {
+						"type": "integer",
+						"title": "Expired",
+						"default": 0
+					},
+					"vacant": {
+						"type": "integer",
+						"title": "Vacant",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"title": "CrmRenewalLeadCounts",
+				"description": "Lead units in the agent's whole window, whichever page or kind was asked for."
+			},
 			"CrmRenewalLeadsResponse": {
 				"properties": {
 					"items": {
@@ -18715,6 +18758,15 @@
 						"type": "string",
 						"format": "date",
 						"title": "As Of"
+					},
+					"kind": {
+						"type": "string",
+						"enum": ["all", "upcoming", "expired", "vacant"],
+						"title": "Kind",
+						"default": "all"
+					},
+					"counts": {
+						"$ref": "#/components/schemas/CrmRenewalLeadCounts"
 					}
 				},
 				"type": "object",
@@ -22512,7 +22564,8 @@
 					"assigned_user_id": {
 						"anyOf": [
 							{
-								"type": "string"
+								"type": "string",
+								"maxLength": 64
 							},
 							{
 								"type": "null"
@@ -22917,7 +22970,8 @@
 					"assigned_user_id": {
 						"anyOf": [
 							{
-								"type": "string"
+								"type": "string",
+								"maxLength": 64
 							},
 							{
 								"type": "null"

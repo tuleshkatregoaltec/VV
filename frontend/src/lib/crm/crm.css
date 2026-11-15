@@ -1848,6 +1848,12 @@
 			border-radius: 50%;
 			background: var(--c, var(--l-own));
 		}
+		.leasepager {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 8px 12px;
+		}
 		.boardhead {
 			display: flex;
 			flex-wrap: wrap;

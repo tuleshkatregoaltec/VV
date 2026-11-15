@@ -293,28 +293,30 @@ def assessed_profiles(
 def owner_registry_summary(
     profiles: list[CrmOwnerProfile],
 ) -> CrmOwnerRegistrySummary:
+    def folders(profile: CrmOwnerProfile) -> tuple[bool, bool, bool]:
+        rental = profile.contact_ready_count > 0
+        registry = not profile.properties or any(
+            not property_contact_ready(item, profile) and item.ownership_status != "former_owner"
+            for item in profile.properties
+        )
+        prior = not profile.developer_side_seller and any(
+            item.ownership_status == "former_owner" for item in profile.properties
+        )
+        return rental, registry, prior
+
+    memberships = [folders(profile) for profile in profiles]
     return CrmOwnerRegistrySummary(
-        rental_owner_profiles=sum(profile.contact_ready_count > 0 for profile in profiles),
-        registry_owner_profiles=sum(
-            not profile.properties
-            or any(
-                not property_contact_ready(item, profile)
-                and item.ownership_status != "former_owner"
-                for item in profile.properties
-            )
-            for profile in profiles
-        ),
-        prior_owner_profiles=sum(
-            not profile.developer_side_seller
-            and any(item.ownership_status == "former_owner" for item in profile.properties)
-            for profile in profiles
-        ),
+        rental_owner_profiles=sum(rental for rental, _, _ in memberships),
+        registry_owner_profiles=sum(registry for _, registry, _ in memberships),
+        prior_owner_profiles=sum(prior for _, _, prior in memberships),
         needs_review_profiles=sum(
             bool(profile.history_summary and profile.history_summary.invalid_identity_source_count)
             or any(item.ownership_status in REVIEW_OWNER_STATUSES for item in profile.properties)
             for profile in profiles
         ),
         multi_property_owners=sum(profile.property_count > 1 for profile in profiles),
+        unfiled_profiles=sum(not any(member) for member in memberships),
+        folder_overlap=sum(max(sum(member) - 1, 0) for member in memberships),
     )
 
 

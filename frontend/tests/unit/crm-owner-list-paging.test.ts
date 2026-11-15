@@ -52,6 +52,19 @@ describe('listOwners paging', () => {
 		expect(res.pageFiltered).toBe(true)
 	})
 
+	it('counts every unit of an owner whose list row carries only some properties', async () => {
+		const many = {
+			...owner('c'),
+			property_count: 300,
+			total_property_count: 300,
+			properties_truncated: true,
+			properties: [{ property_key: 'p1', ownership_status: 'verified_current_owner' }]
+		}
+		mockBackend(1, [many as never])
+		const res = await listOwners({ tab: 'all', offset: 0, units: '3' })
+		expect(res.items.map((r) => r.id)).toEqual(['c'])
+	})
+
 	it('starts at the first page when no offset is given', async () => {
 		const get = mockBackend(10)
 		await listOwners({ tab: 'all' })

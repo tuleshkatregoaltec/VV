@@ -3356,6 +3356,10 @@ export type CrmOwnerProfile = {
      * Total Property Count
      */
     total_property_count?: number | null;
+    /**
+     * Properties Truncated
+     */
+    properties_truncated?: boolean;
 };
 
 /**
@@ -3531,6 +3535,9 @@ export type CrmOwnerRegistryResponse = {
 
 /**
  * CrmOwnerRegistrySummary
+ *
+ * Folder counts. Folders overlap (an owner can be in Registry and Prior owners), and some
+ * owners are in no folder, so All = rental + registry + prior - folder_overlap + unfiled.
  */
 export type CrmOwnerRegistrySummary = {
     /**
@@ -3553,6 +3560,14 @@ export type CrmOwnerRegistrySummary = {
      * Multi Property Owners
      */
     multi_property_owners?: number;
+    /**
+     * Unfiled Profiles
+     */
+    unfiled_profiles?: number;
+    /**
+     * Folder Overlap
+     */
+    folder_overlap?: number;
 };
 
 /**
@@ -3825,6 +3840,30 @@ export type CrmRenewalLead = {
 };
 
 /**
+ * CrmRenewalLeadCounts
+ *
+ * Lead units in the agent's whole window, whichever page or kind was asked for.
+ */
+export type CrmRenewalLeadCounts = {
+    /**
+     * All
+     */
+    all?: number;
+    /**
+     * Upcoming
+     */
+    upcoming?: number;
+    /**
+     * Expired
+     */
+    expired?: number;
+    /**
+     * Vacant
+     */
+    vacant?: number;
+};
+
+/**
  * CrmRenewalLeadsResponse
  */
 export type CrmRenewalLeadsResponse = {
@@ -3853,6 +3892,11 @@ export type CrmRenewalLeadsResponse = {
      * As Of
      */
     as_of: string;
+    /**
+     * Kind
+     */
+    kind?: 'all' | 'upcoming' | 'expired' | 'vacant';
+    counts?: CrmRenewalLeadCounts;
 };
 
 /**
