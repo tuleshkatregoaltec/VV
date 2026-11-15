@@ -165,7 +165,8 @@ async def test_saved_aliases_and_detail_stay_live_even_when_base_is_enabled(monk
     await opportunity_queries.fetch_lead({"lead_id": "latest-event"})
     assert all(BASE_TABLE not in sql for sql in calls)
     assert "FROM identified_unit AS i" in calls[0]
-    assert all("FROM dxbi_rental_unit_candidates AS c FINAL" in sql for sql in calls)
+    # Live ranking over the leases that can share the requested units (never the base table).
+    assert all("FROM dxbi_rental_unit_candidates AS c2 FINAL" in sql for sql in calls)
 
 
 async def test_saved_join_qualification_preserves_the_lead_projection(monkeypatch):

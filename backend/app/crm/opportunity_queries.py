@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from crm_rental_sql import AREA_LEAD_CTE, LIVE_LEAD_CTE
+from crm_rental_sql import AREA_LEAD_CTE, CANDIDATE_SOURCE, LIVE_LEAD_CTE
 
 from app.clickhouse.client import ClientDisconnected, query, run_cancellable
 from app.crm.rental_base import lead_cte
@@ -163,6 +163,65 @@ async def _query_with_legacy_rentals(
 
 
 _LEAD_CTE = LIVE_LEAD_CTE
+
+
+def _narrowed_lead_cte(selector: str) -> str:
+    """The canonical lead CTE over only the leases that can share a target lease's unit.
+
+    `selector` is a condition on `c2` (dxbi_rental_unit_candidates FINAL) picking the target
+    leases. The ranking partitions by property identity, which is either the lease's own
+    candidate key or a building/area plus its upper-cased unit number. Every lease that can
+    share a target's identity therefore has the target's candidate key or its unit number
+    (its own, or the matched sale's when it has none), so ranking that superset gives the
+    target rows exactly what ranking all of Dubai gives them, for a few thousand rows.
+    """
+    units = f"""
+        SELECT upperUTF8(coalesce(nullIf(c2.unit_number, ''), m2.unit_number)) AS unit
+        FROM dxbi_rental_unit_candidates AS c2 FINAL
+        LEFT JOIN dxbi_rental_sale_matches AS m2 FINAL
+            ON m2.unit_candidate_key = c2.unit_candidate_key
+        WHERE {selector}
+    """
+    source = f"""FROM (
+        SELECT *, event_key
+        FROM dxbi_rental_unit_candidates FINAL
+        WHERE
+            unit_candidate_key IN (
+                SELECT c2.unit_candidate_key
+                FROM dxbi_rental_unit_candidates AS c2 FINAL
+                WHERE {selector}
+            )
+            OR upperUTF8(unit_number) IN (SELECT unit FROM ({units}) WHERE unit != '')
+            OR unit_candidate_key IN (
+                SELECT unit_candidate_key
+                FROM dxbi_rental_sale_matches FINAL
+                WHERE upperUTF8(unit_number) IN (SELECT unit FROM ({units}) WHERE unit != '')
+            )
+    ) AS c"""
+    return LIVE_LEAD_CTE.replace(CANDIDATE_SOURCE, source)
+
+
+_LEAD_BY_EVENT_CTE = _narrowed_lead_cte("c2.event_key = {lead_id:String}")
+_LEADS_BY_EVENTS_CTE = _narrowed_lead_cte("c2.event_key IN {event_keys:Array(String)}")
+_LEADS_BY_CANDIDATES_CTE = _narrowed_lead_cte(
+    "c2.unit_candidate_key IN {candidate_keys:Array(String)}"
+)
+
+
+async def fetch_leads_by_event_keys(anchor, *, expired_days, event_keys):
+    """Full lead rows for one page of event keys, in the page's order (missing keys skipped)."""
+    if not event_keys:
+        return []
+    rows = await query(
+        _LEADS_BY_EVENTS_CTE + " SELECT * FROM leads WHERE event_key IN {event_keys:Array(String)}",
+        {
+            "as_of": anchor.isoformat(),
+            "expired_days": expired_days,
+            "event_keys": list(event_keys),
+        },
+    )
+    by_key = {str(row["event_key"]): row for row in rows}
+    return [by_key[key] for key in event_keys if key in by_key]
 
 
 def _where_clause(
@@ -623,7 +682,8 @@ async def fetch_renewal_areas(anchor):
 
 async def fetch_lead(parameters):
     return await _query_with_legacy_rentals(
-        _LEAD_CTE + " SELECT * FROM leads WHERE event_key = {lead_id:String} LIMIT 1", parameters
+        _LEAD_BY_EVENT_CTE + " SELECT * FROM leads WHERE event_key = {lead_id:String} LIMIT 1",
+        parameters,
     )
 
 
@@ -709,7 +769,7 @@ async def fetch_candidate_key(parameters):
 
 async def fetch_saved_leads(parameters):
     rows = await _query_with_legacy_rentals(
-        _LEAD_CTE
+        _LEADS_BY_CANDIDATES_CTE
         + """
         SELECT
             i.unit_candidate_key AS saved_candidate_key,
