@@ -584,7 +584,8 @@ async def refresh_inbound_matches(
     listing_last_refresh, listing_fresh = await get_inventory_freshness()
     offplan_last_refresh = await get_catalog_freshness()
 
-    if listing_last_refresh and enquiry.intent in {"buy", "rent"}:
+    # A stale portal snapshot (months old) is not suggested: its listings may be long gone.
+    if listing_last_refresh and listing_fresh and enquiry.intent in {"buy", "rent"}:
         requested_locations = _locations(criteria)
         band = _listing_budget_band(criteria)
         listings = await list_listings_from_clickhouse(
@@ -610,12 +611,7 @@ async def refresh_inbound_matches(
                 score=score,
                 title=listing.title,
                 subtitle=_listing_subtitle(listing),
-                reasons=[
-                    *reasons,
-                    "Fresh active listing"
-                    if listing_fresh
-                    else "Listing catalog candidate; availability requires confirmation",
-                ],
+                reasons=[*reasons, "Fresh active listing"],
                 breakdown=breakdown,
                 snapshot=listing.model_dump(mode="json"),
             )
@@ -688,25 +684,7 @@ async def refresh_inbound_matches(
     await match_repository.mark_algorithm_version(db, enquiry_id, _ALGORITHM_VERSION)
     await db.commit()
     stored = await match_repository.list_matches_by_score(db, enquiry_id)
-    lanes: dict[str, list[InboundMatchResponse]] = {
-        "company": [],
-        "owners": [],
-        "units": [],
-        "listings": [],
-        "offplan": [],
-        "demand": [],
-    }
-    lane_names = {
-        "company": "company",
-        "owner": "owners",
-        "unit": "units",
-        "listing": "listings",
-        "project": "offplan",
-        "demand": "demand",
-    }
-    for item in stored:
-        if item.state not in {"dismissed", "stale"}:
-            lanes[lane_names[item.target_type]].append(_match_response(item))
+    lanes = _visible_lanes(stored, listing_fresh=listing_fresh)
     return InboundMatchesResponse(
         enquiry_id=enquiry_id,
         listing_fresh=listing_fresh,
@@ -715,6 +693,29 @@ async def refresh_inbound_matches(
         offplan_last_refresh=offplan_last_refresh,
         lanes=lanes,
     )
+
+
+_LANE_NAMES = {
+    "company": "company",
+    "owner": "owners",
+    "unit": "units",
+    "listing": "listings",
+    "project": "offplan",
+    "demand": "demand",
+}
+
+
+def _visible_lanes(items, *, listing_fresh: bool) -> dict[str, list[InboundMatchResponse]]:
+    """Matches shown per lane. Without a fresh listing catalog, portal listings show only once
+    an agent saved or contacted them; suggestions from an old snapshot stay hidden."""
+    lanes: dict[str, list[InboundMatchResponse]] = {lane: [] for lane in _LANE_NAMES.values()}
+    for item in items:
+        if item.state in {"dismissed", "stale"}:
+            continue
+        if item.target_type == "listing" and not listing_fresh and item.state == "suggested":
+            continue
+        lanes[_LANE_NAMES[item.target_type]].append(_match_response(item))
+    return lanes
 
 
 async def get_inbound_matches(
@@ -747,25 +748,7 @@ async def get_inbound_matches(
         )
     listing_last_refresh, listing_fresh = await get_inventory_freshness()
     offplan_last_refresh = await get_catalog_freshness()
-    lanes: dict[str, list[InboundMatchResponse]] = {
-        "company": [],
-        "owners": [],
-        "units": [],
-        "listings": [],
-        "offplan": [],
-        "demand": [],
-    }
-    lane_names = {
-        "company": "company",
-        "owner": "owners",
-        "unit": "units",
-        "listing": "listings",
-        "project": "offplan",
-        "demand": "demand",
-    }
-    for item in items:
-        if item.state not in {"dismissed", "stale"}:
-            lanes[lane_names[item.target_type]].append(_match_response(item))
+    lanes = _visible_lanes(items, listing_fresh=listing_fresh)
     return InboundMatchesResponse(
         enquiry_id=enquiry_id,
         listing_fresh=listing_fresh,
