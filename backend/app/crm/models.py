@@ -1,10 +1,13 @@
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import DateTime, ForeignKey, Text, UniqueConstraint
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
+
+# ClickHouse Date's zero value, which a left join gives a lease with no matched sale.
+_ZERO_DATE = date(1970, 1, 1)
 
 LeadStatus = Literal["expired", "expiring_30", "expiring_60", "expiring_90"]
 LeadPriority = Literal["urgent", "high", "medium"]
@@ -78,6 +81,14 @@ class CrmLead(BaseModel):
     recommended_action: str
     sale_conversation: bool
     source: str = "Transaction registry"
+
+    @field_validator("last_purchase_date", "identity_sale_date", mode="before")
+    @classmethod
+    def _no_zero_date(cls, value: Any) -> Any:
+        """A lease without a matched sale reads Date's zero value (1970-01-01): no date."""
+        if value in (_ZERO_DATE, _ZERO_DATE.isoformat()):
+            return None
+        return value
 
 
 class CrmBreakdownItem(BaseModel):
