@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.analytics.dxbi import SALES_SOURCE
 from app.clickhouse.client import query
 from app.plots.models import (
     Usage,
@@ -125,14 +126,26 @@ async def fetch_plot_details(parameters):
     )
 
 
+# Plot sales: DXBI's listed sales (the Analytics records, price floor included). DLD's register
+# (ch_transactions) holds no DLD plot sale after 2026-10-14, and DXBI's plot sales there carry no
+# DLD procedure. A DXBI sale is a market sale, so no procedure filter applies; DXBI names no land
+# use, so a usage request finds no rows and the evidence falls back to every plot sale, as it did
+# for a usage DLD did not record. A plot's area is its sale's size (m²).
+_PLOT_SALES = f"""(
+    SELECT transaction_id, instance_date, area_name_en, location_name, project_name_en,
+           '' AS procedure_name_en, property_usage_en, size_sqm AS procedure_area,
+           actual_worth, CAST(NULL AS Nullable(String)) AS nearest_landmark
+    FROM {SALES_SOURCE}
+    WHERE property_type = 'Plot'
+)"""
+
+
 async def fetch_land_sale_evidence(*, area_name, days, limit, plot_area_sqm, usage):
     base_where = [
-        "trans_group_en = 'Sales'",
-        # DLD registers off-plan villas against their land ('Land'); the uniform type keeps plots.
-        "property_type = 'Plot'",
         "actual_worth > 0",
         "procedure_area > 0",
-        "lower(area_name_en) = lower({area_name:String})",
+        "(lower(area_name_en) = lower({area_name:String})"
+        " OR lower(location_name) = lower({area_name:String}))",
         "instance_date >= today() - {days:Int32}",
     ]
     if plot_area_sqm and plot_area_sqm > 0:
@@ -166,8 +179,8 @@ async def fetch_land_sale_evidence(*, area_name, days, limit, plot_area_sqm, usa
             round(toFloat64(procedure_area), 1) AS plot_area_sqm,
             toFloat64(actual_worth) AS price_aed,
             round(toFloat64(actual_worth) / greatest(toFloat64(procedure_area), 1), 0) AS price_sqm,
-            nullIf(nearest_landmark_en, '') AS nearest_landmark
-        FROM ch_transactions
+            nearest_landmark
+        FROM {_PLOT_SALES}
         WHERE {" AND ".join(where)}
         ORDER BY
             instance_date DESC,
@@ -188,18 +201,12 @@ DDA_VALUATION_LOOKBACK_DAYS = 365 * 5
 
 DDA_VALUATION_MIN_TRANSACTION_AED = 1_000_000
 
-DDA_VALUATION_MARKET_PROCEDURES = (
-    "Sell",
-    "Delayed Sell",
-    "Sale On Payment Plan",
-)
-
 
 async def _dda_land_transaction_rows(communities: set[str]) -> list[dict[str, Any]]:
     if not communities:
         return []
     return await query(
-        """
+        f"""
         SELECT
             transaction_id,
             instance_date,
@@ -209,20 +216,17 @@ async def _dda_land_transaction_rows(communities: set[str]) -> list[dict[str, An
             procedure_name_en,
             toFloat64(procedure_area) AS plot_area_sqm,
             toFloat64(actual_worth) AS price_aed
-        FROM ch_transactions
-        WHERE trans_group_en = 'Sales'
-          AND property_type = 'Plot'
-          AND actual_worth > {min_transaction_aed:Float64}
+        FROM {_PLOT_SALES}
+        WHERE actual_worth > {{min_transaction_aed:Float64}}
           AND procedure_area > 0
-          AND instance_date >= today() - {lookback_days:Int32}
-          AND has({communities:Array(String)}, lowerUTF8(area_name_en))
-          AND has({procedures:Array(String)}, procedure_name_en)
+          AND instance_date >= today() - {{lookback_days:Int32}}
+          AND (has({{communities:Array(String)}}, lowerUTF8(area_name_en))
+               OR has({{communities:Array(String)}}, lowerUTF8(location_name)))
         ORDER BY instance_date DESC
         LIMIT 100000
         """,
         {
             "communities": sorted(communities),
-            "procedures": list(DDA_VALUATION_MARKET_PROCEDURES),
             "lookback_days": DDA_VALUATION_LOOKBACK_DAYS,
             "min_transaction_aed": DDA_VALUATION_MIN_TRANSACTION_AED,
         },

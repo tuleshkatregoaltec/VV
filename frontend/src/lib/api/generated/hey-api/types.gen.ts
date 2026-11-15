@@ -333,6 +333,10 @@ export type AnalyticsResponse = {
      * Property Usage
      */
     property_usage: string;
+    /**
+     * Market Type
+     */
+    market_type?: string | null;
     summary: AnalyticsSummary;
     /**
      * Trends
@@ -386,6 +390,10 @@ export type AnalyticsSummary = {
      * Max Price
      */
     max_price: number;
+    /**
+     * Median Price
+     */
+    median_price?: number | null;
     /**
      * Volume Change Pct
      */
@@ -8117,6 +8125,12 @@ export type MarketTrendPoint = {
      * Avg Price Sqft
      */
     avg_price_sqft?: number | null;
+    /**
+     * Partial
+     *
+     * The day, week or month is cut by the requested period: not a whole one
+     */
+    partial?: boolean;
 };
 
 /**
@@ -9485,6 +9499,14 @@ export type ProjectForecastPoint = {
  */
 export type ProjectForecastResponse = {
     /**
+     * Available
+     */
+    available?: boolean;
+    /**
+     * Unavailable Reason
+     */
+    unavailable_reason?: string | null;
+    /**
      * Data
      */
     data: Array<ProjectForecastPoint>;
@@ -9656,6 +9678,12 @@ export type ProjectPipelineResponse = {
      * Developer Name
      */
     developer_name?: string | null;
+    /**
+     * Basis
+     *
+     * Which projects the pipeline counts, and from which register
+     */
+    basis?: string | null;
     /**
      * Data
      */
@@ -10922,6 +10950,10 @@ export type RentalSummary = {
      */
     max_annual_rent: number;
     /**
+     * Median Annual Rent
+     */
+    median_annual_rent?: number | null;
+    /**
      * Value Change Pct
      */
     value_change_pct?: number | null;
@@ -11955,6 +11987,12 @@ export type TrendPoint = {
      * Avg Sqft
      */
     avg_sqft: number;
+    /**
+     * Partial
+     *
+     * The day, week or month is cut by the requested period: not a whole one
+     */
+    partial?: boolean;
 };
 
 /**
@@ -17439,10 +17477,25 @@ export type UploadUploadNewsArticleResponse = UploadUploadNewsArticleResponses[k
 
 export type UploadHealthData = {
     body?: never;
+    headers: {
+        /**
+         * X-Api-Key
+         */
+        'x-api-key': string;
+    };
     path?: never;
     query?: never;
     url: '/api/v1/upload/health';
 };
+
+export type UploadHealthErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadHealthError = UploadHealthErrors[keyof UploadHealthErrors];
 
 export type UploadHealthResponses = {
     /**

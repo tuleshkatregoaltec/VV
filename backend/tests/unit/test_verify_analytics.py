@@ -370,3 +370,82 @@ def test_expected_values_never_read_the_stale_combined_layer():
         assert "ch_rent_contracts" not in sql
     assert "dxbi_sales_listed" in v.SALES_SQL
     assert "dxbi_leases_listed" in v.LEASES_SQL
+
+
+# -- price floors, trends, breakdowns and market metrics (2026-11-15) -------------------------
+def test_expected_rows_apply_the_api_price_floors():
+    """Sales under AED 50,000 and rents under AED 1,000 a year are not Analytics records."""
+    assert "sale_amount_aed >= 50000" in v.SALES_SQL
+    assert "sale_amount_aed >= 50000" in v.DUBAI_SALES_SQL
+    assert "annual_rent_aed >= 1000 AND lease_end > lease_start" in v.LEASES_SQL
+    assert "annual_rent_aed >= 1000 AND lease_end > lease_start" in v.DUBAI_LEASES_SQL
+
+
+def _sales_body(today=TODAY):
+    """What the API answers for two sales yesterday (Saturday 14 Nov) and one in the prior 30."""
+    return {
+        "summary": {"transaction_count": 2, "total_volume": 4_000_000.0,
+                    "count_change_pct": 100.0, "volume_change_pct": 166.7},
+        "trends": [{"date": "2026-11-14", "count": 2, "total_value": 4_000_000.0,
+                    "avg_value": 2_000_000.0, "avg_sqft": 1750.0, "partial": False}],
+        "by_property_type": [{"dimension_value": "Apartment", "transaction_count": 2,
+                              "total_volume": 4_000_000.0, "avg_price_sqft": 1750.0,
+                              "pct_of_total": 100.0}],
+        "by_rooms": [{"dimension_value": "2 B/R", "transaction_count": 1, "total_volume": 1.5e6,
+                      "avg_price_sqft": 1500.0, "pct_of_total": 50.0},
+                     {"dimension_value": "Not recorded", "transaction_count": 1,
+                      "total_volume": 2.5e6, "avg_price_sqft": 2000.0, "pct_of_total": 50.0}],
+        "by_reg_type": [{"dimension_value": "Existing Properties", "transaction_count": 2,
+                         "total_volume": 4e6, "avg_price_sqft": 1750.0, "pct_of_total": 100.0}],
+        "by_master_project": [{"dimension_value": "Business Bay", "transaction_count": 2,
+                               "total_volume": 4e6, "avg_price_sqft": 1750.0,
+                               "pct_of_total": 100.0}],
+    }  # fmt: skip
+
+
+def _breakdown_verifier():
+    verifier = v.Verifier("http://api", "t", today=TODAY)
+    verifier.sales = sales_frame(
+        sale(),
+        sale(sale_amount_aed=2_500_000, size_sqft=1250.0, bedrooms=""),
+        sale(transaction_date=TODAY - timedelta(days=40), sale_amount_aed=1_500_000),
+    )
+    return verifier
+
+
+def test_sales_trend_breakdowns_and_changes_pass_when_the_api_matches():
+    verifier = _breakdown_verifier()
+    verifier.api = FakeApi({"analytics/sales": _sales_body()})
+    verifier.compare_sales_breakdowns(30)
+    assert verifier.failures == []
+    assert verifier.checks > 20
+
+
+def test_sales_breakdowns_fail_when_the_api_answers_them_empty():
+    """The stub the API used to be: trends and every breakdown [], changes null."""
+    verifier = _breakdown_verifier()
+    body = _sales_body()
+    body.update(trends=[], by_property_type=[], by_rooms=[], by_reg_type=[], by_master_project=[])
+    body["summary"].update(count_change_pct=None, volume_change_pct=None)
+    verifier.api = FakeApi({"analytics/sales": body})
+    verifier.compare_sales_breakdowns(30)
+    assert any("trend" in failure for failure in verifier.failures)
+    assert any("by_rooms" in failure for failure in verifier.failures)
+    assert any("change" in failure for failure in verifier.failures)
+
+
+def test_market_metrics_must_equal_the_listed_rows_and_the_sales_page():
+    verifier = _breakdown_verifier()
+    metrics = {
+        "total": {"count": 2, "values": {"mean_aed": 2_000_000.0, "total_aed": 4_000_000.0}},
+        "coverage": {"data_from": "2014-01-02", "data_to": "2026-11-14"},
+        "release_id": "dxbi-20261115040727",
+    }
+    verifier.api = FakeApi({"analytics/sales": summary(2, 4e6, 2e6, 1.5e6, 2.5e6, 1750.0)})
+    verifier.api_post = FakeApi({"analytics/market-metrics": metrics})
+    verifier.compare_market_metrics("sales", 30)
+    assert verifier.failures == []
+
+    metrics["total"]["count"] = 3  # the combined DLD layer's count
+    verifier.compare_market_metrics("sales", 30)
+    assert any("market-metrics" in failure and "count" in failure for failure in verifier.failures)

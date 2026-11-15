@@ -18,7 +18,9 @@ class AnalyticsSummary(BaseModel):
     avg_price_sqft: float
     min_price: float
     max_price: float
-    volume_change_pct: Optional[float] = None  # % change vs previous period
+    median_price: Optional[float] = None
+    # % change against the equal period just before (None when that period has no sales).
+    volume_change_pct: Optional[float] = None
     count_change_pct: Optional[float] = None
 
 
@@ -31,6 +33,7 @@ class RentalSummary(BaseModel):
     avg_rent_sqft: float
     min_annual_rent: float
     max_annual_rent: float
+    median_annual_rent: Optional[float] = None
     value_change_pct: Optional[float] = None
     count_change_pct: Optional[float] = None
 
@@ -63,13 +66,19 @@ class TrendPoint(BaseModel):
     total_value: float
     avg_value: float
     avg_sqft: float
+    partial: bool = Field(
+        default=False,
+        description="The day, week or month is cut by the requested period: not a whole one",
+    )
 
 
 class AnalyticsResponse(BaseModel):
     """Complete analytics response for dashboard"""
 
     timeframe_days: int
+    # The usage the records are of: a market type's own usage when one is requested.
     property_usage: str
+    market_type: Optional[str] = None
     summary: AnalyticsSummary
     trends: list[TrendPoint]
     by_property_type: list[DimensionBreakdown]
@@ -97,6 +106,10 @@ class MarketTrendPoint(BaseModel):
     avg_price: float
     # None when no sale in the period has a size (whole buildings, for example).
     avg_price_sqft: Optional[float] = None
+    partial: bool = Field(
+        default=False,
+        description="The day, week or month is cut by the requested period: not a whole one",
+    )
 
 
 class MarketTrendResponse(BaseModel):
@@ -291,6 +304,9 @@ class ProjectForecastPoint(BaseModel):
 
 
 class ProjectForecastResponse(BaseModel):
+    # False when no defensible forecast exists: the page says so instead of drawing nothing.
+    available: bool = False
+    unavailable_reason: Optional[str] = None
     data: list[ProjectForecastPoint]
     delivery_date: Optional[date] = None
     source_reg_type: str = "Off-Plan Properties"
@@ -311,7 +327,11 @@ class ProjectPipelineResponse(BaseModel):
     )
     undated_units: int = Field(default=0, description="Uncompleted units without a delivery date")
     area_name: Optional[str] = None
+    # The scope's developer; None for a scope several developers build (a master, the market).
     developer_name: Optional[str] = None
+    basis: Optional[str] = Field(
+        default=None, description="Which projects the pipeline counts, and from which register"
+    )
     data: list[ProjectPipelinePoint]
 
 

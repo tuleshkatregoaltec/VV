@@ -425,8 +425,9 @@ def _rental_property_type(value: Any) -> str | None:
     if not property_type:
         return None
     normalized = property_type.lower()
+    # DXBI's (uniform) type: DLD's "Flat" leases and "Unit" sales are Apartments there.
     if normalized in {"unit", "apartment", "apartments", "flat", "flats"}:
-        return "Flat"
+        return "Apartment"
     if normalized in {"villa", "villas"}:
         return "Villa"
     return property_type
@@ -438,7 +439,7 @@ def _sales_property_type(value: Any) -> str | None:
         return None
     normalized = property_type.lower()
     if normalized in {"unit", "apartment", "apartments", "flat", "flats"}:
-        return "Unit"
+        return "Apartment"
     if normalized in {"villa", "villas"}:
         return "Villa"
     return property_type

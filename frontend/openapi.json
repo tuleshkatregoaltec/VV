@@ -6630,7 +6630,7 @@
 			"put": {
 				"tags": ["organization", "organization"],
 				"summary": "Update Organization",
-				"description": "Update organization settings (organization admin).",
+				"description": "Owners cannot change the seat limit: it follows the paid Stripe quantity.\n\nPlatform admins change it through /api/v1/admin/organizations/{id}.",
 				"operationId": "organization-update_organization",
 				"parameters": [
 					{
@@ -9417,7 +9417,19 @@
 			"get": {
 				"tags": ["upload", "upload"],
 				"summary": "Health",
+				"description": "Service-key-only dependency check. Read-only: no object is written, and failures\nare logged server-side, never echoed to the caller.",
 				"operationId": "upload-health",
+				"parameters": [
+					{
+						"name": "x-api-key",
+						"in": "header",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "X-Api-Key"
+						}
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Successful Response",
@@ -9425,6 +9437,16 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/UploadHealthResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
 								}
 							}
 						}
@@ -12641,6 +12663,17 @@
 						"type": "string",
 						"title": "Property Usage"
 					},
+					"market_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Market Type"
+					},
 					"summary": {
 						"$ref": "#/components/schemas/AnalyticsSummary"
 					},
@@ -12719,6 +12752,17 @@
 					"max_price": {
 						"type": "number",
 						"title": "Max Price"
+					},
+					"median_price": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Price"
 					},
 					"volume_change_pct": {
 						"anyOf": [
@@ -13853,6 +13897,7 @@
 					},
 					"seats": {
 						"type": "integer",
+						"maximum": 1000.0,
 						"minimum": 1.0,
 						"title": "Seats"
 					},
@@ -25904,6 +25949,12 @@
 							}
 						],
 						"title": "Avg Price Sqft"
+					},
+					"partial": {
+						"type": "boolean",
+						"title": "Partial",
+						"description": "The day, week or month is cut by the requested period: not a whole one",
+						"default": false
 					}
 				},
 				"type": "object",
@@ -28089,6 +28140,22 @@
 			},
 			"ProjectForecastResponse": {
 				"properties": {
+					"available": {
+						"type": "boolean",
+						"title": "Available",
+						"default": false
+					},
+					"unavailable_reason": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Unavailable Reason"
+					},
 					"data": {
 						"items": {
 							"$ref": "#/components/schemas/ProjectForecastPoint"
@@ -28397,6 +28464,18 @@
 							}
 						],
 						"title": "Developer Name"
+					},
+					"basis": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Basis",
+						"description": "Which projects the pipeline counts, and from which register"
 					},
 					"data": {
 						"items": {
@@ -30435,6 +30514,17 @@
 						"type": "number",
 						"title": "Max Annual Rent"
 					},
+					"median_annual_rent": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Annual Rent"
+					},
 					"value_change_pct": {
 						"anyOf": [
 							{
@@ -32295,6 +32385,12 @@
 					"avg_sqft": {
 						"type": "number",
 						"title": "Avg Sqft"
+					},
+					"partial": {
+						"type": "boolean",
+						"title": "Partial",
+						"description": "The day, week or month is cut by the requested period: not a whole one",
+						"default": false
 					}
 				},
 				"type": "object",

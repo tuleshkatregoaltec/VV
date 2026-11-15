@@ -15,6 +15,7 @@ import type {
 } from '$lib/api/analytics'
 import StandardDropdown from '$lib/components/dropdowns/StandardDropdown.svelte'
 import { analyticsQueries } from '$lib/queries/analytics'
+import { forecastNote, pipelineBasisNote } from '$lib/utils/analyticsNotes'
 import { getChartTheme } from '$lib/utils/chartTheme'
 import AnalyticsError from './AnalyticsError.svelte'
 import UsageToggle from './UsageToggle.svelte'
@@ -1368,6 +1369,9 @@ onMount(() => {
 						</div>
 					{/if}
 				</div>
+				{#if !isAggregateSelection() && forecastNote(forecast)}
+					<p class="mt-3 text-xs text-fg-3">{forecastNote(forecast)}</p>
+				{/if}
 				{#if shouldShowTrendForecast() && forecast?.delivery_date}
 					<div class="mt-3 flex items-center gap-2 text-xs text-fg-3">
 						<span class="inline-block h-1.5 w-1.5 rounded-full bg-primary-light"></span>
@@ -1703,6 +1707,9 @@ onMount(() => {
 			{#if pipeline}
 				{#if pipeline.reference_date}
 					<p class="mt-2 text-xs text-fg-3">As of {pipeline.reference_date}</p>
+				{/if}
+				{#if pipelineBasisNote(pipeline)}
+					<p class="mt-1 text-xs text-fg-3">{pipelineBasisNote(pipeline)}</p>
 				{/if}
 				{#if pipeline.overdue_units || pipeline.undated_units}
 					<p class="mt-1 text-xs text-fg-3">
