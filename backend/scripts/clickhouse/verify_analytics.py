@@ -1,25 +1,41 @@
-"""Check the Analytics API against the served market tables, independently.
+"""Check the Analytics API against the DXBI listed tables, independently.
 
-The Analytics pages read the combined DXBI + DLD layer (``ch_transactions`` /
-``ch_rent_contracts``). This script reads the last two years of served rows into pandas,
-re-implements each endpoint's rules here rather than importing them, and compares the live API
-with them:
+The Analytics pages read Holocron's DXBI-only listed tables (``dxbi_sales_listed`` /
+``dxbi_leases_listed``, since 2026-10-14), one row per record the Transactions pages list. This
+script reads the last two years of those rows into pandas, re-implements each endpoint's documented
+rules here rather than importing the API's queries, and compares the live API with them:
 
-- /analytics/sales: every period (30-365 days), usage, market type, the busiest communities,
+- /analytics/sales: every period (30-365 days), usage, market type, the busiest masters,
   property types, bedroom counts, registration types, and price and area buckets;
-- /analytics/rentals: every period, usage, the busiest communities, property types, and rent and
-  area buckets;
+- /analytics/rentals: every period, usage, the busiest masters, property types, and rent and area
+  buckets;
 - /analytics/market-trend: every period and market type, point by point, with the change on the
-  previous period;
-- /analytics/project/summary for the whole Dubai market.
+  previous period (average price and median price per sq ft);
+- /analytics/project/summary for the whole Dubai market;
+- the parts add up: every listed record is Residential, Commercial, land or untyped, so the
+  usages, the land market type and the untyped count reconcile with every listed record.
 
-Rules re-implemented: a period is every whole day from today minus N days to today; a bucket is a
-half-open range ('1M-2M' is 1,000,000 up to, not including, 2,000,000; areas in sq ft); a market
-type is a transaction group and uniform property types.
+Rules re-implemented from the API's documentation:
 
-Read-only: one SELECT-only ClickHouse connection and GET requests.
+- DXBI names a property type but no usage: Residential is Apartment, Villa, Townhouse and Hotel
+  Apartment; Commercial is Office, Shop, Show Rooms, Warehouse, Workshop, Clinic, Gymnasium, Hotel,
+  Sized Partition, Building and Commercial. A Plot or an untyped record is in neither (a Plot is the
+  ``land`` market type).
+- A period is every whole day from today minus N days to today, inclusive (the API's own date).
+- A bucket is a half-open range ('1M-2M' is 1,000,000 up to, not including, 2,000,000; areas in
+  sq ft).
+- A market type is a transaction group and property types: residential_units, villas,
+  commercial_units, bulk_building and land. Mortgages and gifts are DLD registrations, not DXBI
+  records: the API answers 422 to them and this script checks that it does.
+- DXBI's own values first, the profile's sourced fill where DXBI left one empty (area, bedrooms,
+  status); a master is DLD's, else DXBI's community; 'any spelling of the master' resolves through
+  ``analytics_master_keys``.
 
-    VERIFY_API_TOKEN=<bearer token> uv run python -m scripts.clickhouse.verify_analytics
+Read-only: one SELECT-only ClickHouse connection and GET requests. Run it from ``backend`` on the
+machine whose date the API uses (the API's "today" is that machine's date):
+
+    VERIFY_API_TOKEN=<bearer token> VERIFY_API_URL=http://localhost:8000 \\
+        python -m scripts.clickhouse.verify_analytics
 """
 
 from __future__ import annotations
@@ -27,37 +43,44 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date, timedelta
 
-import clickhouse_connect
+import numpy as np
 import pandas as pd
-
-from app.config import settings
 
 SQFT_PER_SQM = 10.7639
 PERIODS = (30, 90, 180, 365)
-# A market type: its transaction group and the rows it holds.
+RESIDENTIAL_TYPES = ("Apartment", "Villa", "Townhouse", "Hotel Apartment")
+COMMERCIAL_TYPES = (
+    "Office",
+    "Shop",
+    "Show Rooms",
+    "Warehouse",
+    "Workshop",
+    "Clinic",
+    "Gymnasium",
+    "Hotel",
+    "Sized Partition",
+    "Building",
+    "Commercial",
+)
+# A market type: the rows it holds. Every listed sale is a Sales-group record.
 MARKET_TYPES = {
-    "residential_units": (
-        "Sales",
-        lambda f: (f.property_usage_en == "Residential")
-        & f.property_type.isin(["Apartment", "Hotel Apartment"]),
-    ),
-    "villas": ("Sales", lambda f: f.property_type.isin(["Villa", "Townhouse"])),
-    "commercial_units": (
-        "Sales",
-        lambda f: f.property_usage_en.isin(["Commercial", "Hospitality"])
-        & ~f.property_type.isin(["Villa", "Townhouse", "Plot", "Building", ""]),
-    ),
-    "bulk_building": ("Sales", lambda f: f.property_type == "Building"),
-    "land": ("Sales", lambda f: f.property_type == "Plot"),
-    "mortgages": ("Mortgages", lambda f: f.property_type == f.property_type),
-    "gifts": ("Gifts", lambda f: f.property_type == f.property_type),
+    "residential_units": lambda f: (f.usage == "Residential")
+    & f.property_type.isin(["Apartment", "Hotel Apartment"]),
+    "villas": lambda f: f.property_type.isin(["Villa", "Townhouse"]),
+    "commercial_units": lambda f: f.usage.isin(["Commercial", "Hospitality"])
+    & ~f.property_type.isin(["Villa", "Townhouse", "Plot", "Building", ""]),
+    "bulk_building": lambda f: f.property_type == "Building",
+    "land": lambda f: f.property_type == "Plot",
 }
+# DLD registrations that were once market types and are not DXBI records.
+REJECTED_MARKET_TYPES = ("mortgages", "gifts")
 PRICE_BUCKETS = {
     "<500K": (None, 5e5),
     "500K-1M": (5e5, 1e6),
@@ -77,28 +100,183 @@ AREA_BUCKETS = {
     "2K+": (2000, None),
 }
 
+_RES = "(" + ", ".join(f"'{kind}'" for kind in RESIDENTIAL_TYPES) + ")"
+SALES_SQL = (
+    "SELECT transaction_date, property_type, bedrooms, profile_bedrooms, market_status, "
+    "profile_status, size_sqft, profile_size, sale_amount_aed, price_per_sqft_aed, "
+    "master_key, master_name, area_name FROM dxbi_sales_listed "
+    "WHERE transaction_date >= '{start}'"
+)
+LEASES_SQL = (
+    "SELECT lease_start, property_type, bedrooms, profile_bedrooms, size_sqft, profile_size, "
+    "annual_rent_aed, master_key, master_name, area_name FROM dxbi_leases_listed "
+    "WHERE lease_start >= '{start}'"
+)
+ALIASES_SQL = "SELECT raw_key, master_key FROM analytics_master_keys"
+# The whole market, over all listed history: a residential sale priced above zero.
+_READY = "(market_status = 'Ready' OR (market_status = '' AND profile_status = 'Ready'))"
+DUBAI_SALES_SQL = (
+    "SELECT count(), avg(sale_amount_aed), medianExact(sale_amount_aed), "
+    f"medianExactIf(sale_amount_aed, {_READY}), "
+    "avg(multiIf(price_per_sqft_aed > 0, round(price_per_sqft_aed), size_sqft > 0, "
+    "round(sale_amount_aed / size_sqft), NULL)) "
+    f"FROM dxbi_sales_listed WHERE property_type IN {_RES} AND sale_amount_aed > 0"
+)
+DUBAI_LEASES_SQL = (
+    "SELECT count(), sum(annual_rent_aed), medianExact(annual_rent_aed), "
+    "medianExact(annual_rent_aed / nullIf(multiIf(size_sqft > 0, size_sqft, profile_size > 0, "
+    "profile_size, 0), 0)) "
+    f"FROM dxbi_leases_listed WHERE property_type IN {_RES} AND annual_rent_aed > 0"
+)
+
 
 class Failed(Exception):
     """An API call that did not answer: recorded as a failed check."""
 
 
+# -- the rules, as functions of the rows -------------------------------------------------------
+def name_key(text: str) -> str:
+    """A name's letters and digits, lower case: how the hierarchy matches spellings."""
+    return re.sub(r"[^A-Za-z0-9]", "", text or "").lower()
+
+
+def usage_of(property_type: pd.Series) -> pd.Series:
+    return pd.Series(
+        np.select(
+            [property_type.isin(RESIDENTIAL_TYPES), property_type.isin(COMMERCIAL_TYPES)],
+            ["Residential", "Commercial"],
+            default="",
+        ),
+        index=property_type.index,
+    )
+
+
+def ch_round(values: pd.Series) -> pd.Series:
+    """ClickHouse ``round``: halves go away from zero (numpy rounds them to even)."""
+    return np.sign(values) * np.floor(np.abs(values) + 0.5)
+
+
+def ch_median(values: pd.Series) -> float | None:
+    """ClickHouse ``medianExact``: the n/2-th sorted value, not the mean of the middle two."""
+    ordered = np.sort(values.dropna().to_numpy(dtype=float))
+    return float(ordered[len(ordered) // 2]) if len(ordered) else None
+
+
+def _bedroom_label(text: str) -> str:
+    if text == "Studio":
+        return "Studio"
+    found = re.fullmatch(r"([0-9]+) Beds?", text)
+    return f"{found.group(1)} B/R" if found else ""
+
+
+def _rooms(kind: str, usage: str, bedrooms: str, profile_bedrooms: str) -> str:
+    """Homes by bedroom count; an office or shop has none, so its type is its configuration."""
+    if usage == "Commercial":
+        return "Commercial (type not recorded)" if kind == "Commercial" else kind
+    return _bedroom_label(bedrooms if bedrooms else profile_bedrooms)
+
+
+def _area_sqft(size: pd.Series, profile: pd.Series) -> pd.Series:
+    """DXBI's own area, else the profile's sourced one."""
+    return pd.Series(
+        np.select([size > 0, profile > 0], [size, profile], default=np.nan), index=size.index
+    )
+
+
+def _master_key(raw: pd.DataFrame) -> pd.Series:
+    """DLD's master; where DLD defines none, DXBI's community."""
+    return pd.Series(
+        [key or name_key(area) for key, area in zip(raw.master_key, raw.area_name)],
+        index=raw.index,
+    )
+
+
+def _dates(values: pd.Series) -> pd.Series:
+    return pd.to_datetime(values).dt.date
+
+
+def derive_sales(raw: pd.DataFrame) -> pd.DataFrame:
+    """The listed sales as the Analytics pages value them."""
+    price = raw.sale_amount_aed.astype(float)
+    ppsf = pd.Series(
+        np.select(
+            [raw.price_per_sqft_aed > 0, raw.size_sqft > 0],
+            [ch_round(raw.price_per_sqft_aed), ch_round(price / raw.size_sqft)],
+            default=np.nan,
+        ),
+        index=raw.index,
+    )
+    usage = usage_of(raw.property_type)
+    status = np.select(
+        [
+            (raw.market_status == "Offplan")
+            | ((raw.market_status == "") & (raw.profile_status == "Off-Plan")),
+            (raw.market_status == "Ready")
+            | ((raw.market_status == "") & (raw.profile_status == "Ready")),
+        ],
+        ["Off-Plan Properties", "Existing Properties"],
+        default="",
+    )
+    return pd.DataFrame(
+        {
+            "d": _dates(raw.transaction_date),
+            "property_type": raw.property_type,
+            "usage": usage,
+            "price": price,
+            "sqft": _area_sqft(raw.size_sqft, raw.profile_size),
+            "ppsf": ppsf,
+            "rooms": [
+                _rooms(*row)
+                for row in zip(raw.property_type, usage, raw.bedrooms, raw.profile_bedrooms)
+            ],
+            "reg_type": status,
+            "master_key": _master_key(raw),
+            "master_name": raw.master_name,
+        }
+    )
+
+
+def derive_leases(raw: pd.DataFrame) -> pd.DataFrame:
+    """The listed leases as the Analytics pages value them."""
+    return pd.DataFrame(
+        {
+            "d": _dates(raw.lease_start),
+            "property_type": raw.property_type,
+            "usage": usage_of(raw.property_type),
+            "rent": raw.annual_rent_aed.astype(float),
+            "sqft": _area_sqft(raw.size_sqft, raw.profile_size),
+            "master_key": _master_key(raw),
+            "master_name": raw.master_name,
+        }
+    )
+
+
+def period_start(day: date, days: int) -> date:
+    """The trend point a day falls in: a day, a week from Sunday, or a month."""
+    if days <= 30:
+        return day
+    if days <= 180:
+        return day - timedelta(days=(day.weekday() + 1) % 7)
+    return day.replace(day=1)
+
+
+def area_sqft_as_stored(sqft: pd.Series) -> pd.Series:
+    """The API stores the area in sq m and multiplies back, so a bucket edge sees that float."""
+    return (sqft / SQFT_PER_SQM) * SQFT_PER_SQM
+
+
 class Verifier:
-    def __init__(self, api_url: str, token: str) -> None:
+    def __init__(self, api_url: str, token: str, today: date | None = None) -> None:
         self.api_url = api_url.rstrip("/") + "/api/v1"
         self.token = token
-        self.today = date.today()
+        self.today = today or date.today()
         self.checks = 0
         self.failures: list[str] = []
-        self.ch = clickhouse_connect.get_client(
-            host=settings.CLICKHOUSE_HOST,
-            port=settings.CLICKHOUSE_PORT,
-            username=settings.CLICKHOUSE_USER,
-            password=settings.CLICKHOUSE_PASSWORD,
-            database=settings.CLICKHOUSE_DATABASE,
-            secure=settings.CLICKHOUSE_SECURE,
-            send_receive_timeout=900,
-            settings={"readonly": 1},
-        )
+        self.notes: dict[str, int] = {}
+        self.aliases: dict[str, list[str]] = {}
+        self.sales = pd.DataFrame()
+        self.rents = pd.DataFrame()
+        self.ch = None
 
     # -- plumbing ----------------------------------------------------------------------------
     def check(self, ok: bool, message: str) -> None:
@@ -129,24 +307,34 @@ class Verifier:
         except urllib.error.HTTPError as error:
             raise Failed(f"{path} {params}: HTTP {error.code}") from error
 
-    # -- served rows -------------------------------------------------------------------------
+    # -- listed rows -------------------------------------------------------------------------
+    def connect(self) -> None:
+        import clickhouse_connect
+
+        from app.config import settings
+
+        self.ch = clickhouse_connect.get_client(
+            host=settings.CLICKHOUSE_HOST,
+            port=settings.CLICKHOUSE_PORT,
+            username=settings.CLICKHOUSE_USER,
+            password=settings.CLICKHOUSE_PASSWORD,
+            database=settings.CLICKHOUSE_DATABASE,
+            secure=settings.CLICKHOUSE_SECURE,
+            send_receive_timeout=900,
+            settings={"readonly": 1},
+        )
+
     def load(self) -> None:
+        self.connect()
+        # The trend compares a period with the equal one before it: two years back, plus a day.
         start = self.today - timedelta(days=2 * max(PERIODS) + 2)
-        self.sales = self.ch.query_df(
-            "SELECT toDate(instance_date) AS d, trans_group_en, property_usage_en, property_type, "
-            "toFloat64(actual_worth) AS price, toFloat64(meter_sale_price) AS per_sqm, "
-            "toFloat64(size_sqm) AS sqm, master_project_en, rooms_en, reg_type_en "
-            f"FROM ch_transactions WHERE toDate(instance_date) >= '{start}'"
+        self.sales = derive_sales(self.ch.query_df(SALES_SQL.format(start=start)))
+        self.rents = derive_leases(
+            self.ch.query_df(LEASES_SQL.format(start=self.today - timedelta(days=max(PERIODS) + 1)))
         )
-        self.rents = self.ch.query_df(
-            "SELECT toDate(contract_start_date) AS d, property_usage_en, property_type, "
-            "toFloat64(annual_amount) AS rent, toFloat64(size_sqm) AS sqm, master_project_en "
-            "FROM ch_rent_contracts "
-            f"WHERE toDate(contract_start_date) >= '{self.today - timedelta(days=max(PERIODS) + 1)}'"
-        )
-        for frame in (self.sales, self.rents):
-            frame["d"] = pd.to_datetime(frame.d).dt.date
-        print(f"served rows: {len(self.sales)} sales, {len(self.rents)} leases", flush=True)
+        for raw_key, master_key in self.ch.query(ALIASES_SQL).result_rows:
+            self.aliases.setdefault(raw_key, []).append(master_key)
+        print(f"listed rows: {len(self.sales)} sales, {len(self.rents)} leases", flush=True)
 
     def period(self, frame: pd.DataFrame, days: int, end: date | None = None) -> pd.DataFrame:
         end = end or self.today
@@ -162,30 +350,56 @@ class Verifier:
             mask &= values < high
         return mask
 
+    def of_master(self, frame: pd.DataFrame, name: str) -> pd.DataFrame:
+        """Records of a master under any spelling the hierarchy resolves to it."""
+        key = name_key(name)
+        return frame[frame.master_key.isin([key, *self.aliases.get(key, [])])]
+
     # -- expectations ------------------------------------------------------------------------
-    def expected_sales(self, days: int, usage: str = "Residential", **f) -> pd.DataFrame:
-        frame = self.period(self.sales, days)
-        if f.get("market_type"):  # a market type replaces the usage
-            group, holds = MARKET_TYPES[f["market_type"]]
-            frame = frame[frame.trans_group_en == group]
-            frame = frame[holds(frame)]
+    def expected_sales(
+        self, days: int, usage: str = "Residential", end: date | None = None, **f
+    ) -> pd.DataFrame:
+        frame = self.period(self.sales, days, end)
+        if f.get("market_type"):  # a market type replaces the usage and property type
+            frame = frame[MARKET_TYPES[f["market_type"]](frame)]
         else:
-            frame = frame[frame.trans_group_en == "Sales"]
             if usage:
-                frame = frame[frame.property_usage_en == usage]
-        for column, key in (
-            ("master_project_en", "master_project"),
-            ("property_type", "property_type"),
-            ("rooms_en", "rooms"),
-            ("reg_type_en", "reg_type"),
-        ):
+                frame = frame[frame.usage == usage]
+            if f.get("property_type"):
+                frame = frame[frame.property_type == f["property_type"]]
+        if f.get("master_project"):
+            frame = self.of_master(frame, f["master_project"])
+        for column, key in (("rooms", "rooms"), ("reg_type", "reg_type")):
             if f.get(key):
                 frame = frame[frame[column] == f[key]]
         if f.get("price_bucket"):
             frame = frame[self.within(frame.price, PRICE_BUCKETS[f["price_bucket"]])]
         if f.get("area_bucket"):
-            frame = frame[self.within(frame.sqm * SQFT_PER_SQM, AREA_BUCKETS[f["area_bucket"]])]
+            frame = frame[
+                self.within(area_sqft_as_stored(frame.sqft), AREA_BUCKETS[f["area_bucket"]])
+            ]
         return frame
+
+    def expected_leases(self, days: int, usage: str = "Residential", **f) -> pd.DataFrame:
+        frame = self.period(self.rents, days)
+        frame = frame[frame.usage == usage]
+        if f.get("property_type"):
+            frame = frame[frame.property_type == f["property_type"]]
+        if f.get("master_project"):
+            frame = self.of_master(frame, f["master_project"])
+        if f.get("rent_bucket"):
+            frame = frame[self.within(frame.rent, RENT_BUCKETS[f["rent_bucket"]])]
+        if f.get("area_bucket"):
+            frame = frame[
+                self.within(area_sqft_as_stored(frame.sqft), AREA_BUCKETS[f["area_bucket"]])
+            ]
+        return frame
+
+    @staticmethod
+    def per_sqft(amount: pd.Series, sqft: pd.Series) -> float:
+        """The mean amount per sq ft over the records that have an area, 0 when none do."""
+        sized = sqft > 0
+        return round(float((amount[sized] / sqft[sized]).mean()), 2) if sized.any() else 0.0
 
     def compare_sales(self, days: int, usage: str = "Residential", **f) -> None:
         frame = self.expected_sales(days, usage, **f)
@@ -195,68 +409,89 @@ class Verifier:
         self.close(f"{label} count", body["transaction_count"], len(frame))
         if frame.empty:
             return
-        sized = frame[frame.sqm > 0]
         self.close(f"{label} volume", body["total_volume"], round(frame.price.sum(), 2))
         self.close(f"{label} avg", body["avg_price"], round(frame.price.mean(), 2))
         self.close(f"{label} min", body["min_price"], round(frame.price.min(), 2))
         self.close(f"{label} max", body["max_price"], round(frame.price.max(), 2))
         self.close(
-            f"{label} avg/sqft",
-            body["avg_price_sqft"],
-            round((sized.price / sized.sqm).mean() / SQFT_PER_SQM, 2) if len(sized) else 0.0,
+            f"{label} avg/sqft", body["avg_price_sqft"], self.per_sqft(frame.price, frame.sqft)
         )
 
-    def compare_rentals(self, days: int, usage: str = "Residential", **f) -> None:
-        frame = self.period(self.rents, days)
-        frame = frame[frame.property_usage_en == usage]
-        for column, key in (
-            ("master_project_en", "master_project"),
-            ("property_type", "property_type"),
-        ):
-            if f.get(key):
-                frame = frame[frame[column] == f[key]]
-        if f.get("rent_bucket"):
-            frame = frame[self.within(frame.rent, RENT_BUCKETS[f["rent_bucket"]])]
-        if f.get("area_bucket"):
-            frame = frame[self.within(frame.sqm * SQFT_PER_SQM, AREA_BUCKETS[f["area_bucket"]])]
+    def compare_leases(self, days: int, usage: str = "Residential", **f) -> None:
+        frame = self.expected_leases(days, usage, **f)
         label = f"rentals {days}d {usage} {f}"
-        body = self.api("analytics/rentals", timeframe_days=days, property_usage=usage, **f)[
-            "summary"
-        ]
+        body = self.api("analytics/rentals", timeframe_days=days, property_usage=usage, **f)
+        body = body["summary"]
         self.close(f"{label} count", body["contract_count"], len(frame))
         if frame.empty:
             return
-        sized = frame[frame.sqm > 0]
         self.close(f"{label} value", body["total_annual_value"], round(frame.rent.sum(), 2))
         self.close(f"{label} avg", body["avg_annual_rent"], round(frame.rent.mean(), 2))
         self.close(f"{label} min", body["min_annual_rent"], round(frame.rent.min(), 2))
         self.close(f"{label} max", body["max_annual_rent"], round(frame.rent.max(), 2))
         self.close(
-            f"{label} avg/sqft",
-            body["avg_rent_sqft"],
-            round((sized.rent / sized.sqm).mean() / SQFT_PER_SQM, 2) if len(sized) else 0.0,
+            f"{label} avg/sqft", body["avg_rent_sqft"], self.per_sqft(frame.rent, frame.sqft)
         )
+
+    def reconcile_sales(self, days: int) -> None:
+        """Every listed sale is Residential, Commercial, land or untyped: nothing else."""
+        listed = self.period(self.sales, days)
+        untyped = int((listed.property_type == "").sum())
+        self.notes[f"sales {days}d without a type"] = untyped
+        parts = {
+            "Residential": self.api(
+                "analytics/sales", timeframe_days=days, property_usage="Residential"
+            ),
+            "Commercial": self.api(
+                "analytics/sales", timeframe_days=days, property_usage="Commercial"
+            ),
+            "land": self.api("analytics/sales", timeframe_days=days, market_type="land"),
+        }
+        counted = sum(body["summary"]["transaction_count"] for body in parts.values())
+        self.check(
+            counted + untyped == len(listed),
+            f"sales {days}d: Residential + Commercial + land + untyped = {counted} + {untyped}"
+            f" != {len(listed)} listed",
+        )
+
+    def reconcile_leases(self, days: int) -> None:
+        """Every listed lease is Residential, Commercial or untyped: nothing else."""
+        listed = self.period(self.rents, days)
+        untyped = int((listed.property_type == "").sum())
+        self.notes[f"leases {days}d without a type"] = untyped
+        counted = sum(
+            self.api("analytics/rentals", timeframe_days=days, property_usage=usage)["summary"][
+                "contract_count"
+            ]
+            for usage in ("Residential", "Commercial")
+        )
+        self.check(
+            counted + untyped == len(listed),
+            f"leases {days}d: Residential + Commercial + untyped = {counted} + {untyped}"
+            f" != {len(listed)} listed",
+        )
+
+    def check_rejected_market_types(self) -> None:
+        for market in REJECTED_MARKET_TYPES:
+            try:
+                self.api("analytics/sales", timeframe_days=30, market_type=market)
+            except Failed as failure:
+                self.check("HTTP 422" in str(failure), f"market_type={market}: {failure}")
+            else:
+                self.check(False, f"market_type={market}: API answered; expected 422")
 
     def compare_trend(self, days: int, market: str | None = None) -> None:
         def rows(end: date) -> pd.DataFrame:
             frame = self.period(self.sales, days, end)
-            if market:
-                group, holds = MARKET_TYPES[market]
-                frame = frame[frame.trans_group_en == group]
-                return frame[holds(frame)]
-            frame = frame[frame.trans_group_en == "Sales"]
-            return frame[frame.property_usage_en == "Residential"]
+            return (
+                frame[MARKET_TYPES[market](frame)]
+                if market
+                else frame[frame.usage == "Residential"]
+            )
 
         current = rows(self.today)
         previous = rows(self.today - timedelta(days=days + 1))
-        if days <= 30:
-            current = current.assign(p=current.d)
-        elif days <= 180:  # weeks start on Sunday (ClickHouse toStartOfWeek mode 0)
-            current = current.assign(
-                p=[d - timedelta(days=(d.weekday() + 1) % 7) for d in current.d]
-            )
-        else:
-            current = current.assign(p=[d.replace(day=1) for d in current.d])
+        current = current.assign(p=[period_start(d, days) for d in current.d])
         label = f"trend {days}d {market or 'residential'}"
         body = self.api("analytics/market-trend", days=days, market_type=market)
         points = {date.fromisoformat(point["date"]): point for point in body["data"]}
@@ -270,45 +505,55 @@ class Verifier:
                 continue
             self.close(f"{label} {period} count", point["transaction_count"], len(group))
             self.close(f"{label} {period} avg", point["avg_price"], round(group.price.mean(), 2))
-            per_sqm = group.per_sqm.dropna()
+            ppsf = group.ppsf.dropna()
             self.close(
                 f"{label} {period} avg/sqft",
                 point["avg_price_sqft"],
-                round(per_sqm.mean() / SQFT_PER_SQM, 2) if len(per_sqm) else None,
+                round(ppsf.mean(), 2) if len(ppsf) else None,
             )
-        if len(current) and len(previous):
-            change = round(
-                (round(current.price.mean(), 2) - round(previous.price.mean(), 2))
-                / round(previous.price.mean(), 2)
-                * 100,
-                1,
-            )
-            self.close(f"{label} change", body["avg_price_change_pct"], change, places=1)
+
+        def change(now: float | None, before: float | None) -> float | None:
+            if now is None or not before:
+                return None
+            return round((now - before) / before * 100, 1)
+
+        def average(frame: pd.DataFrame) -> float | None:
+            return round(frame.price.mean(), 2) if len(frame) else None
+
+        def median_sqft(frame: pd.DataFrame) -> float | None:
+            middle = ch_median(frame.ppsf)
+            return round(middle, 2) if middle is not None else None
+
+        self.close(
+            f"{label} change",
+            body["avg_price_change_pct"],
+            change(average(current), average(previous)),
+            places=1,
+        )
+        self.close(
+            f"{label} change/sqft",
+            body["avg_price_sqft_change_pct"],
+            change(median_sqft(current), median_sqft(previous)),
+            places=1,
+        )
 
     def compare_dubai_summary(self) -> None:
-        """The whole market by the project summary's definitions, over all served history."""
-        sales = self.ch.query(
-            "SELECT count(), avg(actual_worth), medianExact(actual_worth), "
-            "medianExactIf(actual_worth, reg_type_en = 'Existing Properties') "
-            "FROM ch_transactions WHERE trans_group_en = 'Sales' AND actual_worth > 0 "
-            "AND property_usage_en = 'Residential' AND property_type NOT IN ('Plot', 'Building', '')"
-        ).result_rows[0]
-        rents = self.ch.query(
-            "SELECT count(), medianExact(annual_amount), "
-            "medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)) "
-            "FROM ch_rent_contracts WHERE property_usage_en = 'Residential' AND annual_amount > 0"
-        ).result_rows[0]
-        body = self.api("analytics/project/summary")  # no project or community: all of Dubai
+        """The whole market by the project summary's definitions, over all listed history."""
+        sales = self.ch.query(DUBAI_SALES_SQL).result_rows[0]
+        leases = self.ch.query(DUBAI_LEASES_SQL).result_rows[0]
+        body = self.api("analytics/project/summary")  # no project or master: all of Dubai
         self.close("dubai sales count", body["sales"]["transaction_count"], int(sales[0]))
         self.close("dubai avg price", body["sales"]["avg_price"], round(sales[1], 2))
         self.close("dubai median price", body["sales"]["median_price"], round(sales[2], 2))
-        self.close("dubai leases", body["rentals"]["contract_count"], int(rents[0]))
-        self.close("dubai median rent", body["rentals"]["median_annual_rent"], round(rents[1], 2))
+        self.close("dubai avg/sqft", body["sales"]["avg_price_sqft"], round(sales[4], 2))
+        self.close("dubai leases", body["rentals"]["contract_count"], int(leases[0]))
+        self.close("dubai lease value", body["rentals"]["total_annual_value"], round(leases[1], 2))
+        self.close("dubai median rent", body["rentals"]["median_annual_rent"], round(leases[2], 2))
         self.close(
-            "dubai median rent/sqft", body["rentals"]["median_rent_sqft"], round(rents[2], 2)
+            "dubai median rent/sqft", body["rentals"]["median_rent_sqft"], round(leases[3], 2)
         )
         self.close(
-            "dubai yield", body["overall_gross_yield_pct"], round(rents[1] / sales[3] * 100, 2)
+            "dubai yield", body["overall_gross_yield_pct"], round(leases[2] / sales[3] * 100, 2)
         )
 
     # -- run ---------------------------------------------------------------------------------
@@ -320,39 +565,44 @@ class Verifier:
 
     def run(self) -> int:
         self.load()
-        year_sales = self.expected_sales(365)
-        busiest = year_sales.master_project_en[year_sales.master_project_en != ""]
-        communities = busiest.value_counts().index[:5].tolist()
+        year = self.expected_sales(365)
+        named = year[year.master_name != ""]
+        masters = named.master_name.value_counts().index[:5].tolist()
+        self.attempt(self.check_rejected_market_types)
         for days in PERIODS:
             for usage in ("Residential", "Commercial"):
                 self.attempt(self.compare_sales, days, usage=usage)
-                self.attempt(self.compare_rentals, days, usage=usage)
+                self.attempt(self.compare_leases, days, usage=usage)
+            self.attempt(self.reconcile_sales, days)
+            self.attempt(self.reconcile_leases, days)
             for market in MARKET_TYPES:
                 self.attempt(self.compare_sales, days, market_type=market)
                 self.attempt(self.compare_trend, days, market)
             self.attempt(self.compare_trend, days)
-        for community in communities:
-            self.attempt(self.compare_sales, 365, master_project=community)
-            self.attempt(self.compare_rentals, 365, master_project=community)
-        for kind in sorted(v for v in year_sales.property_type.unique() if v):
+        for master in masters:
+            self.attempt(self.compare_sales, 365, master_project=master)
+            self.attempt(self.compare_leases, 365, master_project=master)
+        for kind in sorted(v for v in year.property_type.unique() if v):
             self.attempt(self.compare_sales, 365, property_type=kind)
-            self.attempt(self.compare_rentals, 365, property_type=kind)
-        for rooms in year_sales.rooms_en.value_counts().index[:6]:
+            self.attempt(self.compare_leases, 365, property_type=kind)
+        for rooms in year.rooms.value_counts().index[:6]:
             if rooms:
                 self.attempt(self.compare_sales, 365, rooms=rooms)
-        for reg_type in sorted(v for v in year_sales.reg_type_en.unique() if v):
+        for reg_type in sorted(v for v in year.reg_type.unique() if v):
             self.attempt(self.compare_sales, 365, reg_type=reg_type)
         for bucket in PRICE_BUCKETS:
             self.attempt(self.compare_sales, 365, price_bucket=bucket)
         for bucket in AREA_BUCKETS:
             self.attempt(self.compare_sales, 365, area_bucket=bucket)
-            self.attempt(self.compare_rentals, 365, area_bucket=bucket)
+            self.attempt(self.compare_leases, 365, area_bucket=bucket)
         for bucket in RENT_BUCKETS:
-            self.attempt(self.compare_rentals, 365, rent_bucket=bucket)
+            self.attempt(self.compare_leases, 365, rent_bucket=bucket)
         self.attempt(self.compare_dubai_summary)
 
         print(f"{self.checks} checks, {len(self.failures)} failed")
-        for failure in self.failures[:40]:
+        for name, count in self.notes.items():
+            print(f"  note: {name}: {count}")
+        for failure in self.failures[:60]:
             print("  ", failure)
         return 1 if self.failures else 0
 
