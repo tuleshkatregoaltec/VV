@@ -145,9 +145,8 @@ async def create_checkout_session(
     if not membership:
         raise HTTPException(403, "Not authorized: You must be the owner of this organization")
 
-    # Update seats if different from org max_users
-    if seats != org.max_users:
-        org.max_users = seats
+    # Seats are NOT written here. max_users only changes from Stripe state
+    # (webhook or sync_after_checkout) once payment is confirmed.
 
     # Set subscription status to pending while checkout in progress
     org.subscription_status = "pending"
@@ -159,7 +158,7 @@ async def create_checkout_session(
     except Exception as e:
         await db.rollback()
         logger.error(f"Failed to update organization: {e}")
-        raise HTTPException(500, f"Failed to update organization: {str(e)}")
+        raise HTTPException(500, "Failed to update organization")
 
     customer_id = org.stripe_customer_id
 
@@ -178,7 +177,7 @@ async def create_checkout_session(
             logger.error(f"Stripe customer creation failed for org {org.id}: {e}")
             org.subscription_status = "failed"
             await db.commit()
-            raise HTTPException(500, f"Failed to create Stripe customer: {str(e)}")
+            raise HTTPException(500, "Failed to create Stripe customer")
 
         org.stripe_customer_id = customer_id
 
@@ -192,7 +191,7 @@ async def create_checkout_session(
             except Exception:
                 logger.exception("Failed to delete Stripe customer %s during rollback", customer_id)
             logger.error(f"Failed to link Stripe customer: {e}")
-            raise HTTPException(500, f"Failed to link Stripe customer: {str(e)}")
+            raise HTTPException(500, "Failed to link Stripe customer")
 
     # Use the price tier selected by the user
     price_id = (
@@ -233,7 +232,7 @@ async def create_checkout_session(
         logger.error(f"Checkout session creation failed for org {org.id}: {e}")
         org.subscription_status = "failed"
         await db.commit()
-        raise HTTPException(500, f"Failed to create checkout session: {str(e)}")
+        raise HTTPException(500, "Failed to create checkout session")
 
     return {
         "checkout_url": checkout_session.url or "",
@@ -248,7 +247,7 @@ async def sync_after_checkout(session_id: str, user_id: str, db: AsyncSession) -
         session = stripe_gateway.retrieve_checkout(session_id)
     except Exception as e:
         logger.error(f"Failed to retrieve session {session_id}: {e}")
-        raise HTTPException(400, f"Invalid session: {str(e)}")
+        raise HTTPException(400, "Invalid checkout session")
 
     if session.status != "complete":
         raise HTTPException(400, f"Session not complete: {session.status}")
