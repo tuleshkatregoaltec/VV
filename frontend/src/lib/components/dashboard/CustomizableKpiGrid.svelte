@@ -22,6 +22,7 @@ import { supply } from '$lib/api/supply'
 import { transactions } from '$lib/api/transactions'
 import { DASHBOARD_KPI_STORAGE_KEY } from '$lib/auth/user-browser-state'
 import { analyticsQueries } from '$lib/queries/analytics'
+import { grossYieldPct as medianGrossYieldPct } from '$lib/utils/analyticsNotes'
 
 type CardId =
 	| 'mtd-transactions'
@@ -258,10 +259,8 @@ function pipelineForwardUnits() {
 }
 
 function grossYieldPct() {
-	const medianRent = annualRentQuery.data?.summary.min_annual_rent ?? 0
-	const medianPrice = annualSalesQuery.data?.summary.min_price ?? 0
-	if (medianRent <= 0 || medianPrice <= 0) return null
-	return (medianRent / medianPrice) * 100
+	// Median rent over median price (it divided the cheapest rent by the cheapest price).
+	return medianGrossYieldPct(annualRentQuery.data?.summary, annualSalesQuery.data?.summary)
 }
 
 function trendFromPct(value: number | null | undefined): KpiCard['trend'] {

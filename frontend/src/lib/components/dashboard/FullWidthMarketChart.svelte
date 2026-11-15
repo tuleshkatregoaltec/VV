@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import { analyticsQueries } from '$lib/queries/analytics'
+import { partialPeriodsNote } from '$lib/utils/analyticsNotes'
 
 type TimeRange = '30d' | '90d' | '6mo' | '1yr'
 type Metric = 'price_sqft' | 'avg_price'
@@ -171,7 +172,16 @@ function formatNumber(num: number): string {
 			class="w-full min-w-[500px] animate-pulse rounded bg-panel"
 			style="height: {chartHeight}px"
 		></div>
-	{:else if trendQuery.isError || chartData.length === 0}
+	{:else if trendQuery.isError}
+		<!-- A failed load is not an empty market: say so. -->
+		<div
+			class="flex w-full min-w-[500px] items-center justify-center text-sm text-fg-4"
+			style="height: {chartHeight}px"
+			role="alert"
+		>
+			The market trend could not be loaded. Try again shortly.
+		</div>
+	{:else if chartData.length === 0}
 		<div
 			class="flex w-full min-w-[500px] items-center justify-center text-sm text-fg-4"
 			style="height: {chartHeight}px"
@@ -253,6 +263,9 @@ function formatNumber(num: number): string {
 		</svg>
 	{/if}
 </div>
+{#if !trendQuery.isLoading && !trendQuery.isError && partialPeriodsNote(trendQuery.data?.data)}
+	<p class="mt-2 text-xs text-fg-4">{partialPeriodsNote(trendQuery.data?.data)}</p>
+{/if}
 
 <!-- Footer -->
 <div class="mt-4 border-t border-border pt-3">
