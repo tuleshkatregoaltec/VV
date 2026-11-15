@@ -1468,8 +1468,7 @@ async def fetch_rentals_breakdown(parameters: dict, dimension: str, **filters):
     return await query(rentals_breakdown(dimension, **filters), parameters)
 
 
-GET_MARKET_PULSE_SQL = (
-    """
+GET_MARKET_PULSE_SQL = f"""
     SELECT
         count(*) as transaction_count,
         round(medianExact(actual_worth), 0) as median_price,
@@ -1478,17 +1477,14 @@ GET_MARKET_PULSE_SQL = (
         round(medianExact(actual_worth / size_sqm) / 10.7639, 0) as median_price_per_sqft,
         min(instance_date) as period_start,
         max(instance_date) as period_end
-    FROM """
-    + SALES_SOURCE
-    + """
+    FROM {SALES_SOURCE}
     WHERE
-        location_name = {area:String}
+        location_name = {{area:String}}
         AND trans_group_en = 'Sales'
-        AND instance_date >= today() - {period_days:Int32}
+        AND instance_date >= today() - {{period_days:Int32}}
         AND actual_worth > 0
         AND size_sqm > 0
     """
-)
 
 
 async def fetch_market_pulse(parameters: dict):
@@ -1498,61 +1494,50 @@ async def fetch_market_pulse(parameters: dict):
 # Chat's market tools (market pulse, area rankings) read the Analytics DXBI records, as chat's
 # metrics and charts do (2026-11-15; they read the combined DXBI + DLD layer before). Ranked by
 # DXBI community (the names market pulse and the Transactions page filter on).
-RANK_AREAS_VOLUME_SQL = (
-    """
+RANK_AREAS_VOLUME_SQL = f"""
         SELECT
             location_name as area,
             count(*) as transaction_count,
             round(medianExact(actual_worth), 0) as median_price
-        FROM """
-    + SALES_SOURCE
-    + """
-        WHERE
-            instance_date >= today() - {period_days:Int32}
+        FROM {SALES_SOURCE}
+    WHERE
+            instance_date >= today() - {{period_days:Int32}}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
             AND location_name != ''
         GROUP BY location_name
         ORDER BY transaction_count DESC
-        LIMIT {limit:Int32}
+        LIMIT {{limit:Int32}}
         """
-)
 
 
-RANK_AREAS_PRICE_SQL = (
-    """
+RANK_AREAS_PRICE_SQL = f"""
         SELECT
             location_name as area,
             round(medianExact(actual_worth), 0) as median_price,
             count(*) as transaction_count
-        FROM """
-    + SALES_SOURCE
-    + """
-        WHERE
-            instance_date >= today() - {period_days:Int32}
+        FROM {SALES_SOURCE}
+    WHERE
+            instance_date >= today() - {{period_days:Int32}}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
             AND location_name != ''
         GROUP BY location_name
         HAVING transaction_count >= 10
         ORDER BY median_price DESC
-        LIMIT {limit:Int32}
+        LIMIT {{limit:Int32}}
         """
-)
 
 
-RANK_AREAS_GROWTH_SQL = (
-    """
+RANK_AREAS_GROWTH_SQL = f"""
         WITH
             current_period AS (
                 SELECT
                     location_name as area,
                     medianExact(actual_worth) as current_median
-                FROM """
-    + SALES_SOURCE
-    + """
-                WHERE
-                    instance_date >= today() - {period_days:Int32}
+                FROM {SALES_SOURCE}
+    WHERE
+                    instance_date >= today() - {{period_days:Int32}}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
                     AND location_name != ''
@@ -1563,12 +1548,10 @@ RANK_AREAS_GROWTH_SQL = (
                 SELECT
                     location_name as area,
                     medianExact(actual_worth) as previous_median
-                FROM """
-    + SALES_SOURCE
-    + """
-                WHERE
-                    instance_date >= today() - {period_days:Int32} * 2
-                    AND instance_date < today() - {period_days:Int32}
+                FROM {SALES_SOURCE}
+    WHERE
+                    instance_date >= today() - {{period_days:Int32}} * 2
+                    AND instance_date < today() - {{period_days:Int32}}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
                     AND location_name != ''
@@ -1583,9 +1566,8 @@ RANK_AREAS_GROWTH_SQL = (
         FROM current_period c
         INNER JOIN previous_period p ON c.area = p.area
         ORDER BY growth_percentage DESC
-        LIMIT {limit:Int32}
+        LIMIT {{limit:Int32}}
         """
-)
 
 
 async def fetch_rank_areas(metric: str, parameters: dict):

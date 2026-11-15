@@ -25,9 +25,12 @@ def test_actual_chat_registration_links_to_public_capabilities_and_warehouse():
     } <= registered
     assert all("confirm" not in name for name in registered)
     pulse = inventory["functions"]["app.analytics.queries.fetch_market_pulse"]
-    # Chat's market pulse reads the combined market layer, as the rest of chat does; the
-    # Analytics page reads the DXBI records.
-    assert pulse["sql_source_candidates"] == ["ch_transactions"]
+    # Chat's market pulse reads the Analytics DXBI records (an imported source expression the
+    # inventory does not resolve), no longer the combined market layer.
+    from app.analytics import dxbi, queries
+
+    assert "ch_transactions" not in pulse["sql_source_candidates"]
+    assert dxbi.SALES_SOURCE in queries.GET_MARKET_PULSE_SQL
 
 
 def test_declared_legacy_hbu_tools_are_not_assigned_to_selected_production_agents():

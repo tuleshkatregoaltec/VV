@@ -17477,10 +17477,25 @@ export type UploadUploadNewsArticleResponse = UploadUploadNewsArticleResponses[k
 
 export type UploadHealthData = {
     body?: never;
+    headers: {
+        /**
+         * X-Api-Key
+         */
+        'x-api-key': string;
+    };
     path?: never;
     query?: never;
     url: '/api/v1/upload/health';
 };
+
+export type UploadHealthErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadHealthError = UploadHealthErrors[keyof UploadHealthErrors];
 
 export type UploadHealthResponses = {
     /**

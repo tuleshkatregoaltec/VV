@@ -18,7 +18,9 @@ def test_sales_below_the_floor_are_not_analytics_sales():
 
 def test_leases_below_the_floor_are_not_analytics_leases():
     assert dxbi.RENT_FLOOR_AED == 1_000
-    assert re.search(r"WHERE annual_rent_aed >= 1000 AND lease_end > lease_start\b", dxbi.RENTALS_SOURCE)
+    assert re.search(
+        r"WHERE annual_rent_aed >= 1000 AND lease_end > lease_start\b", dxbi.RENTALS_SOURCE
+    )
 
 
 def test_every_analytics_query_reads_the_floored_sources():

@@ -616,9 +616,7 @@ async def get_project_pipeline(
             f"DLD project register: every project in {', '.join(areas)}, the DLD area of the "
             "selected scope, not only the scope's own projects."
         )
-        rows = await queries.fetch_area_supply_projects(
-            {"areas": [area.lower() for area in areas]}
-        )
+        rows = await queries.fetch_area_supply_projects({"areas": [area.lower() for area in areas]})
 
     if not rows:
         return ProjectPipelineResponse(

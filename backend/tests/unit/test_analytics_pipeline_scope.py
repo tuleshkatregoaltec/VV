@@ -18,7 +18,10 @@ async def test_master_pipeline_reads_its_records_dld_areas_and_no_single_develop
 
     async def areas(parameters, filter_type):
         seen["areas_scope"] = (parameters, filter_type)
-        return [{"area_name_en": "Marsa Dubai", "records": 950}, {"area_name_en": "Al Sufouh", "records": 30}]
+        return [
+            {"area_name_en": "Marsa Dubai", "records": 950},
+            {"area_name_en": "Al Sufouh", "records": 30},
+        ]
 
     async def supply(parameters, filter_by_area=True):
         seen["supply"] = parameters
