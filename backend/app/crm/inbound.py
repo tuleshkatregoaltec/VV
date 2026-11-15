@@ -44,7 +44,7 @@ from app.crm.inbound_policy import (
 )
 from app.crm.owner_assessment import get_owner_assessment
 from app.crm.owners import _projected_claims
-from app.organization.repository import get_membership_in_org
+from app.organization.service import get_membership_for_user
 
 
 async def _find_or_create_contact(
@@ -353,7 +353,8 @@ async def _registry_transaction_evidence(
 
 async def _require_member(db: AsyncSession, organization_id: str, user_id: str) -> None:
     """An enquiry is only ever assigned to a member of its own organization."""
-    if await get_membership_in_org(db, organization_id, user_id) is None:
+    membership = await get_membership_for_user(db, user_id)
+    if membership is None or str(membership.organization_id) != str(organization_id):
         raise HTTPException(
             status_code=422, detail="The assigned agent is not a member of this organization"
         )

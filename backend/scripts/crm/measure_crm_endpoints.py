@@ -67,7 +67,9 @@ def _extra(name: str, body: bytes) -> str:
                 lead = items[0].get("lead", items[0])
                 if isinstance(lead, dict) and "lease_end" in lead:
                     ends = [
-                        (it.get("lead", it) or {}).get("lease_end") for it in items if isinstance(it, dict)
+                        (it.get("lead", it) or {}).get("lease_end")
+                        for it in items
+                        if isinstance(it, dict)
                     ]
                     ends = [e for e in ends if e]
                     parts.append(f"lease_end={min(ends)}..{max(ends)}")
@@ -125,7 +127,11 @@ async def main() -> None:
             if selected and name not in selected:
                 continue
             response = await g(name, path)
-            if name.startswith("renewal_leads_upcoming") and response.status_code == 200 and not lead_id:
+            if (
+                name.startswith("renewal_leads_upcoming")
+                and response.status_code == 200
+                and not lead_id
+            ):
                 items = response.json().get("items") or []
                 lead_id = items[0]["lead"]["lead_id"] if items else None
         if lead_id and (not selected or "lead_detail" in selected):
@@ -133,7 +139,9 @@ async def main() -> None:
             await g("lead_report", f"/leads/{lead_id}/report")
         if not selected or "contention" in selected:
             # Cheap calls while the dashboard runs (fresh filter so it is not a cache hit).
-            dashboard = asyncio.create_task(g("contention_dashboard", "/dashboard?expired_days=400"))
+            dashboard = asyncio.create_task(
+                g("contention_dashboard", "/dashboard?expired_days=400")
+            )
             await asyncio.sleep(0.5)
             await g("contention_enquiries", "/inbound/enquiries?limit=100")
             await g("contention_workspaces", "/workspaces")

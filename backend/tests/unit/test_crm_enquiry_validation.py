@@ -39,17 +39,19 @@ def test_an_ordinary_brief_is_accepted():
 
 
 async def test_assigning_a_user_outside_the_organization_is_refused(monkeypatch):
-    monkeypatch.setattr(inbound, "get_membership_in_org", AsyncMock(return_value=None))
-    with pytest.raises(HTTPException) as caught:
-        await inbound._require_member(None, "org-1", "someone-else")
-    assert caught.value.status_code == 422
+    other_tenant = SimpleNamespace(organization_id="org-2")
+    for found in (None, other_tenant):
+        monkeypatch.setattr(inbound, "get_membership_for_user", AsyncMock(return_value=found))
+        with pytest.raises(HTTPException) as caught:
+            await inbound._require_member(None, "org-1", "someone-else")
+        assert caught.value.status_code == 422
 
 
 async def test_assigning_a_member_is_allowed(monkeypatch):
-    lookup = AsyncMock(return_value=SimpleNamespace(user_id="u-2"))
-    monkeypatch.setattr(inbound, "get_membership_in_org", lookup)
+    lookup = AsyncMock(return_value=SimpleNamespace(user_id="u-2", organization_id="org-1"))
+    monkeypatch.setattr(inbound, "get_membership_for_user", lookup)
     await inbound._require_member(None, "org-1", "u-2")
-    lookup.assert_awaited_once_with(None, "org-1", "u-2")
+    lookup.assert_awaited_once_with(None, "u-2")
 
 
 async def test_create_checks_the_assignee(monkeypatch):

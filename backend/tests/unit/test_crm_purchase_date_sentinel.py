@@ -8,10 +8,11 @@ snapshot of every lead opened from the feed.
 from datetime import date
 from unittest.mock import AsyncMock
 
+from test_crm_service import _lead_row
+
 from app.crm import renewal_leads
 from app.crm.models import CrmLead
 from app.crm.opportunities import _lead_from_row
-from test_crm_service import _lead_row
 
 
 def test_the_zero_date_of_an_unmatched_lease_is_no_purchase_date():
