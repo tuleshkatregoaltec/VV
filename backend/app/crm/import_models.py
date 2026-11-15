@@ -115,13 +115,6 @@ class CrmOwnerAssessedClaim(SQLModel, table=True):
             "identity_area",
         ),
         Index("ix_crm_assessed_claim_property", "organization_id", "generation", "property_key"),
-        Index(
-            "ix_crm_assessed_claim_lead",
-            "organization_id",
-            "generation",
-            "lead_id",
-            postgresql_where=text("lead_id IS NOT NULL"),
-        ),
     )
 
     organization_id: str = SQLField(primary_key=True)
@@ -227,18 +220,11 @@ class CrmContactList(SQLModel, table=True):
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
-_CLAIM_PREFERENCE = (
-    "CASE ownership_status WHEN 'former_owner' THEN 6 WHEN 'verified_current_owner' THEN 5"
-    " WHEN 'probable_current_owner' THEN 4 WHEN 'unit_linked_unverified' THEN 3"
-    " WHEN 'conflicting_claim' THEN 2 ELSE 1 END"
-)
-
-
 class CrmPropertyContactClaim(SQLModel, table=True):
     __tablename__ = "crm_property_contact_claims"
-    # Indexes and BIGINT amounts mirror migrations b7d2f4a8c1e6 and d9f4b6c8e3a2, which are the
-    # schema authority; tests compare this model with a freshly migrated database. The ranking
-    # indexes use PostgreSQL-only syntax, so SQLite unit fixtures skip them.
+    # Indexes and BIGINT amounts mirror the migrations, which are the schema authority; tests
+    # compare this model with a freshly migrated database. The ranking indexes of d9f4b6c8e3a2
+    # were dropped by b6d2f8a4c1e7: no query could use them.
     __table_args__ = (
         UniqueConstraint(
             "import_id",
@@ -249,25 +235,6 @@ class CrmPropertyContactClaim(SQLModel, table=True):
         Index("ix_crm_claim_org_owner", "organization_id", "owner_key"),
         Index("ix_crm_claim_org_property", "organization_id", "property_key"),
         Index("ix_crm_claim_org_owner_property", "organization_id", "owner_key", "property_key"),
-        Index(
-            "ix_crm_claim_owner_property_preference",
-            "organization_id",
-            "owner_key",
-            "property_key",
-            text(f"({_CLAIM_PREFERENCE}) DESC"),
-            text("confidence_score DESC"),
-            text("transaction_date DESC NULLS LAST"),
-        ).ddl_if(dialect="postgresql"),
-        Index(
-            "ix_crm_claim_list_owner_property_preference",
-            "organization_id",
-            "list_id",
-            "owner_key",
-            "property_key",
-            text(f"({_CLAIM_PREFERENCE}) DESC"),
-            text("confidence_score DESC"),
-            text("transaction_date DESC NULLS LAST"),
-        ).ddl_if(dialect="postgresql"),
     )
 
     id: int | None = SQLField(default=None, primary_key=True)
