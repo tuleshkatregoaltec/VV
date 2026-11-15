@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import logging.config
+import random
 import signal
 
 from app.core.logging_config import LOGGING_CONFIG
@@ -13,20 +14,41 @@ from app.whatsapp.customer_connections import bootstrap_on_startup
 SHUTDOWN_GRACE_SECONDS = 60
 
 
-async def poll(run, stop, *, idle_seconds=2):
+BASE_RETRY_SECONDS = 2
+MAX_RETRY_SECONDS = 60
+
+
+def retry_delay(failures, *, jitter=random.random):
+    """Capped exponential backoff for the nth consecutive failure, jittered into the upper
+    half of the window so the lanes do not retry in lockstep against a struggling dependency."""
+    ceiling = min(MAX_RETRY_SECONDS, BASE_RETRY_SECONDS * 2 ** min(max(failures, 1) - 1, 16))
+    return ceiling * (0.5 + 0.5 * jitter())
+
+
+async def _wait(stop, delay):
+    with contextlib.suppress(TimeoutError):
+        await asyncio.wait_for(stop.wait(), delay)
+
+
+async def poll(run, stop, *, idle_seconds=2, jitter=random.random):
+    failures = 0
     while not stop.is_set():
         delay = idle_seconds
         try:
             processed = await run()
+            failures = 0
         except Exception as exc:
+            failures += 1
+            delay = retry_delay(failures, jitter=jitter)
             logging.getLogger(__name__).error(
-                "WhatsApp worker iteration failed (%s)", type(exc).__name__
+                "WhatsApp worker iteration failed (%s); retrying in %.1fs (consecutive=%d)",
+                type(exc).__name__,
+                delay,
+                failures,
             )
             processed = False
-            delay = 2  # Do not increase retry pressure when infrastructure fails.
         if not processed:
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), delay)
+            await _wait(stop, delay)
 
 
 async def serve(runs, *, grace=SHUTDOWN_GRACE_SECONDS):

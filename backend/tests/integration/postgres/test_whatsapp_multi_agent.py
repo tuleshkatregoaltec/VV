@@ -413,6 +413,16 @@ async def test_token_is_encrypted_in_the_database_and_env_pilot_migrates(pg_sess
 
 
 async def test_signup_completion_persists_an_encrypted_connection(pg_session, env, monkeypatch):
+    used = set()
+
+    class UsedStates:
+        async def set(self, key, value, *, nx=False, ex=None):
+            if key in used:
+                return None
+            used.add(key)
+            return True
+
+    monkeypatch.setattr(connections, "_state_store", lambda: UsedStates())
     waba, phone = str(uuid4().int)[:15], str(uuid4().int)[:15]
     calls = []
 
