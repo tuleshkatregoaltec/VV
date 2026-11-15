@@ -224,6 +224,7 @@ async def fetch_rental_evidence(parameters, has_source_unit: bool):
                 c.project_name AS project_name,
                 c.area_name AS area_name,
                 c.property_type AS property_type,
+                c.lease_start AS lease_start,
                 c.lease_end AS lease_end,
                 c.annual_rent_aed AS annual_rent_aed,
                 observed_unit AS unit_number,
@@ -235,8 +236,8 @@ async def fetch_rental_evidence(parameters, has_source_unit: bool):
                 ({source_unit} != '' OR m.match_status = 'unique')
                 AND normalized_unit IN {{units:Array(String)}}
                 AND c.lease_end >= {{window_start:Date}}
-                AND c.lease_end <= {{window_end:Date}}
-            ORDER BY ({source_unit} != '') DESC, c.lease_end DESC, c.unit_candidate_key, c.event_key
+            ORDER BY c.lease_start DESC, c.lease_end DESC, ({source_unit} != '') DESC,
+                c.unit_candidate_key, c.event_key
             SETTINGS max_threads=2, max_memory_usage=2000000000
             """,
         parameters,
