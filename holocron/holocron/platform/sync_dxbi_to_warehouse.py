@@ -3,7 +3,10 @@
 The scraper box writes ``<kind>/run=YYYY-MM-DD/`` (kind: ``sales`` or ``rentals``) and touches
 ``_SUCCESS`` in a run only when every shard finished. This job loads only those runs, oldest
 first, each replacing the dates its own checkpoint covers (a run re-reads a rolling window, so a
-later run supersedes an earlier one). After anything new was loaded it rebuilds the served
+later run supersedes an earlier one). The newest complete data for a day wins whatever order
+runs finish in: a run that gets its ``_SUCCESS`` after a newer run was already loaded replaces
+only the days no newer loaded run covers, loading just those days' shards, and is skipped when
+none are left. After anything new was loaded it rebuilds the served
 market releases and the profiles, then clears the API caches that read them. Every run then
 refreshes the Owners lease links (imported claims' lease end, rent and lease id) and republishes
 the stored owner assessments; a lease link's window moves with the date, so this runs even when
@@ -11,6 +14,8 @@ nothing new was loaded.
 
 A run's marker in ``<state>/loaded`` is written after its load succeeds, so a failed night is
 retried whole on the next run. ``<state>/release-pending`` keeps a failed release build owed.
+The unit fails when a report has no finished run in 36 hours (sales or rentals) or a load fails,
+so ``systemctl --failed`` and the journal show it.
 """
 
 from __future__ import annotations
@@ -21,12 +26,13 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger("sync_dxbi_to_warehouse")
@@ -62,6 +68,10 @@ class Config:
     @property
     def loaded_dir(self) -> Path:
         return self.state_dir / "loaded"
+
+    @property
+    def views_dir(self) -> Path:
+        return self.state_dir / "views"
 
     @property
     def release_pending(self) -> Path:
@@ -106,21 +116,33 @@ def stale_reports(evidence_dir: Path, *, max_age_hours: float) -> list[str]:
     return stale
 
 
-def load_command(config: Config, run: Run) -> list[str]:
-    window = [run.first.isoformat(), run.last.isoformat()]
+def load_command(
+    config: Config,
+    run: Run,
+    *,
+    first: date | None = None,
+    last: date | None = None,
+    source: Path | None = None,
+) -> list[str]:
+    """The loader call for a run, or for the stretch ``first`` to ``last`` of it read from ``source``."""
+    narrowed = first is not None
+    first, last = first or run.first, last or run.last
+    window = [first.isoformat(), last.isoformat()]
+    path = str(source or run.path)
     if run.kind == "sales":
         script = config.scripts_dir / "load_dxbi_sales_units.py"
-        return [config.python, str(script), str(run.path), "--replace-window", *window]
+        return [config.python, str(script), path, "--replace-window", *window]
     script = config.scripts_dir / "load_dxbi_rental_events.py"
-    reconciliation = config.state_dir / "reconciliations" / f"rentals-{run.name}.json"
+    suffix = f"-{first.isoformat()}" if narrowed else ""
+    reconciliation = config.state_dir / "reconciliations" / f"rentals-{run.name}{suffix}.json"
     return [
         config.python,
         str(script),
-        str(run.path),
+        path,
         "--target",
         "active",
         "--run-id",
-        f"sync-{run.name}",
+        f"sync-{run.name}{suffix}",
         "--reconciliation-output",
         str(reconciliation),
         "--replace-window",
@@ -128,8 +150,98 @@ def load_command(config: Config, run: Run) -> list[str]:
     ]
 
 
+def uncovered_stretches(run: Run, newer_loaded: list[Run]) -> list[tuple[date, date]]:
+    """The stretches of the run's window that no newer, already loaded run covers.
+
+    A newer run holds a later scrape of the days it covers, so the run's own copy of them is
+    never loaded over it. Stretches are runs of consecutive days, since a load replaces one
+    contiguous window.
+    """
+    stretches: list[tuple[date, date]] = []
+    start: date | None = None
+    day = run.first
+    while day <= run.last:
+        covered = any(other.first <= day <= other.last for other in newer_loaded)
+        if not covered and start is None:
+            start = day
+        if covered and start is not None:
+            stretches.append((start, day - timedelta(days=1)))
+            start = None
+        day += timedelta(days=1)
+    if start is not None:
+        stretches.append((start, run.last))
+    return stretches
+
+
+def _stretch_view(config: Config, run: Run, first: date, last: date) -> Path:
+    """A folder holding only the shards of the days ``first`` to ``last`` of the run."""
+    view = config.views_dir / f"{run.kind}-{run.name}-{first.isoformat()}"
+    shutil.rmtree(view, ignore_errors=True)
+    for day_dir in sorted((run.path / "shards").glob("*")):
+        try:
+            day = date.fromisoformat(day_dir.name)
+        except ValueError:
+            continue
+        if first <= day <= last and day_dir.is_dir():
+            target = view / "shards" / day_dir.name
+            target.mkdir(parents=True)
+            for shard in day_dir.iterdir():
+                (target / shard.name).symlink_to(shard.resolve())
+    return view
+
+
 def _default_run_command(argv: list[str]) -> int:
     return subprocess.run(argv, check=False).returncode
+
+
+def _is_loaded(config: Config, run: Run) -> bool:
+    return (config.loaded_dir / f"{run.kind}-{run.name}").exists()
+
+
+def _load_run(
+    config: Config, run: Run, finished: list[Run], run_command: Callable[[list[str]], int]
+) -> bool:
+    """Load what the run still owns of its window; False when a load failed."""
+    newer_loaded = [
+        other for other in finished if other.name > run.name and _is_loaded(config, other)
+    ]
+    stretches = uncovered_stretches(run, newer_loaded)
+    if not newer_loaded or stretches == [(run.first, run.last)]:
+        logger.info("Loading %s %s (%s to %s)", run.kind, run.name, run.first, run.last)
+        if run_command(load_command(config, run)) != 0:
+            logger.error("Loading %s %s failed; later runs wait for it", run.kind, run.name)
+            return False
+        config.release_pending.touch()
+        return True
+    if not stretches:
+        logger.info(
+            "Skipping %s %s: newer loaded runs already cover %s to %s",
+            run.kind,
+            run.name,
+            run.first,
+            run.last,
+        )
+        return True
+    for first, last in stretches:
+        logger.info(
+            "Loading %s %s late, only %s to %s; newer loaded runs hold the other days",
+            run.kind,
+            run.name,
+            first,
+            last,
+        )
+        view = _stretch_view(config, run, first, last)
+        try:
+            if not view.exists():
+                logger.warning("%s %s has no shards for %s to %s", run.kind, run.name, first, last)
+                continue
+            if run_command(load_command(config, run, first=first, last=last, source=view)) != 0:
+                logger.error("Loading %s %s failed; later runs wait for it", run.kind, run.name)
+                return False
+            config.release_pending.touch()
+        finally:
+            shutil.rmtree(view, ignore_errors=True)
+    return True
 
 
 def run_sync(
@@ -144,19 +256,13 @@ def run_sync(
     (config.state_dir / "reconciliations").mkdir(parents=True, exist_ok=True)
     failures = 0
     for kind in KINDS:
-        pending = [
-            run
-            for run in discover_runs(config.evidence_dir, kind)
-            if not (config.loaded_dir / f"{kind}-{run.name}").exists()
-        ]
+        finished = discover_runs(config.evidence_dir, kind)
+        pending = [run for run in finished if not _is_loaded(config, run)]
         for run in pending:
-            logger.info("Loading %s %s (%s to %s)", kind, run.name, run.first, run.last)
-            if run_command(load_command(config, run)) != 0:
-                logger.error("Loading %s %s failed; later runs wait for it", kind, run.name)
+            if not _load_run(config, run, finished, run_command):
                 failures += 1
                 break
             (config.loaded_dir / f"{kind}-{run.name}").touch()
-            config.release_pending.touch()
     if config.release_pending.exists():
         try:
             build_release()
@@ -176,9 +282,8 @@ def run_sync(
             logger.exception("Owners lease refresh failed; it is retried next run")
             failures += 1
     for kind in stale_reports(config.evidence_dir, max_age_hours=36):
-        logger.warning("No finished %s run in the last 36 hours", kind)
-        if kind == "sales":
-            failures += 1
+        logger.error("No finished %s run in the last 36 hours", kind)
+        failures += 1
     return 1 if failures else 0
 
 

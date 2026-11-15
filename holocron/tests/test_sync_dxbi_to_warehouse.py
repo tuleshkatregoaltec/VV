@@ -13,6 +13,10 @@ def _run(root: Path, kind: str, name: str, days: list[str], *, success: bool = T
     run = root / kind / name
     run.mkdir(parents=True)
     completed = {f"{day}|0|12500.00||": {"rows": 1, "path": ""} for day in days}
+    for day in days:
+        shard = run / "shards" / day
+        shard.mkdir(parents=True)
+        (shard / "a.jsonl.gz").write_text(day)
     (run / "checkpoint.json").write_text(json.dumps({"completed": completed, "failed": {}}))
     if success:
         (run / "_SUCCESS").touch()
@@ -25,11 +29,14 @@ class Recorder:
     def __init__(self, *, fail_on: str | None = None) -> None:
         self.calls: list[str] = []
         self.commands: list[list[str]] = []
+        self.inputs: list[list[str]] = []
         self.fail_on = fail_on
 
     def command(self, argv: list[str]) -> int:
         self.commands.append(argv)
         script = next(part for part in argv if part.endswith(".py"))
+        source = Path(argv[argv.index(script) + 1])
+        self.inputs.append(sorted(p.parent.name for p in source.rglob("*.jsonl.gz")))
         name = Path(script).name
         self.calls.append(f"{name}:{Path(argv[argv.index(script) + 1]).name}")
         return 1 if self.fail_on and self.fail_on in self.calls[-1] else 0
@@ -55,6 +62,14 @@ def _config(tmp_path: Path) -> sync.Config:
         python="python",
         scripts_dir=Path("scripts"),
     )
+
+
+def _fresh(config: sync.Config, *kinds: str) -> None:
+    """Both feeds must have a recent finished run, or the sync fails as stale."""
+    for kind in kinds:
+        run = _run(config.evidence_dir, kind, "run=2026-11-01", ["2026-11-01"])
+        (config.state_dir / "loaded").mkdir(parents=True, exist_ok=True)
+        (config.state_dir / "loaded" / f"{kind}-{run.name}").touch()
 
 
 def _go(config: sync.Config, recorder: Recorder) -> int:
@@ -100,6 +115,7 @@ def test_other_directories_next_to_runs_are_ignored(tmp_path: Path) -> None:
 
 def test_new_runs_load_oldest_first_each_with_its_own_window(tmp_path: Path) -> None:
     config = _config(tmp_path)
+    _fresh(config, "rentals")
     _run(config.evidence_dir, "sales", "run=2026-11-13", ["2026-11-06", "2026-11-13"])
     _run(config.evidence_dir, "sales", "run=2026-11-12", ["2026-11-05", "2026-11-12"])
     recorder = Recorder()
@@ -132,8 +148,8 @@ def test_a_loaded_run_is_not_loaded_again_and_only_the_owners_refresh_runs(
 ) -> None:
     # Lease links age out of their window daily, so the Owners refresh runs on every sync.
     config = _config(tmp_path)
+    _fresh(config, "rentals")
     _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
-    (config.state_dir / "loaded").mkdir(parents=True)
     (config.state_dir / "loaded" / "sales-run=2026-11-14").touch()
     recorder = Recorder()
     assert _go(config, recorder) == 0
@@ -155,6 +171,7 @@ def test_the_release_and_cache_flush_follow_a_load_and_clear_the_pending_marker(
     tmp_path: Path,
 ) -> None:
     config = _config(tmp_path)
+    _fresh(config, "rentals")
     _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
     recorder = Recorder()
     assert _go(config, recorder) == 0
@@ -164,6 +181,7 @@ def test_the_release_and_cache_flush_follow_a_load_and_clear_the_pending_marker(
 
 def test_a_failed_release_is_retried_on_the_next_run_without_new_data(tmp_path: Path) -> None:
     config = _config(tmp_path)
+    _fresh(config, "rentals")
     _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
     assert _go(config, Recorder(fail_on="release")) == 1
     assert (config.state_dir / "release-pending").exists()
@@ -223,3 +241,110 @@ def test_the_owners_refresh_runs_the_backend_script_with_its_own_state(tmp_path:
     ]
     assert cwd == repo / "backend"
     assert env["PYTHONPATH"] == str(repo / "backend")
+
+
+def _loaded(config: sync.Config, kind: str, *names: str) -> None:
+    (config.state_dir / "loaded").mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (config.state_dir / "loaded" / f"{kind}-{name}").touch()
+
+
+def _span(first: int, last: int) -> list[str]:
+    return [f"2026-11-{day:02d}" for day in range(first, last + 1)]
+
+
+def test_a_late_run_loads_only_the_days_no_newer_loaded_run_covers(tmp_path: Path) -> None:
+    # Run 11-10 got its _SUCCESS after run 11-12 was loaded. Days 11-05..11-10 belong to the
+    # newer run; only 11-03 and 11-04 are the late run's to replace.
+    config = _config(tmp_path)
+    _fresh(config, "sales")
+    _run(config.evidence_dir, "rentals", "run=2026-11-12", _span(5, 12))
+    _loaded(config, "rentals", "run=2026-11-12")
+    _run(config.evidence_dir, "rentals", "run=2026-11-10", _span(3, 10))
+    recorder = Recorder()
+    assert _go(config, recorder) == 0
+    assert recorder.inputs == [["2026-11-03", "2026-11-04"]]
+    argv = recorder.commands[0]
+    assert argv[argv.index("--replace-window") + 1 :] == ["2026-11-03", "2026-11-04"]
+    assert (config.state_dir / "loaded" / "rentals-run=2026-11-10").exists()
+    assert not (config.state_dir / "views").exists() or not list(
+        (config.state_dir / "views").iterdir()
+    )
+
+
+def test_a_late_run_whose_days_are_all_newer_loaded_is_marked_without_loading(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    _fresh(config, "rentals")
+    _run(config.evidence_dir, "sales", "run=2026-11-14", _span(7, 14))
+    _loaded(config, "sales", "run=2026-11-14")
+    _run(config.evidence_dir, "sales", "run=2026-11-13", _span(7, 13))
+    recorder = Recorder()
+    assert _go(config, recorder) == 0
+    assert recorder.commands == []
+    assert (config.state_dir / "loaded" / "sales-run=2026-11-13").exists()
+
+
+def test_a_late_run_split_around_newer_days_loads_each_older_stretch(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _fresh(config, "sales")
+    _run(config.evidence_dir, "rentals", "run=2026-11-12", _span(4, 5))
+    _loaded(config, "rentals", "run=2026-11-12")
+    _run(config.evidence_dir, "rentals", "run=2026-11-10", _span(1, 10))
+    recorder = Recorder()
+    assert _go(config, recorder) == 0
+    windows = [argv[argv.index("--replace-window") + 1 :] for argv in recorder.commands]
+    assert windows == [["2026-11-01", "2026-11-03"], ["2026-11-06", "2026-11-10"]]
+    assert recorder.inputs == [_span(1, 3), _span(6, 10)]
+
+
+def test_an_older_loaded_run_does_not_narrow_a_newer_one(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _fresh(config, "sales")
+    _run(config.evidence_dir, "rentals", "run=2026-11-12", _span(5, 12))
+    _loaded(config, "rentals", "run=2026-11-05")
+    _run(config.evidence_dir, "rentals", "run=2026-11-05", _span(1, 5))
+    recorder = Recorder()
+    # run=2026-11-12 is pending and newer: both load, oldest first, nothing narrowed.
+    assert _go(config, recorder) == 0
+    assert recorder.inputs == [_span(5, 12)]
+
+
+def test_a_failure_while_loading_a_late_run_leaves_it_unmarked(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _fresh(config, "sales")
+    _run(config.evidence_dir, "rentals", "run=2026-11-12", _span(5, 12))
+    _loaded(config, "rentals", "run=2026-11-12")
+    _run(config.evidence_dir, "rentals", "run=2026-11-10", _span(3, 10))
+    assert _go(config, Recorder(fail_on="run=2026-11-10")) == 1
+    assert not (config.state_dir / "loaded" / "rentals-run=2026-11-10").exists()
+
+
+def test_a_stale_rentals_feed_fails_the_run_like_a_stale_sales_feed(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _fresh(config, "sales")
+    old = _run(config.evidence_dir, "rentals", "run=2026-10-29", ["2026-10-29"])
+    _loaded(config, "rentals", "run=2026-10-29")
+    stamp = time.time() - 40 * 3600
+    os.utime(old / "_SUCCESS", (stamp, stamp))
+    recorder = Recorder()
+    assert _go(config, recorder) == 1
+    # The data that is there is still served and the Owners refresh still runs.
+    assert recorder.calls == ["owners"]
+
+
+def test_a_feed_with_no_finished_run_at_all_fails_the_run(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _fresh(config, "sales")
+    assert _go(config, Recorder()) == 1
+
+
+def test_a_stale_sales_feed_still_fails_the_run(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _fresh(config, "rentals")
+    old = _run(config.evidence_dir, "sales", "run=2026-10-29", ["2026-10-29"])
+    _loaded(config, "sales", "run=2026-10-29")
+    stamp = time.time() - 40 * 3600
+    os.utime(old / "_SUCCESS", (stamp, stamp))
+    assert _go(config, Recorder()) == 1
