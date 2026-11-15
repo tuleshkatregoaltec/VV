@@ -22,7 +22,7 @@ from app.crm.company_listings import (
     list_company_listings,
     select_company_source,
 )
-from app.crm.execution import expensive_crm
+from app.crm.execution import expensive_crm, light_crm
 from app.crm.import_models import (
     CrmContactImportPreview,
     CrmContactImportRename,
@@ -166,11 +166,21 @@ async def _expensive_crm(
         yield
 
 
-# Every CRM entry can compose assessments or warehouse operations, including aliases.
+async def _light_crm(context: AuthContext = Depends(require_active_subscription)):
+    async with light_crm(str(context.organization.id)):
+        yield
+
+
+# Every route names its lane. Warehouse pages, owner assessments, imports and reports queue in
+# the expensive lane; reviewed Postgres reads and writes use the light lane, whose occasional
+# heavy step (an uncached owner assessment) is admitted through execution.heavy_section.
+EXPENSIVE_LANE = [Depends(_expensive_crm)]
+LIGHT_LANE = [Depends(_light_crm)]
+
 router = APIRouter(
     prefix="/api/v1/crm",
     tags=["crm"],
-    dependencies=[Depends(_crm_actor), Depends(_expensive_crm)],
+    dependencies=[Depends(_crm_actor)],
 )
 
 
@@ -178,7 +188,12 @@ def _auth_ids(auth: AuthContext) -> tuple[str, str]:
     return str(auth.user.id), str(auth.organization.id)
 
 
-@router.post("/inbound/enquiries", response_model=InboundEnquiryResponse, status_code=201)
+@router.post(
+    "/inbound/enquiries",
+    response_model=InboundEnquiryResponse,
+    status_code=201,
+    dependencies=LIGHT_LANE,
+)
 async def crm_create_inbound_enquiry(
     payload: InboundEnquiryCreate,
     context: AuthContext = Depends(require_active_subscription),
@@ -191,7 +206,9 @@ async def crm_create_inbound_enquiry(
     )
 
 
-@router.get("/inbound/enquiries", response_model=InboundEnquiryListResponse)
+@router.get(
+    "/inbound/enquiries", response_model=InboundEnquiryListResponse, dependencies=LIGHT_LANE
+)
 async def crm_inbound_enquiries(
     intent_group: str | None = Query(default=None, pattern="^(demand|instructions)$"),
     workspace: str | None = Query(default=None, pattern="^(inbox|unqualified|qualified|closed)$"),
@@ -225,7 +242,11 @@ async def crm_inbound_enquiries(
     )
 
 
-@router.post("/inbound/enquiries/{enquiry_id}/approve-buyer", response_model=InboundEnquiryResponse)
+@router.post(
+    "/inbound/enquiries/{enquiry_id}/approve-buyer",
+    response_model=InboundEnquiryResponse,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_approve_recent_seller(
     enquiry_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -238,7 +259,11 @@ async def crm_approve_recent_seller(
     )
 
 
-@router.get("/inbound/enquiries/{enquiry_id}", response_model=InboundEnquiryResponse)
+@router.get(
+    "/inbound/enquiries/{enquiry_id}",
+    response_model=InboundEnquiryResponse,
+    dependencies=LIGHT_LANE,
+)
 async def crm_inbound_enquiry(
     enquiry_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -248,7 +273,11 @@ async def crm_inbound_enquiry(
     return await get_inbound_enquiry(db, enquiry_id, organization_id)
 
 
-@router.patch("/inbound/enquiries/{enquiry_id}", response_model=InboundEnquiryResponse)
+@router.patch(
+    "/inbound/enquiries/{enquiry_id}",
+    response_model=InboundEnquiryResponse,
+    dependencies=LIGHT_LANE,
+)
 async def crm_update_inbound_enquiry(
     enquiry_id: int,
     payload: InboundEnquiryUpdate,
@@ -265,7 +294,11 @@ async def crm_update_inbound_enquiry(
     )
 
 
-@router.post("/inbound/enquiries/{enquiry_id}/notes", response_model=InboundEnquiryResponse)
+@router.post(
+    "/inbound/enquiries/{enquiry_id}/notes",
+    response_model=InboundEnquiryResponse,
+    dependencies=LIGHT_LANE,
+)
 async def crm_add_inbound_note(
     enquiry_id: int,
     payload: InboundNoteCreate,
@@ -282,7 +315,11 @@ async def crm_add_inbound_note(
     )
 
 
-@router.post("/inbound/enquiries/{enquiry_id}/activities", response_model=InboundEnquiryResponse)
+@router.post(
+    "/inbound/enquiries/{enquiry_id}/activities",
+    response_model=InboundEnquiryResponse,
+    dependencies=LIGHT_LANE,
+)
 async def crm_add_inbound_activity(
     enquiry_id: int,
     payload: InboundActivityCreate,
@@ -300,7 +337,11 @@ async def crm_add_inbound_activity(
     )
 
 
-@router.get("/inbound/enquiries/{enquiry_id}/matches", response_model=InboundMatchesResponse)
+@router.get(
+    "/inbound/enquiries/{enquiry_id}/matches",
+    response_model=InboundMatchesResponse,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_inbound_matches(
     enquiry_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -313,6 +354,7 @@ async def crm_inbound_matches(
 @router.post(
     "/inbound/enquiries/{enquiry_id}/matches/refresh",
     response_model=InboundMatchesResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_refresh_inbound_matches(
     enquiry_id: int,
@@ -329,7 +371,9 @@ async def crm_refresh_inbound_matches(
     )
 
 
-@router.patch("/inbound/matches/{match_id}", response_model=InboundMatchResponse)
+@router.patch(
+    "/inbound/matches/{match_id}", response_model=InboundMatchResponse, dependencies=LIGHT_LANE
+)
 async def crm_update_inbound_match(
     match_id: int,
     payload: InboundMatchUpdate,
@@ -346,6 +390,7 @@ async def crm_update_inbound_match(
     "/inbound/imports",
     response_model=InboundImportResponse,
     status_code=202,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_inbound_import(
     file: UploadFile = File(...),
@@ -375,6 +420,7 @@ async def crm_inbound_import(
 @router.post(
     "/inbound/imports/preview",
     response_model=InboundImportPreviewResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_preview_inbound_import(
     file: UploadFile = File(...),
@@ -385,7 +431,9 @@ async def crm_preview_inbound_import(
     return await preview_inbound_import(file, campaign_context)
 
 
-@router.get("/company-listings", response_model=CrmCompanyListingsResponse)
+@router.get(
+    "/company-listings", response_model=CrmCompanyListingsResponse, dependencies=EXPENSIVE_LANE
+)
 async def crm_company_listings(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -417,7 +465,11 @@ async def crm_company_listings(
     )
 
 
-@router.put("/company-listings/source", response_model=CrmCompanyListingSourceResponse)
+@router.put(
+    "/company-listings/source",
+    response_model=CrmCompanyListingSourceResponse,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_select_company_listing_source(
     payload: CrmCompanyListingSourceUpdate,
     context: AuthContext = Depends(require_active_owner),
@@ -436,7 +488,7 @@ async def crm_select_company_listing_source(
     )
 
 
-@router.delete("/company-listings/source", status_code=204)
+@router.delete("/company-listings/source", status_code=204, dependencies=EXPENSIVE_LANE)
 async def crm_clear_company_listing_source(
     context: AuthContext = Depends(require_active_owner),
     db: AsyncSession = Depends(get_db_session),
@@ -446,7 +498,7 @@ async def crm_clear_company_listing_source(
     await clear_company_source(db, organization_id=organization_id)
 
 
-@router.get("/inbound/imports", response_model=list[InboundImportResponse])
+@router.get("/inbound/imports", response_model=list[InboundImportResponse], dependencies=LIGHT_LANE)
 async def crm_inbound_imports(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
@@ -455,7 +507,7 @@ async def crm_inbound_imports(
     return await list_inbound_imports(db, organization_id)
 
 
-@router.delete("/inbound/imports/{import_id}", status_code=204)
+@router.delete("/inbound/imports/{import_id}", status_code=204, dependencies=EXPENSIVE_LANE)
 async def crm_delete_inbound_import(
     import_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -470,6 +522,7 @@ async def crm_delete_inbound_import(
     "/contact-imports",
     response_model=CrmContactImportResponse,
     status_code=202,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_contact_import(
     file: UploadFile = File(...),
@@ -499,6 +552,7 @@ async def crm_contact_import(
 @router.post(
     "/contact-imports/preview",
     response_model=CrmContactImportPreview,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_contact_import_preview(
     file: UploadFile = File(...),
@@ -514,6 +568,7 @@ async def crm_contact_import_preview(
     "/contact-imports/source-only",
     response_model=CrmContactImportResponse,
     status_code=202,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_source_only_import(
     file: UploadFile = File(...),
@@ -533,6 +588,7 @@ async def crm_source_only_import(
 @router.get(
     "/contact-imports",
     response_model=list[CrmContactImportResponse],
+    dependencies=LIGHT_LANE,
 )
 async def crm_contact_imports(
     context: AuthContext = Depends(require_active_subscription),
@@ -546,6 +602,7 @@ async def crm_contact_imports(
 @router.patch(
     "/contact-imports/{import_id}",
     response_model=CrmContactImportResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_rename_contact_import(
     import_id: int,
@@ -563,7 +620,7 @@ async def crm_rename_contact_import(
     )
 
 
-@router.delete("/contact-imports/{import_id}", status_code=204)
+@router.delete("/contact-imports/{import_id}", status_code=204, dependencies=EXPENSIVE_LANE)
 async def crm_delete_contact_import(
     import_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -582,6 +639,7 @@ async def crm_delete_contact_import(
 @router.get(
     "/contact-imports/{import_id}/dropped-rows",
     response_model=CrmDroppedRowsResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_contact_import_dropped_rows(
     import_id: int,
@@ -615,6 +673,7 @@ async def crm_contact_import_dropped_rows(
 @router.get(
     "/contact-imports/{import_id}/properties",
     response_model=CrmImportPropertiesResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_contact_import_properties(
     import_id: int,
@@ -639,6 +698,7 @@ async def crm_contact_import_properties(
 @router.get(
     "/contact-lists",
     response_model=list[CrmContactListSummary],
+    dependencies=LIGHT_LANE,
 )
 async def crm_contact_lists(
     context: AuthContext = Depends(require_active_subscription),
@@ -652,6 +712,7 @@ async def crm_contact_lists(
 @router.get(
     "/contact-lists/{list_id}",
     response_model=CrmContactListDetail,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_contact_list(
     list_id: int,
@@ -695,6 +756,7 @@ async def crm_contact_list(
 @router.get(
     "/owner-registry",
     response_model=CrmOwnerRegistryResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_owner_registry(
     scope: str = Query(
@@ -760,6 +822,7 @@ async def crm_owner_registry(
 @router.get(
     "/owner-workspaces",
     response_model=list[CrmOwnerWorkspaceSummary],
+    dependencies=LIGHT_LANE,
 )
 async def crm_owner_workspaces(
     context: AuthContext = Depends(require_active_subscription),
@@ -777,6 +840,7 @@ async def crm_owner_workspaces(
 @router.patch(
     "/owner-workspaces/bulk",
     response_model=list[CrmOwnerWorkspaceSummary],
+    dependencies=LIGHT_LANE,
 )
 async def crm_bulk_update_owner_workspaces(
     payload: CrmOwnerBulkUpdate,
@@ -796,6 +860,7 @@ async def crm_bulk_update_owner_workspaces(
 @router.get(
     "/owner-history/summary",
     response_model=CrmOwnerHistorySummary,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_owner_history_summary(
     import_id: int | None = Query(default=None, ge=1),
@@ -810,6 +875,7 @@ async def crm_owner_history_summary(
 @router.get(
     "/contact-imports/{import_id}/owner-summary",
     response_model=CrmOwnerHistorySummary,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_contact_import_owner_summary(
     import_id: int,
@@ -824,6 +890,7 @@ async def crm_contact_import_owner_summary(
 @router.get(
     "/owners/{owner_key}/history",
     response_model=CrmOwnerHistoryResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_owner_history(
     owner_key: str,
@@ -845,7 +912,7 @@ async def crm_owner_history(
     )
 
 
-@router.get("/owners/{owner_key}", response_model=CrmOwnerProfile)
+@router.get("/owners/{owner_key}", response_model=CrmOwnerProfile, dependencies=EXPENSIVE_LANE)
 async def crm_owner_profile(
     owner_key: str,
     context: AuthContext = Depends(require_active_subscription),
@@ -860,7 +927,7 @@ async def crm_owner_profile(
     )
 
 
-@router.get("/dashboard", response_model=CrmDashboardResponse)
+@router.get("/dashboard", response_model=CrmDashboardResponse, dependencies=EXPENSIVE_LANE)
 async def crm_dashboard(
     request: Request,
     status: str | None = Query(
@@ -901,7 +968,7 @@ async def crm_dashboard(
     )
 
 
-@router.get("/area-preferences", response_model=CrmAreaPreferencesResponse)
+@router.get("/area-preferences", response_model=CrmAreaPreferencesResponse, dependencies=LIGHT_LANE)
 async def crm_area_preferences(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
@@ -911,7 +978,7 @@ async def crm_area_preferences(
     return await get_area_preferences(db, user_id=user_id, organization_id=organization_id)
 
 
-@router.put("/area-preferences", response_model=CrmAreaPreferencesResponse)
+@router.put("/area-preferences", response_model=CrmAreaPreferencesResponse, dependencies=LIGHT_LANE)
 async def crm_update_area_preferences(
     payload: CrmAreaPreferencesUpdate,
     context: AuthContext = Depends(require_active_subscription),
@@ -934,7 +1001,7 @@ async def _until_disconnect(request: Request, work):
     return Response(status_code=499) if result is None else result
 
 
-@router.get("/renewals", response_model=CrmRenewalsResponse)
+@router.get("/renewals", response_model=CrmRenewalsResponse, dependencies=EXPENSIVE_LANE)
 async def crm_renewals(
     request: Request,
     window: str | None = Query(
@@ -965,7 +1032,7 @@ async def crm_renewals(
     )
 
 
-@router.get("/renewal-areas", response_model=list[CrmRenewalArea])
+@router.get("/renewal-areas", response_model=list[CrmRenewalArea], dependencies=EXPENSIVE_LANE)
 async def crm_renewal_areas(
     request: Request,
     as_of: date | None = Query(default=None),
@@ -975,7 +1042,7 @@ async def crm_renewal_areas(
     return await _until_disconnect(request, list_renewal_areas(as_of=as_of))
 
 
-@router.get("/renewal-leads", response_model=CrmRenewalLeadsResponse)
+@router.get("/renewal-leads", response_model=CrmRenewalLeadsResponse, dependencies=EXPENSIVE_LANE)
 async def crm_renewal_leads(
     request: Request,
     kind: str | None = Query(default=None, pattern="^(vacant|upcoming)$"),
@@ -1005,7 +1072,11 @@ async def crm_renewal_leads(
     )
 
 
-@router.post("/renewal-leads/{lease_id}/lead", response_model=InboundEnquiryResponse)
+@router.post(
+    "/renewal-leads/{lease_id}/lead",
+    response_model=InboundEnquiryResponse,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_open_renewal_lead(
     lease_id: str,
     context: AuthContext = Depends(require_active_subscription),
@@ -1018,7 +1089,7 @@ async def crm_open_renewal_lead(
     )
 
 
-@router.get("/leads/{lead_id}", response_model=CrmLeadDetailResponse)
+@router.get("/leads/{lead_id}", response_model=CrmLeadDetailResponse, dependencies=EXPENSIVE_LANE)
 async def crm_lead_detail(
     request: Request,
     lead_id: str,
@@ -1039,6 +1110,7 @@ async def crm_lead_detail(
 @router.get(
     "/leads/{lead_id}/contacts",
     response_model=list[CrmLeadImportedContact],
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_lead_contacts(
     lead_id: str,
@@ -1057,6 +1129,7 @@ async def crm_lead_contacts(
 @router.get(
     "/leads/{lead_id}/report",
     response_model=CrmPropertyReportResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_property_report(
     request: Request,
@@ -1068,7 +1141,7 @@ async def crm_property_report(
     return await _until_disconnect(request, get_property_report(lead_id, as_of=as_of))
 
 
-@router.get("/workspaces", response_model=list[CrmWorkspaceSummary])
+@router.get("/workspaces", response_model=list[CrmWorkspaceSummary], dependencies=LIGHT_LANE)
 async def crm_workspaces(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
@@ -1085,6 +1158,7 @@ async def crm_workspaces(
 @router.get(
     "/workspaces/{lead_id}",
     response_model=CrmWorkspaceResponse,
+    dependencies=LIGHT_LANE,
 )
 async def crm_lead_workspace(
     lead_id: str,
@@ -1101,7 +1175,7 @@ async def crm_lead_workspace(
     )
 
 
-@router.patch("/workspaces/{lead_id}", response_model=CrmWorkspaceResponse)
+@router.patch("/workspaces/{lead_id}", response_model=CrmWorkspaceResponse, dependencies=LIGHT_LANE)
 async def crm_update_workspace(
     lead_id: str,
     payload: CrmWorkspaceUpdate,
@@ -1119,7 +1193,9 @@ async def crm_update_workspace(
     )
 
 
-@router.post("/workspaces/{lead_id}/notes", response_model=CrmWorkspaceResponse)
+@router.post(
+    "/workspaces/{lead_id}/notes", response_model=CrmWorkspaceResponse, dependencies=LIGHT_LANE
+)
 async def crm_add_note(
     lead_id: str,
     payload: CrmNoteCreate,
@@ -1137,7 +1213,7 @@ async def crm_add_note(
     )
 
 
-@router.delete("/notes/{note_id}", status_code=204)
+@router.delete("/notes/{note_id}", status_code=204, dependencies=LIGHT_LANE)
 async def crm_delete_note(
     note_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -1157,6 +1233,7 @@ async def crm_delete_note(
 @router.get(
     "/saved-leads",
     response_model=list[CrmSavedLeadResponse],
+    dependencies=LIGHT_LANE,
 )
 async def crm_saved_leads(
     context: AuthContext = Depends(require_active_subscription),
@@ -1175,6 +1252,7 @@ async def crm_saved_leads(
     "/saved-leads/{lead_id}",
     response_model=CrmSavedLeadResponse,
     status_code=201,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_save_lead(
     lead_id: str,
@@ -1191,7 +1269,7 @@ async def crm_save_lead(
     )
 
 
-@router.delete("/saved-leads/{saved_id}", status_code=204)
+@router.delete("/saved-leads/{saved_id}", status_code=204, dependencies=LIGHT_LANE)
 async def crm_delete_saved_lead(
     saved_id: int,
     context: AuthContext = Depends(require_active_subscription),

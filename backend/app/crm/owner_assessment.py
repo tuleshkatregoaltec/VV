@@ -22,6 +22,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.async_work import run_in_thread
 from app.core.cache import RedisCache
 from app.crm import owner_repository
+from app.crm.execution import heavy_section
 from app.crm.identity import ParsedContact
 from app.crm.import_models import CrmOwnerHistorySummary
 from app.crm.owner_namespaces import history_unit_aliases, registry_namespace
@@ -715,7 +716,11 @@ async def _scoped_assessment(
     revision, warehouse_revision, key = await identity()
     if (found := reusable(key)) is not None:
         return found
-    async with _BUILD_LOCKS.setdefault(f"scoped:{tenant}", asyncio.Lock()):
+    # A build is heavy whichever request reaches it: admit it (slot before lock).
+    async with (
+        heavy_section(organization_id),
+        _BUILD_LOCKS.setdefault(f"scoped:{tenant}", asyncio.Lock()),
+    ):
         # A queued identical request reuses the build that just finished.
         if (found := reusable(key)) is not None:
             return found
@@ -787,7 +792,9 @@ async def get_owner_assessment(
     cache = _cache_client()
     lock = _BUILD_LOCKS.setdefault(tenant, asyncio.Lock())
     waiting = lock.locked()
-    async with lock:
+    # Decoding or building the whole-org snapshot is the known OOM path: admit it like an
+    # expensive request even when a light route reached it (slot before lock).
+    async with heavy_section(organization_id), lock:
         # A queued request may have waited through an import or warehouse change.
         if waiting:
             revision, warehouse_revision, key = await cache_identity()

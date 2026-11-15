@@ -257,9 +257,9 @@ async def test_overloaded_authenticated_route_never_starts_warehouse_work(client
     "path, service_name",
     [
         ("/api/v1/crm/contact-imports/1/owner-summary", "get_owner_history_summary"),
-        ("/api/v1/crm/contact-lists", "list_contact_lists"),
+        ("/api/v1/crm/owner-history/summary", "get_owner_history_summary"),
         ("/api/v1/crm/leads/test/contacts", "list_lead_imported_contacts"),
-        ("/api/v1/crm/inbound/enquiries", "list_inbound_enquiries"),
+        ("/api/v1/crm/contact-lists/1", "get_contact_list"),
     ],
 )
 async def test_aliases_cannot_bypass_shared_admission(client, monkeypatch, path, service_name):
