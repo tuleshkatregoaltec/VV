@@ -22393,7 +22393,8 @@
 					"assigned_user_id": {
 						"anyOf": [
 							{
-								"type": "string"
+								"type": "string",
+								"maxLength": 64
 							},
 							{
 								"type": "null"
@@ -22798,7 +22799,8 @@
 					"assigned_user_id": {
 						"anyOf": [
 							{
-								"type": "string"
+								"type": "string",
+								"maxLength": 64
 							},
 							{
 								"type": "null"

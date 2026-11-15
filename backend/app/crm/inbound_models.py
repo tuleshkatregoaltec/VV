@@ -1,7 +1,8 @@
+import json
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 from sqlalchemy import DateTime, ForeignKey, Index, Text, UniqueConstraint, text
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
@@ -302,6 +303,33 @@ class InboundContactResponse(BaseModel):
     registry_profiles: list[InboundRegistryProfileResponse] = Field(default_factory=list)
 
 
+# Briefs are small structured documents (live: at most 620 bytes); bound them so a client
+# cannot store megabytes or deeply nested JSON in an enquiry.
+BRIEF_MAX_BYTES = 16_384
+BRIEF_MAX_DEPTH = 6
+
+
+def _bounded_brief(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+
+    def depth(node: Any, level: int = 1) -> int:
+        if isinstance(node, dict):
+            return max((depth(child, level + 1) for child in node.values()), default=level)
+        if isinstance(node, list):
+            return max((depth(child, level + 1) for child in node), default=level)
+        return level
+
+    if depth(value) > BRIEF_MAX_DEPTH:
+        raise ValueError(f"nested more than {BRIEF_MAX_DEPTH} levels")
+    if len(json.dumps(value, default=str)) > BRIEF_MAX_BYTES:
+        raise ValueError(f"larger than {BRIEF_MAX_BYTES} bytes")
+    return value
+
+
+Brief = Annotated[dict[str, Any], AfterValidator(_bounded_brief)]
+
+
 class InboundEnquiryCreate(BaseModel):
     intent: InboundIntent = "unknown"
     record_kind: InboundRecordKind = "unqualified_contact"
@@ -311,9 +339,9 @@ class InboundEnquiryCreate(BaseModel):
     whatsapp: str | None = Field(default=None, max_length=80)
     source: str = Field(default="Manual", max_length=120)
     campaign: str | None = Field(default=None, max_length=200)
-    assigned_user_id: str | None = None
+    assigned_user_id: str | None = Field(default=None, max_length=64)
     notes: str | None = Field(default=None, max_length=8_000)
-    criteria: dict[str, Any] = Field(default_factory=dict)
+    criteria: Brief = Field(default_factory=dict)
     strict_fields: list[str] = Field(default_factory=list, max_length=20)
     consent_status: str = "unknown"
 
@@ -322,14 +350,14 @@ class InboundEnquiryUpdate(BaseModel):
     intent: InboundIntent | None = None
     status: InboundStatus | None = None
     record_kind: InboundRecordKind | None = None
-    assigned_user_id: str | None = None
-    criteria: dict[str, Any] | None = None
+    assigned_user_id: str | None = Field(default=None, max_length=64)
+    criteria: Brief | None = None
     strict_fields: list[str] | None = Field(default=None, max_length=20)
     next_follow_up: date | None = None
     tags: list[str] | None = Field(default=None, max_length=20)
     notes: str | None = Field(default=None, max_length=8_000)
-    confirmed_data: dict[str, Any] | None = None
-    qualification: dict[str, Any] | None = None
+    confirmed_data: Brief | None = None
+    qualification: Brief | None = None
     lost_reason: str | None = Field(default=None, max_length=500)
     consent_status: Literal["unknown", "provided", "withdrawn"] | None = None
     do_not_contact: bool | None = None
