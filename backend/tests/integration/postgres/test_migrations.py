@@ -102,12 +102,23 @@ async def test_runtime_models_match_the_migrated_schema(pg_session):
     rendering_only = {
         name for name, kinds in by_name.items() if kinds == {"add_index", "remove_index"}
     }
-    assert rendering_only <= {
-        "ix_crm_claim_owner_property_preference",
-        "ix_crm_claim_list_owner_property_preference",
-    }
+    assert rendering_only == set()
     assert [
         change
         for change in changes
         if not (change[0] in {"add_index", "remove_index"} and change[1].name in rendering_only)
     ] == []
+
+
+async def test_unused_claim_indexes_are_dropped_and_the_used_list_index_kept(pg_session):
+    """Zero-scan indexes that no query can use are gone; the Owners list path stays."""
+    rows = await pg_session.execute(
+        sa.text("SELECT indexname FROM pg_indexes WHERE schemaname = 'public'")
+    )
+    names = {row[0] for row in rows}
+    assert not names & {
+        "ix_crm_claim_owner_property_preference",
+        "ix_crm_claim_list_owner_property_preference",
+        "ix_crm_assessed_claim_lead",
+    }
+    assert "ix_crm_assessed_claim_list" in names

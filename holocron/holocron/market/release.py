@@ -24,7 +24,7 @@ data copy) that nothing writes to again. A reader that must give one consistent 
 across several queries (a chat turn, an MCP call, a report) pins the published versions and
 reads only those tables (backend ``app.market.releases``). Pins hold at most
 ``MAX_READER_LEASE``; a superseded version is dropped only ``RELEASE_RETENTION`` after it
-stopped being published, so a version can never disappear under a reader that pinned it
+stopped being published (the one ``__previous`` holds is always kept), so a version can never disappear under a reader that pinned it
 while it was current. Versions of releases that never went live are dropped at once.
 """
 
@@ -76,7 +76,11 @@ _EVENT_DATE = {
 _GOOD_STATES = {"published", "superseded", "rolled_back"}
 # Must equal backend app.market.releases.MAX_LEASE; retention must stay far above it.
 MAX_READER_LEASE = timedelta(minutes=30)
-RELEASE_RETENTION = timedelta(hours=24)
+# Every release builds its own parts (a version shares them with the live table only until the
+# next release), so a retained version costs a full copy of the table (rentals: 1.4 GiB).
+# Retention is therefore the lease plus a wide margin, not a day; the release that
+# ``<table>__previous`` holds is kept at any age as the rollback target.
+RELEASE_RETENTION = timedelta(hours=2)
 # The bronze table and date each dataset's metrics count by; coverage is claimed on that date.
 _COVERAGE_BASIS = {
     "market_sale_events": ("dld_od_transactions_bronze", "instance_date"),
@@ -240,7 +244,12 @@ def _snapshot(clickhouse: ClickHouseClient, source: str, target: str, release_id
 
 
 def cleanup_versions(clickhouse: ClickHouseClient, *, now: datetime | None = None) -> list[str]:
-    """Drop immutable versions no reader can still hold. Caller holds the lock."""
+    """Drop immutable versions no reader can still hold. Caller holds the lock.
+
+    Kept: the published release, the release ``<served>__previous`` holds (the rollback target)
+    and any version superseded less than ``RELEASE_RETENTION`` ago. Everything else is dropped,
+    including versions the ledger does not know.
+    """
     now = now or _now()
     dropped = []
     tables = _market_tables(clickhouse)
@@ -250,7 +259,11 @@ def cleanup_versions(clickhouse: ClickHouseClient, *, now: datetime | None = Non
         for name in [n for n in tables if n.startswith(prefix)]:
             entry = ledger.get(name.removeprefix(prefix))
             state = entry["state"] if entry else ""
-            if state == "published" or tables.get(served) == name.removeprefix(prefix):
+            release_id = name.removeprefix(prefix)
+            if state == "published" or release_id in {
+                tables.get(served),
+                tables.get(f"{served}__previous"),
+            }:
                 continue
             if (
                 entry

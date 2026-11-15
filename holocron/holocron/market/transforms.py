@@ -127,11 +127,24 @@ def _audit(*entries: tuple[str, str]) -> str:
     return f"arrayFilter(c -> c != '', [{items}])"
 
 
-# Large joins and sorts spill to disk instead of failing when memory is tight.
-_HEAVY_QUERY_SETTINGS = """SETTINGS
+# A release build shares a 9 GiB ClickHouse with the live API, so no single statement may take
+# it over. Measured on the production box before these bounds: the sale events INSERT peaked at
+# 7.0 GiB on 59 threads and the rental events INSERT at 4.9 GiB. Sorts and aggregations spill
+# to disk past 500 MB per stream, an INSERT writes through one stream, and max_memory_usage
+# fails one statement (the served release stays untouched) instead of letting the kernel kill
+# the server. 6.5e9 = 6.05 GiB: 1.5x the measured need of the widest insert.
+_BOUNDED_SETTINGS = """max_memory_usage = 6500000000,
+    max_insert_threads = 1,
+    max_bytes_before_external_sort = 500000000,
+    max_bytes_before_external_group_by = 500000000"""
+# Large joins spill to disk instead of failing when memory is tight.
+_HEAVY_QUERY_SETTINGS = f"""SETTINGS
     join_algorithm = 'grace_hash',
-    max_bytes_before_external_sort = 2000000000,
-    max_bytes_before_external_group_by = 2000000000"""
+    {_BOUNDED_SETTINGS}"""
+# The events inserts are the widest joins. Fewer threads hold fewer join hash tables at once:
+# sales 7.0 -> 3.9 GiB on 2 threads (13 -> 24 s); rentals 4.9 -> 4.3 GiB on 4 (36 -> 54 s).
+_SALE_EVENTS_SETTINGS = f"SETTINGS\n    max_threads = 2,\n    {_BOUNDED_SETTINGS}"
+_RENTAL_EVENTS_SETTINGS = f"SETTINGS\n    max_threads = 4,\n    {_BOUNDED_SETTINGS}"
 
 # Every column of the legacy ch_transactions / ch_rent_contracts views, in order. The backend
 # reads these names; the canonical tables must keep all of them (tests enforce it).
@@ -238,13 +251,15 @@ _OPEN_DATA_LABELS = f"""(
     WHERE source_system = 'dld_open_data' AND area_en != ''
     GROUP BY lk, pk
 )"""
-_GEO_CROSSWALK_STATEMENTS = (
-    f"""{_GEO_CROSSWALK_INSERT}
+_GEO_CROSSWALK_STATEMENTS = tuple(
+    f"{statement}\nSETTINGS\n    {_BOUNDED_SETTINGS}"
+    for statement in (
+        f"""{_GEO_CROSSWALK_INSERT}
 SELECT 'district', k, argMax(area_id, n), argMax(name, n), '', '', sum(n), max(n) / sum(n),
        now64(3)
 FROM ({_PULSE_AND_EJARI_AREAS})
 GROUP BY k""",
-    f"""{_GEO_CROSSWALK_INSERT}
+        f"""{_GEO_CROSSWALK_INSERT}
 SELECT 'community', c.ck, if(c.share >= 0.8, d.district_id, 0),
        if(c.share >= 0.8, d.district_name, ''), c.ck, names.name, c.total, c.share, now64(3)
 FROM (
@@ -258,7 +273,7 @@ INNER JOIN (
     GROUP BY ck
 ) AS names ON names.ck = c.ck
 LEFT JOIN {_GEO_DISTRICTS} AS d ON d.source_key = c.top_dk""",
-    f"""{_GEO_CROSSWALK_INSERT}
+        f"""{_GEO_CROSSWALK_INSERT}
 SELECT 'project', e.pk, d.district_id, d.district_name, c.source_key, c.community_name, e.total,
        e.share, now64(3)
 FROM (
@@ -270,8 +285,8 @@ FROM (
 INNER JOIN {_GEO_DISTRICTS} AS d ON d.source_key = tupleElement(e.top, 1)
 INNER JOIN (SELECT source_key, community_name FROM `market_geo_crosswalk`
             WHERE kind = 'community') AS c ON c.source_key = tupleElement(e.top, 2)""",
-    # Labels that name a DLD community exactly.
-    f"""{_GEO_CROSSWALK_INSERT}
+        # Labels that name a DLD community exactly.
+        f"""{_GEO_CROSSWALK_INSERT}
 SELECT 'label', o.lk, c.district_id, c.district_name, c.source_key, c.community_name,
        sum(o.n), 1, now64(3)
 FROM {_OPEN_DATA_LABELS} AS o
@@ -279,8 +294,8 @@ INNER JOIN (SELECT source_key, district_id, district_name, community_name
             FROM `market_geo_crosswalk` WHERE kind = 'community') AS c ON c.source_key = o.lk
 WHERE o.lk NOT IN (SELECT source_key FROM {_GEO_DISTRICTS})
 GROUP BY o.lk, c.district_id, c.district_name, c.source_key, c.community_name""",
-    # Other labels, from the rows whose project already locates them.
-    f"""{_GEO_CROSSWALK_INSERT}
+        # Other labels, from the rows whose project already locates them.
+        f"""{_GEO_CROSSWALK_INSERT}
 SELECT 'label', lk,
        tupleElement(district, 1), tupleElement(district, 2),
        if(pair_share >= 0.8, tupleElement(pair, 3), ''),
@@ -318,6 +333,7 @@ INNER JOIN (
     GROUP BY lk
 ) AS districts USING lk
 WHERE pair_share >= 0.8 OR district_share >= 0.8""",
+    )
 )
 
 
@@ -953,6 +969,7 @@ LEFT JOIN {_SALE_PROFILE_FILL} AS prof ON prof.prof_key = m.dxbi_sale_key AND m.
 LEFT JOIN {_PROFILE_PROJECT_MASTERS} AS ppm ON ppm.ppm_key = lowerUTF8(trimBoth(d.project_en))
 {_geo_joins(area="d.area_en", master="d.master_project_en", project="d.project_en")}
 {_LOCATION_MAP_JOIN}
+{_SALE_EVENTS_SETTINGS}
 """
 
 
@@ -1056,6 +1073,7 @@ LEFT JOIN {_SALE_PROFILE_FILL} AS prof ON prof.prof_key = x.sale_key
     )
 }
 WHERE m.dld_transaction_number = ''
+{_SALE_EVENTS_SETTINGS}
 """
 
 
@@ -1738,7 +1756,7 @@ LEFT JOIN {_RENTAL_PROFILE_FILL} AS prof
 LEFT JOIN {_PROFILE_PROJECT_MASTERS} AS ppm ON ppm.ppm_key = lowerUTF8(trimBoth(d.project_en))
 {_geo_joins(area="d.area_en", master="d.master_project_en", project="d.project_en")}
 {_LOCATION_MAP_JOIN}
-{_HEAVY_QUERY_SETTINGS}
+{_RENTAL_EVENTS_SETTINGS}
 """
 
 _RENTAL_EVENTS_DXBI_SQL = f"""
@@ -1807,4 +1825,5 @@ LEFT JOIN {_RENTAL_PROFILE_FILL} AS prof ON prof.prof_key = x.contract_key
     )
 }
 WHERE m.dld_rent_key = 0
+{_RENTAL_EVENTS_SETTINGS}
 """

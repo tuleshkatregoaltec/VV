@@ -78,18 +78,19 @@ come from the old release, and a new pin sees the new one.
 There are no lease rows to forget or clean up. Safety comes from two bounds:
 
 - a pin lasts at most `MAX_LEASE` = 30 minutes (backend `app.market.releases`);
-- Holocron drops a superseded or rolled-back version only `RELEASE_RETENTION` = 24 hours after
-  its ledger entry changed (`holocron.market.release.cleanup_versions`). The published version
-  and the live table's release are never dropped.
+- Holocron drops a superseded or rolled-back version only `RELEASE_RETENTION` = 2 hours after
+  its ledger entry changed (`holocron.market.release.cleanup_versions`). The published version,
+  the live table's release and the release `<table>__previous` holds (the rollback target) are
+  never dropped.
 
 A pin is taken only on a version that is published at that moment, so the version outlives
-every pin on it by at least 23.5 hours. Versions of releases that never went live (failed,
+every pin on it by at least 1.5 hours. Versions of releases that never went live (failed,
 rejected, interrupted) were never pinnable and are dropped at once. Cleanup runs under the
 market release lock after every publication and in
 `python -m holocron.market.release recover`. Rollback recreates the restored release's version
 if it has already aged out. The two constants must stay equal across both packages: Holocron
-`MAX_READER_LEASE`, backend `MAX_LEASE`. A Holocron test asserts that retention is more than
-10× the lease.
+`MAX_READER_LEASE`, backend `MAX_LEASE`. A Holocron test asserts that retention is at least 4×
+the lease and at most 4 hours.
 
 ## Deployment requirements
 
@@ -98,8 +99,13 @@ if it has already aged out. The two constants must stay equal across both packag
   `SELECT`), plus `system.tables` (visible to readers by default). It needs no DDL.
 - After the schema adds `release_id` and the geography columns, recreate the serving views
   (`create_compatibility_views`), because ClickHouse expands `SELECT *` when a view is created.
-- Storage: versions share parts with the live table through hard links. Space grows only as
-  merges rewrite parts, for at most 24 hours of superseded releases.
+- Storage: a version shares parts (hard links) only with the release it was taken from; every
+  release builds fresh parts, so each retained version is a full copy (rentals 1.4 GiB, sales
+  0.3 GiB). Steady state is the live release plus the rollback target; the 24-hour retention
+  this replaced let 11-14's four re-runs leave six copies (5.2 GiB of real disk).
+- Memory: every INSERT of a release build carries `max_memory_usage` (6.5e9), one insert
+  stream and 500 MB external sort/group-by thresholds; the events inserts also cap
+  `max_threads` (sales 2, rentals 4). Measured peak per insert: sales 7.0 -> 3.9 GiB.
 
 ## Limits
 
@@ -108,4 +114,4 @@ if it has already aged out. The two constants must stay equal across both packag
 - The pinned set pairs the current sales and rentals releases. The rentals entry records the
   sales release its area learning used (`depends_on_json`); the two are not forced to come from
   one publication run.
-- Clock skew between the API and ClickHouse hosts must stay far below the 23.5-hour margin.
+- Clock skew between the API and ClickHouse hosts must stay far below the 1.5-hour margin.

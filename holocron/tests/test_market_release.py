@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import os
 import threading
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
@@ -51,6 +51,67 @@ def test_cleanup_never_drops_a_staging_name_that_holds_another_release() -> None
     )
     release._drop_own_staging(cast(Any, client), "new")
     assert client.commands == ["DROP TABLE IF EXISTS `market_sale_matches__staging_new`"]
+
+
+class _Warehouse:
+    """Answers the system.tables listing and the release ledger; records commands."""
+
+    def __init__(self, tables: dict[str, str], ledger: list[tuple[str, str, datetime]]) -> None:
+        self.tables = tables
+        self.ledger = ledger
+        self.commands: list[str] = []
+
+    def query(self, sql: str) -> Any:
+        if "market_release_ledger" not in sql:
+            return SimpleNamespace(result_rows=list(self.tables.items()))
+        rows = []
+        for release_id, state, updated_at in self.ledger:
+            entry: dict[str, Any] = dict.fromkeys(release._LEDGER_COLUMNS, "")
+            entry.update(release_id=release_id, state=state, updated_at=updated_at)
+            rows.append(tuple(entry[column] for column in release._LEDGER_COLUMNS))
+        return SimpleNamespace(result_rows=rows)
+
+    def command(self, sql: str) -> None:
+        self.commands.append(sql)
+
+
+def test_cleanup_keeps_only_live_previous_and_just_superseded_versions() -> None:
+    # Every release builds its own parts, so a retained version costs a full copy of the table:
+    # one table, 1.4 GiB. Beyond the live release and the rollback target, a version may only
+    # outlive the longest reader pin (plus a margin), not a day of re-runs.
+    now = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+    ago = lambda delta: (now - delta).replace(tzinfo=None)  # noqa: E731  (ledger holds naive UTC)
+    client = _Warehouse(
+        {
+            "market_sale_events": "cur",
+            "market_sale_events__previous": "prev",
+            "market_sale_events__rcur": "cur",
+            "market_sale_events__rprev": "prev",  # the rollback target: kept at any age
+            "market_sale_events__rrecent": "recent",  # superseded 40 minutes ago: a pin may hold it
+            "market_sale_events__rold1": "old1",  # superseded 3 hours ago
+            "market_sale_events__rold2": "old2",  # superseded 20 hours ago
+            "market_sale_events__rghost": "ghost",  # no ledger entry at all
+        },
+        [
+            ("cur", "published", ago(timedelta(hours=1))),
+            ("prev", "superseded", ago(timedelta(days=3))),
+            ("recent", "superseded", ago(timedelta(minutes=40))),
+            ("old1", "superseded", ago(timedelta(hours=3))),
+            ("old2", "rolled_back", ago(timedelta(hours=20))),
+        ],
+    )
+    dropped = release.cleanup_versions(cast(Any, client), now=now)
+    assert sorted(client.commands) == [
+        "DROP TABLE IF EXISTS `market_sale_events__rghost`",
+        "DROP TABLE IF EXISTS `market_sale_events__rold1`",
+        "DROP TABLE IF EXISTS `market_sale_events__rold2`",
+    ]
+    assert len(dropped) == 3
+
+
+def test_retention_outlives_a_reader_pin_with_margin_but_not_by_a_day() -> None:
+    assert release.RELEASE_RETENTION >= release.MAX_READER_LEASE * 4
+    assert release.RELEASE_RETENTION <= timedelta(hours=4)
 
 
 def test_only_named_failures_with_a_reason_are_accepted() -> None:
@@ -435,18 +496,27 @@ def test_published_versions_stay_immutable_until_no_reader_can_hold_them(warehou
     assert any(r3 in item for item in dropped)
 
     # Superseded versions survive retention (a pin lasts at most MAX_READER_LEASE) ...
-    assert release.RELEASE_RETENTION > release.MAX_READER_LEASE * 10
+    assert release.RELEASE_RETENTION >= release.MAX_READER_LEASE * 4
+    later = datetime.now(UTC) + release.RELEASE_RETENTION + timedelta(minutes=1)
     with release.release_lock(warehouse, owner="test"):
         assert release.cleanup_versions(warehouse) == []
-        later = datetime.now(UTC) + release.RELEASE_RETENTION + timedelta(minutes=1)
+        # ... and the release __previous holds (the rollback target) is kept at any age.
+        assert release.cleanup_versions(warehouse, now=later) == []
+    assert v1 in _tables(warehouse)
+
+    # A newer release moves the rollback target on; the version that aged out then goes,
+    # and the published and the new rollback-target versions never do.
+    _dld_sales(warehouse, [("T42", "Sales", 3_000_000)])
+    release.materialize_market_sale_events(clickhouse=warehouse)
+    with release.release_lock(warehouse, owner="test"):
         dropped = release.cleanup_versions(warehouse, now=later)
-    # ... and then go; the published version never does.
     assert [item.split(":")[0] for item in dropped] == [v1]
     assert v2 in _tables(warehouse) and v1 not in _tables(warehouse)
 
-    # Rolling back to a release whose version aged out recreates it for readers.
-    assert release.rollback(warehouse, "market_sale_events") == r1
-    assert _served(warehouse, v1) == 40
+    # Rolling back to a release whose version was removed recreates it for readers.
+    warehouse.command(f"DROP TABLE `{v2}`")
+    assert release.rollback(warehouse, "market_sale_events") == r2
+    assert _served(warehouse, v2) == 41
 
 
 @live
