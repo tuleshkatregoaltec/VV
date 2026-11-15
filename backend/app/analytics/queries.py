@@ -1144,6 +1144,81 @@ def sales_summary(
     All filtering uses parameter binding - no SQL injection risk. ``market`` is a
     MARKET_FILTERS entry (trusted, not user input): its group and predicate.
     """
+    where_clause = _sales_where(
+        property_usage,
+        master_project,
+        property_type,
+        property_sub_type,
+        rooms,
+        area_name,
+        reg_type,
+        price_range,
+        area_range,
+        market,
+    )
+
+    return f"""
+        SELECT
+            count() as transaction_count,
+            round(medianExact(actual_worth), 2) as median_price,
+            round(avg(actual_worth), 2) as avg_price,
+            round(sum(actual_worth), 2) as total_volume,
+            round(medianExact(meter_sale_price) / 10.7639, 2) as median_price_per_sqft,
+            round(medianExactIf(size_sqm, size_sqm > 0) * 10.7639, 2) as median_area_sqft,
+            round(min(actual_worth), 2) as min_price,
+            round(max(actual_worth), 2) as max_price,
+            {_SALE_PER_SQFT} as avg_price_sqft
+        FROM {SALES_SOURCE}
+        WHERE {where_clause}
+    """
+
+
+# The mean of each sized sale's price per sq ft, as the summary, its trend and its breakdowns.
+_SALE_PER_SQFT = "round(avgIf(actual_worth / size_sqm, size_sqm > 0) / 10.7639, 2)"
+_RENT_PER_SQFT = "round(avgIf(annual_amount / size_sqm, size_sqm > 0) / 10.7639, 2)"
+_NOT_RECORDED = "'Not recorded'"
+# A breakdown dimension: (group key, display label). Records with no value are a group of their
+# own, so the parts add up to the summary.
+SALES_DIMENSIONS = {
+    "property_type": (
+        "property_type",
+        f"any(if(property_type = '', {_NOT_RECORDED}, property_type))",
+    ),
+    "rooms": ("rooms_en", f"any(if(rooms_en = '', {_NOT_RECORDED}, rooms_en))"),
+    "reg_type": ("reg_type_en", f"any(if(reg_type_en = '', {_NOT_RECORDED}, reg_type_en))"),
+    "master_project": ("master_key_en", "any(master_project_en)"),
+}
+RENTALS_DIMENSIONS = {
+    "property_type": SALES_DIMENSIONS["property_type"],
+    "master_project": SALES_DIMENSIONS["master_project"],
+}
+# The busiest masters only; the other breakdowns are short by nature.
+BREAKDOWN_LIMIT = {"master_project": 20}
+
+
+def _period_group(interval: str, column: str) -> str:
+    # SAFE: interval is controlled by application, not user input
+    if interval == "day":
+        return f"toDate({column})"
+    if interval == "week":
+        return f"toStartOfWeek({column})"  # Sunday weeks
+    if interval == "month":
+        return f"toStartOfMonth({column})"
+    raise ValueError("interval must be 'day', 'week', or 'month'")
+
+
+def _sales_where(
+    property_usage: Optional[str],
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    property_sub_type: Optional[str] = None,
+    rooms: Optional[str] = None,
+    area_name: Optional[str] = None,
+    reg_type: Optional[str] = None,
+    price_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
+    market: Optional[dict[str, str]] = None,
+) -> str:
     where_clauses = _market_clauses(market) + [
         "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
@@ -1164,24 +1239,50 @@ def sales_summary(
         where_clauses.append("reg_type_en = {reg_type:String}")
     where_clauses += _range_clauses("actual_worth", "price", price_range)
     where_clauses += _range_clauses("size_sqm * 10.7639", "area_sqft", area_range)
+    return " AND ".join(where_clauses)
 
-    where_clause = " AND ".join(where_clauses)
 
+def sales_trends(interval: str, *, start_date: str = "", end_date: str = "", **filters) -> str:
+    """The summary's sales by day, Sunday week or month: count, value, mean, mean per sq ft."""
     return f"""
         SELECT
-            count() as transaction_count,
-            round(medianExact(actual_worth), 2) as median_price,
-            round(avg(actual_worth), 2) as avg_price,
-            round(sum(actual_worth), 2) as total_volume,
-            round(medianExact(meter_sale_price) / 10.7639, 2) as median_price_per_sqft,
-            round(medianExactIf(size_sqm, size_sqm > 0) * 10.7639, 2) as median_area_sqft,
-            round(min(actual_worth), 2) as min_price,
-            round(max(actual_worth), 2) as max_price,
-            round(avgIf(actual_worth / size_sqm, size_sqm > 0) / 10.7639, 2)
-                as avg_price_sqft
+            {_period_group(interval, "instance_date")} as period,
+            count() as count,
+            round(sum(actual_worth), 2) as total_value,
+            round(avg(actual_worth), 2) as avg_value,
+            {_SALE_PER_SQFT} as avg_sqft
         FROM {SALES_SOURCE}
-        WHERE {where_clause}
+        WHERE {_sales_where(**filters)}
+        GROUP BY period
+        ORDER BY period ASC
     """
+
+
+def sales_breakdown(dimension: str, *, start_date: str = "", end_date: str = "", **filters) -> str:
+    """The summary's sales split by one dimension, busiest first."""
+    key, label = SALES_DIMENSIONS[dimension]
+    limit = f"LIMIT {BREAKDOWN_LIMIT[dimension]}" if dimension in BREAKDOWN_LIMIT else ""
+    return f"""
+        SELECT
+            {key} as dimension_key,
+            {label} as dimension_value,
+            count() as transaction_count,
+            round(sum(actual_worth), 2) as total_volume,
+            {_SALE_PER_SQFT} as avg_price_sqft
+        FROM {SALES_SOURCE}
+        WHERE {_sales_where(**filters)}
+        GROUP BY dimension_key
+        ORDER BY transaction_count DESC, dimension_key
+        {limit}
+    """
+
+
+async def fetch_sales_trends(parameters: dict, *, interval: str, **filters):
+    return await query(sales_trends(interval, **filters), parameters)
+
+
+async def fetch_sales_breakdown(parameters: dict, dimension: str, **filters):
+    return await query(sales_breakdown(dimension, **filters), parameters)
 
 
 def price_trends(
@@ -1193,13 +1294,11 @@ def price_trends(
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
     market: Optional[dict[str, str]] = None,
-    source: Optional[str] = None,
 ) -> str:
     """
     Get price trends over time (grouped by day, week, or month).
 
-    ``source`` is the Analytics DXBI records by default; chat charts pass the combined market
-    layer (``ch_transactions``) their other queries read.
+    The Analytics DXBI records, for the market-trend chart and chat's charts alike.
 
     Args:
         interval: 'day', 'week', or 'month'
@@ -1207,8 +1306,6 @@ def price_trends(
     Returns: period, transaction_count, avg_price, avg_price_sqft
     ``market`` is a MARKET_FILTERS entry (trusted, not user input).
     """
-    combined_layer = source is not None
-    source = source or SALES_SOURCE
     # SAFE: interval is controlled by application, not user input
     if interval not in ("day", "week", "month"):
         raise ValueError("interval must be 'day', 'week', or 'month'")
@@ -1227,10 +1324,7 @@ def price_trends(
         where_clauses.append("property_usage_en = {property_usage:String}")
 
     if master_project is not None:
-        where_clauses.append(
-            # The combined layer (chat) has no master key: its master is matched by name.
-            "master_project_en = {master_project:String}" if combined_layer else MASTER_FILTER
-        )
+        where_clauses.append(MASTER_FILTER)
     if property_type is not None:
         where_clauses.append("property_type = {property_type:String}")
     if area_name is not None:
@@ -1244,7 +1338,7 @@ def price_trends(
             count() as transaction_count,
             round(avg(actual_worth), 2) as avg_price,
             round(avg(meter_sale_price) / 10.7639, 2) as avg_price_sqft
-        FROM {source}
+        FROM {SALES_SOURCE}
         WHERE {where_clause}
         GROUP BY period
         ORDER BY period ASC
@@ -1267,6 +1361,34 @@ def rentals_summary(
     Returns: contract_count, median_rent, avg_rent, total_annual_value,
              median_rent_per_sqft, median_area_sqft
     """
+    where_clause = _rentals_where(
+        property_usage, master_project, property_type, area_name, rent_range, area_range
+    )
+
+    return f"""
+        SELECT
+            count() as contract_count,
+            round(medianExact(annual_amount), 2) as median_rent,
+            round(avg(annual_amount), 2) as avg_rent,
+            round(sum(annual_amount), 2) as total_annual_value,
+            round(medianExact(annual_amount / nullIf(size_sqm * 10.7639, 0)), 2) as median_rent_per_sqft,
+            round(medianExactIf(size_sqm, size_sqm > 0) * 10.7639, 2) as median_area_sqft,
+            round(min(annual_amount), 2) as min_rent,
+            round(max(annual_amount), 2) as max_rent,
+            {_RENT_PER_SQFT} as avg_rent_sqft
+        FROM {RENTALS_SOURCE}
+        WHERE {where_clause}
+    """
+
+
+def _rentals_where(
+    property_usage: str,
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    area_name: Optional[str] = None,
+    rent_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
+) -> str:
     where_clauses = [
         "property_usage_en = {property_usage:String}",
         "toDate(contract_start_date) BETWEEN {start_date:Date} AND {end_date:Date}",
@@ -1280,27 +1402,56 @@ def rentals_summary(
         where_clauses.append("location_name = {area_name:String}")
     where_clauses += _range_clauses("annual_amount", "rent", rent_range)
     where_clauses += _range_clauses("size_sqm * 10.7639", "area_sqft", area_range)
+    return " AND ".join(where_clauses)
 
-    where_clause = " AND ".join(where_clauses)
 
+def rentals_trends(interval: str, *, start_date: str = "", end_date: str = "", **filters) -> str:
+    """The summary's leases by start day, Sunday week or month."""
     return f"""
         SELECT
-            count() as contract_count,
-            round(medianExact(annual_amount), 2) as median_rent,
-            round(avg(annual_amount), 2) as avg_rent,
-            round(sum(annual_amount), 2) as total_annual_value,
-            round(medianExact(annual_amount / nullIf(size_sqm * 10.7639, 0)), 2) as median_rent_per_sqft,
-            round(medianExactIf(size_sqm, size_sqm > 0) * 10.7639, 2) as median_area_sqft,
-            round(min(annual_amount), 2) as min_rent,
-            round(max(annual_amount), 2) as max_rent,
-            round(avgIf(annual_amount / size_sqm, size_sqm > 0) / 10.7639, 2)
-                as avg_rent_sqft
+            {_period_group(interval, "contract_start_date")} as period,
+            count() as count,
+            round(sum(annual_amount), 2) as total_value,
+            round(avg(annual_amount), 2) as avg_value,
+            {_RENT_PER_SQFT} as avg_sqft
         FROM {RENTALS_SOURCE}
-        WHERE {where_clause}
+        WHERE {_rentals_where(**filters)}
+        GROUP BY period
+        ORDER BY period ASC
     """
 
 
-GET_MARKET_PULSE_SQL = """
+def rentals_breakdown(
+    dimension: str, *, start_date: str = "", end_date: str = "", **filters
+) -> str:
+    """The summary's leases split by one dimension, busiest first."""
+    key, label = RENTALS_DIMENSIONS[dimension]
+    limit = f"LIMIT {BREAKDOWN_LIMIT[dimension]}" if dimension in BREAKDOWN_LIMIT else ""
+    return f"""
+        SELECT
+            {key} as dimension_key,
+            {label} as dimension_value,
+            count() as contract_count,
+            round(sum(annual_amount), 2) as total_annual_value,
+            {_RENT_PER_SQFT} as avg_rent_sqft
+        FROM {RENTALS_SOURCE}
+        WHERE {_rentals_where(**filters)}
+        GROUP BY dimension_key
+        ORDER BY contract_count DESC, dimension_key
+        {limit}
+    """
+
+
+async def fetch_rentals_trends(parameters: dict, *, interval: str, **filters):
+    return await query(rentals_trends(interval, **filters), parameters)
+
+
+async def fetch_rentals_breakdown(parameters: dict, dimension: str, **filters):
+    return await query(rentals_breakdown(dimension, **filters), parameters)
+
+
+GET_MARKET_PULSE_SQL = (
+    """
     SELECT
         count(*) as transaction_count,
         round(medianExact(actual_worth), 0) as median_price,
@@ -1309,7 +1460,9 @@ GET_MARKET_PULSE_SQL = """
         round(medianExact(actual_worth / size_sqm) / 10.7639, 0) as median_price_per_sqft,
         min(instance_date) as period_start,
         max(instance_date) as period_end
-    FROM ch_transactions
+    FROM """
+    + SALES_SOURCE
+    + """
     WHERE
         location_name = {area:String}
         AND trans_group_en = 'Sales'
@@ -1317,21 +1470,25 @@ GET_MARKET_PULSE_SQL = """
         AND actual_worth > 0
         AND size_sqm > 0
     """
+)
 
 
 async def fetch_market_pulse(parameters: dict):
     return await query(GET_MARKET_PULSE_SQL, parameters)
 
 
-# Chat's market tools (market pulse, area rankings) read the combined market layer, as the rest
-# of chat does; the Analytics page reads the DXBI records. Ranked by location in the uniform
-# vocabulary (DXBI community names; the names market pulse and the Transactions page filter on).
-RANK_AREAS_VOLUME_SQL = """
+# Chat's market tools (market pulse, area rankings) read the Analytics DXBI records, as chat's
+# metrics and charts do (2026-11-15; they read the combined DXBI + DLD layer before). Ranked by
+# DXBI community (the names market pulse and the Transactions page filter on).
+RANK_AREAS_VOLUME_SQL = (
+    """
         SELECT
             location_name as area,
             count(*) as transaction_count,
             round(medianExact(actual_worth), 0) as median_price
-        FROM ch_transactions
+        FROM """
+    + SALES_SOURCE
+    + """
         WHERE
             instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
@@ -1341,14 +1498,18 @@ RANK_AREAS_VOLUME_SQL = """
         ORDER BY transaction_count DESC
         LIMIT {limit:Int32}
         """
+)
 
 
-RANK_AREAS_PRICE_SQL = """
+RANK_AREAS_PRICE_SQL = (
+    """
         SELECT
             location_name as area,
             round(medianExact(actual_worth), 0) as median_price,
             count(*) as transaction_count
-        FROM ch_transactions
+        FROM """
+    + SALES_SOURCE
+    + """
         WHERE
             instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
@@ -1359,15 +1520,19 @@ RANK_AREAS_PRICE_SQL = """
         ORDER BY median_price DESC
         LIMIT {limit:Int32}
         """
+)
 
 
-RANK_AREAS_GROWTH_SQL = """
+RANK_AREAS_GROWTH_SQL = (
+    """
         WITH
             current_period AS (
                 SELECT
                     location_name as area,
                     medianExact(actual_worth) as current_median
-                FROM ch_transactions
+                FROM """
+    + SALES_SOURCE
+    + """
                 WHERE
                     instance_date >= today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
@@ -1380,7 +1545,9 @@ RANK_AREAS_GROWTH_SQL = """
                 SELECT
                     location_name as area,
                     medianExact(actual_worth) as previous_median
-                FROM ch_transactions
+                FROM """
+    + SALES_SOURCE
+    + """
                 WHERE
                     instance_date >= today() - {period_days:Int32} * 2
                     AND instance_date < today() - {period_days:Int32}
@@ -1400,6 +1567,7 @@ RANK_AREAS_GROWTH_SQL = """
         ORDER BY growth_percentage DESC
         LIMIT {limit:Int32}
         """
+)
 
 
 async def fetch_rank_areas(metric: str, parameters: dict):

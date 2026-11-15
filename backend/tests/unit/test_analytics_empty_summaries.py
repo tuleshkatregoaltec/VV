@@ -12,11 +12,17 @@ NAN = math.nan
 PERIOD = {"start_date": date(2025, 10, 1), "end_date": date(2026, 9, 30)}
 
 
+async def nothing(*args, **kwargs):
+    return []
+
+
 async def test_sales_summary_of_no_sales_is_empty(monkeypatch):
     async def no_sales(*args, **kwargs):
         return [{"transaction_count": 0, "median_price": NAN, "avg_price": NAN, "total_volume": 0}]
 
     monkeypatch.setattr(queries, "fetch_sales_summary", no_sales)
+    monkeypatch.setattr(queries, "fetch_sales_trends", nothing)
+    monkeypatch.setattr(queries, "fetch_sales_breakdown", nothing)
 
     response = await service.get_sales_analytics(master_project="No Such Place", **PERIOD)
 
@@ -30,6 +36,8 @@ async def test_rentals_summary_of_no_leases_is_empty(monkeypatch):
         return [{"contract_count": 0, "median_rent": NAN, "avg_rent": NAN, "total_annual_value": 0}]
 
     monkeypatch.setattr(queries, "fetch_rentals_summary", no_leases)
+    monkeypatch.setattr(queries, "fetch_rentals_trends", nothing)
+    monkeypatch.setattr(queries, "fetch_rentals_breakdown", nothing)
 
     response = await service.get_rental_analytics(master_project="No Such Place", **PERIOD)
 

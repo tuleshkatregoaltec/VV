@@ -465,25 +465,26 @@ async def test_custom_area_yield_chart_recomputes_yield_from_sales_and_rentals(
         },
     )
 
+    # DXBI's records type apartments "Apartment" (DLD's "Unit" sales and "Flat" leases).
     assert seen["latest_sales_args"] == {
         "property_usage": "Residential",
-        "property_type": "Unit",
+        "property_type": "Apartment",
         "area": None,
     }
     assert seen["latest_rental_args"] == {
         "property_usage": "Residential",
-        "property_type": "Flat",
+        "property_type": "Apartment",
         "area": None,
     }
-    assert "FROM ch_transactions" in str(seen["sql"])
-    assert "FROM ch_rent_contracts" in str(seen["sql"])
+    assert "FROM dxbi_sales_listed" in str(seen["sql"])
+    assert "FROM dxbi_leases_listed" in str(seen["sql"])
     assert "FROM ch_area_fact" not in str(seen["sql"])
     assert "median_annual_rent / nullIf(s.median_sale_price, 0) * 100" in str(seen["sql"])
     assert "value BETWEEN 1 AND 25" in str(seen["sql"])
     assert seen["params"]["start_date"] == "2025-01-20"
     assert seen["params"]["end_date"] == "2026-01-20"
-    assert seen["params"]["sales_property_type"] == "Unit"
-    assert seen["params"]["rental_property_type"] == "Flat"
+    assert seen["params"]["sales_property_type"] == "Apartment"
+    assert seen["params"]["rental_property_type"] == "Apartment"
     assert seen["params"]["min_records"] == 250
     assert artifact["query"]["dataset"] == "areas"
     assert artifact["query"]["metric"] == "gross_yield_pct"

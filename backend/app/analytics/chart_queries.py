@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from typing import Any
 
+from app.analytics.dxbi import RENTALS_SOURCE, SALES_SOURCE
 from app.analytics.metrics import (
     _chart_area_inputs,
     _chart_days,
@@ -35,9 +36,12 @@ async def _resolve_transaction_area(area: str | None) -> str | None:
         return None
 
     search_text = area_search_text(area)
-    sql = """
+    sql = (
+        """
     SELECT location_name
-    FROM ch_transactions
+    FROM """
+        + SALES_SOURCE
+        + """
     WHERE location_name != ''
       AND (
         lower(location_name) = lower({area:String})
@@ -56,6 +60,7 @@ async def _resolve_transaction_area(area: str | None) -> str | None:
         count() DESC
     LIMIT 1
     """
+    )
     rows = await ch_query(
         sql, {"area": area, "search_text": search_text, "pattern": f"%{search_text}%"}
     )
@@ -88,7 +93,7 @@ async def _latest_transaction_date(
     rows = await ch_query(
         f"""
         SELECT max(instance_date) AS max_date
-        FROM ch_transactions
+        FROM {SALES_SOURCE}
         WHERE {" AND ".join(where_clauses)}
         """,
         params,
@@ -137,7 +142,7 @@ async def _latest_rental_contract_date(
     rows = await ch_query(
         f"""
         SELECT max(contract_start_date) AS max_date
-        FROM ch_rent_contracts
+        FROM {RENTALS_SOURCE}
         WHERE {" AND ".join(where_clauses)}
         """,
         params,
@@ -164,7 +169,9 @@ async def _resolve_transaction_scope(area: str | None) -> dict[str, str | None]:
     master_rows = await ch_query(
         """
         SELECT master_project_en
-        FROM ch_transactions
+        FROM """
+        + SALES_SOURCE
+        + """
         WHERE master_project_en != ''
           AND lower(master_project_en) = lower({search_text:String})
           AND trans_group_en = 'Sales'
@@ -286,7 +293,7 @@ async def _latest_transaction_date_for_scopes(
     rows = await ch_query(
         f"""
         SELECT max(instance_date) AS max_date
-        FROM ch_transactions
+        FROM {SALES_SOURCE}
         WHERE {" AND ".join(where_clauses)}
         """,
         params,
@@ -332,7 +339,7 @@ async def _latest_rental_contract_date_for_scopes(
     rows = await ch_query(
         f"""
         SELECT max(contract_start_date) AS max_date
-        FROM ch_rent_contracts
+        FROM {RENTALS_SOURCE}
         WHERE {" AND ".join(where_clauses)}
         """,
         params,
@@ -374,7 +381,6 @@ async def fetch_market_trend_rows(args: dict[str, Any]):
     start_date = end_date - timedelta(days=days)
 
     sql = price_trends(
-        source="ch_transactions",
         property_usage=property_usage,
         property_type=property_type,
         area_name=area,
@@ -527,7 +533,7 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
                 {label_expr} AS label,
                 {metric_exprs[metric]} AS value,
                 count() AS record_count
-            FROM ch_transactions
+            FROM {SALES_SOURCE}
             WHERE {" AND ".join(where)}
             GROUP BY series_label, label
             HAVING value > 0 AND record_count >= {{min_records:Int32}}
@@ -548,7 +554,7 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
                 {label_expr} AS label,
                 {metric_exprs[metric]} AS value,
                 count() AS record_count
-            FROM ch_transactions
+            FROM {SALES_SOURCE}
             WHERE {" AND ".join(where)}
             GROUP BY label
             HAVING value > 0 AND record_count >= {{min_records:Int32}}
@@ -701,7 +707,7 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
                 {label_expr} AS label,
                 {metric_exprs[metric]} AS value,
                 count() AS record_count
-            FROM ch_rent_contracts
+            FROM {RENTALS_SOURCE}
             WHERE {" AND ".join(where)}
             GROUP BY series_label, label
             HAVING value > 0 AND record_count >= {{min_records:Int32}}
@@ -722,7 +728,7 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
                 {label_expr} AS label,
                 {metric_exprs[metric]} AS value,
                 count() AS record_count
-            FROM ch_rent_contracts
+            FROM {RENTALS_SOURCE}
             WHERE {" AND ".join(where)}
             GROUP BY label
             HAVING value > 0 AND record_count >= {{min_records:Int32}}
@@ -927,7 +933,7 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
                     location_name AS area,
                     medianExact(actual_worth) AS median_sale_price,
                     count() AS sales_count
-                FROM ch_transactions
+                FROM {SALES_SOURCE}
                 WHERE {" AND ".join(sales_where)}
                 GROUP BY area
                 HAVING sales_count >= {{min_records:Int32}}
@@ -937,7 +943,7 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
                     location_name AS area,
                     medianExact(annual_amount) AS median_annual_rent,
                     count() AS rental_count
-                FROM ch_rent_contracts
+                FROM {RENTALS_SOURCE}
                 WHERE {" AND ".join(rental_where)}
                 GROUP BY area
                 HAVING rental_count >= {{min_records:Int32}}

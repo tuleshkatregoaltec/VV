@@ -1,12 +1,13 @@
 """Database-grounded sales and rental metrics shared by the API and the chat tools.
 
-The served canonical tables (ch_transactions / ch_rent_contracts over the market layer) are
-the authority. A period is resolved to Dubai calendar dates first. Coverage then comes from
-the served release's load evidence, day by day (see MarketCoverage), not from the first and
-last record dates: records at both ends of a month do not show the middle was loaded.
-Missing data stays missing: a day without evidence is unknown, never a zero, and only a
-fully verified period is complete. One operation answers from one release: if the release
-changes while it runs, the operation is recomputed.
+They read the Analytics records: DXBI's listed sales and leases (app.analytics.dxbi), the rows
+/analytics/sales, /rentals and the project pages read, so one filter gives one count everywhere.
+A period is resolved to Dubai calendar dates first. Coverage then comes from the DXBI feed's
+load evidence, day by day (see MarketCoverage), not from the first and last record dates:
+records at both ends of a month do not show the middle was loaded. Missing data stays missing:
+a day without evidence is unknown, never a zero, and only a fully verified period is complete.
+One operation answers from one build of the listed tables: if it is rebuilt while the operation
+runs, the operation is recomputed.
 """
 
 from __future__ import annotations
@@ -40,20 +41,17 @@ SMALL_SAMPLE = 10
 
 ELIGIBILITY = {
     "sales": (
-        "Served canonical sales, one row per sale after corrections and de-duplication: DXBI's "
-        "record where DXBI lists the sale, DLD's for the sales only DLD holds. Transaction group "
-        "'Sales' with a price above zero; mortgages, gifts, probable duplicates and superseded "
-        "versions are excluded. Date: transaction date (DXBI's where DXBI lists the sale, "
-        "otherwise DLD's), Dubai calendar."
+        "DXBI's listed sales, one row per sale (the records the Analytics and Transactions pages "
+        "list), priced at AED 50,000 or more: lower DXBI values are not market prices. Date: "
+        "DXBI's transaction date, Dubai calendar."
     ),
     "rentals": (
-        "Served canonical leases, one row per lease of one unit: DXBI's record where DXBI lists "
-        "the lease, de-duplicated Ejari contracts for the leases only DLD holds. Annual amount "
-        "above zero and an end date after the start date. Date: lease start date, Dubai calendar."
+        "DXBI's listed leases, one row per lease of one unit, with an annual rent of AED 1,000 or "
+        "more and an end date after the start date. Date: lease start date, Dubai calendar."
     ),
 }
 
-_VALUE = {"sales": "sale price", "rentals": "annual rent (DLD annualised amount)"}
+_VALUE = {"sales": "sale price", "rentals": "annual rent"}
 _AREA = {"sales": "size in sq ft", "rentals": "size in sq ft"}
 
 
@@ -396,20 +394,9 @@ async def _compute(
                 "Change is not computed because a compared period is not fully covered."
             )
     if request.location:
-        location = community_location(request.location)
+        # Every DXBI record names its community, so none is located only by a wider district.
         matched = await queries.fetch_matched_locations(request.dataset, filters)
         response.matched_locations = [MarketLocationMatch(**item) for item in matched]
-        containing = tuple(
-            sorted({m.district for m in response.matched_locations if m.community and m.district})
-        )
-        if location.communities and not location.districts and containing:
-            coarse = await queries.fetch_district_only_rows(request.dataset, filters, containing)
-            if coarse:
-                limitations.append(
-                    f"{coarse} records matching the other filters are located by DLD only at "
-                    f"district level ({', '.join(containing)}); they may include "
-                    f"{location.name} but are not counted, because no source places them there."
-                )
     sources = await queries.fetch_source_breakdown(request.dataset, filters)
     response.sources = {
         f"{item['source_system']}/{item['match_status']}": int(item["records"]) for item in sources

@@ -12,6 +12,11 @@ refreshes the Owners lease links (imported claims' lease end, rent and lease id)
 the stored owner assessments; a lease link's window moves with the date, so this runs even when
 nothing new was loaded.
 
+Each successful load also records the days it replaced as complete load windows
+(``source_load_windows``, the evidence DLD loads record): ``_SUCCESS`` means every price-band
+shard of those days finished, so the API's coverage can call them verified. ``--record-loaded``
+records the windows of runs loaded before this evidence was kept.
+
 A run's marker in ``<state>/loaded`` is written after its load succeeds, so a failed night is
 retried whole on the next run. ``<state>/release-pending`` keeps a failed release build owed.
 The unit fails when a report has no finished run in 36 hours (sales or rentals) or a load fails,
@@ -40,6 +45,20 @@ logger = logging.getLogger("sync_dxbi_to_warehouse")
 KINDS = ("sales", "rentals")
 _RUN_NAME = re.compile(r"^run=\d{4}-\d{2}-\d{2}$")
 CACHE_PREFIXES = ("transactions:", "analytics:")
+
+
+# The table and date each report's load windows are recorded against (the loader's
+# --replace-window date).
+EVIDENCE_TABLES = {
+    "sales": ("dxbi_sales_unit_events", "transaction_date"),
+    "rentals": ("dxbi_rental_events", "lease_start"),
+}
+
+RecordWindow = Callable[["Run", date, date], None]
+
+
+def evidence_table(kind: str) -> tuple[str, str]:
+    return EVIDENCE_TABLES[kind]
 
 
 class RunError(RuntimeError):
@@ -199,9 +218,17 @@ def _is_loaded(config: Config, run: Run) -> bool:
 
 
 def _load_run(
-    config: Config, run: Run, finished: list[Run], run_command: Callable[[list[str]], int]
+    config: Config,
+    run: Run,
+    finished: list[Run],
+    run_command: Callable[[list[str]], int],
+    record_window: RecordWindow | None = None,
 ) -> bool:
-    """Load what the run still owns of its window; False when a load failed."""
+    """Load what the run still owns of its window; False when a load failed.
+
+    Every stretch loaded is recorded as load evidence (``record_window``) once it is stored.
+    """
+    record = record_window or (lambda _run, _first, _last: None)
     newer_loaded = [
         other for other in finished if other.name > run.name and _is_loaded(config, other)
     ]
@@ -212,6 +239,7 @@ def _load_run(
             logger.error("Loading %s %s failed; later runs wait for it", run.kind, run.name)
             return False
         config.release_pending.touch()
+        record(run, run.first, run.last)
         return True
     if not stretches:
         logger.info(
@@ -239,6 +267,7 @@ def _load_run(
                 logger.error("Loading %s %s failed; later runs wait for it", run.kind, run.name)
                 return False
             config.release_pending.touch()
+            record(run, first, last)
         finally:
             shutil.rmtree(view, ignore_errors=True)
     return True
@@ -251,6 +280,7 @@ def run_sync(
     build_release: Callable[[], None],
     flush_cache: Callable[[], None],
     refresh_owners: Callable[[], None],
+    record_window: RecordWindow | None = None,
 ) -> int:
     config.loaded_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / "reconciliations").mkdir(parents=True, exist_ok=True)
@@ -259,7 +289,7 @@ def run_sync(
         finished = discover_runs(config.evidence_dir, kind)
         pending = [run for run in finished if not _is_loaded(config, run)]
         for run in pending:
-            if not _load_run(config, run, finished, run_command):
+            if not _load_run(config, run, finished, run_command, record_window):
                 failures += 1
                 break
             (config.loaded_dir / f"{kind}-{run.name}").touch()
@@ -285,6 +315,57 @@ def run_sync(
         logger.error("No finished %s run in the last 36 hours", kind)
         failures += 1
     return 1 if failures else 0
+
+
+def _record_window(run: Run, first: date, last: date) -> None:
+    """Record the days ``first`` to ``last`` of a loaded run as one complete load window."""
+    from holocron.platform.clickhouse import ClickHouseClient
+    from holocron.platform.load_windows import record_load_windows
+    from holocron.platform.settings import Settings
+
+    completed = json.loads((run.path / "checkpoint.json").read_text())["completed"]
+    rows = sum(
+        int(entry.get("rows") or 0)
+        for key, entry in completed.items()
+        if first <= date.fromisoformat(key.split("|", 1)[0]) <= last
+    )
+    bronze_table, date_field = evidence_table(run.kind)
+    record_load_windows(
+        ClickHouseClient(Settings()),
+        bronze_table=bronze_table,
+        date_field=date_field,
+        # A whole window from its first row: complete, so verified (load_windows.window_statuses).
+        windows=[
+            {
+                "window_start": first,
+                "window_end": last,
+                "status": "complete",
+                "rows": rows,
+                "evidence": f"{run.path}/_SUCCESS",
+                "first_row": 0,
+                "end_row": rows,
+                "total_rows": rows,
+            }
+        ],  # fmt: skip
+        run_id=f"sync-{run.name}",
+        manifest_key=str(run.path / "checkpoint.json"),
+    )
+
+
+def record_loaded(config: Config, record_window: RecordWindow) -> int:
+    """Record the windows of runs already loaded (before load evidence was kept), oldest first:
+    each run's days that no newer loaded run covers, as the sync would have loaded them."""
+    recorded = 0
+    for kind in KINDS:
+        loaded = [
+            run for run in discover_runs(config.evidence_dir, kind) if _is_loaded(config, run)
+        ]
+        for run in loaded:
+            newer = [other for other in loaded if other.name > run.name]
+            for first, last in uncovered_stretches(run, newer):
+                record_window(run, first, last)
+                recorded += 1
+    return recorded
 
 
 def _build_release() -> None:
@@ -340,6 +421,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-dir", type=Path, required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--state-dir", type=Path, required=True)
+    parser.add_argument(
+        "--record-loaded",
+        action="store_true",
+        help="only record the load windows of runs already loaded, then exit",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args.state_dir.mkdir(parents=True, exist_ok=True)
@@ -356,11 +442,15 @@ def main(argv: list[str] | None = None) -> int:
             python=sys.executable,
             scripts_dir=args.repo_dir / "holocron/scripts",
         )
+        if args.record_loaded:
+            logger.info("Recorded %d load windows", record_loaded(config, _record_window))
+            return 0
         return run_sync(
             config,
             build_release=_build_release,
             flush_cache=lambda: _flush_cache(args.repo_dir / "backend"),
             refresh_owners=lambda: _refresh_owners(args.repo_dir, args.state_dir),
+            record_window=_record_window,
         )
 
 

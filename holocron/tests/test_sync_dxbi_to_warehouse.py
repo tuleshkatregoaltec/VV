@@ -348,3 +348,87 @@ def test_a_stale_sales_feed_still_fails_the_run(tmp_path: Path) -> None:
     stamp = time.time() - 40 * 3600
     os.utime(old / "_SUCCESS", (stamp, stamp))
     assert _go(config, Recorder()) == 1
+
+
+def test_a_loaded_run_records_its_days_as_verified_load_evidence(tmp_path: Path) -> None:
+    """The run's _SUCCESS proves every price-band shard of its days finished: the warehouse keeps
+    that as load evidence (source_load_windows), so Analytics coverage can say which DXBI days
+    are fully loaded instead of calling every day since the DLD feed stopped unverified."""
+    config = _config(tmp_path)
+    _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-08", "2026-11-14"])
+    _run(config.evidence_dir, "rentals", "run=2026-11-14", ["2026-11-10", "2026-11-13"])
+    windows: list[tuple] = []
+    recorder = Recorder()
+    assert (
+        sync.run_sync(
+            config,
+            run_command=recorder.command,
+            build_release=recorder.release,
+            flush_cache=recorder.flush,
+            refresh_owners=recorder.owners,
+            record_window=lambda run, first, last: windows.append(
+                (*sync.evidence_table(run.kind), run.name, first, last)
+            ),
+        )
+        == 0
+    )
+    assert windows == [
+        ("dxbi_sales_unit_events", "transaction_date", "run=2026-11-14",
+         date(2026, 11, 8), date(2026, 11, 14)),
+        ("dxbi_rental_events", "lease_start", "run=2026-11-14",
+         date(2026, 11, 10), date(2026, 11, 13)),
+    ]  # fmt: skip
+
+
+def test_a_failed_load_records_no_load_evidence(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _fresh(config, "rentals")
+    _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
+    windows: list[tuple] = []
+    recorder = Recorder(fail_on="load_dxbi_sales_units.py")
+    sync.run_sync(
+        config,
+        run_command=recorder.command,
+        build_release=recorder.release,
+        flush_cache=recorder.flush,
+        refresh_owners=recorder.owners,
+        record_window=lambda run, first, last: windows.append((run.name, first, last)),
+    )
+    assert windows == []
+
+
+def test_a_late_run_records_only_the_stretch_it_loaded(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _fresh(config, "rentals")
+    _run(config.evidence_dir, "sales", "run=2026-11-13", ["2026-11-06", "2026-11-13"])
+    newer = _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-10", "2026-11-14"])
+    (config.state_dir / "loaded" / f"sales-{newer.name}").touch()
+    windows: list[tuple] = []
+    recorder = Recorder()
+    sync.run_sync(
+        config,
+        run_command=recorder.command,
+        build_release=recorder.release,
+        flush_cache=recorder.flush,
+        refresh_owners=recorder.owners,
+        record_window=lambda run, first, last: windows.append((run.name, first, last)),
+    )
+    assert windows == [("run=2026-11-13", date(2026, 11, 6), date(2026, 11, 9))]
+
+
+def test_runs_loaded_before_evidence_was_kept_record_the_days_they_still_hold(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    (config.state_dir / "loaded").mkdir(parents=True)
+    for name, days in (("run=2026-11-13", ["2026-11-06", "2026-11-13"]),
+                       ("run=2026-11-14", ["2026-11-10", "2026-11-14"])):  # fmt: skip
+        run = _run(config.evidence_dir, "sales", name, days)
+        (config.state_dir / "loaded" / f"sales-{run.name}").touch()
+    _run(config.evidence_dir, "sales", "run=2026-11-15", ["2026-11-15"])  # not loaded yet
+    windows: list[tuple] = []
+    sync.record_loaded(config, lambda run, first, last: windows.append((run.name, first, last)))
+    assert windows == [
+        ("run=2026-11-13", date(2026, 11, 6), date(2026, 11, 9)),
+        ("run=2026-11-14", date(2026, 11, 10), date(2026, 11, 14)),
+    ]

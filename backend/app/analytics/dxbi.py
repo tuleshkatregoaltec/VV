@@ -42,6 +42,15 @@ _MASTER_KEY = f"if(master_key != '', master_key, {_NAME_KEY.format(e=_LOCATION)}
 # DLD's area; without a profile, DXBI's community.
 _AREA = f"if(profile_area != '', profile_area, {_LOCATION})"
 
+# Price floors (decision 2026-11-15). A record below them is not a market price and is left out
+# of every Analytics figure: DXBI lists sales from AED 163 (1-17 AED/sq ft below AED 10,000, a
+# median 41 AED/sq ft from 10,000 to 50,000, against ~1,700 for the market; 446 of 165,000
+# sales in the year to 2026-11-15) and leases at AED 0-999 a year (contract amounts of AED 0-3
+# over 1-10 years; ~1,800 of 575,000); a lease must also end after it starts (2 do not). The
+# Transactions pages still list them as recorded.
+SALE_FLOOR_AED = 50_000
+RENT_FLOOR_AED = 1_000
+
 SALES_SOURCE = f"""(
     WITH {_LOCATION_SPELLING}
     SELECT sale_key AS transaction_id, transaction_date AS instance_date,
@@ -63,12 +72,13 @@ SALES_SOURCE = f"""(
            scope AS project_name_en, {_MASTER} AS master_project_en, {_MASTER_KEY} AS master_key_en,
            {_LOCATION} AS location_name, {_AREA} AS area_name_en
     FROM dxbi_sales_listed
+    WHERE sale_amount_aed >= {SALE_FLOOR_AED}
 )"""
 
 RENTALS_SOURCE = f"""(
     WITH {_LOCATION_SPELLING}
     SELECT contract_key AS contract_id, lease_start AS contract_start_date,
-           lease_end AS contract_end_date,
+           lease_end AS contract_end_date, contract_state AS version_en,
            annual_rent_aed AS annual_amount, contract_amount_aed AS contract_amount,
            multiIf(size_sqft > 0, size_sqft, profile_size > 0, profile_size, NULL) / 10.7639
                AS actual_area,
@@ -80,4 +90,5 @@ RENTALS_SOURCE = f"""(
            scope AS project_name_en, {_MASTER} AS master_project_en, {_MASTER_KEY} AS master_key_en,
            {_LOCATION} AS location_name, {_AREA} AS area_name_en
     FROM dxbi_leases_listed
+    WHERE annual_rent_aed >= {RENT_FLOOR_AED} AND lease_end > lease_start
 )"""

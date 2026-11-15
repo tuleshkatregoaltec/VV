@@ -7,6 +7,8 @@ import re
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
+from fastapi import HTTPException
+
 from app.analytics import queries
 from app.analytics.metrics import (
     _add_months,
@@ -21,6 +23,7 @@ from app.analytics.models import (
     AnalyticsSummary,
     AnalyticsUnitComposition,
     BuildingStock,
+    DimensionBreakdown,
     MarketTrendPoint,
     MarketTrendResponse,
     PriceDistributionBucket,
@@ -39,10 +42,12 @@ from app.analytics.models import (
     PropertyTypeBreakdown,
     RegTypeBreakdown,
     RentalAnalyticsResponse,
+    RentalDimensionBreakdown,
     RentalSummary,
     RoomAnalytics,
     SubProjectItem,
     SubProjectsResponse,
+    TrendPoint,
     UsageCount,
 )
 from app.analytics.queries import MARKET_FILTERS, ProjectFilterType, ProjectScopeType
@@ -543,9 +548,18 @@ async def get_project_trends(
 async def get_project_forecast(
     project_name: str, days: int, filter_type: ProjectScopeType = "project"
 ) -> ProjectForecastResponse:
-    # DXBI has no verified delivery schedule in the loaded source; no DLD price curve.
+    # Decision 2026-11-15: no forecast. The forecast anchored DLD's off-plan price curve on a
+    # project's delivery date; DXBI's records carry no delivery schedule and the DLD curve is
+    # frozen (2026-10-13), so any curve drawn now would be invented. Delivery timing is shown by
+    # the pipeline instead.
     return ProjectForecastResponse(
-        data=[], methodology="Delivery-based forecasts are unavailable from DXBI transaction data."
+        available=False,
+        unavailable_reason=(
+            "A price forecast is not available: the DXBI records hold no delivery schedule to "
+            "anchor one on. See the delivery pipeline for expected completions."
+        ),
+        data=[],
+        methodology="Delivery-based forecasts are unavailable from DXBI transaction data.",
     )
 
 
@@ -764,6 +778,80 @@ def _bind_bounds(parameters: dict, name: str, bounds) -> None:
         parameters[f"{name}_max"] = high
 
 
+# The usage a market type's records are of (DXBI types each: villas and townhouses are homes, a
+# whole building is commercial, a plot is land), echoed instead of the ignored property_usage.
+MARKET_TYPE_USAGE = {
+    "residential_units": "Residential",
+    "villas": "Residential",
+    "commercial_units": "Commercial",
+    "bulk_building": "Commercial",
+    "land": "Land",
+}
+
+
+def _market_interval(days: int) -> str:
+    """Daily points up to 30 days, Sunday weeks up to 180, months beyond."""
+    if days <= 30:
+        return "day"
+    if days <= 180:
+        return "week"
+    return "month"
+
+
+def _period_last_day(start: date, interval: str) -> date:
+    if interval == "day":
+        return start
+    if interval == "week":
+        return start + timedelta(days=6)
+    return _add_months(start.replace(day=1), 1) - timedelta(days=1)
+
+
+def _is_partial(period: date, interval: str, start_date: date, end_date: date) -> bool:
+    """A point whose day, week or month the requested period cuts: not a whole one."""
+    return period < start_date or _period_last_day(period, interval) > end_date
+
+
+def _figure(value: Any) -> Optional[float]:
+    """A period or group with no records (or none with a size) has no average: NULL or NaN."""
+    if value is None:
+        return None
+    number = float(value)
+    return None if math.isnan(number) else number
+
+
+def _pct_change(current: Optional[float], previous: Optional[float]) -> Optional[float]:
+    if current is None or not previous:
+        return None
+    return round((current - previous) / previous * 100, 1)
+
+
+def _resolve_period(
+    timeframe_days: Optional[int], start_date: Optional[date], end_date: Optional[date]
+) -> tuple[date, date]:
+    if timeframe_days:
+        end_date = date.today()
+        return end_date - timedelta(days=timeframe_days), end_date
+    end_date = end_date or date.today()
+    return start_date or date.today() - timedelta(days=180), end_date  # default 6 months
+
+
+def _previous_period(start_date: date, end_date: date) -> tuple[date, date]:
+    """The equal period just before: as many whole days, sharing none."""
+    previous_end = start_date - timedelta(days=1)
+    return previous_end - (end_date - start_date), previous_end
+
+
+def _unavailable(what: str, error: Exception) -> HTTPException:
+    """A failed query is an error the page shows, never a 200 with zeros that reads as no sales."""
+    logger.error("Error executing %s query: %s", what, error)
+    return HTTPException(status_code=503, detail=f"The {what} figures could not be loaded.")
+
+
+def _shares(rows: list[dict], count_field: str, total: int) -> dict[str, float]:
+    """Each group's share of the summary's records (the busiest masters do not add up to all)."""
+    return {row["dimension_value"]: round(int(row[count_field]) / total * 100, 1) for row in rows}
+
+
 async def get_sales_analytics(
     market_type: Optional[str] = None,
     property_usage: Optional[str] = "Residential",
@@ -777,25 +865,18 @@ async def get_sales_analytics(
     price_bucket: Optional[str] = None,
     area_bucket: Optional[str] = None,
 ):
-    """Get sales analytics with flexible filtering and custom date ranges.
+    """Sales summary, trend and breakdowns for a period, with the change on the equal period
+    before it.
 
-    Supports:
-    - Custom date ranges (use start_date/end_date or timeframe_days)
-    - market_type for taxonomy-correct filtering (recommended)
-    - Manual filtering via property_usage + property_type (legacy)
-
-    Examples:
-    - Last 30 days: ?timeframe_days=30
-    - By market: ?market_type=residential_units&timeframe_days=90
-    - Custom range: ?start_date=2024-01-01&end_date=2024-12-31
+    ``market_type`` replaces property_usage / property_type with its own group and predicate.
+    A period is ``timeframe_days`` up to today, or start_date to end_date (default: 180 days).
+    The trend is daily up to 30 days, by Sunday week up to 180 and monthly beyond; a point the
+    period cuts is flagged ``partial``. Breakdowns split the summary's records (records without
+    a value are their own "Not recorded" group; masters are the 20 busiest).
     """
-    from fastapi import HTTPException
-
-    # A market type replaces property_usage / property_type with its own group and predicate.
-    resolved_property_usage = property_usage
-    resolved_property_type = property_type
     market = None
-
+    resolved_usage = property_usage
+    resolved_type = property_type
     if market_type is not None:
         if market_type not in MARKET_FILTERS:
             raise HTTPException(
@@ -803,85 +884,81 @@ async def get_sales_analytics(
                 detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}",
             )
         market = MARKET_FILTERS[market_type]
-        resolved_property_usage = None
-        resolved_property_type = None
+        resolved_usage = None
+        resolved_type = None
 
-    # Calculate date range
-    if timeframe_days:
-        from datetime import timedelta
+    start_date, end_date = _resolve_period(timeframe_days, start_date, end_date)
+    previous_start, previous_end = _previous_period(start_date, end_date)
+    price_range = _bucket_bounds("price_bucket", price_bucket)
+    area_range = _bucket_bounds("area_bucket", area_bucket)
 
-        end_date = date.today()
-        start_date = end_date - timedelta(days=timeframe_days)
-    else:
-        if not start_date:
-            from datetime import timedelta
-
-            start_date = date.today() - timedelta(days=180)  # Default 6 months
-        if not end_date:
-            end_date = date.today()
-
-    # Execute ClickHouse query
-    try:
-        parameters = {
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-        }
-
-        # Add optional parameters
-        if resolved_property_usage is not None:
-            parameters["property_usage"] = resolved_property_usage
+    def parameters(start: date, end: date) -> dict:
+        bound: dict = {"start_date": start.isoformat(), "end_date": end.isoformat()}
+        if resolved_usage is not None:
+            bound["property_usage"] = resolved_usage
         if master_project:
-            parameters["master_project"] = master_project
-        if resolved_property_type:
-            parameters["property_type"] = resolved_property_type
+            bound["master_project"] = master_project
+        if resolved_type:
+            bound["property_type"] = resolved_type
         if rooms:
-            parameters["rooms"] = rooms
+            bound["rooms"] = rooms
         if reg_type:
-            parameters["reg_type"] = reg_type
-        price_range = _bucket_bounds("price_bucket", price_bucket)
-        area_range = _bucket_bounds("area_bucket", area_bucket)
-        _bind_bounds(parameters, "price", price_range)
-        _bind_bounds(parameters, "area_sqft", area_range)
+            bound["reg_type"] = reg_type
+        _bind_bounds(bound, "price", price_range)
+        _bind_bounds(bound, "area_sqft", area_range)
+        return bound
 
-        result = await queries.fetch_sales_summary(
-            parameters,
-            property_usage=resolved_property_usage,
-            market=market,
-            start_date=start_date.isoformat(),
-            end_date=end_date.isoformat(),
-            master_project=master_project,
-            property_type=resolved_property_type,
-            rooms=rooms,
-            reg_type=reg_type,
-            price_range=price_range,
-            area_range=area_range,
+    filters = dict(
+        property_usage=resolved_usage,
+        market=market,
+        master_project=master_project,
+        property_type=resolved_type,
+        rooms=rooms,
+        reg_type=reg_type,
+        price_range=price_range,
+        area_range=area_range,
+    )
+    current = parameters(start_date, end_date)
+    period = {"start_date": current["start_date"], "end_date": current["end_date"]}
+    interval = _market_interval((end_date - start_date).days)
+    dimensions = ("property_type", "rooms", "reg_type", "master_project")
+    try:
+        result, previous, trend_rows, *breakdown_rows = await asyncio.gather(
+            queries.fetch_sales_summary(current, **period, **filters),
+            queries.fetch_sales_summary(
+                parameters(previous_start, previous_end),
+                start_date=previous_start.isoformat(),
+                end_date=previous_end.isoformat(),
+                **filters,
+            ),
+            queries.fetch_sales_trends(current, interval=interval, **period, **filters),
+            *(
+                queries.fetch_sales_breakdown(current, dimension, **period, **filters)
+                for dimension in dimensions
+            ),
         )
-
     except HTTPException:
         raise
-    except Exception as e:
-        # Log error and return empty response instead of crashing
-        import logging
+    except Exception as error:
+        raise _unavailable("sales analytics", error) from error
 
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error executing sales analytics query: {str(e)}")
-        result = []
-
+    response = {
+        "timeframe_days": timeframe_days or (end_date - start_date).days,
+        "property_usage": MARKET_TYPE_USAGE[market_type] if market_type else property_usage,
+        "market_type": market_type,
+    }
     # An aggregate over no sales is one row with a zero count and NaN averages (not JSON).
     if not result or not result[0].get("transaction_count"):
-        # Return empty analytics response
-        summary = AnalyticsSummary(
-            transaction_count=0,
-            total_volume=0.0,
-            avg_price=0.0,
-            avg_price_sqft=0.0,
-            min_price=0.0,
-            max_price=0.0,
-        )
         return AnalyticsResponse(
-            timeframe_days=timeframe_days or (end_date - start_date).days,
-            property_usage=property_usage,
-            summary=summary,
+            **response,
+            summary=AnalyticsSummary(
+                transaction_count=0,
+                total_volume=0.0,
+                avg_price=0.0,
+                avg_price_sqft=0.0,
+                min_price=0.0,
+                max_price=0.0,
+            ),
             trends=[],
             by_property_type=[],
             by_rooms=[],
@@ -889,29 +966,63 @@ async def get_sales_analytics(
             by_master_project=[],
         )
 
-    # Convert result to summary
     row = result[0]
+    before = previous[0] if previous and previous[0].get("transaction_count") else {}
     summary = AnalyticsSummary(
         transaction_count=row["transaction_count"],
         total_volume=float(row["total_volume"]),
         avg_price=float(row["avg_price"]),
-        avg_price_sqft=float(row.get("avg_price_sqft") or 0),
+        avg_price_sqft=_figure(row.get("avg_price_sqft")) or 0.0,
         min_price=float(row.get("min_price") or 0),
         max_price=float(row.get("max_price") or 0),
+        median_price=_figure(row.get("median_price")),
+        volume_change_pct=_pct_change(
+            float(row["total_volume"]), _figure(before.get("total_volume"))
+        ),
+        count_change_pct=_pct_change(
+            float(row["transaction_count"]), _figure(before.get("transaction_count"))
+        ),
     )
 
-    # For now, return basic response with just summary
-    # TODO: Add trends and breakdowns queries
+    def breakdown(rows: list[dict]) -> list[DimensionBreakdown]:
+        shares = _shares(rows, "transaction_count", int(row["transaction_count"]))
+        return [
+            DimensionBreakdown(
+                dimension_value=item["dimension_value"],
+                transaction_count=int(item["transaction_count"]),
+                total_volume=float(item["total_volume"]),
+                avg_price_sqft=_figure(item.get("avg_price_sqft")) or 0.0,
+                pct_of_total=shares[item["dimension_value"]],
+            )
+            for item in rows
+        ]
+
+    by = dict(zip(dimensions, breakdown_rows, strict=True))
     return AnalyticsResponse(
-        timeframe_days=timeframe_days or (end_date - start_date).days,
-        property_usage=property_usage,
+        **response,
         summary=summary,
-        trends=[],  # TODO: Implement trends query
-        by_property_type=[],  # TODO: Implement breakdowns
-        by_rooms=[],
-        by_reg_type=[],
-        by_master_project=[],
+        trends=_trend_points(trend_rows, interval, start_date, end_date),
+        by_property_type=breakdown(by["property_type"]),
+        by_rooms=breakdown(by["rooms"]),
+        by_reg_type=breakdown(by["reg_type"]),
+        by_master_project=breakdown(by["master_project"]),
     )
+
+
+def _trend_points(
+    rows: list[dict], interval: str, start_date: date, end_date: date
+) -> list[TrendPoint]:
+    return [
+        TrendPoint(
+            date=item["period"],
+            count=int(item["count"]),
+            total_value=float(item["total_value"]),
+            avg_value=float(item["avg_value"]),
+            avg_sqft=_figure(item.get("avg_sqft")) or 0.0,
+            partial=_is_partial(item["period"], interval, start_date, end_date),
+        )
+        for item in rows
+    ]
 
 
 async def get_rental_analytics(
@@ -924,101 +1035,113 @@ async def get_rental_analytics(
     rent_bucket: Optional[str] = None,
     area_bucket: Optional[str] = None,
 ):
-    """Get rental analytics with flexible filtering and custom date ranges.
-
-    Supports:
-    - Custom date ranges (use start_date/end_date or timeframe_days)
-    - Multi-dimensional filtering (combine property_type, location, rent ranges)
-    - Bucketed filtering (rent ranges, area ranges)
-
-    Examples:
-    - Last 90 days: ?timeframe_days=90
-    - Custom range: ?start_date=2024-06-01&end_date=2024-08-31
-    - Filtered: ?property_usage=Commercial&rent_bucket=200K-500K
-    """
-    # Calculate date range
-    if timeframe_days:
-        from datetime import timedelta
-
-        end_date = date.today()
-        start_date = end_date - timedelta(days=timeframe_days)
-    else:
-        if not start_date:
-            from datetime import timedelta
-
-            start_date = date.today() - timedelta(days=180)  # Default 6 months
-        if not end_date:
-            end_date = date.today()
-
-    # Execute ClickHouse query
-
-    parameters = {
-        "property_usage": property_usage,
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat(),
-    }
-
-    # Add optional parameters
-    if master_project:
-        parameters["master_project"] = master_project
-    if property_type:
-        parameters["property_type"] = property_type
+    """Lease summary, trend (by lease start) and breakdowns for a period, with the change on the
+    equal period before it. Periods, trend intervals and partial points as for sales."""
+    start_date, end_date = _resolve_period(timeframe_days, start_date, end_date)
+    previous_start, previous_end = _previous_period(start_date, end_date)
     rent_range = _bucket_bounds("rent_bucket", rent_bucket)
     area_range = _bucket_bounds("area_bucket", area_bucket)
-    _bind_bounds(parameters, "rent", rent_range)
-    _bind_bounds(parameters, "area_sqft", area_range)
 
-    result = await queries.fetch_rentals_summary(
-        parameters,
+    def parameters(start: date, end: date) -> dict:
+        bound: dict = {
+            "property_usage": property_usage,
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+        }
+        if master_project:
+            bound["master_project"] = master_project
+        if property_type:
+            bound["property_type"] = property_type
+        _bind_bounds(bound, "rent", rent_range)
+        _bind_bounds(bound, "area_sqft", area_range)
+        return bound
+
+    filters = dict(
         property_usage=property_usage,
-        start_date=start_date.isoformat(),
-        end_date=end_date.isoformat(),
         master_project=master_project,
         property_type=property_type,
         rent_range=rent_range,
         area_range=area_range,
     )
+    current = parameters(start_date, end_date)
+    period = {"start_date": current["start_date"], "end_date": current["end_date"]}
+    interval = _market_interval((end_date - start_date).days)
+    try:
+        result, previous, trend_rows, by_type, by_master = await asyncio.gather(
+            queries.fetch_rentals_summary(current, **period, **filters),
+            queries.fetch_rentals_summary(
+                parameters(previous_start, previous_end),
+                start_date=previous_start.isoformat(),
+                end_date=previous_end.isoformat(),
+                **filters,
+            ),
+            queries.fetch_rentals_trends(current, interval=interval, **period, **filters),
+            queries.fetch_rentals_breakdown(current, "property_type", **period, **filters),
+            queries.fetch_rentals_breakdown(current, "master_project", **period, **filters),
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise _unavailable("rental analytics", error) from error
 
+    response = {
+        "timeframe_days": timeframe_days or (end_date - start_date).days,
+        "property_usage": property_usage,
+    }
     # An aggregate over no leases is one row with a zero count and NaN averages (not JSON).
     if not result or not result[0].get("contract_count"):
-        # Return empty rental analytics response
-        summary = RentalSummary(
-            contract_count=0,
-            total_annual_value=0.0,
-            avg_annual_rent=0.0,
-            avg_rent_sqft=0.0,
-            min_annual_rent=0.0,
-            max_annual_rent=0.0,
-        )
         return RentalAnalyticsResponse(
-            timeframe_days=timeframe_days or (end_date - start_date).days,
-            property_usage=property_usage,
-            summary=summary,
+            **response,
+            summary=RentalSummary(
+                contract_count=0,
+                total_annual_value=0.0,
+                avg_annual_rent=0.0,
+                avg_rent_sqft=0.0,
+                min_annual_rent=0.0,
+                max_annual_rent=0.0,
+            ),
             trends=[],
             by_property_type=[],
             by_master_project=[],
         )
 
-    # Convert result to summary
     row = result[0]
+    before = previous[0] if previous and previous[0].get("contract_count") else {}
     summary = RentalSummary(
         contract_count=row["contract_count"],
         total_annual_value=float(row["total_annual_value"]),
         avg_annual_rent=float(row["avg_rent"]),
-        avg_rent_sqft=float(row.get("avg_rent_sqft") or 0),
+        avg_rent_sqft=_figure(row.get("avg_rent_sqft")) or 0.0,
         min_annual_rent=float(row.get("min_rent") or 0),
         max_annual_rent=float(row.get("max_rent") or 0),
+        median_annual_rent=_figure(row.get("median_rent")),
+        value_change_pct=_pct_change(
+            float(row["total_annual_value"]), _figure(before.get("total_annual_value"))
+        ),
+        count_change_pct=_pct_change(
+            float(row["contract_count"]), _figure(before.get("contract_count"))
+        ),
     )
 
-    # For now, return basic response with just summary
-    # TODO: Add trends and breakdowns queries
+    def breakdown(rows: list[dict]) -> list[RentalDimensionBreakdown]:
+        shares = _shares(rows, "contract_count", int(row["contract_count"]))
+        return [
+            RentalDimensionBreakdown(
+                dimension_value=item["dimension_value"],
+                contract_count=int(item["contract_count"]),
+                total_annual_value=float(item["total_annual_value"]),
+                avg_rent_sqft=_figure(item.get("avg_rent_sqft")) or 0.0,
+                pct_of_total=shares[item["dimension_value"]],
+            )
+            for item in rows
+        ]
+
     return RentalAnalyticsResponse(
-        timeframe_days=timeframe_days or (end_date - start_date).days,
-        property_usage=property_usage,
+        **response,
         summary=summary,
-        trends=[],  # TODO: Implement trends query
-        by_property_type=[],  # TODO: Implement breakdowns
-        by_master_project=[],
+        trends=_trend_points(trend_rows, interval, start_date, end_date),
+        by_property_type=breakdown(by_type),
+        by_master_project=breakdown(by_master),
     )
 
 
@@ -1029,10 +1152,9 @@ async def get_market_trend(
 ):
     """Get aggregated price trend data for the market trend chart.
 
-    Returns trend points plus period-over-period change vs the equivalent prior period.
+    Returns trend points plus period-over-period change vs the equivalent prior period. The
+    first and last points are flagged ``partial`` when the period cuts their week or month.
     """
-    from fastapi import HTTPException
-
     # A market type replaces property_usage with its own group and predicate.
     resolved_property_usage = property_usage
     resolved_property_type = None
@@ -1052,13 +1174,7 @@ async def get_market_trend(
     # The equal period just before: both cover whole days and share none.
     prev_end = start_date - timedelta(days=1)
     prev_start = prev_end - timedelta(days=days)
-
-    if days <= 30:
-        interval = "day"
-    elif days <= 180:
-        interval = "week"
-    else:
-        interval = "month"
+    interval = _market_interval(days)
 
     def _trend_params(s: str, e: str) -> dict:
         p: dict = {"start_date": s, "end_date": e}
@@ -1096,42 +1212,28 @@ async def get_market_trend(
                 end_date=prev_end.isoformat(),
             ),
         )
-    except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).error(f"Error executing market trend query: {e}")
-        return MarketTrendResponse(data=[], total_transactions=0)
-
-    def figure(value: Any) -> Optional[float]:
-        # A period with no sales (or none with a size) has no average or median: NULL or NaN.
-        if value is None:
-            return None
-        number = float(value)
-        return None if math.isnan(number) else number
+    except Exception as error:
+        raise _unavailable("market trend", error) from error
 
     data = [
         MarketTrendPoint(
             date=row["period"],
             transaction_count=int(row["transaction_count"]),
             avg_price=float(row["avg_price"]),
-            avg_price_sqft=figure(row["avg_price_sqft"]),
+            avg_price_sqft=_figure(row["avg_price_sqft"]),
+            partial=_is_partial(row["period"], interval, start_date, end_date),
         )
         for row in trend_result
     ]
-
-    def pct_change(current: Optional[float], previous: Optional[float]) -> Optional[float]:
-        if current is None or not previous:
-            return None
-        return round((current - previous) / previous * 100, 1)
 
     avg_price_change_pct = None
     avg_price_sqft_change_pct = None
     if current_result and prev_result:
         curr = current_result[0]
         prev = prev_result[0]
-        avg_price_change_pct = pct_change(figure(curr["avg_price"]), figure(prev["avg_price"]))
-        avg_price_sqft_change_pct = pct_change(
-            figure(curr["median_price_per_sqft"]), figure(prev["median_price_per_sqft"])
+        avg_price_change_pct = _pct_change(_figure(curr["avg_price"]), _figure(prev["avg_price"]))
+        avg_price_sqft_change_pct = _pct_change(
+            _figure(curr["median_price_per_sqft"]), _figure(prev["median_price_per_sqft"])
         )
 
     return MarketTrendResponse(
