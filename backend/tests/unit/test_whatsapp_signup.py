@@ -51,6 +51,26 @@ class Session:
         pass
 
 
+class UsedStates:
+    """In-memory stand-in for Redis SET NX EX."""
+
+    def __init__(self):
+        self.keys = {}
+
+    async def set(self, key, value, *, nx=False, ex=None):
+        if nx and key in self.keys:
+            return None
+        self.keys[key] = ex
+        return True
+
+
+@pytest.fixture(autouse=True)
+def used_states(monkeypatch):
+    store = UsedStates()
+    monkeypatch.setattr(connections, "_state_store", lambda: store)
+    return store
+
+
 @pytest.fixture
 def db(monkeypatch):
     session = Session()
@@ -325,3 +345,63 @@ def test_signup_settings_expose_only_public_values():
     assert values["extras"]["featureType"] == "whatsapp_business_app_onboarding"
     assert "app-secret" not in json.dumps(values)
     assert KEY not in json.dumps(values)
+
+
+async def test_signup_state_cannot_be_reused(db, meta, used_states):
+    c = config()
+    replay = request()
+    await connections.complete_signup(
+        db, user_id="user-a", organization_id="org-a", request=replay, config=c
+    )
+    calls_after_first = len(meta.calls)
+    with pytest.raises(HTTPException) as reused:
+        await connections.complete_signup(
+            db, user_id="user-a", organization_id="org-a", request=replay, config=c
+        )
+    assert reused.value.status_code == 400
+    assert len(meta.calls) == calls_after_first
+
+
+async def test_used_state_record_expires_with_the_state(db, meta, used_states):
+    await connections.complete_signup(
+        db, user_id="user-a", organization_id="org-a", request=request(), config=config()
+    )
+    (ttl,) = used_states.keys.values()
+    assert 0 < ttl <= connections.STATE_TTL_SECONDS
+
+
+async def test_each_issued_state_is_distinct():
+    c = config()
+    assert connections.signup_state("u", "o", c) != connections.signup_state("u", "o", c)
+
+
+async def test_forged_state_does_not_burn_a_nonce(db, meta, used_states):
+    forged = request().model_copy(update={"state": "9999999999.abc.deadbeef"})
+    with pytest.raises(HTTPException):
+        await connections.complete_signup(
+            db, user_id="user-a", organization_id="org-a", request=forged, config=config()
+        )
+    assert used_states.keys == {}
+
+
+async def test_signup_fails_closed_when_the_state_store_is_unavailable(db, meta, monkeypatch):
+    monkeypatch.setattr(connections, "_state_store", lambda: None)
+    with pytest.raises(HTTPException) as unavailable:
+        await connections.complete_signup(
+            db, user_id="user-a", organization_id="org-a", request=request(), config=config()
+        )
+    assert unavailable.value.status_code == 503
+    assert meta.calls == []
+
+
+def test_state_is_signed_with_a_key_derived_from_the_session_secret():
+    c = config(SESSION_SECRET="s" * 40)
+    state = connections.signup_state("u", "o", c)
+    assert connections.valid_state(state, "u", "o", c)
+    expires, nonce, _ = state.split(".")
+    raw = connections.hmac.new(
+        c.SESSION_SECRET.encode(),
+        f"whatsapp-signup|u|o|{expires}|{nonce}".encode(),
+        connections.hashlib.sha256,
+    ).hexdigest()
+    assert not connections.valid_state(f"{expires}.{nonce}.{raw}", "u", "o", c)

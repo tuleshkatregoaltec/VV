@@ -56,23 +56,67 @@ def signup_settings(config):
     }
 
 
-def _state_signature(user_id, organization_id, expires, config):
-    message = f"whatsapp-signup|{user_id}|{organization_id}|{expires}".encode()
-    return hmac.new(config.SESSION_SECRET.encode(), message, hashlib.sha256).hexdigest()
+def _state_key(config):
+    """Signup-state key, derived from SESSION_SECRET under its own label so a state
+    signature can never be a valid signature for any other use of the secret."""
+    return hmac.new(
+        config.SESSION_SECRET.encode(), b"vitevue/whatsapp-signup-state/v1", hashlib.sha256
+    ).digest()
+
+
+def _state_signature(user_id, organization_id, expires, nonce, config):
+    message = f"whatsapp-signup|{user_id}|{organization_id}|{expires}|{nonce}".encode()
+    return hmac.new(_state_key(config), message, hashlib.sha256).hexdigest()
 
 
 def signup_state(user_id, organization_id, config):
-    """Binds a signup completion to the agent who started it (30 minutes)."""
+    """Binds a signup completion to the agent who started it (30 minutes, single use)."""
     expires = int(time.time()) + STATE_TTL_SECONDS
-    return f"{expires}.{_state_signature(user_id, organization_id, expires, config)}"
+    nonce = secrets.token_urlsafe(16)
+    signature = _state_signature(user_id, organization_id, expires, nonce, config)
+    return f"{expires}.{nonce}.{signature}"
+
+
+def _parse_state(state):
+    expires, _, rest = state.partition(".")
+    nonce, _, signature = rest.partition(".")
+    if not expires.isdigit() or not nonce or not signature:
+        return None
+    return int(expires), nonce, signature
 
 
 def valid_state(state, user_id, organization_id, config):
-    expires, _, signature = state.partition(".")
-    if not expires.isdigit() or int(expires) < time.time():
+    parsed = _parse_state(state)
+    if parsed is None or parsed[0] < time.time():
         return False
-    expected = _state_signature(user_id, organization_id, int(expires), config)
+    expires, nonce, signature = parsed
+    expected = _state_signature(user_id, organization_id, expires, nonce, config)
     return hmac.compare_digest(expected.encode(), signature.encode())
+
+
+def _state_store():
+    from app.core.decorators import cache
+
+    return cache.redis
+
+
+async def consume_state(state, user_id, organization_id):
+    """Record the state's nonce as used (Redis SET NX, TTL = remaining validity).
+    Call only after valid_state; fails closed if the store is unreachable."""
+    expires, nonce, _ = _parse_state(state)
+    store = _state_store()
+    if store is None:
+        raise HTTPException(503, "WhatsApp signup is temporarily unavailable")
+    ttl = max(1, expires - int(time.time()))
+    try:
+        first_use = await store.set(
+            f"whatsapp-signup-state:{user_id}:{organization_id}:{nonce}", "1", nx=True, ex=ttl
+        )
+    except Exception:
+        logger.error("WhatsApp signup state store failed", exc_info=True)
+        raise HTTPException(503, "WhatsApp signup is temporarily unavailable") from None
+    if not first_use:
+        raise HTTPException(400, "Signup session already used; start again")
 
 
 def _health(raw):
@@ -107,6 +151,7 @@ async def complete_signup(db, *, user_id, organization_id, request, config):
         raise HTTPException(503, "WhatsApp Embedded Signup is not configured")
     if not valid_state(request.state, user_id, organization_id, config):
         raise HTTPException(400, "Signup session expired; start again")
+    await consume_state(request.state, user_id, organization_id)
     onboarding = ONBOARDING.get(request.event)
     if onboarding is None or not request.phone_number_id:
         raise HTTPException(422, "A WhatsApp phone number must be connected")

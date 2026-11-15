@@ -37,7 +37,7 @@ async def db():
     await engine.dispose()
 
 
-async def seed(db, *, status, count=queue.MAX_DAILY_MESSAGES, topic=None):
+async def seed(db, *, status, count=settings.WHATSAPP_MAX_DAILY_TURNS, topic=None):
     connection = WhatsAppConnection(
         user_id="u",
         organization_id="o",
@@ -105,3 +105,23 @@ async def test_personal_receipts_do_not_use_up_the_daily_allowance(db):
     row = await db.get(WhatsAppCustomerMessage, "wamid.new")
     assert row.status == "classifying"
     assert len((await db.exec(select(WhatsAppCustomerMessage))).all()) == 21
+
+
+async def test_customer_lane_cap_follows_the_shared_daily_setting(db):
+    custom = settings.model_copy(update={"WHATSAPP_MAX_DAILY_TURNS": 5})
+    connection, _ = await seed(db, status="sent", count=5, topic="real_estate")
+    jobs = await queue.enqueue(db, connection, incoming(), custom)
+    await db.commit()
+    assert jobs == []
+    assert (await db.get(WhatsAppCustomerMessage, "wamid.new")).topic == "unprocessed"
+
+
+async def test_customer_lane_admits_below_the_configured_cap(db):
+    custom = settings.model_copy(update={"WHATSAPP_MAX_DAILY_TURNS": 30})
+    connection, _ = await seed(db, status="sent", count=25, topic="real_estate")
+    jobs = await queue.enqueue(db, connection, incoming(), custom)
+    assert [job.message_id for job in jobs] == ["wamid.new"]
+
+
+def test_the_shared_daily_cap_defaults_to_twenty():
+    assert settings.model_fields["WHATSAPP_MAX_DAILY_TURNS"].default == 20

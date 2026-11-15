@@ -21,7 +21,6 @@ from app.whatsapp.models import utcnow
 
 logger = logging.getLogger(__name__)
 
-MAX_DAILY_MESSAGES = 20
 COMMANDS = {"STOP", "START", "HUMAN"}
 SEND_STATUSES = ("auto_pending", "grace_pending", "approved")
 # A receipt that could not be classified (admission or the classifier never succeeded, or
@@ -179,7 +178,7 @@ async def enqueue(db, connection, raw_messages, config):
             thread.paused = True
         thread.updated_at = now
         ignored = command is not None or thread.opted_out or thread.paused
-        if not ignored and counts.get(sender, 0) >= MAX_DAILY_MESSAGES:
+        if not ignored and counts.get(sender, 0) >= config.WHATSAPP_MAX_DAILY_TURNS:
             # Never silent: the receipt reaches the agent as needing them. No text, no reply.
             receipt_row = WhatsAppCustomerMessage(
                 id=message_id, thread_id=thread.id, content=None, sent_at=sent_at
