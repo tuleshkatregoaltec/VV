@@ -4791,6 +4791,34 @@ export type DdaPlotFeature = {
 };
 
 /**
+ * DataSourceAsOf
+ *
+ * How current one input of a study is: DXBI is current, DLD ends where its feed ends.
+ */
+export type DataSourceAsOf = {
+    /**
+     * Key
+     */
+    key: 'market_pricing' | 'rental_rates' | 'off_plan_pricing' | 'comparable_projects';
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Source
+     */
+    source: 'dxbi' | 'dld';
+    /**
+     * As Of
+     */
+    as_of?: string | null;
+    /**
+     * Note
+     */
+    note?: string | null;
+};
+
+/**
  * DeleteReminder
  */
 export type DeleteReminder = {
@@ -8071,6 +8099,10 @@ export type MarketPricingRow = {
      * Avg Area Sqm
      */
     avg_area_sqm?: number | null;
+    /**
+     * Last Transaction Date
+     */
+    last_transaction_date?: string | null;
 };
 
 /**
@@ -9037,6 +9069,10 @@ export type PlotResearchInput = {
      */
     land_sales_evidence?: Array<LandSaleEvidence>;
     /**
+     * Data As Of
+     */
+    data_as_of?: Array<DataSourceAsOf>;
+    /**
      * Market Pricing
      */
     market_pricing?: Array<MarketPricingRow>;
@@ -9117,6 +9153,10 @@ export type PlotResearchOutput = {
      * Land Sales Evidence
      */
     land_sales_evidence?: Array<LandSaleEvidence>;
+    /**
+     * Data As Of
+     */
+    data_as_of?: Array<DataSourceAsOf>;
     /**
      * Market Pricing
      */

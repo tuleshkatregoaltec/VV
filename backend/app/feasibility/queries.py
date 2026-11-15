@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+from app.analytics.dxbi import RENTALS_SOURCE, SALES_SOURCE
 from app.clickhouse.client import query
 from app.feasibility.normalization import (
     Stage,
@@ -11,6 +12,33 @@ logger = logging.getLogger(__name__)
 
 
 def transaction_usage_clause(usage: Usage, column: str = "property_usage_en") -> str:
+    """Usage over DXBI's listed records, which name only Residential and Commercial.
+
+    DXBI has no mixed-use or hospitality class, so a mixed-use study prices both.
+    """
+    if usage == "residential":
+        return f"({column} = 'Residential')"
+    if usage == "commercial":
+        return f"({column} = 'Commercial')"
+    if usage == "mixed_use":
+        return f"({column} IN ('Residential', 'Commercial'))"
+    return "1 = 1"
+
+
+def dxbi_area_clause(parameter: str) -> str:
+    """An area matched by its DLD area or its DXBI community, as the Plots evidence matches it.
+
+    DXBI prints JVC's DLD area as 'Al Barsha South Fourth' on a quarter of its sales and nearly
+    every lease; matching the area alone missed them (32,524 JVC leases in a year found none).
+    """
+    return (
+        f"(lower(area_name_en) = lower({{{parameter}:String}})"
+        f" OR lower(location_name) = lower({{{parameter}:String}}))"
+    )
+
+
+def dld_transaction_usage_clause(usage: Usage, column: str = "property_usage_en") -> str:
+    """Usage over DLD's register (ch_transactions), which uses its own class names."""
     if usage == "residential":
         return f"({column} IN ('Residential', 'Hospitality ', 'Hospitality'))"
     if usage == "commercial":
@@ -54,7 +82,7 @@ async def fetch_market_pricing(area_name, days, stage, usage):
     where = [
         "trans_group_en = 'Sales'",
         "meter_sale_price > 0",
-        "lower(area_name_en) = lower({area_name:String})",
+        dxbi_area_clause("area_name"),
         transaction_usage_clause(usage),
         transaction_stage_clause(stage),
         "instance_date >= today() - {days:Int32}",
@@ -64,8 +92,9 @@ async def fetch_market_pricing(area_name, days, stage, usage):
         {canonical_unit_sql} AS unit_type,
         count() AS transaction_count,
         round(median(meter_sale_price), 0) AS median_price_sqm,
-        round(avg(procedure_area), 0) AS avg_area_sqm
-    FROM ch_transactions
+        round(avg(size_sqm), 0) AS avg_area_sqm,
+        toString(max(instance_date)) AS last_transaction_date
+    FROM {SALES_SOURCE}
     WHERE {" AND ".join(where)}
     GROUP BY unit_type
     HAVING unit_type != 'other'
@@ -104,7 +133,7 @@ async def fetch_off_plan_pricing_curve(area_name, days, target_horizon_months, u
         WHERE t.trans_group_en = 'Sales'
           AND t.meter_sale_price > 0
           AND lower(t.area_name_en) = lower({{area_name:String}})
-          AND {transaction_usage_clause(usage, "t.property_usage_en")}
+          AND {dld_transaction_usage_clause(usage, "t.property_usage_en")}
           AND {transaction_stage_clause("off_plan", "t.reg_type_en")}
           AND t.instance_date >= today() - {{days:Int32}}
           AND p.completion_date IS NOT NULL
@@ -128,13 +157,16 @@ async def fetch_off_plan_pricing_curve(area_name, days, target_horizon_months, u
 
 async def fetch_areas(parameters):
     return await query(
-        """
-    SELECT area_name_en
-    FROM ch_transactions
-    WHERE trans_group_en = 'Sales'
-      AND area_name_en != ''
-    GROUP BY area_name_en
-    ORDER BY count() DESC, area_name_en
+        f"""
+    SELECT argMax(spelling, spelling_count) AS area_name_en
+    FROM (
+        SELECT area_name_en AS spelling, count() AS spelling_count
+        FROM {SALES_SOURCE}
+        WHERE area_name_en != ''
+        GROUP BY spelling
+    )
+    GROUP BY lower(spelling)
+    ORDER BY sum(spelling_count) DESC, area_name_en
     """,
         parameters,
     )
@@ -142,13 +174,12 @@ async def fetch_areas(parameters):
 
 async def fetch_market_area(parameters):
     return await query(
-        """
+        f"""
     SELECT area_name_en
-    FROM ch_transactions
-    WHERE trans_group_en = 'Sales'
-      AND area_name_en ILIKE {pattern:String}
+    FROM {SALES_SOURCE}
+    WHERE area_name_en ILIKE {{pattern:String}}
     GROUP BY area_name_en
-    ORDER BY (lower(area_name_en) = lower({name:String})) DESC, count() DESC
+    ORDER BY (lower(area_name_en) = lower({{name:String}})) DESC, count() DESC
     LIMIT 1
     """,
         parameters,
@@ -157,17 +188,17 @@ async def fetch_market_area(parameters):
 
 async def fetch_rental_size_band(parameters):
     return await query(
-        """
+        f"""
         SELECT
             median(toFloat64(annual_amount) / greatest(toFloat64(actual_area), 1)) AS median_rent_psm_annual,
             median(toFloat64(annual_amount)) AS median_annual_rent,
             count() AS contract_count
-        FROM ch_rent_contracts
-        WHERE lower(area_name_en) = lower({area_name:String})
-          AND actual_area > {lo:Float64}
-          AND actual_area <= {hi:Float64}
+        FROM {RENTALS_SOURCE}
+        WHERE {dxbi_area_clause("area_name")}
+          AND actual_area > {{lo:Float64}}
+          AND actual_area <= {{hi:Float64}}
           AND annual_amount > 0
-          AND contract_start_date >= today() - {days:Int32}
+          AND contract_start_date >= today() - {{days:Int32}}
         """,
         parameters,
     )
@@ -217,7 +248,7 @@ async def fetch_comparable_projects(parameters):
         any(land.total_land_area_sqm) AS total_land_area_sqm
     FROM ch_projects p
     LEFT JOIN land ON p.project_id = land.project_id
-    WHERE p.area_name_en = {market_area:String}
+    WHERE lower(p.area_name_en) = lower({market_area:String})
       AND p.project_name_en != ''
     GROUP BY p.project_id
     LIMIT 250
@@ -226,6 +257,9 @@ async def fetch_comparable_projects(parameters):
     )
 
 
+# The comparables below are the project register's projects, named as DLD names them, so their
+# prices stay on DLD's register: DXBI names a building its own way and priced 2 of Marsa Dubai's
+# 5 register projects that DLD prices, 7 of Business Bay's 13.
 async def fetch_comparable_prices(parameters, usage):
     return await query(
         f"""
@@ -242,7 +276,7 @@ async def fetch_comparable_prices(parameters, usage):
             FROM ch_transactions
             WHERE trans_group_en = 'Sales'
               AND area_name_en = {{market_area:String}}
-              AND {transaction_usage_clause(usage)}
+              AND {dld_transaction_usage_clause(usage)}
               AND {transaction_stage_clause("existing")}
               AND meter_sale_price > 0
             GROUP BY project_name_en, unit_type, meter_sale_price
@@ -323,7 +357,7 @@ async def fetch_chat_transactions(area, days, limit, stage, unit_type, usage):
     ]
     params: dict[str, Any] = {"limit": limit}
     if area:
-        where.append("area_name_en = {area:String}")
+        where.append(dxbi_area_clause("area"))
         params["area"] = area
     if unit_type:
         where.append("rooms_en = {unit_type:String}")
@@ -333,8 +367,8 @@ async def fetch_chat_transactions(area, days, limit, stage, unit_type, usage):
         params["days"] = days
     sql = f"""
     SELECT transaction_id, instance_date, project_name_en, rooms_en,
-           procedure_area, actual_worth, meter_sale_price, reg_type_en
-    FROM ch_transactions
+           size_sqm AS procedure_area, actual_worth, meter_sale_price, reg_type_en
+    FROM {SALES_SOURCE}
     WHERE {" AND ".join(where)}
     ORDER BY instance_date DESC
     LIMIT {{limit:Int32}}
@@ -355,7 +389,7 @@ async def fetch_chat_analytics(area, days, project_name, stage, usage):
         where.append("project_name_en = {project_name:String}")
         params["project_name"] = project_name
     elif area:
-        where.append("area_name_en = {area:String}")
+        where.append(dxbi_area_clause("area"))
         params["area"] = area
     if days:
         where.append("instance_date >= today() - {days:Int32}")
@@ -365,15 +399,15 @@ async def fetch_chat_analytics(area, days, project_name, stage, usage):
     SELECT toStartOfMonth(instance_date) AS month,
            round(median(meter_sale_price), 0) AS median_price_sqm,
            count() AS txn_count
-    FROM ch_transactions
+    FROM {SALES_SOURCE}
     WHERE {where_clause}
     GROUP BY month ORDER BY month
     """
     rooms_sql = f"""
     SELECT rooms_en, count() AS txn_count,
            round(median(meter_sale_price), 0) AS median_price_sqm,
-           round(avg(procedure_area), 0) AS avg_area_sqm
-    FROM ch_transactions
+           round(avg(size_sqm), 0) AS avg_area_sqm
+    FROM {SALES_SOURCE}
     WHERE {where_clause}
     GROUP BY rooms_en ORDER BY txn_count DESC
     """
@@ -384,13 +418,13 @@ async def fetch_chat_analytics(area, days, project_name, stage, usage):
 
 async def fetch_chat_area(parameters):
     return await query(
-        """
+        f"""
     SELECT area_name_en
-    FROM ch_transactions
-    WHERE area_name_en ILIKE {pattern:String}
-      AND trans_group_en = 'Sales' AND meter_sale_price > 0
+    FROM {SALES_SOURCE}
+    WHERE area_name_en ILIKE {{pattern:String}}
+      AND meter_sale_price > 0
     GROUP BY area_name_en
-    ORDER BY (area_name_en = {area:String}) DESC, count() DESC
+    ORDER BY (area_name_en = {{area:String}}) DESC, count() DESC
     LIMIT 1
     """,
         parameters,
@@ -399,14 +433,44 @@ async def fetch_chat_area(parameters):
 
 async def fetch_tool_market_area(parameters):
     return await query(
-        """
+        f"""
     SELECT area_name_en
-    FROM ch_transactions
-    WHERE trans_group_en = 'Sales'
-      AND area_name_en ILIKE {pattern:String}
+    FROM {SALES_SOURCE}
+    WHERE area_name_en ILIKE {{pattern:String}}
     GROUP BY area_name_en
-    ORDER BY (lower(area_name_en) = lower({area:String})) DESC, count() DESC
+    ORDER BY (lower(area_name_en) = lower({{area:String}})) DESC, count() DESC
     LIMIT 1
+    """,
+        parameters,
+    )
+
+
+async def fetch_data_as_of(parameters):
+    """The latest record each feasibility source holds for an area.
+
+    DXBI sources are current; the DLD ones (handover dates, the project register, comparable
+    project prices and plot land area, which DXBI does not carry or names differently) end where
+    DLD's feed ends.
+    """
+    return await query(
+        f"""
+    SELECT
+        (SELECT toString(maxOrNull(instance_date)) FROM {SALES_SOURCE}
+         WHERE {dxbi_area_clause("area_name")}) AS sales_as_of,
+        (SELECT toString(maxOrNull(contract_start_date)) FROM {RENTALS_SOURCE}
+         WHERE {dxbi_area_clause("area_name")}
+           AND contract_start_date <= today()) AS rentals_as_of,
+        (SELECT toString(maxOrNull(toDate(t.instance_date))) FROM ch_transactions t
+         INNER JOIN ch_projects p
+            ON lowerUTF8(trimBoth(p.project_name_en)) = lowerUTF8(trimBoth(t.project_name_en))
+         WHERE t.trans_group_en = 'Sales'
+           AND lower(t.area_name_en) = lower({{area_name:String}})
+           AND {transaction_stage_clause("off_plan", "t.reg_type_en")}
+           AND p.completion_date IS NOT NULL
+           AND t.instance_date >= today() - 1095) AS off_plan_curve_as_of,
+        (SELECT toString(maxOrNull(toDate(instance_date))) FROM ch_transactions
+         WHERE trans_group_en = 'Sales' AND project_name_en != ''
+           AND lower(area_name_en) = lower({{area_name:String}})) AS comparables_as_of
     """,
         parameters,
     )

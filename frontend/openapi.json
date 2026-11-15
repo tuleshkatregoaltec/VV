@@ -20173,6 +20173,50 @@
 				"title": "DDAPlotFeature",
 				"description": "DDA GIS plot polygon for map overlay."
 			},
+			"DataSourceAsOf": {
+				"properties": {
+					"key": {
+						"type": "string",
+						"enum": ["market_pricing", "rental_rates", "off_plan_pricing", "comparable_projects"],
+						"title": "Key"
+					},
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"source": {
+						"type": "string",
+						"enum": ["dxbi", "dld"],
+						"title": "Source"
+					},
+					"as_of": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "As Of"
+					},
+					"note": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Note"
+					}
+				},
+				"type": "object",
+				"required": ["key", "label", "source"],
+				"title": "DataSourceAsOf",
+				"description": "How current one input of a study is: DXBI is current, DLD ends where its feed ends."
+			},
 			"DeleteReminder": {
 				"properties": {
 					"reminder_id": {
@@ -25884,6 +25928,17 @@
 							}
 						],
 						"title": "Avg Area Sqm"
+					},
+					"last_transaction_date": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Transaction Date"
 					}
 				},
 				"type": "object",
@@ -27275,6 +27330,13 @@
 						"type": "array",
 						"title": "Land Sales Evidence"
 					},
+					"data_as_of": {
+						"items": {
+							"$ref": "#/components/schemas/DataSourceAsOf"
+						},
+						"type": "array",
+						"title": "Data As Of"
+					},
 					"market_pricing": {
 						"items": {
 							"$ref": "#/components/schemas/MarketPricingRow"
@@ -27431,6 +27493,13 @@
 						},
 						"type": "array",
 						"title": "Land Sales Evidence"
+					},
+					"data_as_of": {
+						"items": {
+							"$ref": "#/components/schemas/DataSourceAsOf"
+						},
+						"type": "array",
+						"title": "Data As Of"
 					},
 					"market_pricing": {
 						"items": {
