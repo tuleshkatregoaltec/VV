@@ -13,6 +13,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.chat import admission
+from app.config import settings
 from app.token_usage import repository
 from app.token_usage.models import UserTokenUsage
 from app.token_usage.service import token_usage_service
@@ -48,12 +49,14 @@ async def test_concurrent_same_user_cannot_reserve_multiple_turns(admission_engi
         *(reserve(admission_engine, user, org, index + 1000) for index in range(12)),
         return_exceptions=True,
     )
-    assert sum(isinstance(item, str) for item in results) == 1
+    assert sum(isinstance(item, admission.TurnLease) for item in results) == 1
     assert all(
-        isinstance(item, str) or isinstance(item, HTTPException) and item.status_code == 429
+        isinstance(item, admission.TurnLease)
+        or isinstance(item, HTTPException)
+        and item.status_code == 429
         for item in results
     )
-    assert await usage_total(admission_engine, user) == admission.RESERVED_TOKENS
+    assert await usage_total(admission_engine, user) == settings.ASSISTANT_TURN_TOKEN_LIMIT
 
 
 async def test_tenant_capacity_and_same_conversation_are_shared_across_workers(
@@ -69,53 +72,53 @@ async def test_tenant_capacity_and_same_conversation_are_shared_across_workers(
     with pytest.raises(HTTPException, match="Another assistant turn"):
         await reserve(admission_engine, users[2], org, 2002)
     async with AsyncSession(admission_engine) as db:
-        await admission.settle(db, first, RunUsage(input_tokens=100), successful=True)
+        await admission.settle(db, first.id, RunUsage(input_tokens=100), successful=True)
     assert await reserve(admission_engine, users[2], org, 2002)
 
 
 async def test_success_refunds_unused_allowance_once_then_budget_blocks(admission_engine):
     user, org = str(uuid4()), str(uuid4())
-    lease = await reserve(admission_engine, user, org, 3000, limit=25000)
+    limit = settings.ASSISTANT_TURN_MIN_TOKENS + 1000
+    lease = await reserve(admission_engine, user, org, 3000, limit=limit)
+    assert lease.token_budget == limit  # capped by the remaining daily allowance
     for _ in range(2):
         async with AsyncSession(admission_engine) as db:
             await admission.settle(
-                db, lease, RunUsage(input_tokens=1000, output_tokens=500), successful=True
+                db, lease.id, RunUsage(input_tokens=1000, output_tokens=500), successful=True
             )
     assert await usage_total(admission_engine, user) == 1500
     with pytest.raises(HTTPException, match="Insufficient daily"):
-        await reserve(admission_engine, user, org, 3001, limit=25000)
+        await reserve(admission_engine, user, org, 3001, limit=limit)
     assert await usage_total(admission_engine, user) == 1500
 
 
-async def test_failure_charges_reservation_and_observed_overrun_and_releases_capacity(
-    admission_engine,
-):
+async def test_failure_charges_only_observed_usage_and_releases_capacity(admission_engine):
     user, org = str(uuid4()), str(uuid4())
     lease = await reserve(admission_engine, user, org, 4000)
     async with AsyncSession(admission_engine) as db:
-        await admission.settle(db, lease, RunUsage(input_tokens=123), successful=False)
-        row = await db.get(admission.ChatTurnLease, lease)
+        await admission.settle(db, lease.id, RunUsage(input_tokens=123), successful=False)
+        row = await db.get(admission.ChatTurnLease, lease.id)
         assert row.status == "failed"
-    assert await usage_total(admission_engine, user) == admission.RESERVED_TOKENS
+    assert await usage_total(admission_engine, user) == 123
     next_lease = await reserve(admission_engine, user, org, 4000)
     async with AsyncSession(admission_engine) as db:
-        await admission.settle(db, next_lease, RunUsage(input_tokens=25000), successful=False)
-    assert await usage_total(admission_engine, user) == admission.RESERVED_TOKENS + 25000
+        await admission.settle(db, next_lease.id, RunUsage(input_tokens=25000), successful=False)
+    assert await usage_total(admission_engine, user) == 123 + 25000
 
 
 async def test_expired_process_lease_frees_capacity_but_never_budget(admission_engine):
     user, org = str(uuid4()), str(uuid4())
-    lease_id = await reserve(admission_engine, user, org, 5000, limit=24000)
+    lease_id = (await reserve(admission_engine, user, org, 5000, limit=24000)).id
     async with AsyncSession(admission_engine) as db:
         lease = await db.get(admission.ChatTurnLease, lease_id)
         lease.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
         await db.commit()
     with pytest.raises(HTTPException, match="Insufficient daily"):
         await reserve(admission_engine, user, org, 5000, limit=24000)
-    # Even a late successful finalizer cannot refund a process-loss reservation.
+    # A late finalizer still knows the observed usage and settles to it.
     async with AsyncSession(admission_engine) as db:
         await admission.settle(db, lease_id, RunUsage(input_tokens=10), successful=True)
-    assert await usage_total(admission_engine, user) == admission.RESERVED_TOKENS
+    assert await usage_total(admission_engine, user) == 10
     assert await reserve(admission_engine, user, org, 5000, limit=48000)
 
 

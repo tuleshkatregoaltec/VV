@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+from contextlib import contextmanager
 from typing import Any
 
 MAX_INPUT = 8000
@@ -198,6 +199,24 @@ def fingerprint(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 
 
+@contextmanager
+def tool_progress(ctx: Any, tool: str):
+    """Report a tool's start and finish to the turn's stream: names only, no arguments."""
+    deps = getattr(ctx, "deps", None)
+    progress = getattr(deps, "progress", None)
+    if progress is None:
+        yield
+        return
+    # Provider call IDs are opaque; a digest pairs start/finish without echoing them.
+    call_id = getattr(ctx, "tool_call_id", None) or tool
+    event = {"tool": tool, "tool_call_id": hashlib.sha256(call_id.encode()).hexdigest()[:12]}
+    progress({"type": "tool_call_start", **event})
+    try:
+        yield
+    finally:
+        progress({"type": "tool_call_result", **event})
+
+
 def safe_tool(function):
     """Do not expose service exceptions or unbounded/debug payloads to a model."""
     import functools
@@ -205,6 +224,10 @@ def safe_tool(function):
 
     @functools.wraps(function)
     async def wrapped(*args, **kwargs):
+        with tool_progress(args[0] if args else None, function.__name__):
+            return await _guarded(*args, **kwargs)
+
+    async def _guarded(*args, **kwargs):
         try:
             result = safe_data(await function(*args, **kwargs))
             if isinstance(result, dict) and "error" in result:

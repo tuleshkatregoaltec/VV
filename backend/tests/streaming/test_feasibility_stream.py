@@ -43,7 +43,7 @@ async def test_invalid_history_warns_and_provider_failure_terminates_without_don
             "type": "warning",
             "content": "Session context reset — conversation history could not be restored.",
         },
-        {"type": "error", "error": "provider unavailable"},
+        {"type": "error", "error": "Internal server error"},
     ]
     assert calls[0][0] == "Use the latest request"
     assert calls[0][1]["message_history"] == []

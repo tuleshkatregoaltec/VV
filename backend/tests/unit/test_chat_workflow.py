@@ -50,9 +50,9 @@ def test_specialists_have_narrow_tools_and_no_execution_capability():
         pricing_agent._function_toolset.tools
     )
     assert (
-        LIMITS.request_limit == 16
+        LIMITS.request_limit == 20
         and LIMITS.tool_calls_limit == 24
-        and LIMITS.total_tokens_limit == 24000
+        and LIMITS.total_tokens_limit == 160_000
     )
 
 

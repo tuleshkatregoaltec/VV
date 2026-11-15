@@ -4,11 +4,13 @@ from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, List, Optional
 
 from fastapi import HTTPException
+from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.usage import RunUsage
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.chat import admission, repository
 from app.chat.agent import _convert_to_pydantic_messages, agent
+from app.chat.budget import turn_limits
 from app.chat.dependencies import ChatDependencies
 from app.chat.events import encode_sse as _sse
 from app.chat.models import Conversation, Message
@@ -21,12 +23,18 @@ from app.chat.security import (
     safe_answer,
     safe_data,
 )
-from app.chat.workflows import LIMITS
 from app.config import settings
 from app.crm.assistant import has_current_access, query_my_records
 from app.crm.assistant_models import CrmAssistantQuery
 
 logger = logging.getLogger(__name__)
+
+TURN_DEADLINE_SECONDS = 300
+TURN_ERROR = "Unable to complete this answer. Please try again."
+TURN_LIMIT_ERROR = (
+    "This question needed more research steps than one answer allows. "
+    "Please ask about one area, project or record at a time."
+)
 
 
 async def create_conversation(
@@ -295,15 +303,20 @@ async def stream_chat_response(
     await db.commit()
     try:
         async with asyncio.timeout(30):
-            lease_id = await admission.acquire(**scope, conversation_id=conversation_id)
+            lease = await admission.acquire(**scope, conversation_id=conversation_id)
     except HTTPException as exc:
         yield _sse({"type": "error", "error": exc.detail})
         return
     usage = RunUsage()
     provider_completed = False
+    run_task: asyncio.Task | None = None
+    next_event: asyncio.Future | None = None
+    deadline = asyncio.get_running_loop().time() + TURN_DEADLINE_SECONDS
     try:
         yield _sse({"type": "thinking"})
-        async with asyncio.timeout(300):
+        # Deadlines wrap only non-yielding sections: the SSE heartbeat resumes this
+        # generator from a different task each time.
+        async with asyncio.timeout_at(deadline):
             await add_message(db, conversation_id, "user", user_message, **scope)
             messages = await get_conversation_messages(
                 db, conversation_id, **scope, include_retrieval_context=True
@@ -312,11 +325,40 @@ async def stream_chat_response(
             # Release the read transaction and pool connection before nested tools
             # open their own sessions during provider latency.
             await db.commit()
-            deps = ChatDependencies(**scope, conversation_id=conversation_id)
-            run = run_routed_turn if settings.ASSISTANT_TYPED_ROUTING_ENABLED else agent.run
-            result = await run(
-                user_message, deps=deps, message_history=history, usage_limits=LIMITS, usage=usage
-            )
+        progress: asyncio.Queue = asyncio.Queue()
+        limits = turn_limits(lease.token_budget)
+        deps = ChatDependencies(
+            **scope,
+            conversation_id=conversation_id,
+            usage_limits=limits,
+            progress=progress.put_nowait,
+        )
+        run = run_routed_turn if settings.ASSISTANT_TYPED_ROUTING_ENABLED else agent.run
+
+        async def run_turn():
+            async with asyncio.timeout_at(deadline):
+                return await run(
+                    user_message,
+                    deps=deps,
+                    message_history=history,
+                    usage_limits=limits,
+                    usage=usage,
+                )
+
+        run_task = asyncio.create_task(run_turn())
+        # Tool names stream while the provider works; answer text only after validation.
+        while True:
+            next_event = asyncio.ensure_future(progress.get())
+            await asyncio.wait({run_task, next_event}, return_when=asyncio.FIRST_COMPLETED)
+            if next_event.done():
+                yield _sse(next_event.result())
+                continue
+            next_event.cancel()
+            break
+        while not progress.empty():
+            yield _sse(progress.get_nowait())
+        result = run_task.result()
+        async with asyncio.timeout_at(deadline):
             provider_completed = True
             answer = result.output
             # A target can be reassigned while the provider is composing its answer.
@@ -359,16 +401,28 @@ async def stream_chat_response(
             if deps.proposals:
                 metadata["actions"] = [{"id": item["id"]} for item in deps.proposals]
             await add_message(db, conversation_id, "assistant", answer, metadata, **scope)
-            yield _sse({"type": "content", "content": answer})
-            for proposal in deps.proposals:
-                yield _sse({"type": "action_proposed", "action": safe_data(proposal)})
+        yield _sse({"type": "content", "content": answer})
+        for proposal in deps.proposals:
+            yield _sse({"type": "action_proposed", "action": safe_data(proposal)})
         yield _sse({"type": "done"})
     except Exception as exc:
-        logger.error("Chat execution failed (%s)", type(exc).__name__)
-        yield _sse({"type": "error", "error": "Unable to complete this answer. Please try again."})
+        logger.error(
+            "Chat execution failed (%s; requests=%s tokens=%s budget=%s)",
+            type(exc).__name__,
+            usage.requests,
+            usage.total_tokens,
+            lease.token_budget,
+        )
+        error = TURN_LIMIT_ERROR if isinstance(exc, UsageLimitExceeded) else TURN_ERROR
+        yield _sse({"type": "error", "error": error})
     finally:
+        if next_event is not None:
+            next_event.cancel()
+        if run_task is not None and not run_task.done():
+            run_task.cancel()
+            await asyncio.gather(run_task, return_exceptions=True)
         try:
-            await asyncio.shield(admission.finish(lease_id, usage, successful=provider_completed))
+            await asyncio.shield(admission.finish(lease.id, usage, successful=provider_completed))
         except Exception as exc:
             # The committed reservation remains charged and its capacity lease
             # expires; a database outage must not turn failed cleanup into credit.

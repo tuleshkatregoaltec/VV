@@ -15,7 +15,11 @@ from app.chat.security import REFUSAL, input_refusal, safe_answer, safe_data, sa
 def offline_admission(monkeypatch):
     monkeypatch.setattr(service.settings, "ASSISTANT_ENABLED", True)
     monkeypatch.setattr(service.settings, "ASSISTANT_TYPED_ROUTING_ENABLED", False)
-    monkeypatch.setattr(service.admission, "acquire", AsyncMock(return_value="lease"))
+    monkeypatch.setattr(
+        service.admission,
+        "acquire",
+        AsyncMock(return_value=service.admission.TurnLease("lease", 160_000)),
+    )
     monkeypatch.setattr(service.admission, "finish", AsyncMock())
 
 

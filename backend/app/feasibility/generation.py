@@ -4,8 +4,12 @@ import logging
 from datetime import date
 
 from fastapi import HTTPException
+from pydantic_ai.usage import RunUsage
 
 from app.area.service import get_area_detail
+from app.chat import operations as chat_operations
+from app.config import settings
+from app.core.decorators import cache as redis_cache
 from app.feasibility.assumption_defaults import (
     sanitize_generated_assumptions,
 )
@@ -58,11 +62,16 @@ from app.project.service import get_project_market_snapshot
 
 logger = logging.getLogger(__name__)
 
+HBU_CACHE_PREFIX = "feasibility:hbu:v1"
+
 
 async def generate_hbu_study(
     plot_number: str,
     usage_override: Usage | None = None,
     development_model: DevelopmentModel = "build_to_sell_residential",
+    *,
+    run_usage: RunUsage | None = None,
+    token_budget: int | None = None,
 ) -> PlotResearch | None:
     development_model = development_model or "build_to_sell_residential"
     generation_date = date.today()
@@ -301,6 +310,8 @@ async def generate_hbu_study(
             development_model=development_model,
             usage_override=usage_override,
         ),
+        usage=run_usage,
+        token_budget=token_budget,
     )
 
     draft.assumptions = (
@@ -396,29 +407,69 @@ async def generate_hbu_for_plot(
     plot_number: str,
     usage_override: Usage | None = None,
     development_model: DevelopmentModel | None = None,
+    *,
+    user_id: str,
+    organization_id: str,
 ) -> PlotResearch:
-    study = await generate_hbu_study(
-        plot_number,
-        usage_override=usage_override,
-        development_model=development_model,
+    """Cached per plot, usage, model and day; a miss runs inside the user's admission.
+
+    The study is built only from plot and market evidence (no user or tenant data),
+    so repeat requests for the same plot reuse it without spending model tokens.
+    """
+    development_model = development_model or "build_to_sell_residential"
+    key = ":".join(
+        (
+            HBU_CACHE_PREFIX,
+            date.today().isoformat(),
+            plot_number.strip(),
+            usage_override or "inferred",
+            development_model,
+        )
     )
+    cached = await redis_cache.get(key)
+    if cached is not None:
+        try:
+            return PlotResearch.model_validate(cached)
+        except ValueError:
+            logger.warning("Ignoring an invalid cached HBU study")
+    async with chat_operations.admitted_run(
+        user_id=user_id,
+        organization_id=organization_id,
+        token_limit=settings.FEASIBILITY_RUN_TOKEN_LIMIT,
+    ) as (run_usage, token_budget):
+        study = await generate_hbu_study(
+            plot_number,
+            usage_override=usage_override,
+            development_model=development_model,
+            run_usage=run_usage,
+            token_budget=token_budget,
+        )
     if study is None:
         raise HTTPException(status_code=404, detail="GIS plot not found")
+    await redis_cache.set(
+        key, study.model_dump(mode="json"), expire=settings.FEASIBILITY_HBU_CACHE_SECONDS
+    )
     return study
 
 
-async def generate_seeded_study(request: GenerateStudyRequest) -> GenerateStudyResponse:
+async def generate_seeded_study(
+    request: GenerateStudyRequest, *, user_id: str, organization_id: str
+) -> GenerateStudyResponse:
     try:
         research = await generate_hbu_for_plot(
             request.plot_number,
             usage_override=request.usage_override,
             development_model=request.development_model,
+            user_id=user_id,
+            organization_id=organization_id,
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("generate_hbu_study failed for plot %s: %s", request.plot_number, e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("generate_hbu_study failed (%s)", type(e).__name__)
+        raise HTTPException(
+            status_code=500, detail="The study could not be generated. Please try again."
+        ) from e
     plot = await get_plot_details_or_404(request.plot_number)
     return GenerateStudyResponse(
         plot_data=plot,

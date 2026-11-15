@@ -6,7 +6,7 @@ from contextlib import aclosing, asynccontextmanager
 
 from pydantic_ai.usage import RunUsage
 
-from app.chat import admission
+from app.chat import admission, budget
 from app.chat.security import input_refusal, safe_answer
 from app.chat.service import create_conversation, stream_chat_response
 from app.crm.assistant import has_current_access
@@ -14,6 +14,11 @@ from app.postgres import get_db_session
 
 # Raised by `channel_budget` when a turn cannot start yet; nothing was reserved or spent.
 AdmissionRefused = admission.AdmissionRefused
+# Shared LLM cost controls for other domains (feasibility): the same per-user admission
+# and daily allowance, history bound and in-turn tool-output compaction.
+admitted_run = admission.admitted_run
+bound_history = budget.bound_history
+compact_tool_outputs = budget.compact_tool_outputs
 
 
 def channel_input(message: str) -> str | None:
@@ -48,7 +53,7 @@ async def channel_budget(*, user_id: str, organization_id: str, conversation_id:
     async with asynccontextmanager(get_db_session)() as db:
         if not await channel_access(db, user_id=user_id, organization_id=organization_id):
             raise PermissionError("Channel access revoked")
-    lease_id = await admission.acquire(
+    lease = await admission.acquire(
         user_id=user_id, organization_id=organization_id, conversation_id=conversation_id
     )
     usage = RunUsage()
@@ -57,7 +62,7 @@ async def channel_budget(*, user_id: str, organization_id: str, conversation_id:
         yield usage
         completed = True
     finally:
-        await asyncio.shield(admission.finish(lease_id, usage, successful=completed))
+        await asyncio.shield(admission.finish(lease.id, usage, successful=completed))
 
 
 async def answer_channel(

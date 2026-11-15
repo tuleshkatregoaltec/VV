@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
+from app.chat import operations as chat_operations
 from app.core.openrouter import create_openrouter_model
 from app.feasibility.chat_units import to_sqft_view
 from app.feasibility.models import FeasibilityPaymentPlan
@@ -58,7 +59,9 @@ workspace_chat_agent = Agent(
     name="feasibility_workspace",
     deps_type=FeasibilityChatDeps,
     model_settings={"temperature": 0.1},
-    system_prompt=(
+    # Each request resends every tool output so far; bound that context per request.
+    history_processors=[chat_operations.compact_tool_outputs],
+    instructions=(
         "You are a Dubai real estate feasibility workspace assistant.\n\n"
         "The frontend owns the live workbook. You receive the current assumptions and workbook state each turn.\n"
         "Use tools for precise context or research, and use mutation tools when you want to suggest changes.\n"
@@ -74,7 +77,7 @@ workspace_chat_agent = Agent(
 )
 
 
-@workspace_chat_agent.system_prompt
+@workspace_chat_agent.instructions
 async def inject_workspace_context(ctx: RunContext[FeasibilityChatDeps]) -> str:
     return (
         "## Current feasibility context\n"
