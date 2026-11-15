@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from app.area.service import get_area_detail
 from app.core.openrouter import create_openrouter_model
@@ -452,7 +452,14 @@ async def get_plot_land_sales(
     return [row.model_dump() for row in rows]
 
 
-async def run_seed_draft(prompt: str, deps: HBUSeedDeps) -> HBUSeedDraft:
+async def run_seed_draft(
+    prompt: str,
+    deps: HBUSeedDeps,
+    *,
+    usage: RunUsage | None = None,
+    token_budget: int | None = None,
+) -> HBUSeedDraft:
+    """`usage` and `token_budget` come from the caller's admitted run (daily allowance)."""
     development_model = deps.development_model
     agent = (
         hbu_seed_agent_btr
@@ -462,8 +469,10 @@ async def run_seed_draft(prompt: str, deps: HBUSeedDeps) -> HBUSeedDraft:
     result = await agent.run(
         prompt,
         deps=deps,
+        usage=usage,
         usage_limits=UsageLimits(
-            request_limit=3 if development_model == "build_to_rent_residential" else 15
+            request_limit=3 if development_model == "build_to_rent_residential" else 15,
+            total_tokens_limit=token_budget,
         ),
     )
     return result.output

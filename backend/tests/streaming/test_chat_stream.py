@@ -13,7 +13,11 @@ from app.chat.dependencies import ChatDependencies
 def offline_admission(monkeypatch):
     monkeypatch.setattr(service.settings, "ASSISTANT_ENABLED", True)
     monkeypatch.setattr(service.settings, "ASSISTANT_TYPED_ROUTING_ENABLED", False)
-    monkeypatch.setattr(service.admission, "acquire", AsyncMock(return_value="lease"))
+    monkeypatch.setattr(
+        service.admission,
+        "acquire",
+        AsyncMock(return_value=service.admission.TurnLease("lease", 160_000)),
+    )
     monkeypatch.setattr(service.admission, "finish", AsyncMock())
 
 
@@ -197,3 +201,48 @@ async def test_admission_rejection_never_saves_or_calls_model(monkeypatch):
     save.assert_not_awaited()
     run.assert_not_awaited()
     service.admission.finish.assert_not_awaited()
+
+
+async def test_long_turn_streams_tool_progress_before_the_validated_answer(monkeypatch):
+    from app.chat.budget import turn_limits
+
+    monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=SimpleNamespace(id=3)))
+    monkeypatch.setattr(service, "get_conversation_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "add_message", AsyncMock())
+    seen = []
+
+    async def run(*args, deps, usage_limits, **kwargs):
+        seen.append((deps.usage_limits, usage_limits))
+        deps.progress({"type": "tool_call_start", "tool": "research_market", "tool_call_id": "a"})
+        await asyncio.sleep(0)
+        deps.progress({"type": "tool_call_result", "tool": "research_market", "tool_call_id": "a"})
+        return SimpleNamespace(output="Marina medians are stored.")
+
+    monkeypatch.setattr(service, "agent", SimpleNamespace(run=run))
+    events = [e async for e in service.stream_chat_response(AsyncMock(), 3, "hi", "u", "o")]
+    assert [event["type"] for event in decode(events)] == [
+        "thinking",
+        "tool_call_start",
+        "tool_call_result",
+        "content",
+        "done",
+    ]
+    # The turn's limits come from its reservation and reach nested workflows via deps.
+    assert seen == [(turn_limits(160_000), turn_limits(160_000))]
+
+
+async def test_exhausted_turn_budget_explains_how_to_continue(monkeypatch):
+    from pydantic_ai.exceptions import UsageLimitExceeded
+
+    monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=SimpleNamespace(id=3)))
+    monkeypatch.setattr(service, "get_conversation_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "add_message", AsyncMock())
+
+    async def run(*args, usage, **kwargs):
+        usage.input_tokens = 5_000
+        raise UsageLimitExceeded("Exceeded the total_tokens_limit")
+
+    monkeypatch.setattr(service, "agent", SimpleNamespace(run=run))
+    events = decode([e async for e in service.stream_chat_response(AsyncMock(), 3, "hi", "u", "o")])
+    assert events[-1] == {"type": "error", "error": service.TURN_LIMIT_ERROR}
+    assert service.admission.finish.await_args.args[1].input_tokens == 5_000

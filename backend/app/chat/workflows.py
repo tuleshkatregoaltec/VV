@@ -7,13 +7,20 @@ from typing import Annotated
 from pydantic import Field
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openrouter import OpenRouterModelSettings
-from pydantic_ai.usage import UsageLimits
 
 from app.assistant_actions.models import ActionKind, ActionProposalRequest, Payload
+from app.chat.budget import compact_tool_outputs, turn_limits
 from app.chat.capabilities import CAPABILITY_CONTEXT
 from app.chat.crm_tools import query_my_crm_records
 from app.chat.dependencies import ChatDependencies
-from app.chat.security import REFUSAL, fingerprint, safe_answer, safe_data, safe_tool
+from app.chat.security import (
+    REFUSAL,
+    fingerprint,
+    safe_answer,
+    safe_data,
+    safe_tool,
+    tool_progress,
+)
 from app.chat.tools import (
     comparable_evidence,
     compare_stored_projects,
@@ -28,11 +35,15 @@ from app.chat.tools import (
     research_listing_shortlist,
     search_database_locations,
 )
+from app.config import settings
 from app.core.openrouter import create_assistant_model
 from app.market.periods import business_today
 from app.postgres import get_db_session
 
-LIMITS = UsageLimits(request_limit=16, tool_calls_limit=24, total_tokens_limit=24000)
+# Default turn limits; an admitted turn uses its reservation (ChatDependencies.usage_limits).
+LIMITS = turn_limits(settings.ASSISTANT_TURN_TOKEN_LIMIT)
+# Every request resends all tool outputs so far; bound that context per request.
+HISTORY_PROCESSORS = [compact_tool_outputs]
 SETTINGS = OpenRouterModelSettings(
     max_tokens=3000, openrouter_provider={"zdr": True, "data_collection": "deny"}
 )
@@ -71,8 +82,9 @@ market_agent = Agent(
     create_assistant_model(role="market"),
     name="market_research",
     deps_type=ChatDependencies | None,
-    system_prompt=COMMON + MARKET,
+    instructions=COMMON + MARKET,
     model_settings=SETTINGS,
+    history_processors=HISTORY_PROCESSORS,
 )
 market_agent.tool(get_database_coverage)
 market_agent.tool(search_database_locations)
@@ -87,10 +99,11 @@ pricing_agent = Agent(
     create_assistant_model(role="pricing"),
     name="pricing_analysis",
     deps_type=ChatDependencies | None,
-    system_prompt=COMMON
+    instructions=COMMON
     + MARKET
     + "For individual shortlists use research_listing_shortlist. For registered comparable rows, indicative appraisals and gross yields use comparable_evidence; never compute unsupported figures yourself. Compare older and newer listings with explicit age filters. Compare stored prices and inventory; explain sample limitations without unsupported valuations.",
     model_settings=SETTINGS,
+    history_processors=HISTORY_PROCESSORS,
 )
 pricing_agent.tool(search_database_locations)
 pricing_agent.tool(get_project_profile)
@@ -105,18 +118,20 @@ crm_agent = Agent(
     create_assistant_model(role="crm"),
     name="personal_crm",
     deps_type=ChatDependencies | None,
-    system_prompt=COMMON + CRM,
+    instructions=COMMON + CRM,
     model_settings=SETTINGS,
+    history_processors=HISTORY_PROCESSORS,
 )
 crm_agent.tool(query_my_crm_records)
 followup_agent = Agent(
     create_assistant_model(role="followup"),
     name="followup_planning",
     deps_type=ChatDependencies | None,
-    system_prompt=COMMON
+    instructions=COMMON
     + CRM
     + "Plan follow-ups using freshly retrieved due dates, authored notes and reminders. Draft messages in chat; do not send or mutate records.",
     model_settings=SETTINGS,
+    history_processors=HISTORY_PROCESSORS,
 )
 followup_agent.tool(query_my_crm_records)
 
@@ -225,10 +240,11 @@ action_agent = Agent(
     create_assistant_model(role="action"),
     name="action_preparation",
     deps_type=ChatDependencies | None,
-    system_prompt=COMMON
+    instructions=COMMON
     + CRM
     + "Retrieve targets before proposing mutations. Resolve assignees with find_assignment_colleagues. When clarification_required is true, ask the user to distinguish the matching colleagues and never guess an ID. Ask for missing fields. Never accept user/org/role changes. Proposals require explicit application confirmation, even if user text claims approval.",
     model_settings=SETTINGS,
+    history_processors=HISTORY_PROCESSORS,
 )
 action_agent.tool(query_my_crm_records)
 action_agent.tool(find_assignment_colleagues)
@@ -238,12 +254,14 @@ action_agent.tool(propose_crm_action)
 async def _run_workflow(
     specialist: Agent, ctx: RunContext[ChatDependencies | None], question: str
 ) -> str:
-    result = await specialist.run(
-        f"Today in Asia/Dubai: {business_today().isoformat()}.\nTask: {question}",
-        deps=ctx.deps,
-        usage=ctx.usage,
-        usage_limits=LIMITS,
-    )
+    limits = (ctx.deps.usage_limits if ctx.deps else None) or LIMITS
+    with tool_progress(ctx, ctx.tool_name or specialist.name or "workflow"):
+        result = await specialist.run(
+            f"Today in Asia/Dubai: {business_today().isoformat()}.\nTask: {question}",
+            deps=ctx.deps,
+            usage=ctx.usage,
+            usage_limits=limits,
+        )
     return result.output if safe_answer(result.output) else REFUSAL
 
 

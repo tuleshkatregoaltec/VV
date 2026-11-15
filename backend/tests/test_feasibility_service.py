@@ -262,6 +262,8 @@ async def test_generate_seeded_study_builds_response_from_plot_and_research():
                     plot_number="L001",
                     usage_override="residential",
                 ),
+                user_id="u",
+                organization_id="o",
             )
 
     assert response.plot_data.plot_number == "L001"

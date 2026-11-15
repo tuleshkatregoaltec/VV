@@ -1,12 +1,22 @@
 import json
 import logging
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 from typing import Any
 
+from fastapi import HTTPException
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessagesTypeAdapter, ToolCallPart
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    SystemPromptPart,
+    ToolCallPart,
+)
+from pydantic_ai.usage import RunUsage, UsageLimits
 
+from app.chat import operations as chat_operations
+from app.config import settings
 from app.feasibility.chat_agent import (
     FeasibilityChatDeps,
     WorkspaceUnitMixReplacement,
@@ -24,19 +34,34 @@ from app.plots.models import PlotDetails
 logger = logging.getLogger(__name__)
 
 
-async def stream_chat_events(request: FeasibilityChatRequest) -> AsyncGenerator[str, None]:
+ERROR_EVENT = f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
+
+
+async def stream_chat_events(
+    request: FeasibilityChatRequest, *, user_id: str, organization_id: str
+) -> AsyncGenerator[str, None]:
+    """One admitted turn: shares the assistant's per-user concurrency and daily allowance."""
     try:
-        async for chunk in stream_feasibility_response(
-            request.messages,
-            request.plot_data,
-            request.assumptions,
-            request.research,
-            request.history_json,
-        ):
-            yield chunk
+        async with chat_operations.admitted_run(
+            user_id=user_id,
+            organization_id=organization_id,
+            token_limit=settings.ASSISTANT_TURN_TOKEN_LIMIT,
+        ) as (usage, token_budget):
+            async for chunk in stream_feasibility_response(
+                request.messages,
+                request.plot_data,
+                request.assumptions,
+                request.research,
+                request.history_json,
+                usage=usage,
+                token_budget=token_budget,
+            ):
+                yield chunk
+    except HTTPException as exc:
+        yield f"data: {json.dumps({'type': 'error', 'error': exc.detail})}\n\n"
     except Exception:
         logger.exception("Error in feasibility chat stream service")
-        yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
+        yield ERROR_EVENT
 
 
 _RESEARCH_TOOLS = {"show_transactions": "transactions", "show_analytics": "analytics"}
@@ -48,6 +73,14 @@ _MUTATION_TOOLS = {
     "update_assumptions": "set_assumptions",
     "update_payment_plan": "set_payment_plan",
 }
+
+
+def _without_system_parts(message: ModelMessage) -> ModelMessage:
+    if not isinstance(message, ModelRequest):
+        return message
+    return replace(
+        message, parts=[part for part in message.parts if not isinstance(part, SystemPromptPart)]
+    )
 
 
 def _unit_mix_row(row: WorkspaceUnitMixUpdate | WorkspaceUnitMixReplacement) -> dict[str, Any]:
@@ -95,6 +128,9 @@ async def stream_feasibility_response(
     assumptions: dict[str, Any],
     research: dict | None = None,
     history_json: str | None = None,
+    *,
+    usage: RunUsage | None = None,
+    token_budget: int | None = None,
 ) -> AsyncGenerator[str, None]:
     deps = FeasibilityChatDeps(
         plot_number=plot_data.plot_number,
@@ -108,7 +144,14 @@ async def stream_feasibility_response(
     history: list[Any] = []
     if history_json:
         try:
-            history = ModelMessagesTypeAdapter.validate_json(history_json)
+            # Client-supplied: drop any system parts (instructions are rebuilt from the
+            # live workbook each turn) and keep only the newest turns within budget.
+            history = chat_operations.bound_history(
+                [
+                    _without_system_parts(message)
+                    for message in ModelMessagesTypeAdapter.validate_json(history_json)
+                ]
+            )
         except Exception:
             logger.exception("Failed to deserialize feasibility history_json")
             yield f"data: {json.dumps({'type': 'warning', 'content': 'Session context reset — conversation history could not be restored.'})}\n\n"
@@ -121,7 +164,8 @@ async def stream_feasibility_response(
             user_message,
             message_history=history,
             deps=deps,
-            usage_limits=UsageLimits(request_limit=10),
+            usage=usage,
+            usage_limits=UsageLimits(request_limit=10, total_tokens_limit=token_budget),
         ) as run:
             async for node in run:
                 if Agent.is_model_request_node(node):
@@ -143,5 +187,5 @@ async def stream_feasibility_response(
             new_messages_json = run.new_messages_json().decode()
             yield f"data: {json.dumps({'type': 'done', 'new_messages_json': new_messages_json})}\n\n"
     except Exception as exc:
-        logger.exception("Error in feasibility chat stream")
-        yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
+        logger.error("Feasibility chat failed (%s)", type(exc).__name__)
+        yield ERROR_EVENT

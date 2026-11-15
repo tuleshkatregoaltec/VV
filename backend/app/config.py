@@ -100,6 +100,21 @@ class Settings(BaseSettings):
     ASSISTANT_ACTION_MODEL: str = "openai/gpt-6-luna"
     ASSISTANT_WHATSAPP_CLASSIFIER_MODEL: str = "openai/gpt-6-luna"
     ASSISTANT_WHATSAPP_DRAFTER_MODEL: str = "openai/gpt-6-luna"
+    # Per-turn budget, separate from each user's daily allowance (a turn reserves
+    # min(turn limit, remaining allowance)). Sized for openai/gpt-6-luna (1.05M context,
+    # $0.10/M input, $0.50/M output): a logged 8-request tool turn used 29,516 tokens,
+    # so 160k covers a two-workflow turn of 15-20 requests and costs at most ~$0.04.
+    ASSISTANT_TURN_TOKEN_LIMIT: int = Field(default=160_000, ge=8_000)
+    ASSISTANT_TURN_MIN_TOKENS: int = Field(default=16_000, ge=1_000)
+    ASSISTANT_TURN_REQUEST_LIMIT: int = Field(default=20, ge=1)
+    ASSISTANT_TURN_TOOL_CALLS_LIMIT: int = Field(default=24, ge=1)
+    # Prior-turn text replayed to the model, and the point at which older tool
+    # outputs inside a turn are compacted before the next request.
+    ASSISTANT_HISTORY_TOKEN_LIMIT: int = Field(default=8_000, ge=500)
+    ASSISTANT_REQUEST_CONTEXT_TOKEN_LIMIT: int = Field(default=32_000, ge=4_000)
+    # Feasibility LLM runs (DEFAULT_CHAT_MODEL) share the same daily allowance.
+    FEASIBILITY_RUN_TOKEN_LIMIT: int = Field(default=300_000, ge=8_000)
+    FEASIBILITY_HBU_CACHE_SECONDS: int = Field(default=86_400, ge=60)
 
     @field_validator(
         "ASSISTANT_ROUTER_MODEL",

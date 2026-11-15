@@ -4,10 +4,12 @@ from typing import List
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
+from app.chat.budget import estimate_tokens
 from app.chat.dependencies import ChatDependencies
 from app.chat.models import Message
 from app.chat.workflows import (
     COMMON,
+    HISTORY_PROCESSORS,
     SETTINGS,
     analyze_pricing,
     plan_followups,
@@ -15,6 +17,7 @@ from app.chat.workflows import (
     research_market,
     retrieve_personal_crm,
 )
+from app.config import settings
 from app.core.openrouter import create_assistant_model
 from app.market.periods import business_today
 
@@ -23,7 +26,8 @@ agent = Agent(
     name="market_chat",
     deps_type=ChatDependencies | None,
     model_settings=SETTINGS,
-    system_prompt=COMMON
+    history_processors=HISTORY_PROCESSORS,
+    instructions=COMMON
     + (
         " Route each request to the focused workflow: market research, pricing analysis, "
         "personal CRM retrieval, follow-up planning, or action preparation. Combine their "
@@ -73,9 +77,19 @@ def _convert_to_pydantic_messages(messages: List[Message]) -> List[ModelMessage]
                 )
                 break
         return result
-    for msg in messages[-30:]:
+    # Newest first until the token budget is spent: every request in the turn resends this.
+    remaining = settings.ASSISTANT_HISTORY_TOKEN_LIMIT
+    for msg in reversed(messages[-30:]):
         if msg.role == "user":
-            result.append(ModelRequest(parts=[UserPromptPart(content=msg.content[:8000])]))
+            item = ModelRequest(parts=[UserPromptPart(content=msg.content[:8000])])
         elif msg.role == "assistant" and (msg.meta_data or {}).get("guardrail_version") == 1:
-            result.append(ModelResponse(parts=[TextPart(content=msg.content[:16000])]))
+            item = ModelResponse(parts=[TextPart(content=msg.content[:16000])])
+        else:
+            continue
+        cost = estimate_tokens(item.parts[0].content)
+        if cost > remaining:
+            break
+        remaining -= cost
+        result.append(item)
+    result.reverse()
     return result

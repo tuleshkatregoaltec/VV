@@ -13,7 +13,7 @@ def quota(monkeypatch):
 
     monkeypatch.setattr(operations, "get_db_session", session)
     access = AsyncMock(return_value=True)
-    acquire = AsyncMock(return_value="lease")
+    acquire = AsyncMock(return_value=operations.admission.TurnLease("lease", 160_000))
     finish = AsyncMock()
     monkeypatch.setattr(operations, "channel_access", access)
     monkeypatch.setattr(operations.admission, "acquire", acquire)

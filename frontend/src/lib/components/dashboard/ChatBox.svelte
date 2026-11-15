@@ -284,7 +284,18 @@ function toolDisplayLabel(tool: string | undefined, state: ToolCallState, cached
 		get_price_trends: {
 			start: 'Reading price history',
 			done: 'Price history ready'
-		}
+		},
+		research_market: { start: 'Researching the market', done: 'Market research ready' },
+		analyze_pricing: { start: 'Analysing pricing evidence', done: 'Pricing analysis ready' },
+		retrieve_personal_crm: { start: 'Reading your CRM', done: 'Your CRM records ready' },
+		plan_followups: { start: 'Planning follow-ups', done: 'Follow-up plan ready' },
+		prepare_action: { start: 'Preparing the proposed change', done: 'Proposed change ready' },
+		get_similar_projects: { start: 'Finding similar projects', done: 'Similar projects ready' },
+		research_listing_shortlist: { start: 'Shortlisting listings', done: 'Listing shortlist ready' },
+		comparable_evidence: { start: 'Reading comparable sales', done: 'Comparable evidence ready' },
+		compare_stored_projects: { start: 'Comparing projects', done: 'Project comparison ready' },
+		find_assignment_colleagues: { start: 'Finding colleagues', done: 'Colleague matches ready' },
+		propose_crm_action: { start: 'Preparing confirmation', done: 'Confirmation ready' }
 	}
 	const fallback = tool ? tool.replaceAll('_', ' ') : 'Working'
 	const label = labels[tool ?? '']?.[state] ?? (state === 'done' ? `${fallback} ready` : fallback)
@@ -729,7 +740,7 @@ function stopStreaming() {
 										<div
 											class="{msg.content || msg.artifacts?.length ? 'mb-3 border-b border-border pb-3' : ''} space-y-2 text-xs text-fg-3"
 										>
-											{#each msg.toolCalls as toolCall (toolCall)}
+											{#each msg.toolCalls as toolCall, index (`${index}:${toolCall}`)}
 												<div class="flex items-center gap-2">
 												<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 													<path
@@ -774,7 +785,7 @@ function stopStreaming() {
 									? 'border-slate-700'
 									: 'border-border'} text-xs space-y-2"
 							>
-								{#each msg.toolCalls as toolCall (toolCall)}
+								{#each msg.toolCalls as toolCall, index (`${index}:${toolCall}`)}
 									<div
 										class="flex items-center gap-2 {msg.role === 'user'
 											? 'text-slate-300'
