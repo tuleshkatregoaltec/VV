@@ -6,9 +6,14 @@ script reads the last two years of those rows into pandas, re-implements each en
 rules here rather than importing the API's queries, and compares the live API with them:
 
 - /analytics/sales: every period (30-365 days), usage, market type, the busiest masters,
-  property types, bedroom counts, registration types, and price and area buckets;
+  property types, bedroom counts, registration types, and price and area buckets; per period and
+  usage also its trend points (and their partial flags), every breakdown and the change on the
+  equal period before;
 - /analytics/rentals: every period, usage, the busiest masters, property types, and rent and area
-  buckets;
+  buckets; per period and usage also its trend, breakdowns and changes;
+- POST /analytics/market-metrics: count, mean and total per period and usage, equal both to the
+  listed rows and to /analytics/sales and /rentals for the same days, with coverage dates that
+  are real record dates;
 - /analytics/market-trend: every period and market type, point by point, with the change on the
   previous period (average price and median price per sq ft);
 - /analytics/project/summary for the whole Dubai market;
@@ -27,6 +32,11 @@ Rules re-implemented from the API's documentation:
 - A market type is a transaction group and property types: residential_units, villas,
   commercial_units, bulk_building and land. Mortgages and gifts are DLD registrations, not DXBI
   records: the API answers 422 to them and this script checks that it does.
+- Price floors: a sale under AED 50,000 and a lease under AED 1,000 a year (or ending before it
+  starts) is not an Analytics record.
+- Trend points: daily up to 30 days, Sunday weeks up to 180, months beyond; a point the period
+  cuts is ``partial``. Breakdown groups without a value are "Not recorded"; masters are the 20
+  busiest; shares are of the whole period.
 - DXBI's own values first, the profile's sourced fill where DXBI left one empty (area, bedrooms,
   status); a master is DLD's, else DXBI's community; 'any spelling of the master' resolves through
   ``analytics_master_keys``.
@@ -100,17 +110,23 @@ AREA_BUCKETS = {
     "2K+": (2000, None),
 }
 
+# The API's price floors (app.analytics.dxbi, decision 2026-11-15), restated here.
+SALE_FLOOR_AED = 50_000
+RENT_FLOOR_AED = 1_000
+_LEASE_FLOOR = f"annual_rent_aed >= {RENT_FLOOR_AED} AND lease_end > lease_start"
+NOT_RECORDED = "Not recorded"
+MASTER_BREAKDOWN_LIMIT = 20
 _RES = "(" + ", ".join(f"'{kind}'" for kind in RESIDENTIAL_TYPES) + ")"
 SALES_SQL = (
     "SELECT transaction_date, property_type, bedrooms, profile_bedrooms, market_status, "
     "profile_status, size_sqft, profile_size, sale_amount_aed, price_per_sqft_aed, "
     "master_key, master_name, area_name FROM dxbi_sales_listed "
-    "WHERE transaction_date >= '{start}'"
+    f"WHERE sale_amount_aed >= {SALE_FLOOR_AED} AND transaction_date >= '{{start}}'"
 )
 LEASES_SQL = (
     "SELECT lease_start, property_type, bedrooms, profile_bedrooms, size_sqft, profile_size, "
     "annual_rent_aed, master_key, master_name, area_name FROM dxbi_leases_listed "
-    "WHERE lease_start >= '{start}'"
+    f"WHERE {_LEASE_FLOOR} AND lease_start >= '{{start}}'"
 )
 ALIASES_SQL = "SELECT raw_key, master_key FROM analytics_master_keys"
 # The whole market, over all listed history: a residential sale priced above zero.
@@ -120,13 +136,13 @@ DUBAI_SALES_SQL = (
     f"medianExactIf(sale_amount_aed, {_READY}), "
     "avg(multiIf(price_per_sqft_aed > 0, round(price_per_sqft_aed), size_sqft > 0, "
     "round(sale_amount_aed / size_sqft), NULL)) "
-    f"FROM dxbi_sales_listed WHERE property_type IN {_RES} AND sale_amount_aed > 0"
+    f"FROM dxbi_sales_listed WHERE property_type IN {_RES} AND sale_amount_aed >= {SALE_FLOOR_AED}"
 )
 DUBAI_LEASES_SQL = (
     "SELECT count(), sum(annual_rent_aed), medianExact(annual_rent_aed), "
     "medianExact(annual_rent_aed / nullIf(multiIf(size_sqft > 0, size_sqft, profile_size > 0, "
     "profile_size, 0), 0)) "
-    f"FROM dxbi_leases_listed WHERE property_type IN {_RES} AND annual_rent_aed > 0"
+    f"FROM dxbi_leases_listed WHERE property_type IN {_RES} AND {_LEASE_FLOOR}"
 )
 
 
@@ -260,6 +276,16 @@ def period_start(day: date, days: int) -> date:
     return day.replace(day=1)
 
 
+def period_end(start: date, days: int) -> date:
+    """The last day of the trend point that starts on ``start``."""
+    if days <= 30:
+        return start
+    if days <= 180:
+        return start + timedelta(days=6)
+    following = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return following - timedelta(days=1)
+
+
 def area_sqft_as_stored(sqft: pd.Series) -> pd.Series:
     """The API stores the area in sq m and multiplies back, so a bucket edge sees that float."""
     return (sqft / SQFT_PER_SQM) * SQFT_PER_SQM
@@ -307,6 +333,19 @@ class Verifier:
         except urllib.error.HTTPError as error:
             raise Failed(f"{path} {params}: HTTP {error.code}") from error
 
+    def api_post(self, path: str, **body) -> dict:
+        request = urllib.request.Request(
+            f"{self.api_url}/{path}",
+            data=json.dumps(body).encode(),
+            headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=600) as response:
+                return json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            raise Failed(f"POST {path} {body}: HTTP {error.code}") from error
+
     # -- listed rows -------------------------------------------------------------------------
     def connect(self) -> None:
         import clickhouse_connect
@@ -329,9 +368,7 @@ class Verifier:
         # The trend compares a period with the equal one before it: two years back, plus a day.
         start = self.today - timedelta(days=2 * max(PERIODS) + 2)
         self.sales = derive_sales(self.ch.query_df(SALES_SQL.format(start=start)))
-        self.rents = derive_leases(
-            self.ch.query_df(LEASES_SQL.format(start=self.today - timedelta(days=max(PERIODS) + 1)))
-        )
+        self.rents = derive_leases(self.ch.query_df(LEASES_SQL.format(start=start)))
         for raw_key, master_key in self.ch.query(ALIASES_SQL).result_rows:
             self.aliases.setdefault(raw_key, []).append(master_key)
         print(f"listed rows: {len(self.sales)} sales, {len(self.rents)} leases", flush=True)
@@ -380,8 +417,10 @@ class Verifier:
             ]
         return frame
 
-    def expected_leases(self, days: int, usage: str = "Residential", **f) -> pd.DataFrame:
-        frame = self.period(self.rents, days)
+    def expected_leases(
+        self, days: int, usage: str = "Residential", end: date | None = None, **f
+    ) -> pd.DataFrame:
+        frame = self.period(self.rents, days, end)
         frame = frame[frame.usage == usage]
         if f.get("property_type"):
             frame = frame[frame.property_type == f["property_type"]]
@@ -431,6 +470,155 @@ class Verifier:
         self.close(f"{label} max", body["max_annual_rent"], round(frame.rent.max(), 2))
         self.close(
             f"{label} avg/sqft", body["avg_rent_sqft"], self.per_sqft(frame.rent, frame.sqft)
+        )
+
+    # -- trends, breakdowns and changes ----------------------------------------------------
+    def previous_end(self, days: int) -> date:
+        """The equal period just before ``days`` up to today ends the day before it starts."""
+        return self.today - timedelta(days=days + 1)
+
+    @staticmethod
+    def change(now: float, before: float) -> float | None:
+        return round((now - before) / before * 100, 1) if before else None
+
+    def compare_trend_points(
+        self, label: str, points: list, frame: pd.DataFrame, amount: str, days: int
+    ) -> None:
+        start = self.today - timedelta(days=days)
+        frame = frame.assign(p=[period_start(d, days) for d in frame.d])
+        groups = frame.groupby("p")
+        got = {date.fromisoformat(point["date"]): point for point in points}
+        self.close(f"{label} trend points", len(got), groups.ngroups)
+        for period, group in groups:
+            point = got.get(period)
+            if point is None:
+                self.check(False, f"{label} trend {period}: missing")
+                continue
+            self.close(f"{label} trend {period} count", point["count"], len(group))
+            self.close(f"{label} trend {period} value", point["total_value"],
+                       round(group[amount].sum(), 2))  # fmt: skip
+            self.close(f"{label} trend {period} avg", point["avg_value"],
+                       round(group[amount].mean(), 2))  # fmt: skip
+            self.close(f"{label} trend {period} avg/sqft", point["avg_sqft"],
+                       self.per_sqft(group[amount], group.sqft))  # fmt: skip
+            last = period_end(period, days)
+            self.check(
+                bool(point.get("partial")) == (period < start or last > self.today),
+                f"{label} trend {period}: partial {point.get('partial')}",
+            )
+
+    def compare_breakdown(
+        self,
+        label: str,
+        rows: list,
+        frame: pd.DataFrame,
+        column: str,
+        amount: str,
+        count_field: str,
+        total_field: str,
+        sqft_field: str,
+    ) -> None:
+        values = frame[column].replace("", NOT_RECORDED)
+        groups = frame.assign(g=values).groupby("g")
+        if column == "master_key":
+            # The busiest masters only: compare their counts, busiest first.
+            want = sorted(groups.size().tolist(), reverse=True)[:MASTER_BREAKDOWN_LIMIT]
+            got = [row[count_field] for row in rows]
+            self.check(got == want, f"{label} counts {got[:5]}... != {want[:5]}...")
+            for row in rows:
+                self.close(f"{label} {row['dimension_value']} share", row["pct_of_total"],
+                           round(row[count_field] / len(frame) * 100, 1), places=1)  # fmt: skip
+            return
+        got = {row["dimension_value"]: row for row in rows}
+        self.close(f"{label} groups", len(got), groups.ngroups)
+        for value, group in groups:
+            row = got.get(value)
+            if row is None:
+                self.check(False, f"{label} {value}: missing")
+                continue
+            self.close(f"{label} {value} count", row[count_field], len(group))
+            self.close(f"{label} {value} total", row[total_field], round(group[amount].sum(), 2))
+            self.close(f"{label} {value} avg/sqft", row[sqft_field],
+                       self.per_sqft(group[amount], group.sqft))  # fmt: skip
+            self.close(f"{label} {value} share", row["pct_of_total"],
+                       round(len(group) / len(frame) * 100, 1), places=1)  # fmt: skip
+
+    def compare_sales_breakdowns(self, days: int, usage: str = "Residential", **f) -> None:
+        frame = self.expected_sales(days, usage, **f)
+        before = self.expected_sales(days, usage, end=self.previous_end(days), **f)
+        label = f"sales {days}d {usage} {f}"
+        body = self.api("analytics/sales", timeframe_days=days, property_usage=usage, **f)
+        if frame.empty:
+            self.check(body["trends"] == [], f"{label}: trend without sales")
+            return
+        self.compare_trend_points(label, body["trends"], frame, "price", days)
+        for name, column in (("property_type", "property_type"), ("rooms", "rooms"),
+                             ("reg_type", "reg_type"), ("master_project", "master_key")):  # fmt: skip
+            self.compare_breakdown(f"{label} by_{name}", body[f"by_{name}"], frame, column,
+                                   "price", "transaction_count", "total_volume",
+                                   "avg_price_sqft")  # fmt: skip
+        summary = body["summary"]
+        self.close(f"{label} count change", summary["count_change_pct"],
+                   self.change(len(frame), len(before)), places=1)  # fmt: skip
+        self.close(f"{label} volume change", summary["volume_change_pct"],
+                   self.change(frame.price.sum(), before.price.sum()), places=1)  # fmt: skip
+
+    def compare_leases_breakdowns(self, days: int, usage: str = "Residential", **f) -> None:
+        frame = self.expected_leases(days, usage, **f)
+        before = self.expected_leases(days, usage, end=self.previous_end(days), **f)
+        label = f"rentals {days}d {usage} {f}"
+        body = self.api("analytics/rentals", timeframe_days=days, property_usage=usage, **f)
+        if frame.empty:
+            self.check(body["trends"] == [], f"{label}: trend without leases")
+            return
+        self.compare_trend_points(label, body["trends"], frame, "rent", days)
+        for name, column in (("property_type", "property_type"), ("master_project", "master_key")):
+            self.compare_breakdown(f"{label} by_{name}", body[f"by_{name}"], frame, column,
+                                   "rent", "contract_count", "total_annual_value",
+                                   "avg_rent_sqft")  # fmt: skip
+        summary = body["summary"]
+        self.close(f"{label} count change", summary["count_change_pct"],
+                   self.change(len(frame), len(before)), places=1)  # fmt: skip
+        self.close(f"{label} value change", summary["value_change_pct"],
+                   self.change(frame.rent.sum(), before.rent.sum()), places=1)  # fmt: skip
+
+    def compare_market_metrics(self, dataset: str, days: int, usage: str = "Residential") -> None:
+        """market-metrics counts the rows /sales and /rentals count, over the same days."""
+        start, end = self.today - timedelta(days=days), self.today
+        frame = (
+            self.expected_sales(days, usage) if dataset == "sales"
+            else self.expected_leases(days, usage)
+        )  # fmt: skip
+        amount = frame.price if dataset == "sales" else frame.rent
+        label = f"market-metrics {dataset} {days}d {usage}"
+        body = self.api_post(
+            "analytics/market-metrics",
+            dataset=dataset,
+            usage=usage.lower(),
+            metrics=["mean_aed", "total_aed"],
+            period={"type": "range", "start": start.isoformat(), "end": end.isoformat()},
+            reference_date=self.today.isoformat(),
+        )
+        total = body["total"]
+        self.close(f"{label} count", total["count"], len(frame))
+        if not frame.empty:
+            self.close(f"{label} mean", total["values"]["mean_aed"], round(amount.mean(), 2))
+            self.close(f"{label} total", total["values"]["total_aed"], round(amount.sum(), 2))
+        page = (
+            self.api("analytics/sales", timeframe_days=days, property_usage=usage)["summary"]
+            if dataset == "sales"
+            else self.api("analytics/rentals", timeframe_days=days, property_usage=usage)["summary"]
+        )
+        page_count = page["transaction_count"] if dataset == "sales" else page["contract_count"]
+        self.close(f"{label} count = page count", total["count"], page_count)
+        coverage = body["coverage"]
+        self.check(
+            coverage.get("data_from") is None or coverage["data_from"] >= "2000-01-01",
+            f"{label}: coverage starts {coverage.get('data_from')}",
+        )
+        self.check(
+            str(body.get("release_id") or "").startswith("dxbi-"),
+            f"{label}: release {body.get('release_id')} is not the DXBI listed build",
         )
 
     def reconcile_sales(self, days: int) -> None:
@@ -573,6 +761,10 @@ class Verifier:
             for usage in ("Residential", "Commercial"):
                 self.attempt(self.compare_sales, days, usage=usage)
                 self.attempt(self.compare_leases, days, usage=usage)
+                self.attempt(self.compare_sales_breakdowns, days, usage=usage)
+                self.attempt(self.compare_leases_breakdowns, days, usage=usage)
+                self.attempt(self.compare_market_metrics, "sales", days, usage)
+                self.attempt(self.compare_market_metrics, "rentals", days, usage)
             self.attempt(self.reconcile_sales, days)
             self.attempt(self.reconcile_leases, days)
             for market in MARKET_TYPES:
@@ -582,6 +774,8 @@ class Verifier:
         for master in masters:
             self.attempt(self.compare_sales, 365, master_project=master)
             self.attempt(self.compare_leases, 365, master_project=master)
+            self.attempt(self.compare_sales_breakdowns, 365, master_project=master)
+            self.attempt(self.compare_leases_breakdowns, 365, master_project=master)
         for kind in sorted(v for v in year.property_type.unique() if v):
             self.attempt(self.compare_sales, 365, property_type=kind)
             self.attempt(self.compare_leases, 365, property_type=kind)
