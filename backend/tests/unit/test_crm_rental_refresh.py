@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -411,3 +411,153 @@ async def test_a_build_held_by_another_process_is_waited_for(monkeypatch):
     monkeypatch.setattr(owner_store.asyncio, "sleep", AsyncMock())
     state = await owner_store.publish_if_stale(MagicMock(), "org")
     assert state.generation == 4
+
+
+def lease(event_key, *, start_days, end_days, source_unit=True, unit="113"):
+    """One warehouse lease for MAG 910 #113, dated relative to today."""
+    today = date.today()
+    return {
+        "event_key": event_key,
+        "unit_candidate_key": f"candidate-{event_key}",
+        "building_name": "MAG 910",
+        "project_name": "MAG City",
+        "area_name": "Mohammed Bin Rashid City",
+        "property_type": "Apartment",
+        "lease_start": today + timedelta(days=start_days),
+        "lease_end": today + timedelta(days=end_days),
+        "annual_rent_aed": 50_000 + end_days,
+        "unit_number": unit,
+        "unit_key": unit,
+        "rental_match_method": "source_unit" if source_unit else "sale_inference",
+    }
+
+
+def lease_warehouse(monkeypatch, leases):
+    """Stand in for the warehouse lease read: it applies the date bounds the caller asks for
+    and returns source-unit leases first, as ClickHouse did before newest-lease ordering."""
+
+    async def fetch(parameters, has_source_unit):
+        lower = date.fromisoformat(parameters["window_start"])
+        upper = parameters.get("window_end")
+        rows = [
+            row
+            for row in leases
+            if row["unit_key"] in parameters["units"]
+            and row["lease_end"] >= lower
+            and (upper is None or row["lease_end"] <= date.fromisoformat(upper))
+        ]
+        return sorted(rows, key=lambda row: row["rental_match_method"] != "source_unit")
+
+    monkeypatch.setattr(
+        crm_ownership.owner_queries,
+        "fetch_rental_source_columns",
+        AsyncMock(return_value=[{"has_unit": 1}]),
+    )
+    monkeypatch.setattr(crm_ownership.owner_queries, "fetch_rental_evidence", fetch)
+
+
+def owner_property(lease_end):
+    from app.crm.import_models import CrmOwnerProperty
+
+    return CrmOwnerProperty(
+        property_key="mag910|113",
+        area_name="Mohammed Bin Rashid City",
+        project_name="MAG City",
+        building_name="MAG 910",
+        unit_number="113",
+        property_type="Apartment",
+        ownership_status="verified_current_owner",
+        confidence_score=95,
+        match_reason="Exact registry match",
+        lead_id="lease",
+        unit_candidate_key="candidate",
+        lease_end=lease_end,
+    )
+
+
+def renewal_due_windows(lease_end):
+    """The Owners lease-window filters an agent can pick that include this lease."""
+    from app.crm.import_models import CrmOwnerProfile
+    from app.crm.owners import _assessed_property_matches
+
+    profile = CrmOwnerProfile(
+        owner_key="owner",
+        contact_name="Owner",
+        phone_primary="+971500000000",
+        highest_ownership_status="verified_current_owner",
+        highest_confidence_score=95,
+        property_count=1,
+        rental_linked_count=1,
+        contact_ready_count=1,
+        annual_rent_aed=0,
+    )
+    item = owner_property(lease_end)
+    return [
+        window
+        for window in ("expired", "expiring_30", "expiring_60", "expiring_90")
+        if _assessed_property_matches(
+            item,
+            profile=profile,
+            scope="all",
+            status=None,
+            search=None,
+            lease_window=window,
+            min_rent_aed=None,
+            max_rent_aed=None,
+            min_value_aed=None,
+            max_value_aed=None,
+        )
+    ]
+
+
+async def refreshed_link(monkeypatch, leases):
+    row = claim(
+        property_key="mag910|113",
+        unit_number="113",
+        area_name="Mohammed Bin Rashid City",
+        project_name="MAG City",
+    )
+    written, _ = link_store(monkeypatch, [row])
+    lease_warehouse(monkeypatch, leases)
+    monkeypatch.setattr(crm_ownership, "_refresh_contact_import_match_summaries", AsyncMock())
+    await crm_ownership.refresh_property_contact_rentals(AsyncMock(), organization_id="org")
+    return written[0]
+
+
+async def test_renewed_unit_links_its_newest_lease_and_is_not_renewal_due(monkeypatch):
+    # MAG 910 #113: the lease ending 2026-04-30 was renewed to 2027-04-30.
+    leases = [
+        lease("expired", start_days=-560, end_days=-196, source_unit=False),
+        lease("renewal", start_days=-195, end_days=166),
+    ]
+    link = await refreshed_link(monkeypatch, leases)
+    assert link["lead_id"] == "renewal"
+    assert link["lease_end"] == date.today() + timedelta(days=166)
+    assert link["annual_rent_aed"] == 50_166
+    assert renewal_due_windows(link["lease_end"]) == []
+
+
+async def test_newest_lease_wins_over_an_older_source_unit_lease(monkeypatch):
+    leases = [
+        lease("older-source", start_days=-560, end_days=-196),
+        lease("newer-inferred", start_days=-195, end_days=166, source_unit=False),
+    ]
+    link = await refreshed_link(monkeypatch, leases)
+    assert link["lead_id"] == "newer-inferred"
+
+
+async def test_unit_whose_newest_lease_expired_still_shows_it_as_expired(monkeypatch):
+    leases = [
+        lease("older", start_days=-900, end_days=-536),
+        lease("latest", start_days=-565, end_days=-200),
+    ]
+    link = await refreshed_link(monkeypatch, leases)
+    assert link["lead_id"] == "latest"
+    assert link["lease_end"] == date.today() - timedelta(days=200)
+    assert renewal_due_windows(link["lease_end"]) == ["expired"]
+
+
+async def test_lease_ending_within_90_days_is_still_renewal_due(monkeypatch):
+    link = await refreshed_link(monkeypatch, [lease("due", start_days=-320, end_days=45)])
+    assert link["lead_id"] == "due"
+    assert renewal_due_windows(link["lease_end"]) == ["expiring_60"]

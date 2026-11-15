@@ -1093,14 +1093,13 @@ async def _rental_evidence_for_units(units: list[str]) -> dict[str, dict[str, An
         return evidence
     columns = await owner_queries.fetch_rental_source_columns()
     has_source_unit = bool(columns[0]["has_unit"])
-    anchor = date.today()
+    # Every lease that ended within the last year is read, however far ahead it ends: a
+    # unit renewed until next year must carry that renewal, not the lease it replaced.
+    # Renewal-due views filter on the newest lease's own end date.
+    window_start = (date.today() - timedelta(days=365)).isoformat()
     for chunk in _chunks(units):
         rows = await owner_queries.fetch_rental_evidence(
-            {
-                "units": chunk,
-                "window_start": (anchor - timedelta(days=365)).isoformat(),
-                "window_end": (anchor + timedelta(days=90)).isoformat(),
-            },
+            {"units": chunk, "window_start": window_start},
             has_source_unit,
         )
         for row in rows:
@@ -1113,7 +1112,8 @@ async def _rental_evidence_for_units(units: list[str]) -> dict[str, dict[str, An
                     unit_lookup_key(str(row["unit_number"])),
                 )
             )
-            evidence.setdefault(key, row)
+            if key not in evidence or _lease_recency(row) > _lease_recency(evidence[key]):
+                evidence[key] = row
     # A display building/unit key is not globally unique. A lease from another
     # community must never give a verified owner the wrong renewal opportunity.
     for key, pairs in scopes.items():
@@ -1128,6 +1128,16 @@ async def _rental_evidence_for_units(units: list[str]) -> dict[str, dict[str, An
         ):
             evidence.pop(key, None)
     return evidence
+
+
+def _lease_recency(row: dict[str, Any]) -> tuple:
+    """Newest lease first, as the renewal-lead feed ranks a unit's leases; a lease with the
+    exact source unit breaks a tie with one placed by sale inference."""
+    return (
+        row.get("lease_start") or date.min,
+        row.get("lease_end") or date.min,
+        row.get("rental_match_method") == "source_unit",
+    )
 
 
 def _rental_scope_compatible(candidate: Any, rental: dict[str, Any]) -> bool:
