@@ -34,6 +34,7 @@ async def test_generation_preserves_provider_path_limits_and_deterministic_field
         "get_market_pricing",
         "get_off_plan_pricing_curve",
         "get_rental_rates_by_size_band",
+        "get_data_as_of",
     ]:
         monkeypatch.setattr(generation, name, AsyncMock(return_value=[]))
     monkeypatch.setattr(generation, "get_area_detail", AsyncMock(side_effect=ValueError("no area")))

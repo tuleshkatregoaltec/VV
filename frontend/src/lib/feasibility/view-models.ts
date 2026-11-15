@@ -12,6 +12,7 @@ export interface PricingEvidenceStudyViewModel {
 	market_area: string
 	usage: string
 	headline: string
+	data_as_of: PlotResearch['data_as_of']
 	off_plan_unit_benchmarks: PlotResearch['off_plan_unit_benchmarks']
 	market_pricing: PlotResearch['market_pricing']
 	pricing_evidence: PlotResearch['pricing_evidence']
@@ -96,6 +97,7 @@ export function buildPricingEvidenceStudy(
 		market_area: research.market_area,
 		usage: research.usage,
 		headline: studyContext?.headline || research.headline,
+		data_as_of: research.data_as_of,
 		off_plan_unit_benchmarks: research.off_plan_unit_benchmarks,
 		market_pricing: research.market_pricing,
 		pricing_evidence: research.pricing_evidence,

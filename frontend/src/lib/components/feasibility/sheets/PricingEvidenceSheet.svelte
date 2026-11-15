@@ -1,4 +1,5 @@
 <script lang="ts">
+import { formatDataAsOf } from '$lib/feasibility/format'
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
 import { perSqft, toSqft } from '$lib/utils/units'
 
@@ -9,6 +10,7 @@ const study = $derived(
 				market_area: workbookStore.research.market_area,
 				usage: workbookStore.research.usage,
 				headline: workbookStore.study_context?.headline || workbookStore.research.headline,
+				data_as_of: workbookStore.research.data_as_of,
 				off_plan_unit_benchmarks: workbookStore.research.off_plan_unit_benchmarks,
 				market_pricing: workbookStore.research.market_pricing,
 				pricing_evidence: workbookStore.research.pricing_evidence,
@@ -71,6 +73,22 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 			</div>
 		</div>
 	</div>
+
+	{#if study && (study.data_as_of?.length ?? 0) > 0}
+		<table class="w-full border-collapse border-b border-[#D9D9D9]" style="border-spacing:0">
+			<tbody>
+				<tr><td colspan="2" class={SUBHEADER}>DATA AS OF</td></tr>
+				{#each study.data_as_of ?? [] as item}
+					<tr title={item.note ?? ''}>
+						<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]" style="width:40%">{item.label}</td>
+						<td class={TD_LEFT}>
+							{formatDataAsOf(item)}{#if item.note}<span class="text-slate-500"> — {item.note}</span>{/if}
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	{/if}
 
 	{#if !study}
 		<div class="flex items-center justify-center h-40 text-slate-400 text-xs">

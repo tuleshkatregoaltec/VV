@@ -47,6 +47,7 @@ from app.feasibility.research import (
     build_off_plan_pricing_confidence,
     build_off_plan_unit_benchmarks,
     get_comparable_data,
+    get_data_as_of,
     get_market_pricing,
     get_off_plan_pricing_curve,
     get_rental_rates_by_size_band,
@@ -62,7 +63,8 @@ from app.project.service import get_project_market_snapshot
 
 logger = logging.getLogger(__name__)
 
-HBU_CACHE_PREFIX = "feasibility:hbu:v1"
+# v2: studies priced from DXBI's listed records; v1 entries were built on DLD's stale register.
+HBU_CACHE_PREFIX = "feasibility:hbu:v2"
 
 
 async def generate_hbu_study(
@@ -369,6 +371,8 @@ async def generate_hbu_study(
             2,
         )
 
+    data_as_of = await get_data_as_of(market_area)
+
     return PlotResearch(
         plot_number=details.plot_number,
         usage=usage,
@@ -379,6 +383,7 @@ async def generate_hbu_study(
         pricing_evidence=pricing_evidence,
         competition_evidence=competition_evidence,
         land_sales_evidence=land_sales_evidence,
+        data_as_of=data_as_of,
         market_pricing=market_pricing,
         off_plan_market_pricing=off_plan_market_pricing,
         off_plan_pricing_confidence=off_plan_confidence,

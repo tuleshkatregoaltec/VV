@@ -20,6 +20,17 @@ class MarketPricingRow(BaseModel):
     transaction_count: int
     median_price_sqm: float
     avg_area_sqm: float | None = None
+    last_transaction_date: str | None = None
+
+
+class DataSourceAsOf(BaseModel):
+    """How current one input of a study is: DXBI is current, DLD ends where its feed ends."""
+
+    key: Literal["market_pricing", "rental_rates", "off_plan_pricing", "comparable_projects"]
+    label: str
+    source: Literal["dxbi", "dld"]
+    as_of: str | None = None
+    note: str | None = None
 
 
 class RentalMarketSummary(BaseModel):
@@ -136,6 +147,7 @@ class PlotResearch(BaseModel):
     pricing_evidence: list[ComparableProject] = Field(default_factory=list)
     competition_evidence: list[ComparableProject] = Field(default_factory=list)
     land_sales_evidence: list[LandSaleEvidence] = Field(default_factory=list)
+    data_as_of: list[DataSourceAsOf] = Field(default_factory=list)
     market_pricing: list[MarketPricingRow] = Field(default_factory=list)
     off_plan_market_pricing: list[OffPlanPricingRow] = Field(default_factory=list)
     off_plan_pricing_confidence: OffPlanPricingConfidence | None = None
