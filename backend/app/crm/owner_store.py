@@ -1189,7 +1189,11 @@ class StoreReader:
                     """
                     SELECT count(*) FILTER (WHERE in_rental), count(*) FILTER (WHERE in_registry),
                            count(*) FILTER (WHERE in_prior), count(*) FILTER (WHERE in_review),
-                           count(*) FILTER (WHERE in_multi)
+                           count(*) FILTER (WHERE in_multi),
+                           count(*) FILTER (WHERE NOT (in_rental OR in_registry OR in_prior)),
+                           COALESCE(sum(GREATEST(
+                               in_rental::int + in_registry::int + in_prior::int - 1, 0
+                           )), 0)
                     FROM crm_owner_registry_owners
                     WHERE organization_id = :org AND generation = :gen AND list_id = :list
                     """
@@ -1208,6 +1212,8 @@ class StoreReader:
                         "prior_owner_profiles",
                         "needs_review_profiles",
                         "multi_property_owners",
+                        "unfiled_profiles",
+                        "folder_overlap",
                     ),
                     summary,
                     strict=True,

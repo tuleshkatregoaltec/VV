@@ -1142,7 +1142,8 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 		)
 			return false
 		if (p.units) {
-			const n = props.length
+			// A list row carries only the first properties of a large owner; count them all.
+			const n = o.total_property_count ?? o.property_count ?? props.length
 			if (p.units === '3' ? n < 3 : n !== Number(p.units)) return false
 		}
 		return true
@@ -1156,7 +1157,7 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 	const TABS: Record<OwnerTab, (x: (typeof all)[number]) => boolean> = {
 		all: () => true,
 		mine: ({ row }) => row.mine,
-		multi: ({ o }) => (o.properties ?? []).length >= 3,
+		multi: ({ o }) => (o.total_property_count ?? o.property_count ?? 0) >= 3,
 		event: ({ o }) => inEvent(o),
 		sold: ({ o }) => soldLater(o),
 		review: ({ o }) =>

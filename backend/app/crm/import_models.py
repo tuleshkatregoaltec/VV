@@ -742,14 +742,24 @@ class CrmOwnerProfile(BaseModel):
     current_property_count: int = 0
     # Every associated property, when the list counts only those in its view.
     total_property_count: int | None = None
+    # A list row carries at most a few properties; the owner profile has them all.
+    properties_truncated: bool = False
 
 
 class CrmOwnerRegistrySummary(BaseModel):
+    """Folder counts. Folders overlap (an owner can be in Registry and Prior owners), and some
+    owners are in no folder, so All = rental + registry + prior - folder_overlap + unfiled."""
+
     rental_owner_profiles: int = 0
     registry_owner_profiles: int = 0
     prior_owner_profiles: int = 0
     needs_review_profiles: int = 0
     multi_property_owners: int = 0
+    # In none of the rental, registry and prior folders: developer-side sellers, which Prior
+    # owners leaves out. They are listed under All only.
+    unfiled_profiles: int = 0
+    # Extra folder memberships: an owner in two folders adds 1, in three adds 2.
+    folder_overlap: int = 0
 
 
 class CrmOwnerRegistryResponse(BaseModel):

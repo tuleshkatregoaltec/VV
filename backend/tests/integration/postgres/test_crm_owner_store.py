@@ -706,3 +706,24 @@ async def test_a_lease_refresh_changes_only_lease_fields_and_reaches_the_publish
         )
     ).all()
     assert [row[0] for row in assessed] == ["lead-601"]
+
+
+@pytest.mark.parametrize("list_choice", [None, 0])
+async def test_folder_counts_reconcile_with_all(pg_session, tenant, list_choice):
+    # Live: all 178,793 vs registry 98,808 + prior 55,134; folders overlap and developer-side
+    # sellers are in no folder. The summary now names both, so the numbers add up.
+    org = tenant["org"]
+    list_id = None if list_choice is None else tenant["lists"][list_choice]
+    page = await owners.get_owner_registry(
+        pg_session,
+        organization_id=org,
+        **_registry_arguments(**({"list_id": list_id} if list_id else {})),
+    )
+    s = page.summary
+    assert page.total == (
+        s.rental_owner_profiles
+        + s.registry_owner_profiles
+        + s.prior_owner_profiles
+        - s.folder_overlap
+        + s.unfiled_profiles
+    )

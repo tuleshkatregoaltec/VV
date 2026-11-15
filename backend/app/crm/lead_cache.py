@@ -66,7 +66,8 @@ def _key(name: str, revision: str, params: dict[str, Any]) -> str:
         json.dumps(params, sort_keys=True, default=str, separators=(",", ":")).encode()
     ).hexdigest()[:32]
     code = hashlib.sha256(f"{CACHE_VERSION}:{TRANSFORM_REVISION}".encode()).hexdigest()[:12]
-    return f"{PREFIX}:{code}:{name}:{revision[:24]}:{digest}"
+    release = hashlib.sha256(revision.encode()).hexdigest()[:24]
+    return f"{PREFIX}:{code}:{name}:{release}:{digest}"
 
 
 async def cached(
@@ -75,11 +76,23 @@ async def cached(
     model: type[ModelT],
     compute: Callable[[], Awaitable[ModelT]],
 ) -> ModelT:
-    """Serve `compute()`'s answer for this release and parameters, computing it once.
+    """Serve `compute()`'s answer for this lease data release and parameters, computing it once.
 
     Identical concurrent requests in this worker share one computation.
     """
-    revision = await lead_data_revision()
+    return await cached_for(name, await lead_data_revision(), params, model, compute)
+
+
+async def cached_for(
+    name: str,
+    revision: str | None,
+    params: dict[str, Any],
+    model: type[ModelT],
+    compute: Callable[[], Awaitable[ModelT]],
+    *,
+    ttl: int = TTL_SECONDS,
+) -> ModelT:
+    """Serve `compute()`'s answer for an immutable input `revision`; None computes live."""
     if revision is None:
         return await compute()
     key = _key(name, revision, params)
@@ -115,5 +128,5 @@ async def cached(
         _inflight.pop(key, None)
     payload = result.model_dump(mode="json")
     future.set_result(payload)
-    await cache.set(key, payload, expire=TTL_SECONDS)
+    await cache.set(key, payload, expire=ttl)
     return result

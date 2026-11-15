@@ -17608,6 +17608,11 @@
 							}
 						],
 						"title": "Total Property Count"
+					},
+					"properties_truncated": {
+						"type": "boolean",
+						"title": "Properties Truncated",
+						"default": false
 					}
 				},
 				"type": "object",
@@ -18028,10 +18033,21 @@
 						"type": "integer",
 						"title": "Multi Property Owners",
 						"default": 0
+					},
+					"unfiled_profiles": {
+						"type": "integer",
+						"title": "Unfiled Profiles",
+						"default": 0
+					},
+					"folder_overlap": {
+						"type": "integer",
+						"title": "Folder Overlap",
+						"default": 0
 					}
 				},
 				"type": "object",
-				"title": "CrmOwnerRegistrySummary"
+				"title": "CrmOwnerRegistrySummary",
+				"description": "Folder counts. Folders overlap (an owner can be in Registry and Prior owners), and some\nowners are in no folder, so All = rental + registry + prior - folder_overlap + unfiled."
 			},
 			"CrmOwnerSourceReference": {
 				"properties": {
