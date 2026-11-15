@@ -20,11 +20,6 @@ router = APIRouter(
     dependencies=[Depends(require_api_key)],
 )
 
-health_router = APIRouter(
-    prefix="/api/v1/upload",
-    tags=["upload"],
-)
-
 
 @router.post("/chunked", response_model=ChunkedUploadResponse)
 async def upload_chunked(
@@ -56,9 +51,11 @@ async def upload_chunked(
             chunk_size=chunk_size,
             expected_hash=expected_hash,
         )
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
         logger.exception("Failed to process chunked upload")
-        raise HTTPException(500, f"Failed to process chunked upload: {e}")
+        raise HTTPException(500, "Failed to process chunked upload")
 
 
 @router.post("/news/article", response_model=NewsArticleUploadResponse)
@@ -68,32 +65,28 @@ async def upload_news_article(
 ) -> NewsArticleUploadResponse:
     try:
         return await create_news_article(db, request.article)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to upload news article")
-        raise HTTPException(500, f"Failed to upload news article: {e}")
+        raise HTTPException(500, "Failed to upload news article")
 
 
-@health_router.get("/health", response_model=UploadHealthResponse)
+@router.get("/health", response_model=UploadHealthResponse)
 async def health():
+    """Service-key-only dependency check. Read-only: no object is written, and failures
+    are logged server-side, never echoed to the caller."""
     from app.upload.service import cache, object_storage_client
 
+    s3_ok = False
     try:
-        # Test object storage by uploading and deleting a test file.
-        test_key = ".health_check"
-        test_data = b"health_check"
-        await object_storage_client.upload(test_key, test_data)
-        await object_storage_client.delete_many([test_key])
+        async with object_storage_client.client() as s3:
+            await s3.head_bucket(Bucket=object_storage_client.bucket_name)
+        s3_ok = True
+    except Exception:
+        logger.exception("Object storage health check failed")
 
-        # Test Redis connection
-        redis_ok = await cache.ping()
-
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={"status": "healthy", "s3": True, "redis": redis_ok},
-        )
-    except Exception as e:
-        logger.exception("Health check failed")
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "degraded", "error": str(e)},
-        )
+    redis_ok = await cache.ping()
+    healthy = s3_ok and redis_ok
+    return JSONResponse(
+        status_code=status.HTTP_200_OK if healthy else status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"status": "healthy" if healthy else "degraded", "s3": s3_ok, "redis": redis_ok},
+    )

@@ -5,6 +5,7 @@ import logfire
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from honeybadger import contrib, honeybadger
 from pydantic import BaseModel
@@ -36,7 +37,6 @@ from app.project.router import router as project_router
 from app.providers.auth.auth_backend import AuthBackend
 from app.supply.router import router as supply_router
 from app.transaction.router import router as transaction_router
-from app.upload.router import health_router
 from app.upload.router import router as upload_router
 from app.whatsapp.connection_router import admin_router as whatsapp_admin_router
 from app.whatsapp.connection_router import router as whatsapp_connection_router
@@ -76,10 +76,23 @@ async def lifespan(app: FastAPI):
         observability_provider.shutdown()
 
 
+def docs_urls_for(environment: str) -> dict[str, str | None]:
+    """Interactive docs and the schema are for local development only.
+
+    Staging and production serve a live API behind a public tunnel; /docs, /redoc and
+    /openapi.json would publish every route and model to anyone. `app.openapi()` still
+    works in-process, so client generation (scripts/generate-client.sh) is unaffected.
+    """
+    if environment == "local":
+        return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.0.0",
     lifespan=lifespan,
+    **docs_urls_for(settings.ENVIRONMENT),
     generate_unique_id_function=custom_generate_unique_id,
 )
 if observability_provider is not None:
@@ -89,7 +102,16 @@ if observability_provider is not None:
 if settings.honeybadger_enabled:
     honeybadger.configure(api_key=settings.HONEYBADGER_API_KEY, before_notify=scrub_whatsapp_notice)
 
-app.add_middleware(AuthenticationMiddleware, backend=AuthBackend())
+
+def _authentication_error(conn, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        {"detail": "Invalid credentials"},
+        status_code=401,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+app.add_middleware(AuthenticationMiddleware, backend=AuthBackend(), on_error=_authentication_error)
 app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
 if settings.honeybadger_enabled:
     app.add_middleware(contrib.ASGIHoneybadger)  # type: ignore
@@ -116,7 +138,6 @@ app.include_router(project_router, tags=["projects"])
 app.include_router(supply_router, tags=["supply"])
 app.include_router(transaction_router, tags=["transactions"])
 app.include_router(upload_router, tags=["upload"])
-app.include_router(health_router, tags=["upload"])
 app.include_router(billing_router, tags=["billing"])
 app.include_router(billing_webhooks, tags=["webhooks"])
 app.include_router(whatsapp_router, tags=["webhooks"])
