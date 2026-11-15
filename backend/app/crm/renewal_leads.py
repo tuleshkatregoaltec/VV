@@ -26,6 +26,7 @@ from app.crm import (
 )
 from app.crm.identity import _normalize_email, _normalize_phone
 from app.crm.inbound_models import InboundEnquiryResponse
+from app.crm.lead_data_errors import lead_data_error, not_loaded
 from app.crm.models import (
     CrmAgentAreaPreference,
     CrmAreaPreferencesResponse,
@@ -116,14 +117,11 @@ async def list_renewal_areas(as_of: date | None = None) -> list[CrmRenewalArea]:
 
 async def _compute_renewal_areas(anchor: date) -> list[CrmRenewalArea]:
     if not await opportunity_queries._tables_exist():
-        return []
+        raise not_loaded()
     try:
         rows = await opportunity_queries.fetch_renewal_areas(anchor)
     except Exception as exc:
-        logger.exception("CRM renewal areas query failed")
-        raise HTTPException(
-            status_code=503, detail="CRM lead data is temporarily unavailable"
-        ) from exc
+        raise lead_data_error(exc, "renewal areas") from exc
     return [
         CrmRenewalArea(area=str(row["area"]), upcoming_90_days=int(row["upcoming_90_days"]))
         for row in rows
@@ -180,7 +178,7 @@ async def _compute_renewals(
     anchor = as_of
     empty = CrmRenewalsResponse(leads=[], total=0, limit=limit, offset=offset, as_of=anchor)
     if not await opportunity_queries._tables_exist():
-        return empty
+        raise not_loaded()
     vacant = window == "vacant"
     try:
         rows, total, facets = await opportunity_queries.fetch_renewals(
@@ -196,10 +194,7 @@ async def _compute_renewals(
             offset=offset,
         )
     except Exception as exc:
-        logger.exception("CRM renewals query failed")
-        raise HTTPException(
-            status_code=503, detail="CRM lead data is temporarily unavailable"
-        ) from exc
+        raise lead_data_error(exc, "renewals") from exc
     return empty.model_copy(
         update={
             "leads": [_lead_from_row(row) for row in rows],
@@ -362,8 +357,10 @@ async def list_renewal_leads(
         as_of=anchor,
         kind=kind or "all",
     )
-    if not preferences.areas or not await opportunity_queries._tables_exist():
+    if not preferences.areas:
         return empty
+    if not await opportunity_queries._tables_exist():
+        raise not_loaded()
     try:
         lead_rows, count_rows = await opportunity_queries.fetch_renewal_leads(
             anchor,
@@ -375,10 +372,7 @@ async def list_renewal_leads(
             kind=kind,
         )
     except Exception as exc:
-        logger.exception("CRM renewal leads query failed")
-        raise HTTPException(
-            status_code=503, detail="CRM lead data is temporarily unavailable"
-        ) from exc
+        raise lead_data_error(exc, "renewal leads") from exc
     leads = [_lead_from_row(row) for row in lead_rows]
     owners = await _owners_by_candidate(
         db,
