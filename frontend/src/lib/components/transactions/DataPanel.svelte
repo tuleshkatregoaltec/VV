@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Download, X } from 'lucide-svelte'
 import ColumnSettingsDropdown from '$lib/components/dropdowns/ColumnSettingsDropdown.svelte'
+import { safeExternalHref } from '$lib/utils/safeUrl'
 
 type ExportAction = {
 	label: string
@@ -101,6 +102,10 @@ let selectAllLabel = $derived(
 		? `Deselect all ${data.length} rows on this page`
 		: `Select all ${data.length} rows on this page`
 )
+
+function rowHref(column: { href?: (row: any) => string | null }, row: any): string | null {
+	return safeExternalHref(column.href?.(row))
+}
 
 function handleRowClick(row: any) {
 	if (onrowclick) {
@@ -322,10 +327,10 @@ function getRenderKey(row: any, index: number): string {
 										>
 											{column.format ? column.format(row[column.id], row) : row[column.id]}
 										</span>
-									{:else if column.href?.(row)}
+									{:else if rowHref(column, row)}
 										<!-- The row opens its details on click; the link opens the map instead. -->
 										<a
-											href={column.href(row)}
+											href={rowHref(column, row)}
 											target="_blank"
 											rel="noopener noreferrer"
 											class="text-info underline decoration-dotted underline-offset-2 hover:decoration-solid"

@@ -18,9 +18,13 @@ function makeUser(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser
 }
 
 describe('getRouteCategory', () => {
+	it('does not treat removed routes as public pages', () => {
+		for (const path of ['/landing2', '/landing-new', '/auth/reset-password', '/organization-setup'])
+			expect(getRouteCategory(path)).not.toBe('public')
+	})
+
 	it('classifies public paths', () => {
 		expect(getRouteCategory('/')).toBe('public')
-		expect(getRouteCategory('/landing-new')).toBe('public')
 		expect(getRouteCategory('/invite')).toBe('public')
 		expect(getRouteCategory('/reset')).toBe('public')
 	})

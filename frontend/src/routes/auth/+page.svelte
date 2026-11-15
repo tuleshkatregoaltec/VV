@@ -618,6 +618,7 @@ async function handleResendForgotPasswordOTP() {
 						<a
 							href="/terms"
 							target="_blank"
+							rel="noopener noreferrer"
 							class="font-medium text-fg-1 underline-offset-2 hover:underline"
 						>
 							Terms of Service
@@ -626,6 +627,7 @@ async function handleResendForgotPasswordOTP() {
 						<a
 							href="/privacy"
 							target="_blank"
+							rel="noopener noreferrer"
 							class="font-medium text-fg-1 underline-offset-2 hover:underline"
 						>
 							Privacy Policy

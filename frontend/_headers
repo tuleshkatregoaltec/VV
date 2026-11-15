@@ -1,0 +1,19 @@
+# Cloudflare Pages applies this file to static assets only; the Worker's page responses get the
+# same headers from src/hooks.server.ts, plus the Content-Security-Policy from svelte.config.js.
+# Assets that are not documents need no CSP, but a font, script or image opened directly can
+# still be framed or sniffed, so the baseline headers go on everything.
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), autoplay=(), bluetooth=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()
+
+# Prerendered legal pages are static files, so SvelteKit can only put their CSP in a <meta> tag,
+# which ignores frame-ancestors. Set it here.
+/terms
+  Content-Security-Policy: frame-ancestors 'none'
+/privacy
+  Content-Security-Policy: frame-ancestors 'none'
+/data-deletion
+  Content-Security-Policy: frame-ancestors 'none'

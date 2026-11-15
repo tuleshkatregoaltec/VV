@@ -20,6 +20,7 @@ import { browser } from '$app/environment'
 import { analytics } from '$lib/api/analytics'
 import { supply } from '$lib/api/supply'
 import { transactions } from '$lib/api/transactions'
+import { DASHBOARD_KPI_STORAGE_KEY } from '$lib/auth/user-browser-state'
 import { analyticsQueries } from '$lib/queries/analytics'
 
 type CardId =
@@ -62,7 +63,7 @@ type DropTarget = {
 	position: 'before' | 'after'
 }
 
-const STORAGE_KEY = 'vitevue-dashboard-kpi-cards'
+const STORAGE_KEY = DASHBOARD_KPI_STORAGE_KEY
 
 const DEFAULT_CARD_IDS: CardId[] = [
 	'mtd-transactions',

@@ -6,15 +6,12 @@ export type GuardDecision = { action: 'allow' } | { action: 'redirect'; location
 
 const PUBLIC_PATHS = [
 	'/',
-	'/landing-new',
 	'/landing-v2',
-	'/landing2',
 	'/invite',
 	'/terms',
 	'/privacy',
 	'/data-deletion',
-	'/reset',
-	'/auth/reset-password'
+	'/reset'
 ]
 const AUTH_PATHS = ['/auth']
 const ONBOARDING_PATHS = [
@@ -22,7 +19,6 @@ const ONBOARDING_PATHS = [
 	'/setup/complete',
 	'/payment-cancel',
 	'/profile-setup',
-	'/organization-setup',
 	'/payment-success'
 ]
 const RECOVERY_PATHS = ['/renew']

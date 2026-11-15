@@ -14,6 +14,7 @@ import {
 } from 'lucide-svelte'
 import { browser } from '$app/environment'
 import { goto } from '$app/navigation'
+import { WORKFLOW_CARDS_STORAGE_KEY } from '$lib/auth/user-browser-state'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
 
@@ -43,7 +44,7 @@ type DropTarget = {
 	position: 'before' | 'after'
 }
 
-const STORAGE_KEY = 'vitevue-workflow-cards'
+const STORAGE_KEY = WORKFLOW_CARDS_STORAGE_KEY
 
 const GROUPS: Array<{ id: WorkflowGroupId; title: string }> = [
 	{ id: 'institutional', title: 'Institutional workflows' },

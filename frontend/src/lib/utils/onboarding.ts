@@ -1,4 +1,4 @@
-const SELECTED_TIER_KEY = 'selected_tier'
+import { SELECTED_TIER_SESSION_KEY as SELECTED_TIER_KEY } from '$lib/auth/user-browser-state'
 
 export type PlanTier = 'tier1' | 'tier2'
 

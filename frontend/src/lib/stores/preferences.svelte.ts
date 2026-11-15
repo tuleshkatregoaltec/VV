@@ -4,8 +4,9 @@
  */
 
 import { browser } from '$app/environment'
+import { PREFERENCES_STORAGE_KEY } from '$lib/auth/user-browser-state'
 
-const STORAGE_KEY = 'vitevue-preferences'
+const STORAGE_KEY = PREFERENCES_STORAGE_KEY
 
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
