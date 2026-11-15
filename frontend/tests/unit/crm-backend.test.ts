@@ -567,38 +567,86 @@ describe('Vitevue lease leads in Leads (/api/v1/crm/renewal-leads)', () => {
 		})
 	})
 
-	it('ranks vacant units first, then the leases that end soonest', async () => {
+	it('loads upcoming renewals first, one server page at a time, soonest end on top', async () => {
+		const get = serve({
+			'/api/v1/crm/inbound/enquiries': NO_ENQUIRIES,
+			'/api/v1/crm/renewal-leads': {
+				...renewalLeads([
+					{ lead: lease({ lead_id: 'ends-3', days_to_expiry: 3 }), owner: null },
+					{ lead: lease({ lead_id: 'ends-60', days_to_expiry: 60 }), owner: null }
+				]),
+				kind: 'upcoming',
+				total: 3657,
+				limit: 100,
+				counts: { all: 4452, upcoming: 3657, expired: 795, vacant: 300 }
+			}
+		})
+		const { crm } = await import('$lib/crm/api')
+		const res = await crm.leads.list({ vitevue: true })
+		const url = String(get.mock.calls.find(([u]) => String(u).includes('renewal-leads'))?.[0])
+		expect(url).toContain('kind=upcoming')
+		expect(url).toContain('limit=100')
+		expect(url).toContain('offset=0')
+		expect(res.items.map((r) => r.lease?.id)).toEqual(['ends-3', 'ends-60'])
+		expect(res.lease_page).toEqual({
+			window: 'upcoming',
+			offset: 0,
+			limit: 100,
+			total: 3657,
+			counts: { upcoming: 3657, expired: 795, vacant: 300 }
+		})
+		// The pager covers the lease leads, so loaded rows are not "limited".
+		expect(res.limited).toBe(false)
+	})
+
+	it('lists expired leases separately, vacant units first, and pages through them', async () => {
+		const get = serve({
+			'/api/v1/crm/inbound/enquiries': NO_ENQUIRIES,
+			'/api/v1/crm/renewal-leads': {
+				...renewalLeads([
+					{
+						lead: lease({
+							lead_id: 'ended',
+							days_to_expiry: -2,
+							lease_evidence_state: 'unit_unresolved'
+						}),
+						owner: null
+					},
+					{
+						lead: lease({
+							lead_id: 'vacant',
+							days_to_expiry: -5,
+							lease_evidence_state: 'unlet_signal'
+						}),
+						owner: null
+					}
+				]),
+				kind: 'expired',
+				total: 795,
+				offset: 100,
+				limit: 100,
+				counts: { all: 4452, upcoming: 3657, expired: 795, vacant: 300 }
+			}
+		})
+		const { crm } = await import('$lib/crm/api')
+		const res = await crm.leads.list({ vitevue: true, lease_window: 'expired', lease_offset: 100 })
+		const url = String(get.mock.calls.find(([u]) => String(u).includes('renewal-leads'))?.[0])
+		expect(url).toContain('kind=expired')
+		expect(url).toContain('offset=100')
+		expect(res.items.map((r) => r.lease?.id)).toEqual(['vacant', 'ended'])
+		expect(res.lease_page?.total).toBe(795)
+	})
+
+	it('never shows the 1970 placeholder as a purchase date', async () => {
 		serve({
 			'/api/v1/crm/inbound/enquiries': NO_ENQUIRIES,
 			'/api/v1/crm/renewal-leads': renewalLeads([
-				{ lead: lease({ lead_id: 'ends-60', days_to_expiry: 60 }), owner: null },
-				{
-					lead: lease({
-						lead_id: 'vacant',
-						days_to_expiry: -5,
-						lease_evidence_state: 'unlet_signal'
-					}),
-					owner: null
-				},
-				{ lead: lease({ lead_id: 'ends-3', days_to_expiry: 3 }), owner: null },
-				{
-					lead: lease({
-						lead_id: 'ended-unconfirmed',
-						days_to_expiry: -5,
-						lease_evidence_state: 'unit_unresolved'
-					}),
-					owner: null
-				}
+				{ lead: lease({ last_purchase_date: '1970-01-01' }), owner: null }
 			])
 		})
 		const { crm } = await import('$lib/crm/api')
-		const { items } = await crm.leads.list({ vitevue: true })
-		expect(items.map((r) => r.lease?.id)).toEqual([
-			'vacant',
-			'ended-unconfirmed',
-			'ends-3',
-			'ends-60'
-		])
+		const [row] = (await crm.leads.list({ vitevue: true })).items
+		expect(row.lease?.last_purchase).toBeNull()
 	})
 
 	it('shows a unit once: an opened unit is its stored lead, not a second row', async () => {
@@ -658,14 +706,23 @@ describe('Vitevue lease leads in Leads (/api/v1/crm/renewal-leads)', () => {
 	})
 
 	it('reports the saved areas and windows in the Leads feed strip', async () => {
-		serve({ '/api/v1/crm/renewal-leads': renewalLeads([{ lead: lease(), owner: null }]) })
+		serve({
+			'/api/v1/crm/renewal-leads': {
+				...renewalLeads([{ lead: lease(), owner: null }]),
+				counts: { all: 4452, upcoming: 3657, expired: 795, vacant: 300 }
+			}
+		})
 		const { crm } = await import('$lib/crm/api')
 		expect(await crm.feed.summary()).toEqual({
 			areas: ['Jumeirah Village Circle'],
 			forward_days: 60,
 			lookback_days: 30,
-			window_total: 1,
+			// Every unit in the window, not the loaded page.
+			window_total: 4452,
+			upcoming: 3657,
+			expired: 795,
 			on_file: 0,
+			loaded: 1,
 			entered_today: 1
 		})
 	})

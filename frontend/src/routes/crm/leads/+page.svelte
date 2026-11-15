@@ -3,7 +3,15 @@ import { createQuery } from '@tanstack/svelte-query'
 import Search from 'lucide-svelte/icons/search'
 import Upload from 'lucide-svelte/icons/upload'
 import { crm } from '$lib/crm/api'
-import type { LeadListParams, LeadRow, LeadStage, LeadType, Source } from '$lib/crm/api/types'
+import { LEASE_PAGE_SIZE } from '$lib/crm/api/backend'
+import type {
+	LeadListParams,
+	LeadRow,
+	LeadStage,
+	LeadType,
+	LeaseWindow,
+	Source
+} from '$lib/crm/api/types'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
@@ -51,6 +59,14 @@ const tabType = $derived(
 /** On the board, a type tab picks its own group; otherwise the group switch does. */
 const group = $derived<LeadGroup>(tabType ? groupOf(tabType) : ui.leadGroup)
 
+// Lease leads come one server page at a time: leases still running (soonest end first) or ended.
+let leaseWindow = $state<LeaseWindow>('upcoming')
+let leaseOffset = $state(0)
+function pickLeaseWindow(w: LeaseWindow) {
+	leaseWindow = w
+	leaseOffset = 0
+}
+
 const params = $derived<LeadListParams>({
 	lead_type: tabType ?? '',
 	lost: ui.leadTab === 'lost' ? true : undefined,
@@ -62,9 +78,15 @@ const params = $derived<LeadListParams>({
 	budget: ui.budget,
 	q,
 	// Vitevue lease leads from My areas join the agency's own leads here.
-	vitevue: true
+	vitevue: true,
+	lease_window: leaseWindow,
+	lease_offset: leaseOffset
 })
 const leads = createQuery(() => crmQueries.leads(params))
+const leasePage = $derived(leads.data?.lease_page)
+const leaseEnd = $derived(
+	leasePage ? Math.min(leasePage.offset + leasePage.limit, leasePage.total) : 0
+)
 const counts = $derived(leads.data?.counts)
 const more = $derived((ui.beds ? 1 : 0) + (ui.ptype ? 1 : 0) + (ui.budget ? 1 : 0))
 const filtered = $derived(Boolean(ui.q || ui.source || ui.stage || ui.area || more))
@@ -129,7 +151,7 @@ const typeLine = (l: LeadRow) =>
 
 <svelte:head><title>Leads · CRM</title></svelte:head>
 
-{#if leads.data?.limited}<p class="small muted">Showing the first 500 stored leads and up to 500 lease leads. Filters and counts apply to loaded rows.</p>{/if}
+{#if leads.data?.limited}<p class="small muted">Showing the first 500 stored leads. Filters and counts apply to loaded rows.</p>{/if}
 
 <PageHeader
 	title="Leads"
@@ -168,7 +190,14 @@ const typeLine = (l: LeadRow) =>
 		<span class="sep">·</span>
 		<span><b class="num">{fmt(feed.data.window_total)}</b> units</span>
 		<span class="sep">·</span>
-		<span><b class="num">{fmt(feed.data.on_file)}</b> with a known owner in the loaded lease leads</span>
+		<span><b class="num">{fmt(feed.data.upcoming ?? 0)}</b> upcoming</span>
+		<span class="sep">·</span>
+		<span><b class="num">{fmt(feed.data.expired ?? 0)}</b> ended</span>
+		<span class="sep">·</span>
+		<span
+			><b class="num">{fmt(feed.data.on_file)}</b> of the first {fmt(feed.data.loaded ?? 0)} upcoming have a known
+			owner</span
+		>
 		<span class="sep">·</span>
 		<span><b class="num">{fmt(feed.data.entered_today)}</b> entered the inbox today</span>
 	{:else if feed.isError}
@@ -258,6 +287,39 @@ const typeLine = (l: LeadRow) =>
 			value={group}
 			onselect={pickGroup}
 		/>
+	</div>
+{/if}
+
+{#if leasePage}
+	<div class="leasepager">
+		<Seg
+			label="Lease leads"
+			items={[
+				{ id: 'upcoming' as LeaseWindow, label: `Upcoming renewals · ${fmt(leasePage.counts.upcoming)}` },
+				{ id: 'expired' as LeaseWindow, label: `Ended · ${fmt(leasePage.counts.expired)}` }
+			]}
+			value={leaseWindow}
+			onselect={pickLeaseWindow}
+		/>
+		<span class="small muted" aria-live="polite">
+			{leasePage.total
+				? `Lease leads ${fmt(leasePage.offset + 1)}–${fmt(leaseEnd)} of ${fmt(leasePage.total)}`
+				: 'No lease leads in this window'}{leasePage.total > leasePage.limit
+				? ' · filters and counts cover this page'
+				: ''}
+		</span>
+		<button
+			type="button"
+			class="btn ghost sm"
+			disabled={leasePage.offset === 0}
+			onclick={() => (leaseOffset = Math.max(0, leaseOffset - LEASE_PAGE_SIZE))}>Previous</button
+		>
+		<button
+			type="button"
+			class="btn ghost sm"
+			disabled={leaseEnd >= leasePage.total}
+			onclick={() => (leaseOffset += LEASE_PAGE_SIZE)}>Next</button
+		>
 	</div>
 {/if}
 

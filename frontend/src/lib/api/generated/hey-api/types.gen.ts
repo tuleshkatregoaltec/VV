@@ -3825,6 +3825,30 @@ export type CrmRenewalLead = {
 };
 
 /**
+ * CrmRenewalLeadCounts
+ *
+ * Lead units in the agent's whole window, whichever page or kind was asked for.
+ */
+export type CrmRenewalLeadCounts = {
+    /**
+     * All
+     */
+    all?: number;
+    /**
+     * Upcoming
+     */
+    upcoming?: number;
+    /**
+     * Expired
+     */
+    expired?: number;
+    /**
+     * Vacant
+     */
+    vacant?: number;
+};
+
+/**
  * CrmRenewalLeadsResponse
  */
 export type CrmRenewalLeadsResponse = {
@@ -3853,6 +3877,11 @@ export type CrmRenewalLeadsResponse = {
      * As Of
      */
     as_of: string;
+    /**
+     * Kind
+     */
+    kind?: 'all' | 'upcoming' | 'expired' | 'vacant';
+    counts?: CrmRenewalLeadCounts;
 };
 
 /**

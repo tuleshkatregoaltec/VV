@@ -259,6 +259,22 @@ export interface LeadListParams {
 	budget?: BudgetBand | ''
 	/** Leads page: add Vitevue lease leads from My areas (not Home, counts or Matches). */
 	vitevue?: boolean
+	/** Which lease leads: still running (default, soonest end first) or ended. */
+	lease_window?: LeaseWindow
+	/** First lease lead of the page (server pagination, LEASE_PAGE_SIZE per page). */
+	lease_offset?: number
+}
+
+export type LeaseWindow = 'upcoming' | 'expired'
+
+/** One server page of Vitevue lease leads and the window's real totals. */
+export interface LeasePage {
+	window: LeaseWindow
+	offset: number
+	limit: number
+	/** Lease leads of this window across every page. */
+	total: number
+	counts: { upcoming: number; expired: number; vacant: number }
 }
 
 export interface LeadListResponse {
@@ -272,6 +288,8 @@ export interface LeadListResponse {
 	areas: string[]
 	/** The Vitevue lease leads could not load; the agency's own leads are still listed. */
 	vitevue_unavailable?: boolean
+	/** Present when lease leads were asked for and loaded. */
+	lease_page?: LeasePage
 }
 
 export interface LeadEvent {
@@ -1367,10 +1385,14 @@ export interface FeedSummary {
 	/** Lease-end window: leases ending in the next `forward_days` or ended in the last `lookback_days`. */
 	forward_days: number
 	lookback_days: number
-	/** Units in the areas inside the window (DLD/Ejari). */
+	/** Units in the areas inside the window (DLD/Ejari), every page. */
 	window_total: number
-	/** Of the loaded units, those with a known owner (typed in or matched by an owner import). */
+	/** Of those, leases still running and leases that ended inside the look-back window. */
+	upcoming?: number
+	expired?: number
+	/** Of the `loaded` units on the first page, those with a known owner (typed in or import-matched). */
 	on_file: number
+	loaded?: number
 	/** Units whose lease end entered the forward window today. */
 	entered_today: number
 }
