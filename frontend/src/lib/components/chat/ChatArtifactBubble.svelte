@@ -15,6 +15,7 @@ import { cubicOut } from 'svelte/easing'
 import { fade, fly } from 'svelte/transition'
 import type { ListingCardResponse } from '$lib/api/generated/hey-api/types.gen'
 import type { ChatArtifact } from '$lib/chat/artifacts'
+import { safeExternalHref } from '$lib/utils/safeUrl'
 import ChatCustomChartArtifact from './ChatCustomChartArtifact.svelte'
 import ChatMarketTrendArtifact from './ChatMarketTrendArtifact.svelte'
 
@@ -189,11 +190,11 @@ function resultSummary(): string {
 													{listingLocation(listing) || listing.location_name || 'Dubai'}
 												</p>
 											</div>
-											{#if listing.share_url}
+											{#if safeExternalHref(listing.share_url)}
 												<a
-													href={listing.share_url}
+													href={safeExternalHref(listing.share_url)}
 													target="_blank"
-													rel="noreferrer"
+													rel="noopener noreferrer"
 													class="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border text-fg-4 transition hover:bg-elevated hover:text-fg-1"
 													aria-label="Open record"
 													title="Open record"

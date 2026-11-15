@@ -1,6 +1,7 @@
 <script lang="ts">
 import Modal from '$lib/components/ui/Modal.svelte'
 import { formatAed } from '$lib/constants/transactions'
+import { safeExternalHref } from '$lib/utils/safeUrl'
 import type { SaleRow } from '$lib/utils/transactionPages'
 import { formatSqft } from '$lib/utils/units'
 
@@ -62,9 +63,9 @@ const fields = $derived(
 			<div class="mt-4 rounded-lg border border-border bg-panel p-4">
 				<span class="text-sm text-fg-4">Location</span>
 				<p class="font-medium text-fg-1">{transaction.location}</p>
-				{#if transaction.mapUrl}
+				{#if safeExternalHref(transaction.mapUrl)}
 					<a
-						href={transaction.mapUrl}
+						href={safeExternalHref(transaction.mapUrl)}
 						target="_blank"
 						rel="noopener noreferrer"
 						class="mt-1 inline-block text-sm text-info underline underline-offset-2"

@@ -1,3 +1,4 @@
+import { safeExternalHref } from '$lib/utils/safeUrl'
 import { formatSqft } from '$lib/utils/units'
 
 // Property usage. DXBI records carry a property type but no usage: the backend groups the types
@@ -46,7 +47,7 @@ function formatMonths(value: number | null | undefined): string {
 }
 
 function mapLink(row: { mapUrl?: string | null }): string | null {
-	return row.mapUrl ?? null
+	return safeExternalHref(row.mapUrl)
 }
 
 // DXBI sales (dxbi_sales_unit_events): one row per sale of one unit.

@@ -1,5 +1,6 @@
 import { createQuery } from '@tanstack/svelte-query'
 import { browser } from '$app/environment'
+import { CHAT_SELECTION_SESSION_PREFIX } from '$lib/auth/user-browser-state'
 import { chatQueries, chatScope } from '$lib/queries/chat'
 
 const selection = $state<{ scope: string | null; id: number | null }>({ scope: null, id: null })
@@ -23,7 +24,7 @@ export function createConversationSelection(initialId: number | null = null) {
 			let saved = selection.scope === scope ? selection.id : null
 			if (browser && selection.scope !== scope) {
 				try {
-					saved = Number(sessionStorage.getItem(`chat:conversation:${scope}`)) || null
+					saved = Number(sessionStorage.getItem(`${CHAT_SELECTION_SESSION_PREFIX}${scope}`)) || null
 				} catch {
 					/* Storage can be unavailable in private browsing. */
 				}
@@ -40,8 +41,8 @@ export function createConversationSelection(initialId: number | null = null) {
 			selection.id = id
 			if (browser) {
 				try {
-					if (id === null) sessionStorage.removeItem(`chat:conversation:${scope}`)
-					else sessionStorage.setItem(`chat:conversation:${scope}`, String(id))
+					if (id === null) sessionStorage.removeItem(`${CHAT_SELECTION_SESSION_PREFIX}${scope}`)
+					else sessionStorage.setItem(`${CHAT_SELECTION_SESSION_PREFIX}${scope}`, String(id))
 				} catch {
 					/* Selection still persists for this app session. */
 				}

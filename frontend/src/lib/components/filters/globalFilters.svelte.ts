@@ -1,5 +1,9 @@
 // src/lib/components/filters/globalFilters.svelte.ts
 import { browser } from '$app/environment'
+import {
+	FILTER_PROPERTY_TYPE_STORAGE_KEY,
+	FILTER_TIMEFRAME_STORAGE_KEY
+} from '$lib/auth/user-browser-state'
 
 function createPersisted<T>(key: string, initial: T) {
 	let state = $state(initial)
@@ -30,5 +34,5 @@ function createPersisted<T>(key: string, initial: T) {
 }
 
 // Global filters (used across app)
-export const propertyType = createPersisted('filter-propertyType', 'Residential')
-export const timeframe = createPersisted('filter-timeframe', 'Last Month')
+export const propertyType = createPersisted(FILTER_PROPERTY_TYPE_STORAGE_KEY, 'Residential')
+export const timeframe = createPersisted(FILTER_TIMEFRAME_STORAGE_KEY, 'Last Month')

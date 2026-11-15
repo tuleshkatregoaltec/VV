@@ -10,7 +10,9 @@ import type {
 	ProjectRadarProject
 } from '$lib/api/projects'
 import { colorTheme } from '$lib/stores/preferences.svelte'
+import { escapeHtml } from '$lib/utils/escapeHtml'
 import { toSqft } from '$lib/utils/units'
+import { createPinSvg, createProjectDotSvg } from './markerElements'
 
 const LIGHT_MAP_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json'
 const DARK_MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
@@ -244,15 +246,6 @@ function formatSqftCompact(valueSqm: number) {
 	const sqft = toSqft(valueSqm)
 	if (!Number.isFinite(sqft) || sqft <= 0) return '~'
 	return sqft >= 1000 ? `${(sqft / 1000).toFixed(1)}k sq ft` : `${Math.round(sqft)} sq ft`
-}
-
-function escapeHtml(value: unknown) {
-	return String(value ?? '')
-		.replaceAll('&', '&amp;')
-		.replaceAll('<', '&lt;')
-		.replaceAll('>', '&gt;')
-		.replaceAll('"', '&quot;')
-		.replaceAll("'", '&#39;')
 }
 
 function ddaParcelPopupHtml(props: Record<string, unknown>) {
@@ -752,12 +745,7 @@ function addBuildingMarkers(pins: GeoPin[]) {
 		const markerEl = document.createElement('div')
 		markerEl.style.cssText =
 			'cursor: pointer; display: flex; flex-direction: column; align-items: center;'
-		markerEl.innerHTML = `
-				<svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<path d="M14 0C6.268 0 0 6.268 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.268 21.732 0 14 0Z" fill="#0d9488"/>
-					<circle cx="14" cy="14" r="6" fill="white"/>
-				</svg>
-			`
+		markerEl.replaceChildren(createPinSvg('#0d9488'))
 
 		const label = pin.building_name || pin.project_name
 		const popup = new maplibregl.Popup({
@@ -804,11 +792,7 @@ export function addProjectMarker(
 	const markerEl = document.createElement('div')
 	markerEl.className =
 		'w-10 h-10 bg-[#1c344a] rounded-full flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:bg-[#0b1b2b] transition-colors'
-	markerEl.innerHTML = `
-			<svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-				<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16z" clip-rule="evenodd" />
-			</svg>
-		`
+	markerEl.replaceChildren(createProjectDotSvg())
 
 	// Create and add marker to map
 	const marker = new maplibregl.Marker({ element: markerEl })
