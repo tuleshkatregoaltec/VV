@@ -54,6 +54,11 @@ class Recorder:
         if self.fail_on == "owners":
             raise RuntimeError("owners refresh failed")
 
+    def warm(self) -> None:
+        self.calls.append("warm")
+        if self.fail_on == "warm":
+            raise RuntimeError("warm-up failed")
+
 
 def _config(tmp_path: Path) -> sync.Config:
     return sync.Config(
@@ -79,6 +84,7 @@ def _go(config: sync.Config, recorder: Recorder) -> int:
         build_release=recorder.release,
         flush_cache=recorder.flush,
         refresh_owners=recorder.owners,
+        warm_pages=recorder.warm,
     )
 
 
@@ -153,7 +159,7 @@ def test_a_loaded_run_is_not_loaded_again_and_only_the_owners_refresh_runs(
     (config.state_dir / "loaded" / "sales-run=2026-11-14").touch()
     recorder = Recorder()
     assert _go(config, recorder) == 0
-    assert recorder.calls == ["owners"]
+    assert recorder.calls == ["owners", "warm"]
 
 
 def test_a_load_that_fails_stops_that_report_and_skips_the_release(tmp_path: Path) -> None:
@@ -175,7 +181,7 @@ def test_the_release_and_cache_flush_follow_a_load_and_clear_the_pending_marker(
     _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
     recorder = Recorder()
     assert _go(config, recorder) == 0
-    assert recorder.calls[-3:] == ["release", "flush", "owners"]
+    assert recorder.calls[-4:] == ["release", "flush", "owners", "warm"]
     assert not (config.state_dir / "release-pending").exists()
 
 
@@ -187,7 +193,7 @@ def test_a_failed_release_is_retried_on_the_next_run_without_new_data(tmp_path: 
     assert (config.state_dir / "release-pending").exists()
     retry = Recorder()
     assert _go(config, retry) == 0
-    assert retry.calls == ["release", "flush", "owners"]
+    assert retry.calls == ["release", "flush", "owners", "warm"]
 
 
 def test_a_sales_load_failure_in_one_report_does_not_block_the_other(tmp_path: Path) -> None:
@@ -227,7 +233,7 @@ def test_a_failed_owners_refresh_fails_the_run_and_keeps_the_loads(tmp_path: Pat
     assert not (config.state_dir / "release-pending").exists()
     retry = Recorder()
     assert _go(config, retry) == 0
-    assert retry.calls == ["owners"]
+    assert retry.calls == ["owners", "warm"]
 
 
 def test_the_owners_refresh_runs_the_backend_script_with_its_own_state(tmp_path: Path) -> None:
@@ -353,7 +359,7 @@ def test_a_stale_rentals_feed_fails_the_run_like_a_stale_sales_feed(tmp_path: Pa
     recorder = Recorder()
     assert _go(config, recorder) == 1
     # The data that is there is still served and the Owners refresh still runs.
-    assert recorder.calls == ["owners"]
+    assert recorder.calls == ["owners", "warm"]
 
 
 def test_a_feed_with_no_finished_run_at_all_fails_the_run(tmp_path: Path) -> None:
@@ -454,3 +460,63 @@ def test_runs_loaded_before_evidence_was_kept_record_the_days_they_still_hold(
         ("run=2026-11-13", date(2026, 11, 6), date(2026, 11, 9)),
         ("run=2026-11-14", date(2026, 11, 10), date(2026, 11, 14)),
     ]
+
+
+def test_the_warm_up_runs_last_after_the_owners_refresh(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _fresh(config, "rentals")
+    _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
+    recorder = Recorder()
+    assert _go(config, recorder) == 0
+    assert recorder.calls[-4:] == ["release", "flush", "owners", "warm"]
+
+
+def test_a_failed_warm_up_warns_and_does_not_fail_the_run(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    config = _config(tmp_path)
+    _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
+    _run(config.evidence_dir, "rentals", "run=2026-11-14", ["2026-11-14"])
+    with caplog.at_level("WARNING"):
+        assert _go(config, Recorder(fail_on="warm")) == 0
+    assert any(
+        record.levelname == "WARNING" and "warm" in record.getMessage().lower()
+        for record in caplog.records
+    )
+
+
+def test_no_warm_up_after_a_failed_owners_refresh_or_a_failed_load(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _run(config.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
+    _run(config.evidence_dir, "rentals", "run=2026-11-14", ["2026-11-14"])
+    owners_failed = Recorder(fail_on="owners")
+    assert _go(config, owners_failed) == 1
+    assert "warm" not in owners_failed.calls
+
+    other = _config(tmp_path / "other")
+    _run(other.evidence_dir, "sales", "run=2026-11-14", ["2026-11-14"])
+    load_failed = Recorder(fail_on="load_dxbi_sales_units.py")
+    assert _go(other, load_failed) == 1
+    assert "warm" not in load_failed.calls
+
+
+def test_the_warm_up_runs_the_backend_script_through_the_backend_venv(tmp_path: Path) -> None:
+    repo = tmp_path / "vv"
+    argv, cwd, env = sync.warm_pages_command(repo)
+    assert argv == [str(repo / "backend/.venv/bin/python"), "scripts/crm/warm_lead_pages.py"]
+    assert cwd == repo / "backend"
+    assert env["PYTHONPATH"] == str(repo / "backend")
+
+
+def test_a_hung_warm_up_is_stopped_by_a_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict = {}
+
+    def fake_run(argv, **kwargs):
+        seen.update(kwargs)
+
+    monkeypatch.setattr(sync.subprocess, "run", fake_run)
+    sync._warm_pages(tmp_path / "vv")
+    assert seen["check"] is True
+    assert 0 < seen["timeout"] <= 1800

@@ -16,6 +16,7 @@ import random
 import subprocess
 import time
 import urllib.request
+from collections.abc import Mapping
 from datetime import datetime
 
 SCENARIOS = [
@@ -59,7 +60,7 @@ def server_now(ssh: str) -> str:
     return clickhouse(ssh, "SELECT toString(now64(3)) AS measure_now")[0]["measure_now"]
 
 
-def get(api: str, token: str, path: str) -> tuple[int, float, int, dict]:
+def get(api: str, token: str, path: str) -> tuple[int, float, int, Mapping[str, str]]:
     request = urllib.request.Request(
         api + path, headers={"Authorization": f"Bearer {token}", "User-Agent": "vv-measure"}
     )
@@ -67,9 +68,9 @@ def get(api: str, token: str, path: str) -> tuple[int, float, int, dict]:
     try:
         with urllib.request.urlopen(request, timeout=120) as response:
             body = response.read()
-            return response.status, time.perf_counter() - started, len(body), dict(response.headers)
+            return response.status, time.perf_counter() - started, len(body), response.headers
     except urllib.error.HTTPError as error:
-        return error.code, time.perf_counter() - started, 0, {}
+        return error.code, time.perf_counter() - started, 0, error.headers
 
 
 def window_queries(ssh: str, start: str, end: str, tables: tuple[str, ...] = ()) -> list[dict]:

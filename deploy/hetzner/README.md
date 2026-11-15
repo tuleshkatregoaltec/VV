@@ -205,8 +205,15 @@ finished.
    visitor's request building it. It runs on every sync because the lease window moves daily;
    `owners/import-rental-matches.json` makes an unchanged day cheap. Measured on the pilot
    (311,665 claims): 10 min in all (link refresh ~2 min, then the new generation), peak RSS 1.4 GB.
+5. **CRM lease page warm-up.** After a successful Owners refresh, `backend/scripts/crm/warm_lead_pages.py`
+   runs from `~/vv/backend` through the backend venv (like the page-table build) and computes
+   today's default lease pages (the opportunities dashboard and the renewals lists) into the
+   release-keyed cache, so the first agent of the day does not wait for the cold ~4 s query. It
+   is skipped when a load or the Owners refresh failed, is cut off after 15 minutes, and a failure
+   only logs `CRM lease page warm-up failed` as a warning: it never fails the unit. The journal
+   line `Warming the CRM lease pages` followed by `CRM lease pages warmed` shows it ran.
 
-The unit fails (and the journal shows why) when a load, the release or the Owners refresh fails,
+The unit fails (and the journal shows why) when a load, the release or the Owners refresh fails (not the warm-up),
 or when there is no finished sales run or no finished rentals run in 36 hours. The failed unit
 shows in `systemctl --failed` and the journal (`No finished rentals run in the last 36 hours`);
 there is no other alert channel.
@@ -220,6 +227,9 @@ ssh-keygen -t ed25519 -N '' -C vv-dxbi-pull -f ~/.ssh/dxbi_pull_ed25519
 sudo install -m 644 deploy/hetzner/vv-dxbi-sync.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now vv-dxbi-sync.timer
 ```
+
+`~/deploy/sync_dxbi_to_warehouse.py` and `vv-dxbi-sync.sh` are copies installed by hand: a backend deploy
+does not update them, so repeat the two `install` lines above (from the deployed checkout) after any change to either file.
 
 Install (4 GB box): `sudo install -m 755 deploy/hetzner/dxbi-pull-gate.sh /usr/local/sbin/dxbi-pull-gate`, then add to
 `~maan/.ssh/authorized_keys`:
