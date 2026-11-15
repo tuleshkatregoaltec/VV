@@ -1045,17 +1045,19 @@ async def crm_renewal_areas(
 @router.get("/renewal-leads", response_model=CrmRenewalLeadsResponse, dependencies=EXPENSIVE_LANE)
 async def crm_renewal_leads(
     request: Request,
-    kind: str | None = Query(default=None, pattern="^(vacant|upcoming)$"),
+    kind: str | None = Query(default=None, pattern="^(vacant|upcoming|expired)$"),
     limit: int = Query(default=200, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     as_of: date | None = Query(default=None),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Return lease-expiry leads in the current agent's areas and windows.
+    """Return one page of lease-expiry leads in the current agent's areas and windows.
 
-    kind=vacant: units whose lease ended with no later lease registered (Leads › Vacant units).
-    kind=upcoming: leases still running (the Inbox).
+    No kind: leases still running first (soonest end on top), then ended ones (most recent
+    first). kind=upcoming: leases still running. kind=expired: leases that ended inside the
+    look-back window. kind=vacant: ended with no later lease registered for the exact unit.
+    `total` counts the requested kind across all pages; `counts` covers the whole window.
     """
     user_id, organization_id = _auth_ids(context)
     return await _until_disconnect(

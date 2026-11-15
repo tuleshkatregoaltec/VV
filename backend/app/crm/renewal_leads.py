@@ -13,11 +13,13 @@ import logging
 from datetime import date, datetime, timezone
 
 from fastapi import HTTPException
+from pydantic import RootModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import (
     inbound,
     inbound_repository,
+    lead_cache,
     opportunity_queries,
     renewal_repository,
     workspace_repository,
@@ -30,6 +32,7 @@ from app.crm.models import (
     CrmAreaPreferencesUpdate,
     CrmRenewalArea,
     CrmRenewalLead,
+    CrmRenewalLeadCounts,
     CrmRenewalLeadsResponse,
     CrmRenewalOwner,
     CrmRenewalsResponse,
@@ -95,8 +98,23 @@ async def update_area_preferences(
     return _preferences_response(record)
 
 
+class _RenewalAreas(RootModel[list[CrmRenewalArea]]):
+    pass
+
+
 async def list_renewal_areas(as_of: date | None = None) -> list[CrmRenewalArea]:
+    """Areas with their units whose lease ends in the next 90 days, once per data release."""
     anchor = as_of or date.today()
+
+    async def compute() -> _RenewalAreas:
+        return _RenewalAreas(await _compute_renewal_areas(anchor))
+
+    return (
+        await lead_cache.cached("renewal_areas", {"as_of": anchor}, _RenewalAreas, compute)
+    ).root
+
+
+async def _compute_renewal_areas(anchor: date) -> list[CrmRenewalArea]:
     if not await opportunity_queries._tables_exist():
         return []
     try:
@@ -133,6 +151,33 @@ async def list_renewals(
     the expiring windows, or None for all of them.
     """
     anchor = as_of or date.today()
+    params = {
+        "window": window,
+        "area": area,
+        "property_type": property_type,
+        "project": project,
+        "building": building,
+        "limit": limit,
+        "offset": offset,
+        "as_of": anchor,
+    }
+    return await lead_cache.cached(
+        "renewals", params, CrmRenewalsResponse, lambda: _compute_renewals(**params)
+    )
+
+
+async def _compute_renewals(
+    *,
+    window: str | None,
+    area: str | None,
+    property_type: str | None,
+    project: str | None,
+    building: str | None,
+    limit: int,
+    offset: int,
+    as_of: date,
+) -> CrmRenewalsResponse:
+    anchor = as_of
     empty = CrmRenewalsResponse(leads=[], total=0, limit=limit, offset=offset, as_of=anchor)
     if not await opportunity_queries._tables_exist():
         return empty
@@ -315,6 +360,7 @@ async def list_renewal_leads(
         entered_today=0,
         preferences=preferences,
         as_of=anchor,
+        kind=kind or "all",
     )
     if not preferences.areas or not await opportunity_queries._tables_exist():
         return empty
@@ -359,6 +405,9 @@ async def list_renewal_leads(
             ],
             "total": int(counts.get("total") or 0),
             "entered_today": int(counts.get("entered_today") or 0),
+            "counts": CrmRenewalLeadCounts(
+                **{name: int(counts.get(name) or 0) for name in CrmRenewalLeadCounts.model_fields}
+            ),
         }
     )
 

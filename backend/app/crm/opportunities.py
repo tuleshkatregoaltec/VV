@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from app.crm import opportunity_queries
+from app.crm import lead_cache, opportunity_queries
 from app.crm.models import (
     CrmAssetBreakdownItem,
     CrmBreakdownItem,
@@ -255,7 +255,48 @@ async def get_dashboard(
     expired_days: int = 365,
     as_of: date | None = None,
 ) -> CrmDashboardResponse:
+    """The dashboard for every organization, computed once per data release and parameters."""
     anchor = as_of or date.today()
+    params = {
+        "status": status,
+        "priority": priority,
+        "asset_class": asset_class,
+        "property_type": property_type,
+        "area": area,
+        "project": project,
+        "building": building,
+        "search": search,
+        "breakdown": breakdown,
+        "limit": limit,
+        "offset": offset,
+        "expired_days": expired_days,
+        "as_of": anchor,
+    }
+    return await lead_cache.cached(
+        "dashboard",
+        params,
+        CrmDashboardResponse,
+        lambda: _compute_dashboard(**params),
+    )
+
+
+async def _compute_dashboard(
+    *,
+    status: str | None,
+    priority: str | None,
+    asset_class: str | None,
+    property_type: str | None,
+    area: str | None,
+    project: str | None,
+    building: str | None,
+    search: str | None,
+    breakdown: str,
+    limit: int,
+    offset: int,
+    expired_days: int,
+    as_of: date,
+) -> CrmDashboardResponse:
+    anchor = as_of
     if not await _tables_exist():
         return _empty_dashboard(anchor, limit, offset, breakdown)
 

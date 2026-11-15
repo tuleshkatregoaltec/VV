@@ -558,8 +558,21 @@ class CrmRenewalLead(BaseModel):
     lead_record_id: int | None = None
 
 
+class CrmRenewalLeadCounts(BaseModel):
+    """Lead units in the agent's whole window, whichever page or kind was asked for."""
+
+    all: int = 0
+    # Lease still running (ends today or later), soonest first in the feed.
+    upcoming: int = 0
+    # Lease ended inside the look-back window.
+    expired: int = 0
+    # Ended with no later lease registered for the exact unit (a subset of expired).
+    vacant: int = 0
+
+
 class CrmRenewalLeadsResponse(BaseModel):
     items: list[CrmRenewalLead]
+    # Leads of the requested kind across every page (the pager's total).
     total: int
     limit: int
     offset: int
@@ -567,6 +580,8 @@ class CrmRenewalLeadsResponse(BaseModel):
     entered_today: int
     preferences: CrmAreaPreferencesResponse
     as_of: date
+    kind: Literal["all", "upcoming", "expired", "vacant"] = "all"
+    counts: CrmRenewalLeadCounts = Field(default_factory=CrmRenewalLeadCounts)
 
 
 class CrmRenewalsResponse(BaseModel):
