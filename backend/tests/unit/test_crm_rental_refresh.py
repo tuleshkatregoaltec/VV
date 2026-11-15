@@ -456,7 +456,7 @@ def lease_warehouse(monkeypatch, leases):
     monkeypatch.setattr(crm_ownership.owner_queries, "fetch_rental_evidence", fetch)
 
 
-def owner_property(lease_end):
+def owner_property(link):
     from app.crm.import_models import CrmOwnerProperty
 
     return CrmOwnerProperty(
@@ -469,18 +469,17 @@ def owner_property(lease_end):
         ownership_status="verified_current_owner",
         confidence_score=95,
         match_reason="Exact registry match",
-        lead_id="lease",
-        unit_candidate_key="candidate",
-        lease_end=lease_end,
+        lead_id=link["lead_id"],
+        unit_candidate_key=link["unit_candidate_key"],
+        lease_end=link["lease_end"],
+        annual_rent_aed=link["annual_rent_aed"],
     )
 
 
-def renewal_due_windows(lease_end):
-    """The Owners lease-window filters an agent can pick that include this lease."""
+def reachable_owner():
     from app.crm.import_models import CrmOwnerProfile
-    from app.crm.owners import _assessed_property_matches
 
-    profile = CrmOwnerProfile(
+    return CrmOwnerProfile(
         owner_key="owner",
         contact_name="Owner",
         phone_primary="+971500000000",
@@ -491,13 +490,18 @@ def renewal_due_windows(lease_end):
         contact_ready_count=1,
         annual_rent_aed=0,
     )
-    item = owner_property(lease_end)
+
+
+def renewal_due_windows(link):
+    """The Owners lease-window filters an agent can pick that include this unit."""
+    from app.crm.owners import _assessed_property_matches
+
     return [
         window
         for window in ("expired", "expiring_30", "expiring_60", "expiring_90")
         if _assessed_property_matches(
-            item,
-            profile=profile,
+            owner_property(link),
+            profile=reachable_owner(),
             scope="all",
             status=None,
             search=None,
@@ -508,6 +512,13 @@ def renewal_due_windows(lease_end):
             max_value_aed=None,
         )
     ]
+
+
+def rental_ready(link):
+    """The Rental ready folder: a reachable current owner of a unit with a renewal lead."""
+    from app.crm.owner_rows import property_contact_ready
+
+    return property_contact_ready(owner_property(link), reachable_owner())
 
 
 async def refreshed_link(monkeypatch, leases):
@@ -524,26 +535,30 @@ async def refreshed_link(monkeypatch, leases):
     return written[0]
 
 
-async def test_renewed_unit_links_its_newest_lease_and_is_not_renewal_due(monkeypatch):
-    # MAG 910 #113: the lease ending 2026-04-30 was renewed to 2027-04-30.
+async def test_renewed_unit_shows_its_newest_lease_and_is_not_renewal_due(monkeypatch):
+    # MAG 910 #113: the lease ending 2026-04-30 was renewed to 2027-04-30. The unit shows the
+    # renewal's rent and end date, but it is no renewal lead until that lease nears its end.
     leases = [
         lease("expired", start_days=-560, end_days=-196, source_unit=False),
         lease("renewal", start_days=-195, end_days=166),
     ]
     link = await refreshed_link(monkeypatch, leases)
-    assert link["lead_id"] == "renewal"
+    assert link["unit_candidate_key"] == "candidate-renewal"
     assert link["lease_end"] == date.today() + timedelta(days=166)
     assert link["annual_rent_aed"] == 50_166
-    assert renewal_due_windows(link["lease_end"]) == []
+    assert link["lead_id"] is None
+    assert renewal_due_windows(link) == []
+    assert not rental_ready(link)
 
 
 async def test_newest_lease_wins_over_an_older_source_unit_lease(monkeypatch):
     leases = [
         lease("older-source", start_days=-560, end_days=-196),
-        lease("newer-inferred", start_days=-195, end_days=166, source_unit=False),
+        lease("newer-inferred", start_days=-275, end_days=45, source_unit=False),
     ]
     link = await refreshed_link(monkeypatch, leases)
     assert link["lead_id"] == "newer-inferred"
+    assert link["unit_candidate_key"] == "candidate-newer-inferred"
 
 
 async def test_unit_whose_newest_lease_expired_still_shows_it_as_expired(monkeypatch):
@@ -554,10 +569,19 @@ async def test_unit_whose_newest_lease_expired_still_shows_it_as_expired(monkeyp
     link = await refreshed_link(monkeypatch, leases)
     assert link["lead_id"] == "latest"
     assert link["lease_end"] == date.today() - timedelta(days=200)
-    assert renewal_due_windows(link["lease_end"]) == ["expired"]
+    assert renewal_due_windows(link) == ["expired"]
+    assert rental_ready(link)
 
 
 async def test_lease_ending_within_90_days_is_still_renewal_due(monkeypatch):
     link = await refreshed_link(monkeypatch, [lease("due", start_days=-320, end_days=45)])
     assert link["lead_id"] == "due"
-    assert renewal_due_windows(link["lease_end"]) == ["expiring_60"]
+    assert renewal_due_windows(link) == ["expiring_60"]
+    assert rental_ready(link)
+
+
+async def test_lease_ending_on_day_90_is_still_a_renewal_lead(monkeypatch):
+    link = await refreshed_link(monkeypatch, [lease("edge", start_days=-275, end_days=90)])
+    assert link["lead_id"] == "edge"
+    link = await refreshed_link(monkeypatch, [lease("later", start_days=-274, end_days=91)])
+    assert link["lead_id"] is None

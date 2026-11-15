@@ -32,6 +32,7 @@ from app.crm.import_models import (
     CrmContactImportSummary,
 )
 from app.crm.import_normalization import normalize_location, positive_decimal
+from app.crm.models import RENEWAL_FORWARD_DAYS_MAX
 from app.crm.owner_cache import _invalidate_owner_summary_cache
 from app.crm.owner_match_stage import run_owner_matching
 from app.crm.owner_match_status import apply_owner_match, summarize_owner_matches
@@ -1095,7 +1096,7 @@ async def _rental_evidence_for_units(units: list[str]) -> dict[str, dict[str, An
     has_source_unit = bool(columns[0]["has_unit"])
     # Every lease that ended within the last year is read, however far ahead it ends: a
     # unit renewed until next year must carry that renewal, not the lease it replaced.
-    # Renewal-due views filter on the newest lease's own end date.
+    # ``_renewal_lead`` decides whether that newest lease is a renewal lead yet.
     window_start = (date.today() - timedelta(days=365)).isoformat()
     for chunk in _chunks(units):
         rows = await owner_queries.fetch_rental_evidence(
@@ -1138,6 +1139,18 @@ def _lease_recency(row: dict[str, Any]) -> tuple:
         row.get("lease_end") or date.min,
         row.get("rental_match_method") == "source_unit",
     )
+
+
+def _renewal_lead(rental: dict[str, Any]) -> str | None:
+    """The lease is a renewal lead while it ends within the lead feed's forward window.
+
+    Only a lead makes the unit rental-ready; a unit renewed until next year shows that
+    lease's rent and end date and becomes a lead again as the renewal nears its end.
+    """
+    lease_end = rental.get("lease_end")
+    if lease_end and lease_end > date.today() + timedelta(days=RENEWAL_FORWARD_DAYS_MAX):
+        return None
+    return str(rental["event_key"])
 
 
 def _rental_scope_compatible(candidate: Any, rental: dict[str, Any]) -> bool:
@@ -1183,7 +1196,7 @@ async def refresh_property_contact_rentals(
             rental = None
         after = (
             (
-                str(rental["event_key"]),
+                _renewal_lead(rental),
                 str(rental["unit_candidate_key"]),
                 rental.get("lease_end"),
                 int(rental.get("annual_rent_aed") or 0) or None,
@@ -1391,7 +1404,7 @@ def _apply_registry_evidence(
     if rental and not _rental_scope_compatible(candidate, rental):
         rental = None
     if rental:
-        candidate.lead_id = str(rental["event_key"])
+        candidate.lead_id = _renewal_lead(rental)
         candidate.unit_candidate_key = str(rental["unit_candidate_key"])
         candidate.lease_end = rental.get("lease_end")
         candidate.annual_rent_aed = int(rental.get("annual_rent_aed") or 0) or None
