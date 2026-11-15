@@ -185,8 +185,9 @@ def _where_sql(
                 positionCaseInsensitive(title, {search:String}) > 0
                 OR positionCaseInsensitive(reference, {search:String}) > 0
                 OR positionCaseInsensitive(listing_location_names_json, {search:String}) > 0
-                OR positionCaseInsensitive(agent_json, {search:String}) > 0
-                OR positionCaseInsensitive(broker_json, {search:String}) > 0
+                OR positionCaseInsensitive(
+                    JSONExtractString(broker_json, 'name'), {search:String}
+                ) > 0
             )
             """
         )

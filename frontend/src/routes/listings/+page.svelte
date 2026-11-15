@@ -6,9 +6,7 @@ import {
 	ChevronRight,
 	Clock3,
 	ExternalLink,
-	Mail,
 	Minus,
-	Phone,
 	RefreshCw,
 	Search,
 	TrendingDown,
@@ -26,7 +24,10 @@ import type {
 } from '$lib/api/listings'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
+import ListingSnapshotNotice from '$lib/components/listings/ListingSnapshotNotice.svelte'
 import { listingQueries } from '$lib/queries/listings'
+import { formatDataDate, newestDate, newListingsLabel } from '$lib/utils/dataFreshness'
+import { safeExternalUrl } from '$lib/utils/safeExternalUrl'
 
 const PAGE_SIZE = 40
 const FILTER_DEBOUNCE_MS = 250
@@ -67,6 +68,11 @@ const listingSummary = $derived(listingsQuery.data?.pages[0])
 const listings = $derived(listingsQuery.data?.pages.flatMap((page) => page.listings) ?? [])
 const filters = $derived(filtersQuery.data)
 const analytics = $derived(analyticsQuery.data)
+// Capture date of the data on screen: the analytics snapshot, else the newest card's capture.
+const snapshotAt = $derived(
+	analytics?.snapshot_at ?? newestDate(listings.map((listing) => listing.captured_at))
+)
+const snapshotDate = $derived(formatDataDate(snapshotAt))
 const trend = $derived(analytics?.trend ?? [])
 const trendChangeValue = $derived(trendChange(trend))
 const chartScale = $derived(buildChartScale(trend))
@@ -81,6 +87,7 @@ const selectedCard = $derived(
 	listings.find((listing) => listing.listing_id === selectedListingId) ?? null
 )
 const selectedRecord = $derived(mergeListingRecord(selectedListing, selectedCard))
+const sourceUrl = $derived(safeExternalUrl(selectedListing?.share_url))
 const hasFilters = $derived(
 	Boolean(
 		search.trim() ||
@@ -310,9 +317,12 @@ function trendChange(points: ListingTrendPoint[]): number | null {
 }
 
 function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse): string {
-	if (listing.is_available === false) return 'Unavailable'
-	if (listing.is_verified) return 'Available · verified'
-	return 'Available'
+	// is_available is the portal's flag on the capture date, not a current availability check.
+	const asOf = formatDataDate(listing.captured_at)
+	const at = asOf ? `on ${asOf}` : 'at capture'
+	if (listing.is_available === false) return `Unavailable ${at}`
+	if (listing.is_verified) return `Active ${at} · verified`
+	return `Active ${at}`
 }
 </script>
 
@@ -361,12 +371,14 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 			</div>
 		</header>
 
+		<ListingSnapshotNotice {snapshotAt} />
+
 		<section class="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Available inventory</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.total?.toLocaleString() ?? '—'}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Active at capture</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.total?.toLocaleString() ?? '—'}</p></div>
 			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Median asking price</p><p class="mt-2 text-2xl font-semibold tabular-nums">{formatMetricMoney(analytics?.median_price_aed)}</p></div>
 			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Median AED / sqft</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.median_price_per_sqft_aed ? `AED ${Math.round(analytics.median_price_per_sqft_aed).toLocaleString()}` : '—'}</p></div>
 			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Average age at capture</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.average_listing_age_days != null ? `${Math.round(analytics.average_listing_age_days)} days` : '—'}</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">New in 30 days</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.newly_listed_30d?.toLocaleString() ?? '—'}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">{newListingsLabel(snapshotAt)}</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.newly_listed_30d?.toLocaleString() ?? '—'}</p></div>
 			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Below-market signals</p><p class="mt-2 text-2xl font-semibold tabular-nums text-success">{analytics?.below_market_count?.toLocaleString() ?? '—'}</p></div>
 		</section>
 
@@ -412,7 +424,7 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 			<div class="grid gap-2 lg:grid-cols-4 xl:grid-cols-7">
 				<label class="relative block">
 					<Search size={15} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-4" />
-					<input bind:value={search} type="search" placeholder="Building, project, reference, agent" class="ui-field h-10 w-full pl-9 pr-3 text-sm" />
+					<input bind:value={search} type="search" placeholder="Building, project, reference, broker" class="ui-field h-10 w-full pl-9 pr-3 text-sm" />
 				</label>
 				<select bind:value={selectedArea} class="ui-field h-10 px-3 text-sm" aria-label="Area or master project"><option value="">All areas / masters</option>{#each filters?.areas ?? [] as area (area)}<option value={area}>{area}</option>{/each}</select>
 				<select bind:value={selectedPropertyType} class="ui-field h-10 px-3 text-sm" aria-label="Property type"><option value="">All property types</option>{#each filters?.property_types ?? [] as propertyType (propertyType)}<option value={propertyType}>{propertyType}</option>{/each}</select>
@@ -482,10 +494,10 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 
 						<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Property data</h3><dl class="mt-2 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border text-xs"><div class="bg-panel p-3"><dt class="text-fg-4">Property type</dt><dd class="mt-1 font-semibold">{text(selectedRecord.property_type)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Size</dt><dd class="mt-1 font-semibold tabular-nums">{formatSize(selectedRecord.size_value, selectedRecord.size_unit)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Bedrooms</dt><dd class="mt-1 font-semibold tabular-nums">{text(selectedRecord.bedrooms)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Bathrooms</dt><dd class="mt-1 font-semibold tabular-nums">{text(selectedRecord.bathrooms)}</dd></div>{#if selectedListing}<div class="bg-panel p-3"><dt class="text-fg-4">Furnished</dt><dd class="mt-1 font-semibold">{text(selectedListing.furnished)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Completion</dt><dd class="mt-1 font-semibold">{text(selectedListing.completion_status)}</dd></div>{/if}</dl></section>
 
-						<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing data</h3><dl class="mt-2 divide-y divide-border rounded-lg border border-border text-xs"><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Status</dt><dd class="font-semibold">{availabilityLabel(selectedRecord)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Listed date</dt><dd class="font-semibold">{formatDate(selectedRecord.listed_date)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Age when captured</dt><dd class="font-semibold">{listingAge(selectedRecord.listing_age_days)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Reference</dt><dd class="max-w-52 truncate font-mono text-[10px] font-semibold">{text(selectedRecord.reference)}</dd></div>{#if selectedListing}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">RERA</dt><dd class="max-w-52 truncate font-semibold">{text(selectedListing.rera)}</dd></div>{#if mode === 'rent'}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Cheques</dt><dd class="font-semibold">{selectedListing.number_of_cheques ?? '—'}</dd></div>{/if}{/if}</dl></section>
+						<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing data</h3><dl class="mt-2 divide-y divide-border rounded-lg border border-border text-xs"><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Status at capture</dt><dd class="font-semibold">{availabilityLabel(selectedRecord)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Captured</dt><dd class="font-semibold">{formatDate(selectedRecord.captured_at)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Listed date</dt><dd class="font-semibold">{formatDate(selectedRecord.listed_date)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Age when captured</dt><dd class="font-semibold">{listingAge(selectedRecord.listing_age_days)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Reference</dt><dd class="max-w-52 truncate font-mono text-[10px] font-semibold">{text(selectedRecord.reference)}</dd></div>{#if selectedListing}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">RERA</dt><dd class="max-w-52 truncate font-semibold">{text(selectedListing.rera)}</dd></div>{#if mode === 'rent'}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Cheques</dt><dd class="font-semibold">{selectedListing.number_of_cheques ?? '—'}</dd></div>{/if}{/if}</dl></section>
 
 						{#if selectedListing}
-							<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing contact</h3><div class="mt-2 rounded-lg border border-border p-3"><p class="text-sm font-semibold">{selectedListing.agent?.name ?? selectedListing.broker?.name ?? 'Contact not stated'}</p><p class="mt-1 text-xs text-fg-4">{selectedListing.broker?.name ?? 'Broker not stated'}</p><div class="mt-3 flex flex-wrap gap-2">{#if selectedListing.share_url}<a href={selectedListing.share_url} target="_blank" rel="noreferrer" class="ui-button" data-variant="primary" data-size="sm"><ExternalLink size={13} /> Source record</a>{/if}{#if selectedListing.agent?.phone}<a href={`tel:${selectedListing.agent.phone}`} class="ui-button" data-variant="secondary" data-size="sm"><Phone size={13} /> Call</a>{/if}{#if selectedListing.agent?.email}<a href={`mailto:${selectedListing.agent.email}`} class="ui-button" data-variant="secondary" data-size="sm"><Mail size={13} /> Email</a>{/if}</div></div></section>
+							<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing source</h3><div class="mt-2 rounded-lg border border-border p-3"><p class="text-sm font-semibold">{selectedListing.broker_name ?? 'Broker not stated'}</p>{#if sourceUrl}<div class="mt-3 flex flex-wrap gap-2"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" class="ui-button" data-variant="primary" data-size="sm"><ExternalLink size={13} /> Source record</a></div>{/if}</div></section>
 						{/if}
 
 						{#if detailQuery.isFetching}<p class="text-center text-xs text-fg-4">Loading…</p>{/if}

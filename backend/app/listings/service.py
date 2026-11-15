@@ -8,7 +8,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.listings import queries
 from app.listings.mapping import (
-    LISTINGS_SOURCE_LABEL,
     _as_dict,
     _as_list,
     _card_from_row,
@@ -18,7 +17,6 @@ from app.listings.mapping import (
     _images,
     _int_or_none,
     _parse_datetime,
-    _party,
     _row_to_dict,
 )
 from app.listings.models import (
@@ -39,6 +37,7 @@ from app.listings.policy import (
 from app.listings.queries import (
     _achieved_trend,
 )
+from app.listings.redaction import redact_contacts
 
 
 async def _filters(
@@ -278,7 +277,7 @@ async def get_listing_from_clickhouse(listing_id: str) -> ListingDetailResponse:
     amenities = raw_property.get("amenity_names") or raw_property.get("amenities")
     return ListingDetailResponse(
         **card.model_dump(),
-        description=raw_property.get("description"),
+        description=redact_contacts(raw_property.get("description")),
         amenities=[str(item) for item in _as_list(amenities) if item],
         images=[
             ListingImageResponse.model_validate(item) for item in _images(data.get("images_json"))
@@ -286,9 +285,6 @@ async def get_listing_from_clickhouse(listing_id: str) -> ListingDetailResponse:
         floorplans=[
             ListingFloorPlanResponse.model_validate(item) for item in _floorplans(raw_property)
         ],
-        agent=_party(data.get("agent_json")),
-        broker=_party(data.get("broker_json")),
-        client=_party(data.get("client_json")),
         furnished=raw_property.get("furnished"),
         completion_status=raw_property.get("completion_status"),
         rera=raw_property.get("rera"),
@@ -296,13 +292,6 @@ async def get_listing_from_clickhouse(listing_id: str) -> ListingDetailResponse:
         payment_method=[str(item) for item in _as_list(raw_property.get("payment_method"))],
         video_url=raw_property.get("video_url"),
         view_360_url=raw_property.get("view_360"),
-        source_run_id=data.get("run_id"),
-        source_manifest_key=None,
-        scraped_at=_parse_datetime(data.get("scraped_at")),
-        source_metadata={
-            "source": LISTINGS_SOURCE_LABEL,
-            "run_id": data.get("run_id"),
-        },
     )
 
 
