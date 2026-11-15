@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, Field
 
@@ -24,20 +24,6 @@ class ListingFloorPlanResponse(BaseModel):
     floor_number: int | None = None
     unit_number: str | None = None
     dimension: str | None = None
-
-
-class ListingPartyResponse(BaseModel):
-    id: str | None = None
-    name: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    whatsapp: str | None = None
-    image_url: str | None = None
-    logo_url: str | None = None
-    address: str | None = None
-    slug: str | None = None
-    is_super_agent: bool | None = None
-    languages: list[str] = Field(default_factory=list)
 
 
 class ListingFiltersResponse(BaseModel):
@@ -74,8 +60,6 @@ class ListingCardResponse(BaseModel):
     primary_image_url: str | None = None
     image_count: int = 0
     floorplan_count: int = 0
-    agent_name: str | None = None
-    agent_image_url: str | None = None
     broker_name: str | None = None
     broker_logo_url: str | None = None
     captured_at: AwareDatetime | None = None
@@ -102,9 +86,6 @@ class ListingDetailResponse(ListingCardResponse):
     amenities: list[str] = Field(default_factory=list)
     images: list[ListingImageResponse] = Field(default_factory=list)
     floorplans: list[ListingFloorPlanResponse] = Field(default_factory=list)
-    agent: ListingPartyResponse | None = None
-    broker: ListingPartyResponse | None = None
-    client: ListingPartyResponse | None = None
     furnished: str | None = None
     completion_status: str | None = None
     rera: str | None = None
@@ -112,10 +93,6 @@ class ListingDetailResponse(ListingCardResponse):
     payment_method: list[str] = Field(default_factory=list)
     video_url: str | None = None
     view_360_url: str | None = None
-    source_run_id: str | None = None
-    source_manifest_key: str | None = None
-    scraped_at: AwareDatetime | None = None
-    source_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ListingListResponse(BaseModel):

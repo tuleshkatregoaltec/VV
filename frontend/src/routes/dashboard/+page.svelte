@@ -10,10 +10,12 @@ import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import NewsCard from '$lib/components/news/NewsCard.svelte'
+import NewsFreshnessNote from '$lib/components/news/NewsFreshnessNote.svelte'
 import { chatKeys } from '$lib/queries/chat'
 import { getQueryClient } from '$lib/queries/client'
 import { newsQueries } from '$lib/queries/news'
 import { currentUser } from '$lib/stores/user.svelte'
+import { newestDate } from '$lib/utils/dataFreshness'
 
 const queryClient = getQueryClient()
 
@@ -27,6 +29,7 @@ const LIMIT = 10
 const newsQuery = createInfiniteQuery(() => newsQueries.listInfinite('dashboard', LIMIT))
 const newsSummaryQuery = createQuery(() => newsQueries.summary())
 const newsArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? [])
+const newestArticleAt = $derived(newestDate(newsArticles.map((article) => article.publish_date)))
 
 async function handleChatSubmit(message: string) {
 	try {
@@ -139,6 +142,7 @@ const SUGGESTIONS = [
 					<div>
 						<p class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Latest news</p>
 						<h2 class="mt-1 text-2xl font-semibold text-fg-1">Dubai real estate</h2>
+						<div class="mt-1"><NewsFreshnessNote newestPublishedAt={newestArticleAt} /></div>
 					</div>
 				</div>
 

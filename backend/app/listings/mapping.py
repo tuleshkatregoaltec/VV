@@ -7,7 +7,6 @@ from typing import Any
 
 from app.listings.models import (
     ListingCardResponse,
-    ListingPartyResponse,
 )
 from app.listings.policy import (
     NON_BUILDING_PROPERTY_TYPES,
@@ -147,24 +146,10 @@ def _primary_image(images: list[dict[str, Any]]) -> str | None:
     return None
 
 
-def _party(value: Any) -> ListingPartyResponse | None:
+def _broker(value: Any) -> tuple[str | None, str | None]:
+    """Return only the brokerage's public name and logo; never contact details."""
     data = _as_dict(value)
-    if not data:
-        return None
-    normalized = {
-        "id": None if data.get("id") is None else str(data.get("id")),
-        "name": data.get("name"),
-        "email": data.get("email"),
-        "phone": data.get("phone"),
-        "whatsapp": data.get("whatsapp"),
-        "image_url": data.get("image_url") or data.get("image"),
-        "logo_url": data.get("logo_url") or data.get("logo"),
-        "address": data.get("address"),
-        "slug": data.get("slug"),
-        "is_super_agent": data.get("is_super_agent"),
-        "languages": _as_list(data.get("languages")),
-    }
-    return ListingPartyResponse.model_validate(normalized)
+    return data.get("name"), data.get("logo_url") or data.get("logo")
 
 
 def _floorplans(raw_property: dict[str, Any]) -> list[dict[str, Any]]:
@@ -197,8 +182,7 @@ def _card_from_row(row: Any) -> ListingCardResponse:
     size = _as_dict(row.get("size_json"))
     names = _location_names(row)
     images = _images(row.get("images_json", row.get("images")))
-    agent = _party(row.get("agent_json", row.get("agent")))
-    broker = _party(row.get("broker_json", row.get("broker")))
+    broker_name, broker_logo_url = _broker(row.get("broker_json", row.get("broker")))
     property_type = (
         raw_property.get("property_type")
         or row.get("property_type_name")
@@ -245,10 +229,8 @@ def _card_from_row(row: Any) -> ListingCardResponse:
         primary_image_url=_primary_image(images),
         image_count=len(images),
         floorplan_count=len(_floorplans(raw_property)),
-        agent_name=agent.name if agent else None,
-        agent_image_url=agent.image_url if agent else None,
-        broker_name=broker.name if broker else None,
-        broker_logo_url=broker.logo_url if broker else None,
+        broker_name=broker_name,
+        broker_logo_url=broker_logo_url,
         captured_at=_parse_datetime(row.get("snapshot_at"))
         or _parse_datetime(row.get("scraped_at")),
         listed_date=listed_date,

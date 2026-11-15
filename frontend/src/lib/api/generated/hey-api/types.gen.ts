@@ -7199,14 +7199,6 @@ export type ListingCardResponse = {
      */
     floorplan_count?: number;
     /**
-     * Agent Name
-     */
-    agent_name?: string | null;
-    /**
-     * Agent Image Url
-     */
-    agent_image_url?: string | null;
-    /**
      * Broker Name
      */
     broker_name?: string | null;
@@ -7381,14 +7373,6 @@ export type ListingDetailResponse = {
      */
     floorplan_count?: number;
     /**
-     * Agent Name
-     */
-    agent_name?: string | null;
-    /**
-     * Agent Image Url
-     */
-    agent_image_url?: string | null;
-    /**
      * Broker Name
      */
     broker_name?: string | null;
@@ -7480,9 +7464,6 @@ export type ListingDetailResponse = {
      * Floorplans
      */
     floorplans?: Array<ListingFloorPlanResponse>;
-    agent?: ListingPartyResponse | null;
-    broker?: ListingPartyResponse | null;
-    client?: ListingPartyResponse | null;
     /**
      * Furnished
      */
@@ -7511,24 +7492,6 @@ export type ListingDetailResponse = {
      * View 360 Url
      */
     view_360_url?: string | null;
-    /**
-     * Source Run Id
-     */
-    source_run_id?: string | null;
-    /**
-     * Source Manifest Key
-     */
-    source_manifest_key?: string | null;
-    /**
-     * Scraped At
-     */
-    scraped_at?: string | null;
-    /**
-     * Source Metadata
-     */
-    source_metadata?: {
-        [key: string]: unknown;
-    };
 };
 
 /**
@@ -7672,56 +7635,6 @@ export type ListingListResponse = {
      */
     offset: number;
     filters?: ListingFiltersResponse;
-};
-
-/**
- * ListingPartyResponse
- */
-export type ListingPartyResponse = {
-    /**
-     * Id
-     */
-    id?: string | null;
-    /**
-     * Name
-     */
-    name?: string | null;
-    /**
-     * Email
-     */
-    email?: string | null;
-    /**
-     * Phone
-     */
-    phone?: string | null;
-    /**
-     * Whatsapp
-     */
-    whatsapp?: string | null;
-    /**
-     * Image Url
-     */
-    image_url?: string | null;
-    /**
-     * Logo Url
-     */
-    logo_url?: string | null;
-    /**
-     * Address
-     */
-    address?: string | null;
-    /**
-     * Slug
-     */
-    slug?: string | null;
-    /**
-     * Is Super Agent
-     */
-    is_super_agent?: boolean | null;
-    /**
-     * Languages
-     */
-    languages?: Array<string>;
 };
 
 /**
