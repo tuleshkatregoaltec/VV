@@ -1,6 +1,10 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { type TransactionExportFormat, transactions } from '$lib/api/transactions'
+import {
+	exportTruncationNotice,
+	type TransactionExportFormat,
+	transactions
+} from '$lib/api/transactions'
 import { propertyType, timeframe } from '$lib/components/filters/globalFilters.svelte'
 import DataPanel from '$lib/components/transactions/DataPanel.svelte'
 import TransactionDetailsModal from '$lib/components/transactions/TransactionDetailsModal.svelte'
@@ -145,12 +149,17 @@ $effect(() => {
 })
 
 let exportingFormat = $state<TransactionExportFormat | null>(null)
+// Set when an export held only the newest rows of the selection (the API caps exports).
+let exportNotice = $state<string | null>(null)
 
 async function handleExport(format: TransactionExportFormat) {
 	exportingFormat = format
+	exportNotice = null
 	try {
 		const filters = withSelectedIds(buildApiFilters(), 'transaction_ids', selectedTransactionIds)
-		const blob = await transactions.exportSales(filters, format)
+		const file = await transactions.exportSales(filters, format)
+		const blob = file.blob
+		exportNotice = exportTruncationNotice(file, 'sales')
 
 		const url = window.URL.createObjectURL(blob)
 		const a = document.createElement('a')
@@ -168,6 +177,13 @@ async function handleExport(format: TransactionExportFormat) {
 	}
 }
 </script>
+
+{#if exportNotice}
+	<div role="status" class="mb-4 flex items-start justify-between gap-4 rounded-lg border border-warning-border bg-warning-bg p-4 text-sm text-warning">
+		<p>{exportNotice}</p>
+		<button type="button" class="ui-button" onclick={() => (exportNotice = null)}>Dismiss</button>
+	</div>
+{/if}
 
 {#if transactionsQuery.isError}
 	<div class="mb-6 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-6 text-center">

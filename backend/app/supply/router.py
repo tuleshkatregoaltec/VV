@@ -36,12 +36,14 @@ async def list_developer_rankings(
 
 
 @router.get("/upcoming-projects", response_model=UpcomingProjectsResponse)
-@cached_endpoint(prefix="upcoming_projects:v2", expire=3600)
+@cached_endpoint(prefix="upcoming_projects:v3", expire=3600)
 async def list_upcoming_projects(
+    limit: int = Query(default=1000, ge=1, le=1000, description="Page size"),
+    offset: int = Query(default=0, ge=0, le=100_000, description="Page offset"),
     context: AuthContext = Depends(require_active_subscription),
 ):
-    """Get all upcoming/active projects for catalogue view."""
-    projects = await get_upcoming_projects_ch()
+    """One page of upcoming/active projects; total counts every one."""
+    projects, total = await get_upcoming_projects_ch(limit=limit, offset=offset)
 
     # Build response
     result = []
@@ -62,7 +64,7 @@ async def list_upcoming_projects(
         }
         result.append(UpcomingProjectResponse.model_validate(project_data))
 
-    return UpcomingProjectsResponse(projects=result, total=len(result))
+    return UpcomingProjectsResponse(projects=result, total=total)
 
 
 @router.get("/catalogue/projects", response_model=SupplyCatalogueProjectsResponse)

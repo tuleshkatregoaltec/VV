@@ -8,17 +8,32 @@ Every record DXBI lists is shown, with its unit as DXBI shows it, so rows and to
 (decision 2026-10-09). DXBI lists a day's sales before their units and fills them in about a day
 later; the morning re-scrape of the last three days (``dxbi-sales-morning``) reads them.
 
-Each request reads one de-duplicated, normalised DXBI source with its date window applied before
-de-duplication (``_sales_source`` / ``_rentals_source``), and one WHERE clause built from the
-filters (``_sales_where`` / ``_rentals_where``), so the list, its total, the filter options and
-the export use the same record definitions. Facets exclude their own selection to offer alternatives.
+One de-duplicated, normalised DXBI source defines the records (``_sales_source`` /
+``_rentals_source``, over all dates). It is built into a page table after each DXBI release
+(``app.transaction.page_tables``), and each request filters that table with its date window (Dubai
+dates) and one WHERE clause built from the filters (``_sales_where`` / ``_rentals_where``), so the
+list, its total, the filter options and the export use the same record definitions. Facets
+exclude their own selection to offer alternatives.
 """
 
-from typing import Optional
+import logging
+from typing import AsyncIterator, Callable, Optional
+
+from clickhouse_connect.driver.exceptions import DatabaseError
 
 from app.clickhouse.client import query
 from app.market.location_search import location_keyword_clause
+from app.market.periods import business_today
 from app.transaction.models import RentalFilters, SalesFilters
+
+logger = logging.getLogger(__name__)
+
+# The de-duplicated, placed records of ``_sales_source`` / ``_rentals_source`` over all dates,
+# built after each DXBI release (app.transaction.page_tables). Each page load filters them
+# instead of rebuilding the source three times (count, page, filter options).
+SALES_PAGE_TABLE = "dxbi_sales_page"
+LEASES_PAGE_TABLE = "dxbi_leases_page"
+_SOURCE = "__TRANSACTIONS_SOURCE__"
 
 # DXBI names a property type but no usage; the page's Residential / Commercial switch groups the
 # types. Plots and rows DXBI gives no type appear under "All" only.
@@ -426,11 +441,38 @@ def _rentals_source(date_clause: str) -> str:
 
 
 def _date_window(column: str, timeframe_days: Optional[int], params: dict) -> str:
-    """The last ``timeframe_days`` calendar days up to and including today (warehouse clock)."""
+    """The last ``timeframe_days`` calendar days up to and including today in Dubai (the
+    warehouse clock is UTC, a day behind between 00:00 and 04:00 in Dubai)."""
     if timeframe_days is None:
         return "1 = 1"
+    params["today"] = business_today()
     params["timeframe_days"] = timeframe_days
-    return f"{column} > today() - {{timeframe_days:Int32}} AND {column} <= today()"
+    return f"{column} > {{today:Date}} - {{timeframe_days:Int32}} AND {column} <= {{today:Date}}"
+
+
+async def _from_page_table(
+    sql: str, params: dict, table: str, live_source: Callable[[str], str]
+) -> list[dict]:
+    """Run ``sql`` over the page table; before its first build, over the live source."""
+    try:
+        return await query(sql.replace(_SOURCE, table), params)
+    except DatabaseError as error:
+        if "UNKNOWN_TABLE" not in str(error):
+            raise
+        logger.warning("%s is not built yet; reading the live DXBI source", table)
+        return await query(sql.replace(_SOURCE, f"({live_source('1 = 1')})"), params)
+
+
+def _sales_page(sql: str, params: dict):
+    return _from_page_table(sql, params, SALES_PAGE_TABLE, _sales_source)
+
+
+def _leases_page(sql: str, params: dict):
+    return _from_page_table(sql, params, LEASES_PAGE_TABLE, _rentals_source)
+
+
+def _and(*clauses: str) -> str:
+    return " AND ".join(clause for clause in clauses if clause != "1 = 1") or "1 = 1"
 
 
 def _equals(clauses: list[str], params: dict, column: str, name: str, value) -> None:
@@ -519,17 +561,20 @@ _RENTAL_COLUMNS = """contract_id, lease_start, lease_end, unit_number, building_
 async def fetch_sales_rows(
     filters: SalesFilters, limit: int, offset: int
 ) -> tuple[list[dict], int]:
-    """One page of sales, newest first, and the total matching the filters."""
+    """One page of sales, newest first (then by id, both descending: the page table's order
+    read backwards), and the total matching the filters."""
     params: dict = {"limit": limit, "offset": offset}
-    source = _sales_source(_date_window("transaction_date", filters.timeframe_days, params))
-    where = _sales_where(filters, params)
-    total = await query(f"SELECT count() AS total FROM ({source}) WHERE {where}", params)
-    rows = await query(
+    where = _and(
+        _date_window("transaction_date", filters.timeframe_days, params),
+        _sales_where(filters, params),
+    )
+    total = await _sales_page(f"SELECT count() AS total FROM {_SOURCE} WHERE {where}", params)
+    rows = await _sales_page(
         f"""
         SELECT {_SALE_COLUMNS}
-        FROM ({source})
+        FROM {_SOURCE}
         WHERE {where}
-        ORDER BY transaction_date DESC, transaction_id
+        ORDER BY transaction_date DESC, transaction_id DESC
         LIMIT {{limit:Int32}} OFFSET {{offset:Int32}}
         """,
         params,
@@ -542,15 +587,17 @@ async def fetch_rental_rows(
 ) -> tuple[list[dict], int]:
     """One page of leases, latest start first, and the total matching the filters."""
     params: dict = {"limit": limit, "offset": offset}
-    source = _rentals_source(_date_window("lease_start", filters.timeframe_days, params))
-    where = _rentals_where(filters, params)
-    total = await query(f"SELECT count() AS total FROM ({source}) WHERE {where}", params)
-    rows = await query(
+    where = _and(
+        _date_window("lease_start", filters.timeframe_days, params),
+        _rentals_where(filters, params),
+    )
+    total = await _leases_page(f"SELECT count() AS total FROM {_SOURCE} WHERE {where}", params)
+    rows = await _leases_page(
         f"""
         SELECT {_RENTAL_COLUMNS}
-        FROM ({source})
+        FROM {_SOURCE}
         WHERE {where}
-        ORDER BY lease_start DESC, contract_id
+        ORDER BY lease_start DESC, contract_id DESC
         LIMIT {{limit:Int32}} OFFSET {{offset:Int32}}
         """,
         params,
@@ -562,52 +609,140 @@ def _ids(value: Optional[str]) -> list[str]:
     return [item.strip() for item in (value or "").split(",") if item.strip()]
 
 
-async def export_sales_rows(
-    filters: SalesFilters, transaction_ids: Optional[str], max_rows: int
-) -> list[dict]:
-    """Sales for an export: the selected rows when ids are given, else the filtered rows."""
-    params: dict = {"max_rows": max_rows}
+def _sales_export(filters: SalesFilters, transaction_ids: Optional[str], params: dict) -> str:
     ids = _ids(transaction_ids)
     if ids:
         params["ids"] = ids
-        source, where = _sales_source("1 = 1"), "transaction_id IN {ids:Array(String)}"
-    else:
-        source = _sales_source(_date_window("transaction_date", filters.timeframe_days, params))
-        where = _sales_where(filters, params)
-    return await query(
-        f"""
-        SELECT {_SALE_COLUMNS}
-        FROM ({source})
-        WHERE {where}
-        ORDER BY transaction_date DESC, transaction_id
-        LIMIT {{max_rows:Int32}}
-        """,
-        params,
+        return "transaction_id IN {ids:Array(String)}"
+    return _and(
+        _date_window("transaction_date", filters.timeframe_days, params),
+        _sales_where(filters, params),
     )
+
+
+def _rentals_export(filters: RentalFilters, contract_ids: Optional[str], params: dict) -> str:
+    ids = _ids(contract_ids)
+    if ids:
+        params["ids"] = ids
+        return "contract_id IN {ids:Array(String)}"
+    return _and(
+        _date_window("lease_start", filters.timeframe_days, params),
+        _rentals_where(filters, params),
+    )
+
+
+async def count_sales_export(filters: SalesFilters, transaction_ids: Optional[str]) -> int:
+    """How many sales an export selects before its row cap."""
+    params: dict = {}
+    where = _sales_export(filters, transaction_ids, params)
+    rows = await _sales_page(f"SELECT count() AS total FROM {_SOURCE} WHERE {where}", params)
+    return int(rows[0]["total"]) if rows else 0
+
+
+async def count_rental_export(filters: RentalFilters, contract_ids: Optional[str]) -> int:
+    """How many leases an export selects before its row cap."""
+    params: dict = {}
+    where = _rentals_export(filters, contract_ids, params)
+    rows = await _leases_page(f"SELECT count() AS total FROM {_SOURCE} WHERE {where}", params)
+    return int(rows[0]["total"]) if rows else 0
+
+
+async def _export_chunks(
+    page,
+    columns: str,
+    where: str,
+    params: dict,
+    date_column: str,
+    id_column: str,
+    max_rows: int,
+    chunk_rows: int,
+) -> AsyncIterator[list[dict]]:
+    """The export's rows newest first, ``chunk_rows`` at a time (keyset paging on the page
+    table's order), so no more than one chunk is held in memory."""
+    sent = 0
+    after = ""
+    while sent < max_rows:
+        params = {**params, "chunk_rows": min(chunk_rows, max_rows - sent)}
+        rows = await page(
+            f"""
+            SELECT {columns}
+            FROM {_SOURCE}
+            WHERE {where}{after}
+            ORDER BY {date_column} DESC, {id_column} DESC
+            LIMIT {{chunk_rows:Int32}}
+            """,
+            params,
+        )
+        if not rows:
+            return
+        yield rows
+        sent += len(rows)
+        last = rows[-1]
+        params |= {"after_date": last[date_column], "after_id": last[id_column]}
+        # Rows after the last one in (date, id) descending order, the page table's own order
+        # read backwards; the first condition is a primary-key range.
+        after = (
+            f" AND {date_column} <= {{after_date:Date}}"
+            f" AND ({date_column} < {{after_date:Date}} OR {id_column} < {{after_id:String}})"
+        )
+        if len(rows) < params["chunk_rows"]:
+            return
+
+
+def export_sales_chunks(
+    filters: SalesFilters, transaction_ids: Optional[str], max_rows: int, chunk_rows: int
+) -> AsyncIterator[list[dict]]:
+    """Sales for an export: the selected rows when ids are given, else the filtered rows."""
+    params: dict = {}
+    where = _sales_export(filters, transaction_ids, params)
+    return _export_chunks(
+        _sales_page,
+        _SALE_COLUMNS,
+        where,
+        params,
+        "transaction_date",
+        "transaction_id",
+        max_rows,
+        chunk_rows,
+    )
+
+
+def export_rental_chunks(
+    filters: RentalFilters, contract_ids: Optional[str], max_rows: int, chunk_rows: int
+) -> AsyncIterator[list[dict]]:
+    """Leases for an export: the selected rows when ids are given, else the filtered rows."""
+    params: dict = {}
+    where = _rentals_export(filters, contract_ids, params)
+    return _export_chunks(
+        _leases_page,
+        _RENTAL_COLUMNS,
+        where,
+        params,
+        "lease_start",
+        "contract_id",
+        max_rows,
+        chunk_rows,
+    )
+
+
+async def export_sales_rows(
+    filters: SalesFilters, transaction_ids: Optional[str], max_rows: int
+) -> list[dict]:
+    return [
+        row
+        async for chunk in export_sales_chunks(filters, transaction_ids, max_rows, max_rows)
+        for row in chunk
+    ]
 
 
 async def export_rental_rows(
     filters: RentalFilters, contract_ids: Optional[str], max_rows: int
 ) -> list[dict]:
-    """Leases for an export: the selected rows when ids are given, else the filtered rows."""
-    params: dict = {"max_rows": max_rows}
-    ids = _ids(contract_ids)
-    if ids:
-        params["ids"] = ids
-        source, where = _rentals_source("1 = 1"), "contract_id IN {ids:Array(String)}"
-    else:
-        source = _rentals_source(_date_window("lease_start", filters.timeframe_days, params))
-        where = _rentals_where(filters, params)
-    return await query(
-        f"""
-        SELECT {_RENTAL_COLUMNS}
-        FROM ({source})
-        WHERE {where}
-        ORDER BY lease_start DESC, contract_id
-        LIMIT {{max_rows:Int32}}
-        """,
-        params,
-    )
+    return [
+        row
+        async for chunk in export_rental_chunks(filters, contract_ids, max_rows, max_rows)
+        for row in chunk
+    ]
 
 
 def _facet_columns(filters, params: dict, where_builder, fields: dict[str, tuple[str, str]]) -> str:
@@ -633,7 +768,7 @@ def _facet_columns(filters, params: dict, where_builder, fields: dict[str, tuple
 async def fetch_sales_facets(filters: SalesFilters) -> dict:
     """Available alternatives for each sales filter, respecting all other selections."""
     params: dict = {}
-    source = _sales_source(_date_window("transaction_date", filters.timeframe_days, params))
+    window = _date_window("transaction_date", filters.timeframe_days, params)
     columns = _facet_columns(
         filters,
         params,
@@ -647,14 +782,14 @@ async def fetch_sales_facets(filters: SalesFilters) -> dict:
             "project": ("project_name", "project_options"),
         },
     )
-    rows = await query(f"SELECT {columns} FROM ({source})", params)
+    rows = await _sales_page(f"SELECT {columns} FROM {_SOURCE} WHERE {window}", params)
     return rows[0] if rows else {}
 
 
 async def fetch_rental_facets(filters: RentalFilters) -> dict:
     """Available alternatives for each rental filter, respecting all other selections."""
     params: dict = {}
-    source = _rentals_source(_date_window("lease_start", filters.timeframe_days, params))
+    window = _date_window("lease_start", filters.timeframe_days, params)
     columns = _facet_columns(
         filters,
         params,
@@ -668,5 +803,5 @@ async def fetch_rental_facets(filters: RentalFilters) -> dict:
             "project": ("project_name", "project_options"),
         },
     )
-    rows = await query(f"SELECT {columns} FROM ({source})", params)
+    rows = await _leases_page(f"SELECT {columns} FROM {_SOURCE} WHERE {window}", params)
     return rows[0] if rows else {}

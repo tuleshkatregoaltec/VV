@@ -7,7 +7,8 @@ later run supersedes an earlier one). The newest complete data for a day wins wh
 runs finish in: a run that gets its ``_SUCCESS`` after a newer run was already loaded replaces
 only the days no newer loaded run covers, loading just those days' shards, and is skipped when
 none are left. After anything new was loaded it rebuilds the served
-market releases and the profiles, then clears the API caches that read them. Every run then
+market releases, the profiles and the Transactions page tables, then clears the API caches that
+read them. Every run then
 refreshes the Owners lease links (imported claims' lease end, rent and lease id) and republishes
 the stored owner assessments; a lease link's window moves with the date, so this runs even when
 nothing new was loaded.
@@ -44,7 +45,7 @@ logger = logging.getLogger("sync_dxbi_to_warehouse")
 
 KINDS = ("sales", "rentals")
 _RUN_NAME = re.compile(r"^run=\d{4}-\d{2}-\d{2}$")
-CACHE_PREFIXES = ("transactions:", "analytics:")
+CACHE_PREFIXES = ("transactions:", "filters:", "analytics:")
 
 
 # The table and date each report's load windows are recorded against (the loader's
@@ -368,7 +369,14 @@ def record_loaded(config: Config, record_window: RecordWindow) -> int:
     return recorded
 
 
-def _build_release() -> None:
+def _build_release(repo_dir: Path) -> None:
+    """The served market releases and profiles, then the Transactions page tables built from
+    them (backend app.transaction.page_tables)."""
+    _build_market_release()
+    _build_page_tables(repo_dir)
+
+
+def _build_market_release() -> None:
     from holocron.market import release
     from holocron.market.dxbi_profile import build_profiles
     from holocron.platform.clickhouse import ClickHouseClient
@@ -397,6 +405,18 @@ def _flush_cache(backend_dir: Path) -> None:
     )
     python = backend_dir / ".venv/bin/python"
     subprocess.run([str(python), "-c", code], cwd=backend_dir, check=True)
+
+
+def page_tables_command(repo_dir: Path) -> tuple[list[str], Path, dict]:
+    backend = repo_dir / "backend"
+    argv = [str(backend / ".venv/bin/python"), "-m", "app.transaction.page_tables"]
+    return argv, backend, {**os.environ, "PYTHONPATH": str(backend)}
+
+
+def _build_page_tables(repo_dir: Path) -> None:
+    argv, cwd, env = page_tables_command(repo_dir)
+    logger.info("Building the Transactions page tables")
+    subprocess.run(argv, cwd=cwd, env=env, check=True)
 
 
 def owners_refresh_command(repo_dir: Path, state_dir: Path) -> tuple[list[str], Path, dict]:
@@ -447,7 +467,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         return run_sync(
             config,
-            build_release=_build_release,
+            build_release=lambda: _build_release(args.repo_dir),
             flush_cache=lambda: _flush_cache(args.repo_dir / "backend"),
             refresh_owners=lambda: _refresh_owners(args.repo_dir, args.state_dir),
             record_window=_record_window,

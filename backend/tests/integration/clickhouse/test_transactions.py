@@ -2,14 +2,15 @@
 
 import csv
 import io
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.transaction import exports, facets, service
+from app.market.periods import business_today
+from app.transaction import exports, facets, page_tables, service
 from app.transaction.models import RentalFilters, SalesFilters
 
-TODAY = date.today()
+TODAY = business_today()  # The pages' date windows end today in Dubai.
 SALE_COLUMNS = (
     "sale_key",
     "dld_transaction_number",
@@ -242,6 +243,15 @@ async def dxbi(warehouse, install_serving):
         for table, statement in _HIERARCHY_FILLS.items():
             await warehouse.command(f"TRUNCATE TABLE {table}")
             await warehouse.command(statement)
+        # The page tables the Transactions pages read, as the release step builds them. A
+        # source with no rows builds nothing, so those pages read the live source (the
+        # fallback before a first build).
+        for table, (select, order_by) in page_tables.PAGE_TABLES.items():
+            await warehouse.command(f"DROP TABLE IF EXISTS {table}")
+            try:
+                await page_tables.build_page_table(warehouse, table, select(), order_by)
+            except RuntimeError:
+                pass
 
     return insert
 
@@ -713,7 +723,9 @@ async def test_numbered_units_hold_one_copy_of_a_lease_and_unnumbered_rows_all_c
     assert (options.contract_types, options.bedrooms) == (["New"], ["2 Beds"])
 
 
-async def test_exports_hold_the_page_rows_and_neutralise_formulas(dxbi):
+async def test_exports_hold_the_page_rows_and_neutralise_formulas(dxbi, monkeypatch):
+    # One row per chunk: every row after the first is read by keyset paging.
+    monkeypatch.setattr(exports, "EXPORT_CHUNK_ROWS", 1)
     await dxbi(
         sales=[
             sale("kept", unit_number="1"),
@@ -726,7 +738,7 @@ async def test_exports_hold_the_page_rows_and_neutralise_formulas(dxbi):
     filtered = await exports.export_sales_transactions(
         SalesFilters(timeframe_days=7, location="Downtown Dubai"), file_format="csv"
     )
-    rows = list(csv.DictReader(io.StringIO(filtered.getvalue().decode("utf-8-sig"))))
+    rows = list(csv.DictReader(io.StringIO((await filtered.content()).decode("utf-8-sig"))))
     assert sorted(r["Transaction ID"] for r in rows) == ["formula", "kept"]
     kept = next(r for r in rows if r["Transaction ID"] == "kept")
     assert (kept["Unit"], kept["Size (sq ft)"], kept["Price/sq ft (AED)"]) == ("1", "800.0", "2000")
@@ -736,13 +748,13 @@ async def test_exports_hold_the_page_rows_and_neutralise_formulas(dxbi):
     selected = await exports.export_sales_transactions(
         SalesFilters(location="Elsewhere"), transaction_ids="other-place", file_format="csv"
     )
-    rows = list(csv.DictReader(io.StringIO(selected.getvalue().decode("utf-8-sig"))))
+    rows = list(csv.DictReader(io.StringIO((await selected.content()).decode("utf-8-sig"))))
     assert [r["Transaction ID"] for r in rows] == ["other-place"]
 
     rentals = await exports.export_rental_contracts(
         RentalFilters(timeframe_days=7), file_format="csv"
     )
-    rows = list(csv.DictReader(io.StringIO(rentals.getvalue().decode("utf-8-sig"))))
+    rows = list(csv.DictReader(io.StringIO((await rentals.content()).decode("utf-8-sig"))))
     assert [(r["Unit"], r["Annual Rent (AED)"], r["Contract Amount (AED)"]) for r in rows] == [
         ("1101", "160000", "320000")
     ]
@@ -928,7 +940,7 @@ async def test_project_context_resolves_repeated_towers_without_guessing(dxbi, w
     exported = await exports.export_sales_transactions(
         SalesFilters(project="Elitz"), file_format="csv"
     )
-    records = list(csv.DictReader(io.StringIO(exported.getvalue().decode("utf-8-sig"))))
+    records = list(csv.DictReader(io.StringIO((await exported.content()).decode("utf-8-sig"))))
     assert [r["Transaction ID"] for r in records] == ["elitz"]
     evidence = await warehouse.query(
         f"SELECT location_resolution, location_candidate_count, location_evidence "

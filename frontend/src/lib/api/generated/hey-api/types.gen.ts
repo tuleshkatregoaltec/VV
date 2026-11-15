@@ -13262,7 +13262,7 @@ export type AreasAreasListData = {
         /**
          * Sort By
          */
-        sort_by?: string;
+        sort_by?: 'units' | 'volume' | 'transactions' | 'yield' | 'completion' | 'developers';
         /**
          * Search
          */
@@ -15467,7 +15467,7 @@ export type FiltersGetSalesFilterOptionsData = {
         /**
          * Timeframe Days
          *
-         * Last N calendar days, today included
+         * Last N calendar days in Dubai, today included
          */
         timeframe_days?: number | null;
         /**
@@ -15583,7 +15583,7 @@ export type FiltersGetRentalFilterOptionsData = {
         /**
          * Timeframe Days
          *
-         * Leases starting in the last N calendar days, today included
+         * Leases starting in the last N calendar days in Dubai, today included
          */
         timeframe_days?: number | null;
         /**
@@ -16437,6 +16437,28 @@ export type ProjectsProjectRadarPinsData = {
     path?: never;
     query?: {
         /**
+         * Area
+         *
+         * Area name to fetch pins for
+         */
+        area?: string | null;
+        /**
+         * Developer
+         *
+         * Developer name to focus
+         */
+        developer?: string | null;
+        /**
+         * Limit
+         *
+         * Maximum project pins
+         */
+        limit?: number;
+        /**
+         * Trailing DLD/Ejari activity window in days (maximum 365)
+         */
+        period_days?: RadarPeriodDays;
+        /**
          * West
          *
          * Viewport west longitude
@@ -16460,28 +16482,6 @@ export type ProjectsProjectRadarPinsData = {
          * Viewport north latitude
          */
         north?: number | null;
-        /**
-         * Area
-         *
-         * Area name to fetch pins for
-         */
-        area?: string | null;
-        /**
-         * Developer
-         *
-         * Developer name to focus
-         */
-        developer?: string | null;
-        /**
-         * Limit
-         *
-         * Maximum project pins
-         */
-        limit?: number;
-        /**
-         * Trailing DLD/Ejari activity window in days (maximum 365)
-         */
-        period_days?: RadarPeriodDays;
     };
     url: '/api/v1/projects/radar/pins';
 };
@@ -16511,6 +16511,16 @@ export type ProjectsRadarBuildingPinsData = {
     path?: never;
     query: {
         /**
+         * Limit
+         *
+         * Maximum tower pins
+         */
+        limit?: number;
+        /**
+         * Trailing DLD/Ejari activity window in days (maximum 365)
+         */
+        period_days?: RadarPeriodDays;
+        /**
          * West
          *
          * Viewport west longitude
@@ -16534,16 +16544,6 @@ export type ProjectsRadarBuildingPinsData = {
          * Viewport north latitude
          */
         north: number;
-        /**
-         * Limit
-         *
-         * Maximum tower pins
-         */
-        limit?: number;
-        /**
-         * Trailing DLD/Ejari activity window in days (maximum 365)
-         */
-        period_days?: RadarPeriodDays;
     };
     url: '/api/v1/projects/radar/building-pins';
 };
@@ -16641,6 +16641,18 @@ export type ProjectsGetDdaPlotsData = {
          */
         area?: string | null;
         /**
+         * Limit
+         *
+         * Maximum DDA plots to return
+         */
+        limit?: number;
+        /**
+         * Include Valuations
+         *
+         * Include transaction-derived valuation ranges. Disabled for bulk map rendering.
+         */
+        include_valuations?: boolean;
+        /**
          * West
          *
          * Viewport west longitude
@@ -16664,18 +16676,6 @@ export type ProjectsGetDdaPlotsData = {
          * Viewport north latitude
          */
         north?: number | null;
-        /**
-         * Limit
-         *
-         * Maximum DDA plots to return
-         */
-        limit?: number;
-        /**
-         * Include Valuations
-         *
-         * Include transaction-derived valuation ranges. Disabled for bulk map rendering.
-         */
-        include_valuations?: boolean;
     };
     url: '/api/v1/projects/dda-plots';
 };
@@ -16705,6 +16705,18 @@ export type ProjectsGetDdaOutlinesData = {
     path?: never;
     query: {
         /**
+         * Zoom
+         *
+         * Current map zoom
+         */
+        zoom: number;
+        /**
+         * Limit
+         *
+         * Maximum outlines to return
+         */
+        limit?: number;
+        /**
          * West
          *
          * Viewport west longitude
@@ -16728,18 +16740,6 @@ export type ProjectsGetDdaOutlinesData = {
          * Viewport north latitude
          */
         north: number;
-        /**
-         * Zoom
-         *
-         * Current map zoom
-         */
-        zoom: number;
-        /**
-         * Limit
-         *
-         * Maximum outlines to return
-         */
-        limit?: number;
     };
     url: '/api/v1/projects/dda-outlines';
 };
@@ -16835,9 +16835,31 @@ export type SupplyListDeveloperRankingsResponse = SupplyListDeveloperRankingsRes
 export type SupplyListUpcomingProjectsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Limit
+         *
+         * Page size
+         */
+        limit?: number;
+        /**
+         * Offset
+         *
+         * Page offset
+         */
+        offset?: number;
+    };
     url: '/api/v1/supply/upcoming-projects';
 };
+
+export type SupplyListUpcomingProjectsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SupplyListUpcomingProjectsError = SupplyListUpcomingProjectsErrors[keyof SupplyListUpcomingProjectsErrors];
 
 export type SupplyListUpcomingProjectsResponses = {
     /**
@@ -17003,7 +17025,7 @@ export type TransactionsGetSalesTransactionsData = {
         /**
          * Timeframe Days
          *
-         * Last N calendar days, today included
+         * Last N calendar days in Dubai, today included
          */
         timeframe_days?: number | null;
         /**
@@ -17131,7 +17153,7 @@ export type TransactionsGetRentalContractsData = {
         /**
          * Timeframe Days
          *
-         * Leases starting in the last N calendar days, today included
+         * Leases starting in the last N calendar days in Dubai, today included
          */
         timeframe_days?: number | null;
         /**
@@ -17193,7 +17215,7 @@ export type TransactionsExportSalesTransactionsEndpointData = {
         /**
          * Transaction Ids
          *
-         * Comma-separated transaction IDs (overrides filters and limit)
+         * Comma-separated transaction IDs, at most 1,000 (overrides the filters)
          */
         transaction_ids?: string | null;
         /**
@@ -17247,7 +17269,7 @@ export type TransactionsExportSalesTransactionsEndpointData = {
         /**
          * Timeframe Days
          *
-         * Last N calendar days, today included
+         * Last N calendar days in Dubai, today included
          */
         timeframe_days?: number | null;
         /**
@@ -17319,7 +17341,7 @@ export type TransactionsExportRentalContractsEndpointData = {
         /**
          * Contract Ids
          *
-         * Comma-separated contract IDs (overrides filters and limit)
+         * Comma-separated contract IDs, at most 1,000 (overrides the filters)
          */
         contract_ids?: string | null;
         /**
@@ -17373,7 +17395,7 @@ export type TransactionsExportRentalContractsEndpointData = {
         /**
          * Timeframe Days
          *
-         * Leases starting in the last N calendar days, today included
+         * Leases starting in the last N calendar days in Dubai, today included
          */
         timeframe_days?: number | null;
         /**

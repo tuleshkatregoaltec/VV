@@ -1,7 +1,17 @@
+from datetime import date
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from app.transaction.facets import get_rental_filter_options, get_sales_filter_options
 from app.transaction.models import RentalFilters, SalesFilters
+
+DUBAI_TODAY = date(2026, 11, 16)
+
+
+@pytest.fixture(autouse=True)
+def dubai_today(monkeypatch):
+    monkeypatch.setattr("app.transaction.queries.business_today", lambda: DUBAI_TODAY)
 
 
 async def test_sales_options_come_from_dxbi_in_one_scan_under_every_filter():
@@ -46,13 +56,16 @@ async def test_sales_options_come_from_dxbi_in_one_scan_under_every_filter():
 
     assert mock_query.await_count == 1
     sql, params = mock_query.await_args.args
-    assert "FROM dxbi_sales_unit_events FINAL" in sql
+    # One scan of the page table (the de-duplicated DXBI sales, built after each load).
+    assert "FROM dxbi_sales_page" in sql
     assert "ch_transactions" not in sql
-    # The date window applies before de-duplication; bands are [min, max).
-    assert "transaction_date > today() - {timeframe_days:Int32}" in sql
+    # The window ends today in Dubai, not on the warehouse's UTC clock; bands are [min, max).
+    assert "transaction_date > {today:Date} - {timeframe_days:Int32}" in sql
+    assert "today()" not in sql
     assert "size_sqft >= {size_min:Float64}" in sql and "size_sqft < {size_max:Float64}" in sql
     assert "price_per_sqft < {price_per_sqft_max:Float64}" in sql
     assert params == {
+        "today": DUBAI_TODAY,
         "timeframe_days": 30,
         "property_usage": "Residential",
         "property_type": "Apartment",
@@ -103,11 +116,14 @@ async def test_rental_options_come_from_dxbi_in_one_scan_under_every_filter():
     assert result.statuses == []
 
     sql, params = mock_query.await_args.args
-    assert "FROM dxbi_rental_events FINAL" in sql
+    assert "FROM dxbi_leases_page" in sql
     assert "ch_rent_contracts" not in sql
-    assert "lease_start > today() - {timeframe_days:Int32} AND lease_start <= today()" in sql
+    assert (
+        "lease_start > {today:Date} - {timeframe_days:Int32} AND lease_start <= {today:Date}" in sql
+    )
     assert "annual_rent_aed < {rent_max:Float64}" in sql
     assert params == {
+        "today": DUBAI_TODAY,
         "timeframe_days": 180,
         "property_usage": "Residential",
         "contract_type": "Renewed",

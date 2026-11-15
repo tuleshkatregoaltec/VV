@@ -55,6 +55,34 @@ export type SalesFacetFilters = Omit<
 >
 export type RentalFacetFilters = Omit<RentalTransactionFilters, 'limit' | 'offset' | 'contract_ids'>
 
+/** An export file and how it relates to the rows the filters matched. */
+export interface TransactionExportFile {
+	blob: Blob
+	rows: number
+	matchingRows: number
+	truncated: boolean
+}
+
+async function exportFile(response: Response): Promise<TransactionExportFile> {
+	const rows = Number(response.headers.get('X-Export-Rows') ?? Number.NaN)
+	const matchingRows = Number(response.headers.get('X-Export-Matching-Rows') ?? Number.NaN)
+	return {
+		blob: await response.blob(),
+		rows,
+		matchingRows,
+		truncated: response.headers.get('X-Export-Truncated') === 'true'
+	}
+}
+
+/** What to tell the user when an export holds only the newest rows of a larger selection. */
+export function exportTruncationNotice(
+	file: TransactionExportFile,
+	noun: 'sales' | 'leases'
+): string | null {
+	if (!file.truncated) return null
+	return `This file holds the newest ${file.rows.toLocaleString('en-US')} of ${file.matchingRows.toLocaleString('en-US')} matching ${noun}. Narrow the filters to export the rest.`
+}
+
 function withFilters(
 	endpoint: string,
 	filters: BaseTransactionFilters & { format?: TransactionExportFormat }
@@ -72,19 +100,25 @@ export const transactions = {
 	rentals: (filters: RentalTransactionFilters) =>
 		client.get<RentalContractListResponse>(withFilters('/api/v1/transactions/rentals', filters)),
 
-	exportSales: (
+	exportSales: async (
 		filters: SalesTransactionFilters,
 		format: TransactionExportFormat = 'xlsx'
-	): Promise<Blob> =>
-		client.get<Blob>(withFilters('/api/v1/transactions/sales/export', { ...filters, format }), {
-			returnBlob: true
-		}),
+	): Promise<TransactionExportFile> =>
+		exportFile(
+			await client.get<Response>(
+				withFilters('/api/v1/transactions/sales/export', { ...filters, format }),
+				{ returnResponse: true }
+			)
+		),
 
-	exportRentals: (
+	exportRentals: async (
 		filters: RentalTransactionFilters,
 		format: TransactionExportFormat = 'xlsx'
-	): Promise<Blob> =>
-		client.get<Blob>(withFilters('/api/v1/transactions/rentals/export', { ...filters, format }), {
-			returnBlob: true
-		})
+	): Promise<TransactionExportFile> =>
+		exportFile(
+			await client.get<Response>(
+				withFilters('/api/v1/transactions/rentals/export', { ...filters, format }),
+				{ returnResponse: true }
+			)
+		)
 }
