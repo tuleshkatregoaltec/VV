@@ -125,6 +125,10 @@ finished.
    `load_dxbi_rental_events.py --target active`, each with `--replace-window` set to the dates the
    run's own checkpoint covers. A run without `_SUCCESS` is never loaded, so the failing rentals
    scrape costs nothing until it succeeds. A run is marked only after its load succeeds.
+   The newest complete data for a day wins whatever order runs finish in: a run that gets its
+   `_SUCCESS` after a newer run was loaded replaces only the days no newer loaded run covers (it
+   loads just those days' shards, each stretch of consecutive days with its own `--replace-window`)
+   and is only marked when none are left. No marker needs deleting by hand for this.
 3. **Release.** After anything was loaded: `materialize_market_sale_events`,
    `materialize_market_rental_events`, `build_profiles`, then the Redis `transactions:` and
    `analytics:` keys are cleared. `release-pending` in the state directory keeps a failed build owed.
@@ -140,8 +144,9 @@ finished.
    (311,665 claims): 10 min in all (link refresh ~2 min, then the new generation), peak RSS 1.4 GB.
 
 The unit fails (and the journal shows why) when a load, the release or the Owners refresh fails,
-or when there is no finished sales run in 36 hours. No finished rentals run in 36 hours is a
-logged warning.
+or when there is no finished sales run or no finished rentals run in 36 hours. The failed unit
+shows in `systemctl --failed` and the journal (`No finished rentals run in the last 36 hours`);
+there is no other alert channel.
 
 Install (16 GB server, as maan):
 
@@ -159,4 +164,5 @@ Install (4 GB box): `sudo install -m 755 deploy/hetzner/dxbi-pull-gate.sh /usr/l
 
 Back up the DXBI and market tables before a manual backfill with `~/backup_ch.sh` (writes
 `~/backups/ch-pre-backfill-<time>`). To reload a run, delete its marker
-(`rm ~/.local/state/vv-dxbi-sync/loaded/sales-run=YYYY-MM-DD`) and start the service.
+(`rm ~/.local/state/vv-dxbi-sync/loaded/sales-run=YYYY-MM-DD`) and start the service. A reloaded
+run still skips days that a newer loaded run covers; delete those runs' markers too to reload them.
