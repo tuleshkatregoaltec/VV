@@ -46,6 +46,8 @@ logger = logging.getLogger("sync_dxbi_to_warehouse")
 KINDS = ("sales", "rentals")
 _RUN_NAME = re.compile(r"^run=\d{4}-\d{2}-\d{2}$")
 CACHE_PREFIXES = ("transactions:", "filters:", "analytics:")
+# The warm-up only saves a first cold page, so a hung one is cut off rather than held.
+WARM_TIMEOUT_SECONDS = 900
 
 
 # The table and date each report's load windows are recorded against (the loader's
@@ -281,6 +283,7 @@ def run_sync(
     build_release: Callable[[], None],
     flush_cache: Callable[[], None],
     refresh_owners: Callable[[], None],
+    warm_pages: Callable[[], None] | None = None,
     record_window: RecordWindow | None = None,
 ) -> int:
     config.loaded_dir.mkdir(parents=True, exist_ok=True)
@@ -312,10 +315,25 @@ def run_sync(
         except Exception:
             logger.exception("Owners lease refresh failed; it is retried next run")
             failures += 1
+        else:
+            _warm(warm_pages)
     for kind in stale_reports(config.evidence_dir, max_age_hours=36):
         logger.error("No finished %s run in the last 36 hours", kind)
         failures += 1
     return 1 if failures else 0
+
+
+def _warm(warm_pages: Callable[[], None] | None) -> None:
+    """Warm the CRM lease pages. It only saves the first agent a cold page, so a failure here
+    is a warning and never fails the unit."""
+    if warm_pages is None:
+        return
+    try:
+        warm_pages()
+    except Exception:
+        logger.warning(
+            "CRM lease page warm-up failed; the pages compute on first use", exc_info=True
+        )
 
 
 def _record_window(run: Run, first: date, last: date) -> None:
@@ -436,6 +454,18 @@ def _refresh_owners(repo_dir: Path, state_dir: Path) -> None:
     subprocess.run(argv, cwd=cwd, env=env, check=True)
 
 
+def warm_pages_command(repo_dir: Path) -> tuple[list[str], Path, dict]:
+    backend = repo_dir / "backend"
+    argv = [str(backend / ".venv/bin/python"), "scripts/crm/warm_lead_pages.py"]
+    return argv, backend, {**os.environ, "PYTHONPATH": str(backend)}
+
+
+def _warm_pages(repo_dir: Path) -> None:
+    argv, cwd, env = warm_pages_command(repo_dir)
+    logger.info("Warming the CRM lease pages")
+    subprocess.run(argv, cwd=cwd, env=env, check=True, timeout=WARM_TIMEOUT_SECONDS)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-dir", type=Path, required=True)
@@ -470,6 +500,7 @@ def main(argv: list[str] | None = None) -> int:
             build_release=lambda: _build_release(args.repo_dir),
             flush_cache=lambda: _flush_cache(args.repo_dir / "backend"),
             refresh_owners=lambda: _refresh_owners(args.repo_dir, args.state_dir),
+            warm_pages=lambda: _warm_pages(args.repo_dir),
             record_window=_record_window,
         )
 

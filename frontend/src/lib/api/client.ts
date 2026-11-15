@@ -42,11 +42,13 @@ const BUSY_RETRIES = 3
 
 /**
  * A read the server turned away only because it was momentarily full (429 with
- * Retry-After, sent by CRM admission) is retried after the advised delay. Writes and
- * other 429s, such as a used-up daily allowance, are never replayed.
+ * Retry-After, sent by CRM admission, or 503 with Retry-After, sent when the warehouse
+ * is out of memory or time) is retried after the advised delay, at most 5 seconds. Writes,
+ * and 429s or 503s without Retry-After (a used-up allowance, a real outage), are never replayed.
  */
 function busyRetryDelay(res: Response, method: string, attempt: number): number | null {
-	if (res.status !== 429 || method !== 'GET' || attempt >= BUSY_RETRIES) return null
+	if ((res.status !== 429 && res.status !== 503) || method !== 'GET' || attempt >= BUSY_RETRIES)
+		return null
 	const seconds = Number(res.headers.get('Retry-After'))
 	if (!res.headers.has('Retry-After') || !Number.isFinite(seconds) || seconds < 0) return null
 	return Math.min(seconds, 5) * 1000

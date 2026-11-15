@@ -58,6 +58,7 @@ def _ordered(start_date: Optional[date], end_date: Optional[date]) -> None:
 
 
 @router.get("/sales", response_model=AnalyticsResponse)
+@cached_endpoint(prefix="analytics:sales:v1", expire=900)
 async def get_sales_analytics(
     context: AuthContext = Depends(require_active_subscription),
     market_type: Optional[str] = Query(
@@ -117,6 +118,7 @@ async def get_sales_analytics(
 
 
 @router.get("/rentals", response_model=RentalAnalyticsResponse)
+@cached_endpoint(prefix="analytics:rentals:v1", expire=900)
 async def get_rental_analytics(
     context: AuthContext = Depends(require_active_subscription),
     property_usage: str = Query(default="Residential", description="Residential or Commercial"),
@@ -162,6 +164,7 @@ async def get_rental_analytics(
 
 
 @router.get("/market-trend", response_model=MarketTrendResponse)
+@cached_endpoint(prefix="analytics:market_trend:v1", expire=900)
 async def get_market_trend(
     context: AuthContext = Depends(require_active_subscription),
     days: int = _lookback_days(180, "Number of days to look back (30, 90, 180, 365)"),
@@ -291,6 +294,7 @@ async def get_project_trends_endpoint(
 
 
 @router.get("/project/forecast", response_model=ProjectForecastResponse)
+@cached_endpoint(prefix="analytics:dxbi:forecast:v1", expire=900)
 async def get_project_forecast_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
@@ -315,6 +319,7 @@ async def get_project_forecast_endpoint(
 
 
 @router.get("/project/pipeline", response_model=ProjectPipelineResponse)
+@cached_endpoint(prefix="analytics:dxbi:pipeline:v1", expire=900)
 async def get_project_pipeline_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
