@@ -327,7 +327,11 @@ class ProjectPipelineResponse(BaseModel):
     )
     undated_units: int = Field(default=0, description="Uncompleted units without a delivery date")
     area_name: Optional[str] = None
+    # The scope's developer; None for a scope several developers build (a master, the market).
     developer_name: Optional[str] = None
+    basis: Optional[str] = Field(
+        default=None, description="Which projects the pipeline counts, and from which register"
+    )
     data: list[ProjectPipelinePoint]
 
 

@@ -690,8 +690,8 @@ def project_price_trends(
 
 def area_supply_projects(filter_by_area: bool = True) -> str:
     area_filter = (
-        "(lowerUTF8(p.area_name_en) = lowerUTF8({area_name:String}) "
-        "OR lowerUTF8(p.master_project_en) = lowerUTF8({area_name:String})) AND"
+        "(lowerUTF8(p.area_name_en) IN {areas:Array(String)} "
+        "OR lowerUTF8(p.master_project_en) IN {areas:Array(String)}) AND"
         if filter_by_area
         else ""
     )
@@ -1003,6 +1003,24 @@ async def fetch_project_price_trends(
     parameters: dict, interval: TrendInterval = "month", filter_type: ProjectScopeType = "project"
 ):
     return await query(project_price_trends(interval, filter_type), parameters)
+
+
+def scope_areas(filter_type: ProjectScopeType) -> str:
+    """DLD's areas of a scope's records (DXBI's community where no profile names one)."""
+    return f"""
+        SELECT area_name_en, count() AS records
+        FROM (
+            SELECT {_SCOPE_COLUMNS}, area_name_en FROM {SALES_SOURCE}
+            UNION ALL
+            SELECT {_SCOPE_COLUMNS}, area_name_en FROM {RENTALS_SOURCE}
+        ) WHERE {_project_filter(filter_type)} AND area_name_en != ''
+        GROUP BY area_name_en
+        ORDER BY records DESC
+    """
+
+
+async def fetch_scope_areas(parameters: dict, filter_type: ProjectScopeType):
+    return await query(scope_areas(filter_type), parameters)
 
 
 async def fetch_area_supply_projects(parameters: dict, filter_by_area: bool = True):

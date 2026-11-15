@@ -563,6 +563,10 @@ async def get_project_forecast(
     )
 
 
+# A master's DLD area holds at least this share of its records.
+MASTER_AREA_SHARE = 0.1
+
+
 async def get_project_pipeline(
     project_name: str, filter_type: ProjectScopeType = "project"
 ) -> ProjectPipelineResponse:
@@ -576,23 +580,50 @@ async def get_project_pipeline(
     if filter_type == "market":
         area_name = "Dubai"
         developer_name = None
+        basis = "DLD project register: every project in Dubai."
         rows = await queries.fetch_area_supply_projects({}, filter_by_area=False)
     else:
         like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
         meta = await queries.fetch_pipeline_meta({"project_name": like_name}, filter_type)
-        area_name = meta[0].get("area_name_en") if meta else None
-        developer_name = meta[0].get("developer_name_en") if meta else None
+        meta_row = meta[0] if meta else {}
+        if filter_type == "project":
+            area_name = meta_row.get("area_name_en")
+            developer_name = meta_row.get("developer_name_en")
+            areas = [area_name] if area_name else []
+        else:
+            # A master spans its projects' DLD areas: those holding a tenth of its records or
+            # more (Dubai Marina's are Marsa Dubai's), never one picked at random.
+            found = await queries.fetch_scope_areas({"project_name": like_name}, filter_type)
+            total = sum(int(row["records"]) for row in found)
+            areas = [
+                row["area_name_en"]
+                for row in found
+                if total and int(row["records"]) / total >= MASTER_AREA_SHARE
+            ]
+            area_name = ", ".join(areas) or None
+            # Several developers build a master: none of them is the master's developer.
+            names = meta_row.get("developer_names") or []
+            developer_name = names[0] if len(set(names)) == 1 else None
 
-        if not area_name:
+        if not areas:
             dxbi_meta = await queries.fetch_project_meta({"project_name": like_name}, filter_type)
             area_name = dxbi_meta[0].get("area_name_en") if dxbi_meta else None
-        if not area_name:
+            areas = [area_name] if area_name else []
+        if not areas:
             return ProjectPipelineResponse(area_name=None, developer_name=developer_name, data=[])
 
-        rows = await queries.fetch_area_supply_projects({"area_name": area_name})
+        basis = (
+            f"DLD project register: every project in {', '.join(areas)}, the DLD area of the "
+            "selected scope, not only the scope's own projects."
+        )
+        rows = await queries.fetch_area_supply_projects(
+            {"areas": [area.lower() for area in areas]}
+        )
 
     if not rows:
-        return ProjectPipelineResponse(area_name=area_name, developer_name=developer_name, data=[])
+        return ProjectPipelineResponse(
+            area_name=area_name, developer_name=developer_name, basis=basis, data=[]
+        )
 
     today = business_today()
     start_quarter = _quarter_start(date(today.year - 1, 1, 1))
@@ -661,6 +692,7 @@ async def get_project_pipeline(
         undated_units=undated_units,
         area_name=area_name,
         developer_name=developer_name,
+        basis=basis,
         data=data,
     )
 
