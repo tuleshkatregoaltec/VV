@@ -9880,7 +9880,19 @@
           "upload"
         ],
         "summary": "Health",
+        "description": "Service-key-only dependency check. Read-only: no object is written, and failures\nare logged server-side, never echoed to the caller.",
         "operationId": "upload-health",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Key"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -9888,6 +9900,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UploadHealthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
