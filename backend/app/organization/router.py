@@ -223,10 +223,14 @@ async def update_organization(
     db: AsyncSession = Depends(get_db_session),
     context: AuthContext = Depends(require_owner_membership),
 ):
-    """Update organization settings (organization admin)."""
+    """Owners cannot change the seat limit: it follows the paid Stripe quantity.
+
+    Platform admins change it through /api/v1/admin/organizations/{id}.
+    """
     _require_owner_org_access(context, org_id)
-    return await organization_service.update_organization_for_owner(
-        org_id=org_id, organization_update=organization_update, db=db
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Seat limits are managed through billing",
     )
 
 

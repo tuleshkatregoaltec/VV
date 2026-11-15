@@ -7008,7 +7008,7 @@
           "organization"
         ],
         "summary": "Update Organization",
-        "description": "Update organization settings (organization admin).",
+        "description": "Owners cannot change the seat limit: it follows the paid Stripe quantity.\n\nPlatform admins change it through /api/v1/admin/organizations/{id}.",
         "operationId": "organization-update_organization",
         "parameters": [
           {
@@ -14593,6 +14593,7 @@
           },
           "seats": {
             "type": "integer",
+            "maximum": 1000.0,
             "minimum": 1.0,
             "title": "Seats"
           },

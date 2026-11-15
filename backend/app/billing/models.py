@@ -42,11 +42,14 @@ class Subscription(SQLModel, table=True):
     )
 
 
+MAX_CHECKOUT_SEATS = 1000
+
+
 class CheckoutSessionRequest(BaseModel):
     """Request to create a Stripe checkout session (org must exist)"""
 
     organization_id: str  # Organization must be created before checkout
-    seats: int = Field(ge=1)
+    seats: int = Field(ge=1, le=MAX_CHECKOUT_SEATS)
     price_tier: str = Field(regex="^(tier1|tier2)$")  # User-selected tier
 
 

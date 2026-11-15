@@ -18,7 +18,6 @@ from app.organization.models import (
     OrganizationDetailResponse,
     OrganizationMembership,
     OrganizationResponse,
-    OrganizationUpdateRequest,
     OrganizationUserDetailResponse,
     OwnerOrganizationCreateRequest,
     OwnerOrganizationCreateResponse,
@@ -221,9 +220,9 @@ async def create_owner_organization(
                 detail="Organization membership exists but org not found",
             )
 
-        # Update org details for retry
+        # Update org details for retry. max_users is deliberately untouched:
+        # the seat limit only changes from verified Stripe state.
         org.name = request.name
-        org.max_users = request.max_users
         org.updated_at = datetime.now(timezone.utc)
 
         repository.save_organization(db, org)
@@ -246,7 +245,9 @@ async def create_owner_organization(
     org = Organization(
         id=org_id,
         name=request.name,
-        max_users=request.max_users,
+        # Seats are granted only by Stripe sync after payment; the requested
+        # seat count is passed to checkout, not stored here.
+        max_users=1,
         subscription_status=None,  # No subscription yet
         stripe_customer_id=None,  # Created during checkout
         created_at=datetime.now(timezone.utc),
@@ -271,7 +272,7 @@ async def create_owner_organization(
     except Exception as e:
         await db.rollback()
         logger.error(f"Failed to create organization for user {current_user.id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create organization: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create organization")
 
     logger.info(f"Created new organization {org.id} for user {current_user.id}")
 
@@ -418,27 +419,6 @@ async def get_organization_details(org_id: str, db: AsyncSession):
         organization=org_response,
         users=user_list,
     )
-
-
-async def update_organization_for_owner(
-    org_id: str, organization_update: OrganizationUpdateRequest, db: AsyncSession
-):
-    """Update organization settings (organization admin)."""
-
-    organization = await update_organization(
-        db=db,
-        org_id=org_id,
-        max_users=organization_update.max_users,
-    )
-
-    if not organization:
-        raise HTTPException(status_code=404, detail="Organization not found")
-
-    active_count = await get_active_user_count(db, org_id)
-
-    response = OrganizationResponse.model_validate(organization)
-    response.active_user_count = active_count
-    return response
 
 
 async def delete_organization_checked(org_id: str, db: AsyncSession):
