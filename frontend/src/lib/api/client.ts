@@ -25,6 +25,8 @@ export interface RequestOptions {
 	body?: unknown
 	headers?: Record<string, string>
 	returnBlob?: boolean
+	/** The raw Response, for a download whose headers describe the file. */
+	returnResponse?: boolean
 	signal?: AbortSignal
 }
 
@@ -66,7 +68,14 @@ function sleep(ms: number, signal?: AbortSignal) {
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-	const { method = 'GET', body, headers = {}, returnBlob = false, signal } = options
+	const {
+		method = 'GET',
+		body,
+		headers = {},
+		returnBlob = false,
+		returnResponse = false,
+		signal
+	} = options
 
 	// if access token available, add auth header.
 	const access_token = await get_access_token()
@@ -152,6 +161,10 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
 	if (res.status === 204) {
 		return undefined as T
+	}
+
+	if (returnResponse) {
+		return res as T
 	}
 
 	if (returnBlob) {

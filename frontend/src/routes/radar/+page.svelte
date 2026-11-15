@@ -70,6 +70,8 @@ const DUBAI_CENTER_LNG = 55.2708
 const DUBAI_CENTER_LAT = 25.2048
 const RADAR_OVERVIEW_ZOOM = 11
 const RADAR_BUILDING_MIN_ZOOM = 12
+// The API returns at most this many towers; a full response means the viewport has more.
+const RADAR_BUILDING_PIN_LIMIT = 5000
 
 let isMinimized = $state(false)
 // Height of the floating top bar; map controls sit just below it.
@@ -157,7 +159,7 @@ const radarBuildingPinParams = $derived.by(() => {
 		south: roundCoordinate(ddaViewport.south),
 		east: roundCoordinate(ddaViewport.east),
 		north: roundCoordinate(ddaViewport.north),
-		limit: 5000,
+		limit: RADAR_BUILDING_PIN_LIMIT,
 		period_days: activityPeriodDays
 	}
 })
@@ -167,6 +169,7 @@ const radarBuildingPinsQuery = createQuery(() =>
 const areaProjectsQuery = createQuery(() => projectQueries.radarPins(areaProjectParams))
 const radarPinProjects = $derived<ProjectRadarProject[]>(radarPinsQuery.data ?? [])
 const radarBuildingPins = $derived<RadarBuildingPin[]>(radarBuildingPinsQuery.data ?? [])
+const buildingPinsTruncated = $derived(radarBuildingPins.length >= RADAR_BUILDING_PIN_LIMIT)
 const areaProjects = $derived<ProjectRadarProject[]>(areaProjectsQuery.data ?? [])
 const radarProjects = $derived<ProjectRadarProject[]>(
 	mergeRadarProjects(radarPinProjects, areaProjects)
@@ -772,11 +775,16 @@ $effect(() => {
 									class="radar-layer-button {showBuildingPins ? 'is-active' : ''}"
 									aria-pressed={showBuildingPins}
 									aria-label="PF towers"
-									title="Towers"
+									title={buildingPinsTruncated
+										? `Showing the first ${RADAR_BUILDING_PIN_LIMIT.toLocaleString('en-US')} towers in view; zoom in to see them all`
+										: 'Towers'}
 									onclick={() => (showBuildingPins = !showBuildingPins)}
 								>
 									<MapPinned size={16} />
 									<span>Towers</span>
+									{#if showBuildingPins && buildingPinsTruncated}
+										<span class="text-[10px] font-semibold">{RADAR_BUILDING_PIN_LIMIT.toLocaleString('en-US')}+</span>
+									{/if}
 								</button>
 
 									<button

@@ -279,9 +279,15 @@ async def fetch_developer_ranking_rows(parameters):
     )
 
 
+_UPCOMING_WHERE = """
+                coalesce(p.no_of_units, 0) > 0
+                AND coalesce(p.completion_date, p.project_end_date) > {anchor_date:Date}
+                AND p.cancellation_date IS NULL"""
+
+
 async def fetch_upcoming_projects(parameters):
     return await query(
-        """
+        f"""
             SELECT
                 p.project_id,
                 p.project_name_en,
@@ -295,17 +301,20 @@ async def fetch_upcoming_projects(parameters):
                 p.no_of_units
             FROM ch_projects p
             LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
-            WHERE
-                coalesce(p.no_of_units, 0) > 0
-                AND coalesce(p.completion_date, p.project_end_date) > {anchor_date:Date}
-                AND p.cancellation_date IS NULL
+            WHERE {_UPCOMING_WHERE}
             ORDER BY
                 coalesce(p.completion_date, p.project_end_date) ASC NULLS LAST,
                 p.project_name_en ASC
-            LIMIT {limit:Int32}
-            OFFSET {offset:Int32}
+            LIMIT {{limit:Int32}}
+            OFFSET {{offset:Int32}}
         """,
         parameters,
+    )
+
+
+async def count_upcoming_projects(parameters):
+    return await query(
+        f"SELECT count() AS total FROM ch_projects p WHERE {_UPCOMING_WHERE}", parameters
     )
 
 

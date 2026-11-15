@@ -158,3 +158,43 @@ async def test_ping_returns_false_on_error(cache):
 async def _async_iter(values):
     for value in values:
         yield value
+
+
+async def test_fill_lock_is_taken_once_and_released_only_by_its_holder():
+    from app.core.cache import RedisCache
+
+    class FakeRedis:
+        def __init__(self):
+            self.values = {}
+
+        async def set(self, key, value, nx=False, px=None, ex=None):
+            if nx and key in self.values:
+                return None
+            self.values[key] = value
+            return True
+
+        async def eval(self, script, numkeys, key, token):
+            if self.values.get(key) == token:
+                del self.values[key]
+                return 1
+            return 0
+
+    cache = RedisCache.__new__(RedisCache)
+    cache.redis = FakeRedis()
+
+    first = await cache.acquire_lock("k", ttl_seconds=30)
+    second = await cache.acquire_lock("k", ttl_seconds=30)
+    assert first and second is None
+    await cache.release_lock("k", "not-mine")
+    assert await cache.acquire_lock("k", ttl_seconds=30) is None
+    await cache.release_lock("k", first)
+    assert await cache.acquire_lock("k", ttl_seconds=30)
+
+
+async def test_fill_lock_without_redis_lets_the_caller_proceed():
+    from app.core.cache import RedisCache
+
+    cache = RedisCache.__new__(RedisCache)
+    cache.redis = None
+
+    assert await cache.acquire_lock("k", ttl_seconds=30) == ""

@@ -37,6 +37,25 @@ from app.core.dependencies import AuthContext, require_active_subscription
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
+# Request bounds: the warehouse binds day counts as Int32 and its records start in 2002 (DLD) and
+# 2014 (DXBI), so 10,000 days and dates from 2000 cover every record; anything else is a 422.
+MAX_LOOKBACK_DAYS = 10_000
+EARLIEST_DATE = date(2000, 1, 1)
+LATEST_DATE = date(2100, 12, 31)
+
+
+def _lookback_days(default: Optional[int], description: str):
+    return Query(default=default, ge=1, le=MAX_LOOKBACK_DAYS, description=description)
+
+
+def _date(description: str):
+    return Query(default=None, ge=EARLIEST_DATE, le=LATEST_DATE, description=description)
+
+
+def _ordered(start_date: Optional[date], end_date: Optional[date]) -> None:
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must not be after end_date")
+
 
 @router.get("/sales", response_model=AnalyticsResponse)
 async def get_sales_analytics(
@@ -49,16 +68,11 @@ async def get_sales_analytics(
         default="Residential",
         description="Residential or Commercial (ignored if market_type set)",
     ),
-    timeframe_days: Optional[int] = Query(
-        default=None,
-        description="Number of days to look back (overrides start_date if provided)",
+    timeframe_days: Optional[int] = _lookback_days(
+        None, "Number of days to look back (overrides start_date if provided)"
     ),
-    start_date: Optional[date] = Query(
-        default=None, description="Explicit start date (YYYY-MM-DD)"
-    ),
-    end_date: Optional[date] = Query(
-        default=None, description="Explicit end date (YYYY-MM-DD), defaults to today"
-    ),
+    start_date: Optional[date] = _date("Explicit start date (YYYY-MM-DD)"),
+    end_date: Optional[date] = _date("Explicit end date (YYYY-MM-DD), defaults to today"),
     master_project: Optional[str] = Query(
         default=None, description="Filter by master project name"
     ),
@@ -86,6 +100,7 @@ async def get_sales_analytics(
     - By market: ?market_type=residential_units&timeframe_days=90
     - Custom range: ?start_date=2024-01-01&end_date=2024-12-31
     """
+    _ordered(start_date, end_date)
     return await analytics_service.get_sales_analytics(
         market_type=market_type,
         property_usage=property_usage,
@@ -105,16 +120,11 @@ async def get_sales_analytics(
 async def get_rental_analytics(
     context: AuthContext = Depends(require_active_subscription),
     property_usage: str = Query(default="Residential", description="Residential or Commercial"),
-    timeframe_days: Optional[int] = Query(
-        default=None,
-        description="Number of days to look back (overrides start_date if provided)",
+    timeframe_days: Optional[int] = _lookback_days(
+        None, "Number of days to look back (overrides start_date if provided)"
     ),
-    start_date: Optional[date] = Query(
-        default=None, description="Explicit start date (YYYY-MM-DD)"
-    ),
-    end_date: Optional[date] = Query(
-        default=None, description="Explicit end date (YYYY-MM-DD), defaults to today"
-    ),
+    start_date: Optional[date] = _date("Explicit start date (YYYY-MM-DD)"),
+    end_date: Optional[date] = _date("Explicit end date (YYYY-MM-DD), defaults to today"),
     master_project: Optional[str] = Query(
         default=None, description="Filter by master project name"
     ),
@@ -138,6 +148,7 @@ async def get_rental_analytics(
     - Custom range: ?start_date=2024-06-01&end_date=2024-08-31
     - Filtered: ?property_usage=Commercial&rent_bucket=200K-500K
     """
+    _ordered(start_date, end_date)
     return await analytics_service.get_rental_analytics(
         property_usage=property_usage,
         timeframe_days=timeframe_days,
@@ -153,7 +164,7 @@ async def get_rental_analytics(
 @router.get("/market-trend", response_model=MarketTrendResponse)
 async def get_market_trend(
     context: AuthContext = Depends(require_active_subscription),
-    days: int = Query(default=180, description="Number of days to look back (30, 90, 180, 365)"),
+    days: int = _lookback_days(180, "Number of days to look back (30, 90, 180, 365)"),
     market_type: Optional[str] = Query(
         default=None,
         description=f"Market type (overrides property_usage). One of: {', '.join(MARKET_FILTERS)}",
@@ -260,7 +271,7 @@ async def get_project_trends_endpoint(
     filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
-    days: int = Query(default=365, description="Number of days to look back"),
+    days: int = _lookback_days(365, "Number of days to look back"),
     usage: Literal["auto", "Residential", "Commercial"] = Query(
         default="auto",
         description="Residential or Commercial records; auto shows Commercial for a scope "
@@ -290,7 +301,7 @@ async def get_project_forecast_endpoint(
     filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
-    days: int = Query(default=365, description="Number of days to look back"),
+    days: int = _lookback_days(365, "Number of days to look back"),
 ):
     project_name, resolved_filter_type = _resolve_project_scope(
         master_project=master_project,

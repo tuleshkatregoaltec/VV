@@ -125,7 +125,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "type": "integer",
+                  "maximum": 10000,
+                  "minimum": 1
                 },
                 {
                   "type": "null"
@@ -336,7 +338,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "type": "integer",
+                  "maximum": 10000,
+                  "minimum": 1
                 },
                 {
                   "type": "null"
@@ -498,6 +502,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
               "description": "Number of days to look back (30, 90, 180, 365)",
               "default": 180,
               "title": "Days"
@@ -924,6 +930,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
               "description": "Number of days to look back",
               "default": 365,
               "title": "Days"
@@ -1059,6 +1067,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
               "description": "Number of days to look back",
               "default": 365,
               "title": "Days"
@@ -1395,6 +1405,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
               "default": 50,
               "title": "Limit"
             }
@@ -1405,6 +1417,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 10000,
+              "minimum": 0,
               "default": 0,
               "title": "Offset"
             }
@@ -1414,6 +1428,14 @@
             "in": "query",
             "required": false,
             "schema": {
+              "enum": [
+                "units",
+                "volume",
+                "transactions",
+                "yield",
+                "completion",
+                "developers"
+              ],
               "type": "string",
               "default": "units",
               "title": "Sort By"
@@ -1426,7 +1448,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 },
                 {
                   "type": "null"
@@ -4517,7 +4540,7 @@
           "crm"
         ],
         "summary": "Crm Renewals",
-        "description": "Assets › Renewals: every lease in the dataset, narrowed by the tab's filters.",
+        "description": "Assets \u203a Renewals: every lease in the dataset, narrowed by the tab's filters.",
         "operationId": "crm-crm_renewals",
         "parameters": [
           {
@@ -4733,7 +4756,7 @@
           "crm"
         ],
         "summary": "Crm Renewal Leads",
-        "description": "Return lease-expiry leads in the current agent's areas and windows.\n\nkind=vacant: units whose lease ended with no later lease registered (Leads › Vacant units).\nkind=upcoming: leases still running (the Inbox).",
+        "description": "Return lease-expiry leads in the current agent's areas and windows.\n\nkind=vacant: units whose lease ended with no later lease registered (Leads \u203a Vacant units).\nkind=upcoming: leases still running (the Inbox).",
         "operationId": "crm-crm_renewal_leads",
         "parameters": [
           {
@@ -5371,7 +5394,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5389,7 +5413,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5407,7 +5432,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5425,7 +5451,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5443,7 +5470,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5480,7 +5508,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5498,7 +5527,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5517,16 +5547,17 @@
               "anyOf": [
                 {
                   "type": "integer",
+                  "maximum": 10000,
                   "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Last N calendar days, today included",
+              "description": "Last N calendar days in Dubai, today included",
               "title": "Timeframe Days"
             },
-            "description": "Last N calendar days, today included"
+            "description": "Last N calendar days in Dubai, today included"
           },
           {
             "name": "size_min",
@@ -5535,7 +5566,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -5553,7 +5586,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -5571,7 +5606,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -5589,7 +5626,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -5607,7 +5646,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 10000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -5625,7 +5666,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 10000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -5678,7 +5721,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5696,7 +5740,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5714,7 +5759,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5732,7 +5778,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5750,7 +5797,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5787,7 +5835,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5805,7 +5854,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -5824,16 +5874,17 @@
               "anyOf": [
                 {
                   "type": "integer",
+                  "maximum": 10000,
                   "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Leases starting in the last N calendar days, today included",
+              "description": "Leases starting in the last N calendar days in Dubai, today included",
               "title": "Timeframe Days"
             },
-            "description": "Leases starting in the last N calendar days, today included"
+            "description": "Leases starting in the last N calendar days in Dubai, today included"
           },
           {
             "name": "size_min",
@@ -5842,7 +5893,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -5860,7 +5913,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -5878,7 +5933,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -5896,7 +5953,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -7436,89 +7495,9 @@
           "projects"
         ],
         "summary": "Project Radar Pins",
-        "description": "Get bounded project pins for a viewport, selected area, or developer overlay.",
+        "description": "Get bounded project pins for a viewport (snapped outward to a grid), selected area, or\ndeveloper overlay.",
         "operationId": "projects-project_radar_pins",
         "parameters": [
-          {
-            "name": "west",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "number",
-                  "maximum": 57,
-                  "minimum": 54
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Viewport west longitude",
-              "title": "West"
-            },
-            "description": "Viewport west longitude"
-          },
-          {
-            "name": "south",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "number",
-                  "maximum": 26,
-                  "minimum": 24
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Viewport south latitude",
-              "title": "South"
-            },
-            "description": "Viewport south latitude"
-          },
-          {
-            "name": "east",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "number",
-                  "maximum": 57,
-                  "minimum": 54
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Viewport east longitude",
-              "title": "East"
-            },
-            "description": "Viewport east longitude"
-          },
-          {
-            "name": "north",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "number",
-                  "maximum": 26,
-                  "minimum": 24
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Viewport north latitude",
-              "title": "North"
-            },
-            "description": "Viewport north latitude"
-          },
           {
             "name": "area",
             "in": "query",
@@ -7526,7 +7505,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 },
                 {
                   "type": "null"
@@ -7544,7 +7524,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 160
                 },
                 {
                   "type": "null"
@@ -7579,6 +7560,86 @@
               "default": 365
             },
             "description": "Trailing DLD/Ejari activity window in days (maximum 365)"
+          },
+          {
+            "name": "west",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 57.0,
+                  "minimum": 54.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Viewport west longitude",
+              "title": "West"
+            },
+            "description": "Viewport west longitude"
+          },
+          {
+            "name": "south",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 26.0,
+                  "minimum": 24.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Viewport south latitude",
+              "title": "South"
+            },
+            "description": "Viewport south latitude"
+          },
+          {
+            "name": "east",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 57.0,
+                  "minimum": 54.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Viewport east longitude",
+              "title": "East"
+            },
+            "description": "Viewport east longitude"
+          },
+          {
+            "name": "north",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 26.0,
+                  "minimum": 24.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Viewport north latitude",
+              "title": "North"
+            },
+            "description": "Viewport north latitude"
           }
         ],
         "responses": {
@@ -7616,68 +7677,16 @@
           "projects"
         ],
         "summary": "Radar Building Pins",
-        "description": "Get Property Finder tower pins and linked market evidence for a viewport.",
+        "description": "Get Property Finder tower pins and linked market evidence for a viewport (snapped\noutward to a grid).",
         "operationId": "projects-radar_building_pins",
         "parameters": [
-          {
-            "name": "west",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "number",
-              "maximum": 57,
-              "minimum": 54,
-              "description": "Viewport west longitude",
-              "title": "West"
-            },
-            "description": "Viewport west longitude"
-          },
-          {
-            "name": "south",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "number",
-              "maximum": 26,
-              "minimum": 24,
-              "description": "Viewport south latitude",
-              "title": "South"
-            },
-            "description": "Viewport south latitude"
-          },
-          {
-            "name": "east",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "number",
-              "maximum": 57,
-              "minimum": 54,
-              "description": "Viewport east longitude",
-              "title": "East"
-            },
-            "description": "Viewport east longitude"
-          },
-          {
-            "name": "north",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "number",
-              "maximum": 26,
-              "minimum": 24,
-              "description": "Viewport north latitude",
-              "title": "North"
-            },
-            "description": "Viewport north latitude"
-          },
           {
             "name": "limit",
             "in": "query",
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 10000,
+              "maximum": 5000,
               "minimum": 10,
               "description": "Maximum tower pins",
               "default": 3000,
@@ -7695,6 +7704,58 @@
               "default": 365
             },
             "description": "Trailing DLD/Ejari activity window in days (maximum 365)"
+          },
+          {
+            "name": "west",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 57.0,
+              "minimum": 54.0,
+              "description": "Viewport west longitude",
+              "title": "West"
+            },
+            "description": "Viewport west longitude"
+          },
+          {
+            "name": "south",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 26.0,
+              "minimum": 24.0,
+              "description": "Viewport south latitude",
+              "title": "South"
+            },
+            "description": "Viewport south latitude"
+          },
+          {
+            "name": "east",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 57.0,
+              "minimum": 54.0,
+              "description": "Viewport east longitude",
+              "title": "East"
+            },
+            "description": "Viewport east longitude"
+          },
+          {
+            "name": "north",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 26.0,
+              "minimum": 24.0,
+              "description": "Viewport north latitude",
+              "title": "North"
+            },
+            "description": "Viewport north latitude"
           }
         ],
         "responses": {
@@ -7822,7 +7883,7 @@
           "projects"
         ],
         "summary": "Get Dda Plots",
-        "description": "Get DDA GIS plot polygons for a community or current map viewport.",
+        "description": "Get DDA GIS plot polygons for a community or a map viewport of at most 0.5 degrees.",
         "operationId": "projects-get_dda_plots",
         "parameters": [
           {
@@ -7832,7 +7893,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 },
                 {
                   "type": "null"
@@ -7844,92 +7906,12 @@
             "description": "Area or community name to match against DDA plots"
           },
           {
-            "name": "west",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "number",
-                  "maximum": 57,
-                  "minimum": 54
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Viewport west longitude",
-              "title": "West"
-            },
-            "description": "Viewport west longitude"
-          },
-          {
-            "name": "south",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "number",
-                  "maximum": 26,
-                  "minimum": 24
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Viewport south latitude",
-              "title": "South"
-            },
-            "description": "Viewport south latitude"
-          },
-          {
-            "name": "east",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "number",
-                  "maximum": 57,
-                  "minimum": 54
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Viewport east longitude",
-              "title": "East"
-            },
-            "description": "Viewport east longitude"
-          },
-          {
-            "name": "north",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "number",
-                  "maximum": 26,
-                  "minimum": 24
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Viewport north latitude",
-              "title": "North"
-            },
-            "description": "Viewport north latitude"
-          },
-          {
             "name": "limit",
             "in": "query",
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 5000,
+              "maximum": 2500,
               "minimum": 100,
               "description": "Maximum DDA plots to return",
               "default": 1200,
@@ -7948,6 +7930,86 @@
               "title": "Include Valuations"
             },
             "description": "Include transaction-derived valuation ranges. Disabled for bulk map rendering."
+          },
+          {
+            "name": "west",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 57.0,
+                  "minimum": 54.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Viewport west longitude",
+              "title": "West"
+            },
+            "description": "Viewport west longitude"
+          },
+          {
+            "name": "south",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 26.0,
+                  "minimum": 24.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Viewport south latitude",
+              "title": "South"
+            },
+            "description": "Viewport south latitude"
+          },
+          {
+            "name": "east",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 57.0,
+                  "minimum": 54.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Viewport east longitude",
+              "title": "East"
+            },
+            "description": "Viewport east longitude"
+          },
+          {
+            "name": "north",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 26.0,
+                  "minimum": 24.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Viewport north latitude",
+              "title": "North"
+            },
+            "description": "Viewport north latitude"
           }
         ],
         "responses": {
@@ -7989,58 +8051,6 @@
         "operationId": "projects-get_dda_outlines",
         "parameters": [
           {
-            "name": "west",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "number",
-              "maximum": 57,
-              "minimum": 54,
-              "description": "Viewport west longitude",
-              "title": "West"
-            },
-            "description": "Viewport west longitude"
-          },
-          {
-            "name": "south",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "number",
-              "maximum": 26,
-              "minimum": 24,
-              "description": "Viewport south latitude",
-              "title": "South"
-            },
-            "description": "Viewport south latitude"
-          },
-          {
-            "name": "east",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "number",
-              "maximum": 57,
-              "minimum": 54,
-              "description": "Viewport east longitude",
-              "title": "East"
-            },
-            "description": "Viewport east longitude"
-          },
-          {
-            "name": "north",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "number",
-              "maximum": 26,
-              "minimum": 24,
-              "description": "Viewport north latitude",
-              "title": "North"
-            },
-            "description": "Viewport north latitude"
-          },
-          {
             "name": "zoom",
             "in": "query",
             "required": true,
@@ -8066,6 +8076,58 @@
               "title": "Limit"
             },
             "description": "Maximum outlines to return"
+          },
+          {
+            "name": "west",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 57.0,
+              "minimum": 54.0,
+              "description": "Viewport west longitude",
+              "title": "West"
+            },
+            "description": "Viewport west longitude"
+          },
+          {
+            "name": "south",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 26.0,
+              "minimum": 24.0,
+              "description": "Viewport south latitude",
+              "title": "South"
+            },
+            "description": "Viewport south latitude"
+          },
+          {
+            "name": "east",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 57.0,
+              "minimum": 54.0,
+              "description": "Viewport east longitude",
+              "title": "East"
+            },
+            "description": "Viewport east longitude"
+          },
+          {
+            "name": "north",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 26.0,
+              "minimum": 24.0,
+              "description": "Viewport north latitude",
+              "title": "North"
+            },
+            "description": "Viewport north latitude"
           }
         ],
         "responses": {
@@ -8216,8 +8278,38 @@
           "supply"
         ],
         "summary": "List Upcoming Projects",
-        "description": "Get all upcoming/active projects for catalogue view.",
+        "description": "One page of upcoming/active projects; total counts every one.",
         "operationId": "supply-list_upcoming_projects",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 1000,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100000,
+              "minimum": 0,
+              "description": "Page offset",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Page offset"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8225,6 +8317,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpcomingProjectsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -8430,7 +8532,7 @@
           "transactions"
         ],
         "summary": "Get Sales Transactions",
-        "description": "DXBI sales, newest first (transaction date, then id).",
+        "description": "DXBI sales, newest first (transaction date, then id, both descending).",
         "operationId": "transactions-get_sales_transactions",
         "parameters": [
           {
@@ -8453,6 +8555,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 1000000,
               "minimum": 0,
               "description": "Page offset",
               "default": 0,
@@ -8467,7 +8570,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8485,7 +8589,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8503,7 +8608,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8521,7 +8627,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8539,7 +8646,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8576,7 +8684,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8594,7 +8703,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8613,16 +8723,17 @@
               "anyOf": [
                 {
                   "type": "integer",
+                  "maximum": 10000,
                   "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Last N calendar days, today included",
+              "description": "Last N calendar days in Dubai, today included",
               "title": "Timeframe Days"
             },
-            "description": "Last N calendar days, today included"
+            "description": "Last N calendar days in Dubai, today included"
           },
           {
             "name": "size_min",
@@ -8631,7 +8742,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -8649,7 +8762,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -8667,7 +8782,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -8685,7 +8802,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -8703,7 +8822,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 10000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -8721,7 +8842,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 10000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -8764,7 +8887,7 @@
           "transactions"
         ],
         "summary": "Get Rental Contracts",
-        "description": "DXBI leases, latest start first (lease start, then id).",
+        "description": "DXBI leases, latest start first (lease start, then id, both descending).",
         "operationId": "transactions-get_rental_contracts",
         "parameters": [
           {
@@ -8787,6 +8910,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 1000000,
               "minimum": 0,
               "description": "Page offset",
               "default": 0,
@@ -8801,7 +8925,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8819,7 +8944,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8837,7 +8963,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8855,7 +8982,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8873,7 +9001,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8910,7 +9039,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8928,7 +9058,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -8947,16 +9078,17 @@
               "anyOf": [
                 {
                   "type": "integer",
+                  "maximum": 10000,
                   "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Leases starting in the last N calendar days, today included",
+              "description": "Leases starting in the last N calendar days in Dubai, today included",
               "title": "Timeframe Days"
             },
-            "description": "Leases starting in the last N calendar days, today included"
+            "description": "Leases starting in the last N calendar days in Dubai, today included"
           },
           {
             "name": "size_min",
@@ -8965,7 +9097,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -8983,7 +9117,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9001,7 +9137,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9019,7 +9157,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9062,7 +9202,7 @@
           "transactions"
         ],
         "summary": "Export Sales Transactions Endpoint",
-        "description": "DXBI sales as Excel or CSV: up to 50,000 filtered rows, or the selected ids.",
+        "description": "DXBI sales as Excel or CSV: up to 50,000 filtered rows, or the selected ids. When more\nrows match, X-Export-Truncated is true and the file says so.",
         "operationId": "transactions-export_sales_transactions_endpoint",
         "parameters": [
           {
@@ -9088,16 +9228,17 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 100000
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Comma-separated transaction IDs (overrides filters and limit)",
+              "description": "Comma-separated transaction IDs, at most 1,000 (overrides the filters)",
               "title": "Transaction Ids"
             },
-            "description": "Comma-separated transaction IDs (overrides filters and limit)"
+            "description": "Comma-separated transaction IDs, at most 1,000 (overrides the filters)"
           },
           {
             "name": "property_usage",
@@ -9106,7 +9247,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9124,7 +9266,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9142,7 +9285,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9160,7 +9304,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9178,7 +9323,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9215,7 +9361,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9233,7 +9380,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9252,16 +9400,17 @@
               "anyOf": [
                 {
                   "type": "integer",
+                  "maximum": 10000,
                   "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Last N calendar days, today included",
+              "description": "Last N calendar days in Dubai, today included",
               "title": "Timeframe Days"
             },
-            "description": "Last N calendar days, today included"
+            "description": "Last N calendar days in Dubai, today included"
           },
           {
             "name": "size_min",
@@ -9270,7 +9419,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9288,7 +9439,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9306,7 +9459,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9324,7 +9479,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9342,7 +9499,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 10000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9360,7 +9519,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 10000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9396,7 +9557,7 @@
           "transactions"
         ],
         "summary": "Export Rental Contracts Endpoint",
-        "description": "DXBI leases as Excel or CSV: up to 50,000 filtered rows, or the selected ids.",
+        "description": "DXBI leases as Excel or CSV: up to 50,000 filtered rows, or the selected ids. When more\nrows match, X-Export-Truncated is true and the file says so.",
         "operationId": "transactions-export_rental_contracts_endpoint",
         "parameters": [
           {
@@ -9422,16 +9583,17 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 100000
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Comma-separated contract IDs (overrides filters and limit)",
+              "description": "Comma-separated contract IDs, at most 1,000 (overrides the filters)",
               "title": "Contract Ids"
             },
-            "description": "Comma-separated contract IDs (overrides filters and limit)"
+            "description": "Comma-separated contract IDs, at most 1,000 (overrides the filters)"
           },
           {
             "name": "property_usage",
@@ -9440,7 +9602,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9458,7 +9621,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9476,7 +9640,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9494,7 +9659,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9512,7 +9678,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9549,7 +9716,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9567,7 +9735,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -9586,16 +9755,17 @@
               "anyOf": [
                 {
                   "type": "integer",
+                  "maximum": 10000,
                   "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Leases starting in the last N calendar days, today included",
+              "description": "Leases starting in the last N calendar days in Dubai, today included",
               "title": "Timeframe Days"
             },
-            "description": "Leases starting in the last N calendar days, today included"
+            "description": "Leases starting in the last N calendar days in Dubai, today included"
           },
           {
             "name": "size_min",
@@ -9604,7 +9774,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9622,7 +9794,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 100000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9640,7 +9814,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -9658,7 +9834,9 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "number"
+                  "type": "number",
+                  "maximum": 1000000000000.0,
+                  "minimum": 0
                 },
                 {
                   "type": "null"
@@ -15959,7 +16137,7 @@
           "listed_at"
         ],
         "title": "CrmCompanyListingResponse",
-        "description": "A company listing as Assets › Company listings shows it."
+        "description": "A company listing as Assets \u203a Company listings shows it."
       },
       "CrmCompanyListingSourceResponse": {
         "properties": {
@@ -19677,7 +19855,7 @@
           "as_of"
         ],
         "title": "CrmRenewalsResponse",
-        "description": "Assets › Renewals: one page of the lease-expiry dataset and the options for its filters."
+        "description": "Assets \u203a Renewals: one page of the lease-expiry dataset and the options for its filters."
       },
       "CrmRentalComparable": {
         "properties": {

@@ -78,3 +78,125 @@ def test_build_cache_key_ignores_dependencies():
     )
 
     assert key == 'news:{"limit":20,"offset":10}'
+
+
+# Single flight: a cold key used to send every concurrent request to the warehouse (the
+# Transactions page alone costs 3-4 GiB of ClickHouse memory per cold load; 2026-11-15 audit).
+
+
+def _no_cache(monkeypatch, *, lock="token"):
+    monkeypatch.setattr("app.core.decorators.cache.get", AsyncMock(return_value=None))
+    monkeypatch.setattr("app.core.decorators.cache.set", AsyncMock())
+    monkeypatch.setattr("app.core.decorators.cache.acquire_lock", AsyncMock(return_value=lock))
+    monkeypatch.setattr("app.core.decorators.cache.release_lock", AsyncMock())
+
+
+async def test_concurrent_misses_for_one_key_compute_once(monkeypatch):
+    import asyncio
+
+    _no_cache(monkeypatch)
+    calls = 0
+
+    @cached_endpoint(prefix="flight")
+    async def endpoint(limit: int = 20):
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.05)
+        return {"limit": limit}
+
+    results = await asyncio.gather(*(endpoint(limit=5) for _ in range(5)))
+
+    assert calls == 1
+    assert results == [{"limit": 5}] * 5
+
+
+async def test_concurrent_misses_for_different_keys_compute_each(monkeypatch):
+    import asyncio
+
+    _no_cache(monkeypatch)
+    calls = []
+
+    @cached_endpoint(prefix="flight")
+    async def endpoint(limit: int = 20):
+        calls.append(limit)
+        await asyncio.sleep(0.01)
+        return limit
+
+    assert await asyncio.gather(endpoint(limit=1), endpoint(limit=2)) == [1, 2]
+    assert sorted(calls) == [1, 2]
+
+
+async def test_a_failed_fill_reaches_every_waiter_and_the_next_call_retries(monkeypatch):
+    import asyncio
+
+    _no_cache(monkeypatch)
+    calls = 0
+
+    @cached_endpoint(prefix="flight")
+    async def endpoint(limit: int = 20):
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.01)
+        if calls == 1:
+            raise RuntimeError("warehouse down")
+        return "ok"
+
+    results = await asyncio.gather(*(endpoint() for _ in range(3)), return_exceptions=True)
+
+    assert calls == 1
+    assert all(isinstance(result, RuntimeError) for result in results)
+    assert await endpoint() == "ok"
+    assert calls == 2
+
+
+async def test_a_waiter_that_goes_away_does_not_cancel_the_fill(monkeypatch):
+    import asyncio
+
+    _no_cache(monkeypatch)
+    finished = asyncio.Event()
+
+    @cached_endpoint(prefix="flight")
+    async def endpoint(limit: int = 20):
+        await asyncio.sleep(0.05)
+        finished.set()
+        return "ok"
+
+    first = asyncio.ensure_future(endpoint())
+    await asyncio.sleep(0.01)
+    first.cancel()
+    assert await endpoint() == "ok"
+    assert finished.is_set()
+
+
+async def test_another_worker_filling_the_key_is_awaited_through_the_cache(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.decorators.cache.get", AsyncMock(side_effect=[None, None, {"from": "peer"}])
+    )
+    monkeypatch.setattr("app.core.decorators.cache.set", AsyncMock())
+    monkeypatch.setattr("app.core.decorators.cache.acquire_lock", AsyncMock(return_value=None))
+    monkeypatch.setattr("app.core.decorators.cache.release_lock", AsyncMock())
+    monkeypatch.setattr("app.core.decorators.LOCK_POLL_SECONDS", 0.001)
+    called = False
+
+    @cached_endpoint(prefix="flight")
+    async def endpoint(limit: int = 20):
+        nonlocal called
+        called = True
+        return "mine"
+
+    assert await endpoint() == {"from": "peer"}
+    assert called is False
+
+
+async def test_the_fill_lock_is_released_after_the_fill(monkeypatch):
+    _no_cache(monkeypatch, lock="abc")
+
+    @cached_endpoint(prefix="flight")
+    async def endpoint(limit: int = 20):
+        return "ok"
+
+    await endpoint()
+
+    from app.core import decorators
+
+    decorators.cache.release_lock.assert_awaited_once_with('flight:{"limit":20}', "abc")

@@ -1,12 +1,18 @@
 import datetime
 import json
 import logging
+import secrets
 from decimal import Decimal
 from typing import Any
 
 import redis.asyncio as redis
 
 logger = logging.getLogger("RedisCache")
+
+_RELEASE_LOCK = """
+if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end
+return 0
+"""
 
 
 class RedisCache:
@@ -116,6 +122,28 @@ class RedisCache:
     async def clear_prefix(self, prefix: str) -> int:
         """Clear all keys with the given prefix."""
         return await self.clear(f"{prefix}*")
+
+    async def acquire_lock(self, key: str, *, ttl_seconds: int) -> str | None:
+        """Take the fill lock for a cache key: a token when taken, None while another holder
+        has it. Without Redis the caller proceeds unlocked (an empty token)."""
+        if not self.redis:
+            return ""
+        token = secrets.token_hex(8)
+        try:
+            taken = await self.redis.set(f"lock:{key}", token, nx=True, px=ttl_seconds * 1000)
+        except Exception as e:
+            logger.error("Failed to take the fill lock for key %s: %s", key, str(e))
+            return ""
+        return token if taken else None
+
+    async def release_lock(self, key: str, token: str) -> None:
+        """Release a fill lock this caller holds (an expired one may belong to another)."""
+        if not self.redis or not token:
+            return
+        try:
+            await self.redis.eval(_RELEASE_LOCK, 1, f"lock:{key}", token)
+        except Exception as e:
+            logger.error("Failed to release the fill lock for key %s: %s", key, str(e))
 
     async def ping(self) -> bool:
         """Check whether Redis is reachable."""

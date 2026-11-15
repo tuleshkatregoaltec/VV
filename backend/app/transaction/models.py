@@ -3,6 +3,21 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Request bounds (the query dependencies and these models share them). The warehouse binds
+# offsets and day counts as Int32; DXBI's records start in 2014, so 10,000 days covers them all.
+MAX_PAGE_SIZE = 1000
+MAX_OFFSET = 1_000_000
+MAX_TIMEFRAME_DAYS = 10_000
+MAX_NAME_LENGTH = 200
+MAX_SIZE_SQFT = 100_000_000.0
+MAX_AMOUNT_AED = 1_000_000_000_000.0
+MAX_PRICE_PER_SQFT_AED = 10_000_000.0
+MAX_SELECTED_EXPORT_IDS = 1000
+
+
+def _band(maximum: float):
+    return Field(default=None, ge=0, le=maximum, allow_inf_nan=False)
+
 
 class SalesFilters(BaseModel):
     """Filters of the DXBI sales page. Range bounds are half-open: min inclusive, max exclusive."""
@@ -24,14 +39,17 @@ class SalesFilters(BaseModel):
     building: Optional[str] = Field(default=None, description="DXBI building name")
     project: Optional[str] = Field(default=None, description="DXBI project name")
     timeframe_days: Optional[int] = Field(
-        default=None, ge=1, description="Last N calendar days, today included"
+        default=None,
+        ge=1,
+        le=MAX_TIMEFRAME_DAYS,
+        description="Last N calendar days in Dubai, today included",
     )
-    size_min: Optional[float] = None
-    size_max: Optional[float] = None
-    price_min: Optional[float] = None
-    price_max: Optional[float] = None
-    price_per_sqft_min: Optional[float] = None
-    price_per_sqft_max: Optional[float] = None
+    size_min: Optional[float] = _band(MAX_SIZE_SQFT)
+    size_max: Optional[float] = _band(MAX_SIZE_SQFT)
+    price_min: Optional[float] = _band(MAX_AMOUNT_AED)
+    price_max: Optional[float] = _band(MAX_AMOUNT_AED)
+    price_per_sqft_min: Optional[float] = _band(MAX_PRICE_PER_SQFT_AED)
+    price_per_sqft_max: Optional[float] = _band(MAX_PRICE_PER_SQFT_AED)
 
 
 class RentalFilters(BaseModel):
@@ -56,12 +74,13 @@ class RentalFilters(BaseModel):
     timeframe_days: Optional[int] = Field(
         default=None,
         ge=1,
-        description="Leases starting in the last N calendar days, today included",
+        le=MAX_TIMEFRAME_DAYS,
+        description="Leases starting in the last N calendar days in Dubai, today included",
     )
-    size_min: Optional[float] = None
-    size_max: Optional[float] = None
-    rent_min: Optional[float] = None
-    rent_max: Optional[float] = None
+    size_min: Optional[float] = _band(MAX_SIZE_SQFT)
+    size_max: Optional[float] = _band(MAX_SIZE_SQFT)
+    rent_min: Optional[float] = _band(MAX_AMOUNT_AED)
+    rent_max: Optional[float] = _band(MAX_AMOUNT_AED)
 
 
 class TransactionResponse(BaseModel):

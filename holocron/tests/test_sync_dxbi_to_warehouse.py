@@ -243,6 +243,28 @@ def test_the_owners_refresh_runs_the_backend_script_with_its_own_state(tmp_path:
     assert env["PYTHONPATH"] == str(repo / "backend")
 
 
+def test_the_transactions_page_tables_build_with_the_backend_after_the_profiles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The Transactions pages read page tables built from the profiles; a release that rebuilt
+    # the profiles but not the page tables would serve yesterday's records.
+    repo = tmp_path / "vv"
+    argv, cwd, env = sync.page_tables_command(repo)
+    assert argv == [str(repo / "backend/.venv/bin/python"), "-m", "app.transaction.page_tables"]
+    assert cwd == repo / "backend"
+    assert env["PYTHONPATH"] == str(repo / "backend")
+
+    steps: list[str] = []
+    monkeypatch.setattr(sync, "_build_market_release", lambda: steps.append("release"))
+    monkeypatch.setattr(sync, "_build_page_tables", lambda repo_dir: steps.append("page tables"))
+    sync._build_release(repo)
+    assert steps == ["release", "page tables"]
+
+
+def test_the_cache_flush_covers_every_page_that_reads_the_release() -> None:
+    assert set(sync.CACHE_PREFIXES) >= {"transactions:", "filters:", "analytics:"}
+
+
 def _loaded(config: sync.Config, kind: str, *names: str) -> None:
     (config.state_dir / "loaded").mkdir(parents=True, exist_ok=True)
     for name in names:
