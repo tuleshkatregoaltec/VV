@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import ArrowLeft from 'lucide-svelte/icons/arrow-left'
+import Send from 'lucide-svelte/icons/send'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import { crm } from '$lib/crm/api'
@@ -33,6 +34,7 @@ import {
 	STATUS_INFO
 } from '$lib/crm/ownerImportReport'
 import { crmQueries } from '$lib/crm/queries'
+import { panel } from '$lib/crm/stores/panel.svelte'
 import { write } from '$lib/crm/write'
 
 /**
@@ -42,6 +44,9 @@ import { write } from '$lib/crm/write'
  * "Processing details" holding everything recorded at import time.
  */
 const imports = createQuery(() => crmQueries.ownerImportDetails())
+/** Managers issue a finished sheet's owners to agents as outbound leads. */
+const assignScope = createQuery(() => crmQueries.assignmentScope())
+const canIssue = $derived(assignScope.data?.capabilities.can_assign ?? false)
 const id = $derived(Number(page.params.id))
 const imp = $derived(imports.data?.find((i) => i.id === id) ?? null)
 
@@ -147,6 +152,16 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 <PageHeader title={imp?.name ?? 'Import report'} facts={imp ? facts(imp) : ''}>
 	{#snippet right()}
 		<a class="btn ghost" href="/crm/owners/imports"><ArrowLeft size={15} /><span>All imports</span></a>
+		{#if imp && imp.status === 'completed' && imp.listId !== null && canIssue}
+			{@const listId = imp.listId}
+			<button
+				type="button"
+				class="btn"
+				onclick={() => panel.open({ kind: 'issue-owners', listId, name: imp.name })}
+			>
+				<Send size={15} /><span>Issue as outbound leads</span>
+			</button>
+		{/if}
 		{#if imp}
 			<button
 				type="button"

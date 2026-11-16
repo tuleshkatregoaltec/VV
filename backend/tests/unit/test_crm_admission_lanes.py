@@ -56,6 +56,11 @@ LIGHT_ROUTES = {
     ("DELETE", "/api/v1/crm/notes/{note_id}"),
     ("GET", "/api/v1/crm/saved-leads"),
     ("DELETE", "/api/v1/crm/saved-leads/{saved_id}"),
+    # Lead assignment: the sidebar loads the scope on every CRM page and the lead panel its
+    # history, so neither may queue behind the dashboard; both are single Postgres reads.
+    ("GET", "/api/v1/crm/assignment/scope"),
+    ("GET", "/api/v1/crm/inbound/enquiries/{enquiry_id}/assignments"),
+    ("GET", "/api/v1/crm/contact-import-requests"),
 }
 
 

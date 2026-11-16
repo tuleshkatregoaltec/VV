@@ -20,6 +20,7 @@ from app.crm.import_models import (
     CrmOwnerAssessedClaim,
     CrmOwnerAssessmentRevision,
     CrmOwnerAssessmentState,
+    CrmOwnerImportRequest,
     CrmOwnerNote,
     CrmOwnerRegistryOwner,
     CrmOwnerRegistryProperty,
@@ -28,6 +29,7 @@ from app.crm.import_models import (
 )
 from app.crm.inbound_models import (
     CrmInboundActivity,
+    CrmInboundAssignmentEvent,
     CrmInboundContact,
     CrmInboundEnquiry,
     CrmInboundImport,
@@ -42,9 +44,16 @@ from app.crm.models import (
     CrmLicensedBroker,
     CrmSavedLead,
 )
+from app.crm.routing_models import CrmAgentLanguages, CrmLeadRotation, CrmRoutingRule
 from app.feasibility.models import FeasibilitySavedStudy
 from app.news.models import NewsArticle
-from app.organization.models import Organization, OrganizationInvitation, OrganizationMembership
+from app.organization.models import (
+    Organization,
+    OrganizationInvitation,
+    OrganizationMembership,
+    OrganizationTeam,
+    OrganizationTeamMember,
+)
 from app.token_usage.models import UserTokenUsage
 from app.whatsapp.customer_models import (
     WhatsAppConnection,
@@ -71,6 +80,8 @@ __all__ = [
     "Organization",
     "OrganizationMembership",
     "OrganizationInvitation",
+    "OrganizationTeam",
+    "OrganizationTeamMember",
     "UserTokenUsage",
     # Billing
     "Subscription",
@@ -90,6 +101,7 @@ __all__ = [
     "CrmImportJob",
     "CrmCompanyListingSource",
     "CrmContactImport",
+    "CrmOwnerImportRequest",
     "CrmContactList",
     "CrmPropertyContactClaim",
     "CrmOwnerWorkspace",
@@ -105,6 +117,10 @@ __all__ = [
     "CrmInboundNote",
     "CrmInboundActivity",
     "CrmInboundMatch",
+    "CrmInboundAssignmentEvent",
+    "CrmLeadRotation",
+    "CrmAgentLanguages",
+    "CrmRoutingRule",
     # Feasibility
     "FeasibilitySavedStudy",
 ]

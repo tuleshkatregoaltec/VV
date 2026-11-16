@@ -3,7 +3,17 @@ from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, Index, Text, UniqueConstraint, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
@@ -31,6 +41,8 @@ InboundMatchState = Literal["suggested", "saved", "dismissed", "contacted", "sta
 VITEVUE_LEASE_SOURCE = "Vitevue lease lead"
 # Owners on the agency file whose unit just resold; source_lead_id holds the owner key.
 SOLD_OWNER_SOURCE = "Owner file · recently sold"
+# Owners a manager issued from an owner sheet for outbound contact; source_lead_id holds the owner key.
+OWNER_OUTBOUND_SOURCE = "Owner file · outbound"
 
 
 class CrmInboundImport(SQLModel, table=True):
@@ -92,6 +104,18 @@ class CrmInboundEnquiry(SQLModel, table=True):
             unique=True,
             postgresql_where=text(f"source = '{SOLD_OWNER_SOURCE}'"),
         ),
+        # The owning team must be this organization's; a team is emptied of leads before deletion.
+        ForeignKeyConstraint(
+            ["team_id", "organization_id"],
+            ["organization_teams.id", "organization_teams.organization_id"],
+            name="fk_crm_inbound_enquiry_team",
+            ondelete="RESTRICT",
+        ),
+        # Only an unassigned lead of a team can wait in that team's shared pool.
+        CheckConstraint(
+            "pool_released_at IS NULL OR (team_id IS NOT NULL AND assigned_user_id IS NULL)",
+            name="ck_crm_inbound_enquiry_pool",
+        ),
     )
 
     id: int | None = SQLField(default=None, primary_key=True)
@@ -109,6 +133,21 @@ class CrmInboundEnquiry(SQLModel, table=True):
     )
     created_by_user_id: str = SQLField(index=True)
     assigned_user_id: str | None = SQLField(default=None, index=True)
+    # Bumped on every committed change of assignee; reassignment checks it to refuse stale writes.
+    assignment_revision: int = SQLField(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+    assigned_at: datetime | None = SQLField(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    # The team that owns the lead: its managers see it, and while shared its members may claim it.
+    # None when no team reliably owns it (legacy, or a creator in several teams): then only
+    # organization administrators and the assignee see it.
+    team_id: str | None = SQLField(default=None, index=True)
+    # Set while the lead waits, unassigned, in its team's shared pool for an agent to claim.
+    pool_released_at: datetime | None = SQLField(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
     record_kind: str = SQLField(default="unqualified_contact", index=True)
     intent: str = SQLField(index=True)
     status: str = SQLField(default="new", index=True)
@@ -197,6 +236,52 @@ class CrmInboundActivity(SQLModel, table=True):
     created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+AssignmentReason = Literal[
+    "created",
+    "import_agent",
+    "import_rule",
+    "manual",
+    "approved_from_inbox",
+    # Put in a team's shared pool (assignee stays empty), taken from it, or moved on by rotation.
+    "released",
+    "claimed",
+    "rotation",
+]
+ASSIGNMENT_REASONS_SQL = ", ".join(f"'{reason}'" for reason in AssignmentReason.__args__)
+
+
+class CrmInboundAssignmentEvent(SQLModel, table=True):
+    """One committed change of a lead's assignee, written in the same transaction as the change."""
+
+    __tablename__ = "crm_inbound_assignment_events"
+    __table_args__ = (
+        CheckConstraint(
+            f"reason IN ({ASSIGNMENT_REASONS_SQL})",
+            name="ck_crm_inbound_assignment_event_reason",
+        ),
+    )
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    organization_id: str = SQLField(index=True)
+    enquiry_id: int = SQLField(
+        sa_column=Column(
+            ForeignKey("crm_inbound_enquiries.id", ondelete="CASCADE"), nullable=False, index=True
+        )
+    )
+    previous_user_id: str | None = None
+    assigned_user_id: str | None = None
+    actor_user_id: str
+    reason: str
+    # Kept as plain values: history must survive a rule or import being deleted later.
+    rule_id: int | None = None
+    rule_revision: int | None = None
+    import_id: int | None = None
+    # The team that owned the lead after this change.
+    team_id: str | None = None
+    revision: int
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 class CrmInboundMatch(SQLModel, table=True):
     __tablename__ = "crm_inbound_matches"
     __table_args__ = (
@@ -234,6 +319,28 @@ class CrmInboundMatch(SQLModel, table=True):
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+# "self": every new lead goes to the importer. The only mode an agent (no team to manage) has.
+# "team": every new lead waits in the chosen team's shared pool for its agents to claim.
+ImportAssignmentMode = Literal["self", "agent", "rules", "team", "unassigned"]
+UnassignedReason = Literal[
+    "chosen_unassigned", "no_matching_rule", "destination_ineligible", "no_language_speaker"
+]
+
+
+class InboundImportAssignmentSummary(BaseModel):
+    mode: ImportAssignmentMode
+    assignee_user_id: str | None = None
+    # The team that owns the leads not given to anyone (the pool team in "team" mode).
+    team_id: str | None = None
+    assigned: int = 0
+    unassigned: int = 0
+    by_assignee: dict[str, int] = Field(default_factory=dict)
+    by_rule: dict[str, int] = Field(default_factory=dict)
+    # Leads put in a team's shared pool; they also count as unassigned.
+    shared: int = 0
+    unassigned_reasons: dict[UnassignedReason, int] = Field(default_factory=dict)
+
+
 class InboundImportSummary(BaseModel):
     total_rows: int = 0
     imported: int = 0
@@ -251,6 +358,8 @@ class InboundImportSummary(BaseModel):
     rental_owners: int = 0
     portfolio_owners: int = 0
     high_priority: int = 0
+    # Absent on imports made before assignment policies existed.
+    assignment: InboundImportAssignmentSummary | None = None
 
 
 class InboundImportResponse(BaseModel):
@@ -340,6 +449,8 @@ class InboundEnquiryCreate(BaseModel):
     source: str = Field(default="Manual", max_length=120)
     campaign: str | None = Field(default=None, max_length=200)
     assigned_user_id: str | None = Field(default=None, max_length=64)
+    # Which of the assignee's teams owns the lead; needed only when they are in several of yours.
+    team_id: str | None = Field(default=None, max_length=200)
     notes: str | None = Field(default=None, max_length=8_000)
     criteria: Brief = Field(default_factory=dict)
     strict_fields: list[str] = Field(default_factory=list, max_length=20)
@@ -423,6 +534,11 @@ class InboundEnquiryResponse(BaseModel):
     intent: InboundIntent
     status: InboundStatus
     assigned_user_id: str | None = None
+    assignment_revision: int = 0
+    assigned_at: datetime | None = None
+    team_id: str | None = None
+    # Waiting, unassigned, in its team's shared pool: logging contact claims it.
+    shared: bool = False
     source: str
     campaign: str | None = None
     source_import_id: int | None = None

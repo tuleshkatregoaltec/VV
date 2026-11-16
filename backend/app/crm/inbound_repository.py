@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from sqlalchemy import delete, exists, func, or_
-from sqlmodel import select
+from sqlalchemy import delete, exists, func, or_, update
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm.import_models import CrmPropertyContactClaim
@@ -9,6 +9,7 @@ from app.crm.inbound_models import (
     SOLD_OWNER_SOURCE,
     VITEVUE_LEASE_SOURCE,
     CrmInboundActivity,
+    CrmInboundAssignmentEvent,
     CrmInboundContact,
     CrmInboundEnquiry,
     CrmInboundImport,
@@ -125,14 +126,51 @@ async def list_enquiry_matches(db: AsyncSession, enquiry):
     ).all()
 
 
-async def list_enquiries(db: AsyncSession, organization_id):
+async def list_enquiries(db: AsyncSession, visible):
+    """The enquiries matching `visible` (assignment.visible_clause: organization and viewer)."""
     return (
         await db.exec(
-            select(CrmInboundEnquiry)
-            .where(CrmInboundEnquiry.organization_id == organization_id)
-            .order_by(CrmInboundEnquiry.enquiry_date.desc())
+            select(CrmInboundEnquiry).where(visible).order_by(CrmInboundEnquiry.enquiry_date.desc())
         )
     ).all()
+
+
+async def list_visible_ids(db: AsyncSession, visible, enquiry_ids):
+    return (
+        await db.exec(
+            select(CrmInboundEnquiry.id).where(
+                visible,
+                col(CrmInboundEnquiry.id).in_(list(enquiry_ids)),
+            )
+        )
+    ).all()
+
+
+async def claim_pooled(
+    db: AsyncSession, *, organization_id, enquiry_id, team_id, user_id, now
+) -> int | None:
+    """Take a lead out of its team pool for `user_id` in one statement; the new assignment
+    revision, or None when it is no longer waiting in that pool (someone else won)."""
+    return (
+        await db.exec(
+            update(CrmInboundEnquiry)
+            .where(
+                col(CrmInboundEnquiry.id) == enquiry_id,
+                col(CrmInboundEnquiry.organization_id) == organization_id,
+                col(CrmInboundEnquiry.team_id) == team_id,
+                col(CrmInboundEnquiry.assigned_user_id).is_(None),
+                col(CrmInboundEnquiry.pool_released_at).is_not(None),
+            )
+            .values(
+                assigned_user_id=user_id,
+                pool_released_at=None,
+                assigned_at=now,
+                updated_at=now,
+                assignment_revision=CrmInboundEnquiry.assignment_revision + 1,
+            )
+            .returning(CrmInboundEnquiry.assignment_revision)
+        )
+    ).scalar_one_or_none()
 
 
 async def list_vitevue_lease_enquiries(db: AsyncSession, organization_id, unit_keys):
@@ -290,3 +328,49 @@ async def delete_orphan_contacts(db: AsyncSession, contact_ids, organization_id)
             ),
         )
     )
+
+
+async def lock_enquiries(db: AsyncSession, organization_id, enquiry_ids):
+    """The organization's enquiries among these ids, row-locked in id order until commit."""
+    return (
+        await db.exec(
+            select(CrmInboundEnquiry)
+            .where(
+                CrmInboundEnquiry.organization_id == organization_id,
+                CrmInboundEnquiry.id.in_(list(enquiry_ids)),  # type: ignore[union-attr]
+            )
+            .order_by(CrmInboundEnquiry.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).all()
+
+
+async def list_assignment_events(db: AsyncSession, organization_id, enquiry_id):
+    return (
+        await db.exec(
+            select(CrmInboundAssignmentEvent)
+            .where(
+                CrmInboundAssignmentEvent.organization_id == organization_id,
+                CrmInboundAssignmentEvent.enquiry_id == enquiry_id,
+            )
+            .order_by(
+                CrmInboundAssignmentEvent.revision.desc(), CrmInboundAssignmentEvent.id.desc()
+            )
+        )
+    ).all()
+
+
+async def was_claimed(db: AsyncSession, enquiry_id) -> bool:
+    """True when the lead's latest assignment change was a claim from a pool."""
+    latest = (
+        await db.exec(
+            select(CrmInboundAssignmentEvent.reason)
+            .where(CrmInboundAssignmentEvent.enquiry_id == enquiry_id)
+            .order_by(
+                CrmInboundAssignmentEvent.revision.desc(), CrmInboundAssignmentEvent.id.desc()
+            )
+            .limit(1)
+        )
+    ).first()
+    return latest == "claimed"

@@ -83,10 +83,17 @@ describe('durable import acceptance', () => {
 		expect(importUploadMessage('completed', 37, true)).toBeNull()
 	})
 	it('a queued inbound upload reports Queued with a canonical job status, not Imported', async () => {
-		vi.spyOn(client, 'post').mockResolvedValue(
-			imported('queued') as unknown as InboundImportResponse
+		const post = vi
+			.spyOn(client, 'post')
+			.mockResolvedValue(imported('queued') as unknown as InboundImportResponse)
+		const { data } = await createImport(
+			new File(['Name,Phone\nSynthetic,0500000000'], 'leads.csv'),
+			{
+				mode: 'self'
+			}
 		)
-		const { data } = await createImport(new File(['Name,Phone\nSynthetic,0500000000'], 'leads.csv'))
+		// Who handles the leads travels with the queued upload; the worker applies it later.
+		expect((post.mock.calls[0][1] as FormData).get('assignment_mode')).toBe('self')
 		expect(data.jobStatus).toBe('queued')
 		expect(data.status).toBe('Queued')
 		expect(importUploadMessage(data.jobStatus, data.rows)).toBe('Import queued')

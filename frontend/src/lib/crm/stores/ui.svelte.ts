@@ -52,6 +52,8 @@ const defaults = {
 	renewalPtype: '',
 	renewalProject: '',
 	renewalBuilding: '',
+	/** Assets › Renewals: lease ids a manager ticked to issue to agents. */
+	renewalSelected: [] as string[],
 	ownerTab: 'all' as OwnerTab,
 	ownerOwnership: 'current' as 'current' | 'former',
 	ownerTransactionMatch: '' as '' | 'matched' | 'unmatched' | 'ambiguous' | 'excluded',

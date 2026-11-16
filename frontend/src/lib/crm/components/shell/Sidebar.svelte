@@ -1,4 +1,5 @@
 <script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
 import Building2 from 'lucide-svelte/icons/building-2'
 import CalendarDays from 'lucide-svelte/icons/calendar-days'
 import ChartNoAxesColumn from 'lucide-svelte/icons/chart-no-axes-column'
@@ -15,9 +16,27 @@ import { page } from '$app/state'
 import ProfileDropdown from '$lib/components/navigation/ProfileDropdown.svelte'
 import SectionSwitch from '$lib/components/navigation/SectionSwitch.svelte'
 import type { Me, NavCounts } from '../../api/types'
+import { crmQueries } from '../../queries'
 import { chrome } from '../../stores/chrome.svelte'
 
 let { counts, me }: { counts: NavCounts | undefined; me: Me | undefined } = $props()
+
+/**
+ * What to show comes from the server's assignment scope; the pages check access themselves, so
+ * hiding an entry here never grants or denies anything. Until the scope loads, only agent entries
+ * show, so a manager's sidebar grows rather than an agent's shrinking.
+ */
+const scope = createQuery(() => crmQueries.assignmentScope())
+const caps = $derived(scope.data?.capabilities)
+const roleLabel = $derived(
+	caps?.organization_admin
+		? me?.is_owner
+			? 'Owner'
+			: 'Administrator'
+		: caps?.can_assign
+			? 'Manager'
+			: 'Agent'
+)
 
 interface Item {
 	href: string
@@ -82,15 +101,22 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 		]
 	},
 	{
+		// Manager view only for people who can assign (managers and administrators). Lead routing has
+		// no page of its own: rules sit in Organisation settings and are applied where leads are issued.
+		// Connectors (each person's own channels) stays for everyone.
 		label: 'Management',
 		items: [
-			{
-				href: '/crm/settings',
-				label: 'Manager view',
-				icon: ChartNoAxesColumn,
-				count: counts?.waiting ?? null,
-				countLabel: 'waiting to assign'
-			},
+			...(caps?.can_assign
+				? [
+						{
+							href: '/crm/settings',
+							label: 'Manager view',
+							icon: ChartNoAxesColumn,
+							count: counts?.waiting ?? null,
+							countLabel: 'waiting to assign'
+						}
+					]
+				: []),
 			{ href: '/crm/connectors', label: 'Connectors', icon: Plug, count: null }
 		]
 	}
@@ -125,7 +151,7 @@ const path = $derived(page.url.pathname.replace(/\/$/, ''))
 	<div class="sb-foot">
 		<!-- Same profile menu as the Market sidebar (My profile, Settings, Sign out). -->
 		<ProfileDropdown />
-		<span class="who"><b>{me?.name ?? ''}</b><br /><span class="muted">Agent{me?.areas.length ? ` · ${me.areas.join(', ')}` : ''}</span></span>
+		<span class="who"><b>{me?.name ?? ''}</b><br /><span class="muted">{roleLabel}{me?.areas.length ? ` · ${me.areas.join(', ')}` : ''}</span></span>
 	</div>
 </aside>
 <button

@@ -1,3 +1,5 @@
+import type { OwnerImportRequestResponse } from '$lib/api/generated/hey-api/types.gen'
+import { getTeams } from '$lib/api/organization'
 import { getQueryClient } from '$lib/queries/client'
 import { crm } from './api'
 import type {
@@ -117,6 +119,7 @@ export const crmKeys = {
 	ownerReport: (id: string) => [...crmScopeKey(), 'owner', id, 'report'] as const,
 	imports: () => [...crmScopeKey(), 'imports'] as const,
 	ownerImports: () => [...crmScopeKey(), 'imports', 'owners'] as const,
+	ownerImportRequests: () => [...crmScopeKey(), 'imports', 'owners', 'requests'] as const,
 	ownerImportDetails: () => [...crmScopeKey(), 'imports', 'owners', 'details'] as const,
 	ownerImportRows: (listId: number, p: OwnerImportRowsParams) =>
 		[...crmScopeKey(), 'imports', 'owners', 'rows', listId, p] as const,
@@ -129,7 +132,12 @@ export const crmKeys = {
 	calendarSide: () => [...crmScopeKey(), 'calendar-side'] as const,
 	search: (q: string) => [...crmScopeKey(), 'search', q] as const,
 	notifications: () => [...crmScopeKey(), 'notifications'] as const,
-	connections: () => [...crmScopeKey(), 'connections'] as const
+	connections: () => [...crmScopeKey(), 'connections'] as const,
+	assignmentScope: () => [...crmScopeKey(), 'assignment', 'scope'] as const,
+	leadAssignments: (id: number) => [...crmScopeKey(), 'lead', id, 'assignments'] as const,
+	routingRules: () => [...crmScopeKey(), 'routing', 'rules'] as const,
+	workload: () => [...crmScopeKey(), 'assignment', 'workload'] as const,
+	teams: () => [...crmScopeKey(), 'teams'] as const
 }
 
 /** Query option factories, same pattern as the main app's `$lib/queries/*`. */
@@ -340,6 +348,18 @@ export const crmQueries = {
 		queryKey: crmKeys.ownerImports(),
 		queryFn: crm.imports.ownerHistory
 	}),
+	/** Owner files waiting for approval keep updating until they are decided and processed. */
+	ownerImportRequests: () => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.ownerImportRequests(),
+		queryFn: crm.imports.ownerRequests,
+		refetchInterval: (q: { state: { data?: OwnerImportRequestResponse[] } }) =>
+			q.state.data?.some(
+				(request) => request.status === 'queued' || request.status === 'processing'
+			)
+				? 5000
+				: false
+	}),
 	/** Active durable jobs keep updating until they finish, with a capped polling backoff. */
 	ownerImportDetails: () => {
 		const scope = crmScopeKey()
@@ -409,5 +429,30 @@ export const crmQueries = {
 		enabled: crmIdentityKnown(),
 		queryKey: crmKeys.connections(),
 		queryFn: crm.connections
+	}),
+	assignmentScope: () => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.assignmentScope(),
+		queryFn: crm.assignment.scope
+	}),
+	leadAssignments: (id: number) => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.leadAssignments(id),
+		queryFn: () => crm.assignment.history(id)
+	}),
+	routingRules: () => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.routingRules(),
+		queryFn: crm.routing.list
+	}),
+	workload: () => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.workload(),
+		queryFn: crm.assignment.workload
+	}),
+	teams: () => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.teams(),
+		queryFn: getTeams
 	})
 }

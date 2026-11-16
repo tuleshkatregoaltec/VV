@@ -28,6 +28,8 @@ export type PanelState =
 	| { kind: 'market'; id: string }
 	| { kind: 'client'; client: string }
 	| { kind: 'renewal'; id: string }
+	| { kind: 'issue-renewals' }
+	| { kind: 'issue-owners'; listId: number; name: string }
 	| { kind: 'event'; id: number }
 	| { kind: 'day'; date: string }
 	| { kind: 'search' }

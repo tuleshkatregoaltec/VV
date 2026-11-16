@@ -66,6 +66,24 @@ const renewalPages = createInfiniteQuery(() => ({
 	}),
 	enabled: ui.assetTab === 'renewals'
 }))
+/** Managers tick units here and issue them to agents (Issue to agents panel). */
+const assignScope = createQuery(() => crmQueries.assignmentScope())
+const canIssue = $derived(assignScope.data?.capabilities.can_assign ?? false)
+const MAX_ISSUE = 100
+const selected = $derived(new Set(ui.renewalSelected))
+function toggleUnit(id: string) {
+	ui.renewalSelected = selected.has(id)
+		? ui.renewalSelected.filter((x) => x !== id)
+		: ui.renewalSelected.length < MAX_ISSUE
+			? [...ui.renewalSelected, id]
+			: ui.renewalSelected
+}
+function toggleAll(ids: string[]) {
+	const all = ids.length > 0 && ids.every((id) => selected.has(id))
+	ui.renewalSelected = all
+		? ui.renewalSelected.filter((id) => !ids.includes(id))
+		: [...new Set([...ui.renewalSelected, ...ids])].slice(0, MAX_ISSUE)
+}
 const renewals = $derived({
 	...renewalPages,
 	data: renewalPages.data
@@ -571,6 +589,18 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 					: ''}
 		</span>
 	</div>
+	{#if canIssue && ui.renewalSelected.length}
+		<div class="issuebar" role="region" aria-label="Selected units">
+			<span>
+				<b>{fmt(ui.renewalSelected.length)}</b>
+				{ui.renewalSelected.length === 1 ? 'unit' : 'units'} selected{ui.renewalSelected.length >= MAX_ISSUE ? ` (up to ${MAX_ISSUE} at a time)` : ''}
+			</span>
+			<button type="button" class="btn ghost sm" onclick={() => (ui.renewalSelected = [])}>Clear</button>
+			<button type="button" class="btn sm" onclick={() => panel.open({ kind: 'issue-renewals' })}>
+				<Users size={15} /> Issue to agents
+			</button>
+		</div>
+	{/if}
 	<!-- Old rows stay dimmed while a new filter loads, so they never read as its answer. -->
 	<div class="card" aria-busy={renewals.isPlaceholderData} style:opacity={renewals.isPlaceholderData ? 0.5 : undefined}>
 		<QueryView query={renewals} rows={3}>
@@ -578,11 +608,35 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 				<div class="tblwrap">
 					<table class="tbl">
 						<thead>
-							<tr><th>Unit</th><th>Property</th><th class="r">Rent a year</th><th>Ends</th><th></th></tr>
+							<tr>
+								{#if canIssue}
+									{@const pageIds = res.items.map((r) => r.id)}
+									<th class="pick">
+										<input
+											type="checkbox"
+											aria-label="Select all shown units"
+											checked={pageIds.length > 0 && pageIds.every((id) => selected.has(id))}
+											onchange={() => toggleAll(pageIds)}
+										/>
+									</th>
+								{/if}
+								<th>Unit</th><th>Property</th><th class="r">Rent a year</th><th>Ends</th><th></th>
+							</tr>
 						</thead>
 						<tbody>
 							{#each res.items as r (r.id)}
-								<tr class="row">
+								<tr class="row" class:picked={selected.has(r.id)}>
+									{#if canIssue}
+										<td class="pick">
+											<input
+												type="checkbox"
+												aria-label="Select {r.unit}"
+												checked={selected.has(r.id)}
+												disabled={!selected.has(r.id) && ui.renewalSelected.length >= MAX_ISSUE}
+												onchange={() => toggleUnit(r.id)}
+											/>
+										</td>
+									{/if}
 									<td>
 										<button type="button" class="rowlink" onclick={() => panel.open({ kind: 'renewal', id: r.id })}>
 											{r.unit}
@@ -599,7 +653,7 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 									</td>
 								</tr>
 							{:else}
-								<tr><td colspan="5"><Empty text="No leases match these filters." /></td></tr>
+								<tr><td colspan={canIssue ? 6 : 5}><Empty text="No leases match these filters." /></td></tr>
 							{/each}
 						</tbody>
 					</table>
@@ -863,5 +917,25 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 	.ag :global(svg) {
 		flex: none;
 		color: var(--text3);
+	}
+	.pick {
+		width: 36px;
+	}
+	tr.picked {
+		background: var(--sel);
+	}
+	.issuebar {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin-bottom: 12px;
+		padding: 10px 14px;
+		border: 1px solid var(--accent-fill);
+		border-radius: 10px;
+		background: var(--sunk);
+		font-size: 13px;
+	}
+	.issuebar span {
+		flex: 1;
 	}
 </style>

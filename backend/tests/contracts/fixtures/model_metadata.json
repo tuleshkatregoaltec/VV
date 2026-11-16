@@ -59,6 +59,12 @@
       "CREATE INDEX ix_crm_agent_area_preferences_user_id ON crm_agent_area_preferences (user_id)"
     ]
   },
+  "crm_agent_languages": {
+    "ddl": "\nCREATE TABLE crm_agent_languages (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\tlanguages JSON NOT NULL, \n\tupdated_by_user_id VARCHAR NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_agent_languages_member UNIQUE (organization_id, user_id), \n\tCONSTRAINT fk_crm_agent_languages_membership FOREIGN KEY(organization_id, user_id) REFERENCES organization_memberships (organization_id, user_id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_agent_languages_organization_id ON crm_agent_languages (organization_id)"
+    ]
+  },
   "crm_company_listing_sources": {
     "ddl": "\nCREATE TABLE crm_company_listing_sources (\n\torganization_id VARCHAR NOT NULL, \n\tbroker_id VARCHAR NOT NULL, \n\tbroker_name VARCHAR NOT NULL, \n\tselected_by_user_id VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (organization_id), \n\tFOREIGN KEY(organization_id) REFERENCES organizations (id) ON DELETE CASCADE\n)\n\n",
     "indexes": []
@@ -96,6 +102,13 @@
       "CREATE INDEX ix_crm_inbound_activities_user_id ON crm_inbound_activities (user_id)"
     ]
   },
+  "crm_inbound_assignment_events": {
+    "ddl": "\nCREATE TABLE crm_inbound_assignment_events (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tenquiry_id INTEGER NOT NULL, \n\tprevious_user_id VARCHAR, \n\tassigned_user_id VARCHAR, \n\tactor_user_id VARCHAR NOT NULL, \n\treason VARCHAR NOT NULL, \n\trule_id INTEGER, \n\trule_revision INTEGER, \n\timport_id INTEGER, \n\tteam_id VARCHAR, \n\trevision INTEGER NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_crm_inbound_assignment_event_reason CHECK (reason IN ('created', 'import_agent', 'import_rule', 'manual', 'approved_from_inbox', 'released', 'claimed', 'rotation')), \n\tFOREIGN KEY(enquiry_id) REFERENCES crm_inbound_enquiries (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_inbound_assignment_events_enquiry_id ON crm_inbound_assignment_events (enquiry_id)",
+      "CREATE INDEX ix_crm_inbound_assignment_events_organization_id ON crm_inbound_assignment_events (organization_id)"
+    ]
+  },
   "crm_inbound_contacts": {
     "ddl": "\nCREATE TABLE crm_inbound_contacts (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tfull_name VARCHAR NOT NULL, \n\tphone VARCHAR, \n\temail VARCHAR, \n\twhatsapp VARCHAR, \n\tpreferred_language VARCHAR, \n\tpreferred_channel VARCHAR, \n\tconsent_status VARCHAR NOT NULL, \n\tdo_not_contact BOOLEAN NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id)\n)\n\n",
     "indexes": [
@@ -107,7 +120,7 @@
     ]
   },
   "crm_inbound_enquiries": {
-    "ddl": "\nCREATE TABLE crm_inbound_enquiries (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tcontact_id INTEGER NOT NULL, \n\tsource_import_id INTEGER, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tassigned_user_id VARCHAR, \n\trecord_kind VARCHAR NOT NULL, \n\tintent VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tsource VARCHAR NOT NULL, \n\tcampaign VARCHAR, \n\tsource_lead_id VARCHAR, \n\tsource_sheet VARCHAR, \n\tsource_row_number INTEGER, \n\tenquiry_date TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcriteria JSON NOT NULL, \n\tstrict_fields JSON NOT NULL, \n\traw_notes TEXT, \n\tobserved_data JSON NOT NULL, \n\tinferred_data JSON NOT NULL, \n\tconfirmed_data JSON NOT NULL, \n\tqualification JSON NOT NULL, \n\textraction_confidence FLOAT NOT NULL, \n\textraction_evidence JSON NOT NULL, \n\treview_reasons JSON NOT NULL, \n\tnext_follow_up DATE, \n\tfirst_response_due_at TIMESTAMP WITH TIME ZONE, \n\tfirst_contact_at TIMESTAMP WITH TIME ZONE, \n\tlast_contact_at TIMESTAMP WITH TIME ZONE, \n\tcontact_attempt_count INTEGER NOT NULL, \n\tlost_reason VARCHAR, \n\ttags JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(contact_id) REFERENCES crm_inbound_contacts (id) ON DELETE CASCADE, \n\tFOREIGN KEY(source_import_id) REFERENCES crm_inbound_imports (id) ON DELETE SET NULL\n)\n\n",
+    "ddl": "\nCREATE TABLE crm_inbound_enquiries (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tcontact_id INTEGER NOT NULL, \n\tsource_import_id INTEGER, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tassigned_user_id VARCHAR, \n\tassignment_revision INTEGER DEFAULT 0 NOT NULL, \n\tassigned_at TIMESTAMP WITH TIME ZONE, \n\tteam_id VARCHAR, \n\tpool_released_at TIMESTAMP WITH TIME ZONE, \n\trecord_kind VARCHAR NOT NULL, \n\tintent VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tsource VARCHAR NOT NULL, \n\tcampaign VARCHAR, \n\tsource_lead_id VARCHAR, \n\tsource_sheet VARCHAR, \n\tsource_row_number INTEGER, \n\tenquiry_date TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcriteria JSON NOT NULL, \n\tstrict_fields JSON NOT NULL, \n\traw_notes TEXT, \n\tobserved_data JSON NOT NULL, \n\tinferred_data JSON NOT NULL, \n\tconfirmed_data JSON NOT NULL, \n\tqualification JSON NOT NULL, \n\textraction_confidence FLOAT NOT NULL, \n\textraction_evidence JSON NOT NULL, \n\treview_reasons JSON NOT NULL, \n\tnext_follow_up DATE, \n\tfirst_response_due_at TIMESTAMP WITH TIME ZONE, \n\tfirst_contact_at TIMESTAMP WITH TIME ZONE, \n\tlast_contact_at TIMESTAMP WITH TIME ZONE, \n\tcontact_attempt_count INTEGER NOT NULL, \n\tlost_reason VARCHAR, \n\ttags JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT fk_crm_inbound_enquiry_team FOREIGN KEY(team_id, organization_id) REFERENCES organization_teams (id, organization_id) ON DELETE RESTRICT, \n\tCONSTRAINT ck_crm_inbound_enquiry_pool CHECK (pool_released_at IS NULL OR (team_id IS NOT NULL AND assigned_user_id IS NULL)), \n\tFOREIGN KEY(contact_id) REFERENCES crm_inbound_contacts (id) ON DELETE CASCADE, \n\tFOREIGN KEY(source_import_id) REFERENCES crm_inbound_imports (id) ON DELETE SET NULL\n)\n\n",
     "indexes": [
       "CREATE INDEX ix_crm_inbound_enquiries_assigned_user_id ON crm_inbound_enquiries (assigned_user_id)",
       "CREATE INDEX ix_crm_inbound_enquiries_campaign ON crm_inbound_enquiries (campaign)",
@@ -120,6 +133,7 @@
       "CREATE INDEX ix_crm_inbound_enquiries_source_import_id ON crm_inbound_enquiries (source_import_id)",
       "CREATE INDEX ix_crm_inbound_enquiries_source_lead_id ON crm_inbound_enquiries (source_lead_id)",
       "CREATE INDEX ix_crm_inbound_enquiries_status ON crm_inbound_enquiries (status)",
+      "CREATE INDEX ix_crm_inbound_enquiries_team_id ON crm_inbound_enquiries (team_id)",
       "CREATE UNIQUE INDEX uq_crm_inbound_sold_owner ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Owner file · recently sold'",
       "CREATE UNIQUE INDEX uq_crm_inbound_vitevue_lease_unit ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Vitevue lease lead'"
     ]
@@ -159,6 +173,13 @@
       "CREATE INDEX ix_crm_lead_notes_organization_id ON crm_lead_notes (organization_id)",
       "CREATE INDEX ix_crm_lead_notes_user_id ON crm_lead_notes (user_id)",
       "CREATE INDEX ix_crm_lead_notes_workspace_id ON crm_lead_notes (workspace_id)"
+    ]
+  },
+  "crm_lead_rotations": {
+    "ddl": "\nCREATE TABLE crm_lead_rotations (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tenquiry_id INTEGER NOT NULL, \n\tteam_id VARCHAR NOT NULL, \n\trule_id INTEGER, \n\trule_revision INTEGER, \n\tuser_ids JSON NOT NULL, \n\ttried_user_ids JSON DEFAULT '[]' NOT NULL, \n\trequired_language VARCHAR, \n\tposition INTEGER NOT NULL, \n\ttimeout_minutes INTEGER NOT NULL, \n\tdue_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tassignment_revision INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tstop_reason VARCHAR, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_crm_lead_rotation_status CHECK (status IN ('active', 'stopped', 'finished')), \n\tCONSTRAINT fk_crm_lead_rotation_team FOREIGN KEY(team_id, organization_id) REFERENCES organization_teams (id, organization_id) ON DELETE CASCADE, \n\tUNIQUE (enquiry_id), \n\tFOREIGN KEY(enquiry_id) REFERENCES crm_inbound_enquiries (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_lead_rotations_due ON crm_lead_rotations (due_at) WHERE status = 'active'",
+      "CREATE INDEX ix_crm_lead_rotations_organization_id ON crm_lead_rotations (organization_id)"
     ]
   },
   "crm_lead_workspaces": {
@@ -202,6 +223,15 @@
     "ddl": "\nCREATE TABLE crm_owner_assessment_state (\n\torganization_id VARCHAR NOT NULL, \n\tgeneration BIGINT NOT NULL, \n\trevision VARCHAR NOT NULL, \n\twarehouse_revision VARCHAR NOT NULL, \n\tchecked_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\twarehouse_status VARCHAR NOT NULL, \n\tbuilt_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tsummary JSONB NOT NULL, \n\timport_summaries JSONB NOT NULL, \n\tlist_counts JSONB NOT NULL, \n\tsource_audit JSONB NOT NULL, \n\tPRIMARY KEY (organization_id)\n)\n\n",
     "indexes": []
   },
+  "crm_owner_import_requests": {
+    "ddl": "\nCREATE TABLE crm_owner_import_requests (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\trequested_by_user_id VARCHAR NOT NULL, \n\tteam_id VARCHAR, \n\tname VARCHAR NOT NULL, \n\toriginal_filename VARCHAR NOT NULL, \n\tsha256 VARCHAR NOT NULL, \n\tsize_bytes INTEGER NOT NULL, \n\tstorage_key VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tdecided_by_user_id VARCHAR, \n\tdecided_at TIMESTAMP WITH TIME ZONE, \n\timport_id INTEGER, \n\terror_message TEXT, \n\tprocessing_started_at TIMESTAMP WITH TIME ZONE, \n\tattempts INTEGER DEFAULT 0 NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_crm_owner_import_request_status CHECK (status IN ('pending', 'queued', 'processing', 'approved', 'rejected', 'failed')), \n\tFOREIGN KEY(import_id) REFERENCES crm_contact_imports (id) ON DELETE SET NULL\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_owner_import_requests_organization_id ON crm_owner_import_requests (organization_id)",
+      "CREATE INDEX ix_crm_owner_import_requests_requested_by_user_id ON crm_owner_import_requests (requested_by_user_id)",
+      "CREATE INDEX ix_crm_owner_import_requests_status ON crm_owner_import_requests (status)",
+      "CREATE INDEX ix_crm_owner_import_requests_team_id ON crm_owner_import_requests (team_id)"
+    ]
+  },
   "crm_owner_notes": {
     "ddl": "\nCREATE TABLE crm_owner_notes (\n\tid SERIAL NOT NULL, \n\tworkspace_id INTEGER NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tbody TEXT NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(workspace_id) REFERENCES crm_owner_workspaces (id) ON DELETE CASCADE\n)\n\n",
     "indexes": [
@@ -244,6 +274,13 @@
       "CREATE INDEX ix_crm_property_contact_claims_unit_candidate_key ON crm_property_contact_claims (unit_candidate_key)"
     ]
   },
+  "crm_routing_rules": {
+    "ddl": "\nCREATE TABLE crm_routing_rules (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tteam_id VARCHAR NOT NULL, \n\tname VARCHAR(120) NOT NULL, \n\tenabled BOOLEAN NOT NULL, \n\tpriority INTEGER NOT NULL, \n\tmatch_mode VARCHAR NOT NULL, \n\tconditions JSON NOT NULL, \n\tdestination_user_id VARCHAR NOT NULL, \n\trotation_user_ids JSON DEFAULT '[]' NOT NULL, \n\trotation_minutes INTEGER, \n\tspeakers_only BOOLEAN DEFAULT false NOT NULL, \n\trevision INTEGER NOT NULL, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tupdated_by_user_id VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_crm_routing_rule_match_mode CHECK (match_mode IN ('all', 'any')), \n\tCONSTRAINT ck_crm_routing_rule_rotation_minutes CHECK (rotation_minutes IS NULL OR rotation_minutes BETWEEN 1 AND 10080), \n\tCONSTRAINT fk_crm_routing_rule_team FOREIGN KEY(team_id, organization_id) REFERENCES organization_teams (id, organization_id) ON DELETE RESTRICT\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_routing_rules_organization_id ON crm_routing_rules (organization_id)",
+      "CREATE INDEX ix_crm_routing_rules_team_id ON crm_routing_rules (team_id)"
+    ]
+  },
   "crm_saved_leads": {
     "ddl": "\nCREATE TABLE crm_saved_leads (\n\tid SERIAL NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tlead_id VARCHAR NOT NULL, \n\tunit_candidate_key VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_saved_lead_owner_candidate UNIQUE (user_id, organization_id, unit_candidate_key)\n)\n\n",
     "indexes": [
@@ -281,10 +318,24 @@
     ]
   },
   "organization_memberships": {
-    "ddl": "\nCREATE TABLE organization_memberships (\n\tid VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\trole VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_membership_user_id UNIQUE (user_id), \n\tCONSTRAINT uq_membership_org_user UNIQUE (organization_id, user_id), \n\tCONSTRAINT ck_membership_role CHECK (role IN ('owner', 'member')), \n\tFOREIGN KEY(organization_id) REFERENCES organizations (id)\n)\n\n",
+    "ddl": "\nCREATE TABLE organization_memberships (\n\tid VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\trole VARCHAR NOT NULL, \n\torganization_admin BOOLEAN DEFAULT false NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_membership_user_id UNIQUE (user_id), \n\tCONSTRAINT uq_membership_org_user UNIQUE (organization_id, user_id), \n\tCONSTRAINT ck_membership_role CHECK (role IN ('owner', 'member')), \n\tFOREIGN KEY(organization_id) REFERENCES organizations (id)\n)\n\n",
     "indexes": [
       "CREATE INDEX ix_organization_memberships_organization_id ON organization_memberships (organization_id)",
       "CREATE INDEX ix_organization_memberships_user_id ON organization_memberships (user_id)"
+    ]
+  },
+  "organization_team_members": {
+    "ddl": "\nCREATE TABLE organization_team_members (\n\tid VARCHAR NOT NULL, \n\tteam_id VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\trole VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_organization_team_member UNIQUE (team_id, user_id), \n\tCONSTRAINT ck_organization_team_member_role CHECK (role IN ('agent', 'supervisor')), \n\tCONSTRAINT fk_organization_team_member_team FOREIGN KEY(team_id, organization_id) REFERENCES organization_teams (id, organization_id) ON DELETE CASCADE, \n\tCONSTRAINT fk_organization_team_member_membership FOREIGN KEY(organization_id, user_id) REFERENCES organization_memberships (organization_id, user_id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_organization_team_members_organization_id ON organization_team_members (organization_id)",
+      "CREATE INDEX ix_organization_team_members_team_id ON organization_team_members (team_id)",
+      "CREATE INDEX ix_organization_team_members_user_id ON organization_team_members (user_id)"
+    ]
+  },
+  "organization_teams": {
+    "ddl": "\nCREATE TABLE organization_teams (\n\tid VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tname VARCHAR(120) NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_organization_team_name UNIQUE (organization_id, name), \n\tCONSTRAINT uq_organization_team_id_org UNIQUE (id, organization_id), \n\tCONSTRAINT fk_organization_team_organization FOREIGN KEY(organization_id) REFERENCES organizations (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_organization_teams_organization_id ON organization_teams (organization_id)"
     ]
   },
   "organizations": {

@@ -114,6 +114,11 @@ export function createPresentationCrm(live: CrmApi, today: string): CrmApi {
 			received_label: i < 8 ? 'Today' : `${1 + (i % 14)} days ago`,
 			stage: seller && stage === 'viewing' ? 'listed' : stage,
 			agent: agents[i % agents.length],
+			// Fictional, read-only rows: no real assignee, team or pool behind them.
+			assigned_user_id: null,
+			assignment_revision: 0,
+			team_id: null,
+			shared: false,
 			score: 98 - (i % 42),
 			area,
 			language: i % 5 === 0 ? 'Arabic / English' : 'English',

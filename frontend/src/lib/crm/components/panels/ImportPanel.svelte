@@ -1,7 +1,13 @@
 <script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
 import { goto } from '$app/navigation'
 import { crm } from '../../api'
-import type { ImportPreview, OwnerFilePreview, OwnerImportResult } from '../../api/types'
+import type {
+	ImportAssignment,
+	ImportPreview,
+	OwnerFilePreview,
+	OwnerImportResult
+} from '../../api/types'
 import { fmt } from '../../format'
 import {
 	importIsActive,
@@ -10,17 +16,23 @@ import {
 	ownerImportNotice
 } from '../../importStatus'
 import { fieldChecklist, fieldLabel } from '../../ownerImportReport'
+import { crmQueries } from '../../queries'
 import { watchQueuedImport } from '../../stores/imports.svelte'
 import { panel } from '../../stores/panel.svelte'
 import { errorText, write } from '../../write'
+import AssignmentPicker from '../ui/AssignmentPicker.svelte'
 import Kv from '../ui/Kv.svelte'
 import Panel from '../ui/Panel.svelte'
 import Seg from '../ui/Seg.svelte'
 
 /**
- * Import a file: Owners or Leads, CSV or XLSX → preview → import. A manager imports directly
- * (owners are matched to sales; leads land in the Inbox); an agent is told to send the file
- * to their manager (approval requests are open question 9). The backend reads the file and
+ * Import a file: Owners or Leads, CSV or XLSX → preview → import (owners are matched to sales;
+ * leads land in the Inbox). A leads import always says who handles the new leads. An agent
+ * imports only for themselves: the leads are assigned to them and there is nothing to choose. A
+ * manager or organization administrator picks one agent they may assign to, the routing rules,
+ * the team's shared pool (the first agent to log contact takes each lead), or nobody yet, and
+ * which of their teams owns what nobody receives. A manager imports an owners file directly; an
+ * agent's goes to their team's supervisor for approval first. The backend reads the file and
  * picks the columns; this screen only shows what it found. From the Owners page it imports owners only.
  *
  * An owners file is read in the browser first, then queued for background processing.
@@ -38,6 +50,10 @@ let file = $state<File | null>(null)
 let preview = $state<ImportPreview | null>(null)
 let ownerPreview = $state<OwnerFilePreview | null>(null)
 let result = $state<OwnerImportResult | null>(null)
+/** Owners: an agent in several teams picks the team whose supervisor approves the file. */
+let teamChoice = $state('')
+/** An agent's owners file was sent to their team's supervisor for approval. */
+let requested = $state(false)
 let problem = $state('')
 let reading = $state(false)
 let sending = $state(false)
@@ -45,6 +61,18 @@ let drag = $state(false)
 let input: HTMLInputElement | undefined = $state()
 
 const owners = $derived(ownersOnly || (!leadsOnly && kind === 'Owners'))
+/** Who may import leads and to whom: the server decides, not the display role. */
+const scope = createQuery(() => crmQueries.assignmentScope())
+const canImportLeads = $derived(scope.data?.capabilities.can_import ?? false)
+/** Managers and administrators choose who gets the leads; an agent's go to themselves. */
+const canDistribute = $derived(scope.data?.capabilities.can_assign ?? false)
+const ownerTeams = $derived(scope.data?.my_teams ?? [])
+const ownerTeamFor = $derived(ownerTeams.length === 1 ? ownerTeams[0].id : teamChoice)
+const ownerTeamMissing = $derived(
+	owners && !canDistribute && ownerTeams.length > 1 && !ownerTeamFor
+)
+/** Leads: who handles them, from the shared picker (null while the choice is incomplete). */
+let assignment = $state<ImportAssignment | null>(null)
 
 async function openReport(id: number) {
 	panel.closeAll()
@@ -74,13 +102,18 @@ function readColumns(p: OwnerFilePreview) {
 	}
 }
 const rows = $derived(owners ? (ownerPreview?.rows ?? 0) : (preview?.rows ?? 0))
-const ready = $derived(owners ? ownerPreview && !ownerPreview.problem : preview && !preview.problem)
+const ready = $derived(
+	owners
+		? ownerPreview && !ownerPreview.problem
+		: preview && !preview.problem && canImportLeads && assignment !== null
+)
 
 function reset() {
 	file = null
 	preview = null
 	ownerPreview = null
 	result = null
+	requested = false
 	problem = ''
 	if (input) input.value = ''
 }
@@ -114,11 +147,13 @@ async function read(f: File | undefined) {
 async function send() {
 	if (!file || !ready || sending) return
 	const f = file
-	sending = true
 	if (!owners) {
+		const policy = assignment
+		if (!policy) return
+		sending = true
 		const r = await write({
 			domain: 'imports',
-			call: () => crm.imports.create(f, areas.trim()),
+			call: () => crm.imports.create(f, areas.trim(), policy),
 			success: ({ data }) => importUploadMessage(data.jobStatus, data.rows),
 			event: 'import_requested'
 		})
@@ -128,6 +163,21 @@ async function send() {
 			panel.closeAll()
 			await goto('/crm/inbox')
 		}
+		return
+	}
+	if (ownerTeamMissing) return
+	sending = true
+	if (!canDistribute) {
+		// Agents send owner files to their team's supervisor; nothing is imported until approved.
+		const sent = await write({
+			domain: 'imports',
+			call: () => crm.imports.requestOwners(f, listName, ownerTeamFor || undefined),
+			success: 'Sent for approval',
+			undoable: false,
+			event: 'import_requested'
+		})
+		sending = false
+		if (sent) requested = true
 		return
 	}
 	const r = await write({
@@ -151,7 +201,13 @@ async function send() {
 	footer={result ? done : undefined}
 >
 	<div class="form">
-		{#if result}
+		{#if requested}
+			<div class="notice" role="status">
+				Sent for approval. The selected team’s supervisor or an organisation administrator must
+				approve before the owners are imported; if you have no team, an administrator approves.
+				You can follow it under Owner file and import requests.
+			</div>
+		{:else if result}
 			{@const s = result.summary}
 			{@const replayNotice = ownerImportNotice(result)}
 			{#if replayNotice}<div class="notice" role="status">{replayNotice}</div>{/if}
@@ -335,10 +391,25 @@ async function send() {
 				</section>
 			{/if}
 
+			{#if !owners && preview && !preview.problem && canImportLeads}
+				<AssignmentPicker bind:assignment disabled={sending} id="imp" />
+			{/if}
+
+			{#if owners && !canDistribute && ownerTeams.length > 1}
+				<div class="fld">
+					<label for="owner-team">Team that owns this owner file</label>
+					<select id="owner-team" bind:value={teamChoice} disabled={sending}>
+						<option value="">Choose a team</option>
+						{#each ownerTeams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+					</select>
+					<div class="small muted">This team's supervisor or an organisation administrator approves it.</div>
+				</div>
+			{/if}
+
 			{#if ready}
 				<div class="acts">
 					<button type="button" class="btn ghost" disabled={sending} onclick={() => panel.closeAll()}>Cancel</button>
-					<button type="button" class="btn" disabled={sending} onclick={send}>
+					<button type="button" class="btn" disabled={sending || ownerTeamMissing} onclick={send}>
 						{sending ? 'Uploading…' : `Import ${fmt(rows)} rows`}
 					</button>
 				</div>

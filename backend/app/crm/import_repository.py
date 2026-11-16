@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy import and_, delete, func, or_, text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -13,6 +16,47 @@ from app.crm.import_models import (
     CrmContactList,
     CrmPropertyContactClaim,
 )
+
+
+@asynccontextmanager
+async def processing_file(db: AsyncSession, organization_id: str, digest: str):
+    """Fence file processing across commits; PostgreSQL releases the lock on a process crash."""
+    key = int.from_bytes(
+        hashlib.sha256(f"owner-import:{organization_id}:{digest}".encode()).digest()[:8],
+        "big",
+        signed=True,
+    )
+    held = db.info.setdefault("owner_import_locks", set())
+    if key in held:
+        yield
+        return
+    # Pin processing to the lock's connection: losing the fence also prevents further writes.
+    original_bind = db.bind
+    await db.commit()
+    async with original_bind.connect() as connection:
+        acquired = await connection.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": key})
+        if not acquired:
+            raise HTTPException(
+                status_code=409, detail="This file is being imported now; try again later"
+            )
+        await connection.commit()
+        db.bind = connection
+        db.sync_session.bind = connection.sync_connection
+        held.add(key)
+        try:
+            yield
+        finally:
+            try:
+                await db.rollback()
+            finally:
+                held.remove(key)
+                db.bind = original_bind
+                db.sync_session.bind = original_bind.sync_engine
+                try:
+                    await connection.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": key})
+                except BaseException:
+                    await connection.invalidate()
+                    raise
 
 
 async def list_rental_refresh_claims(db: AsyncSession, import_id, organization_id):

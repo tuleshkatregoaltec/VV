@@ -363,12 +363,9 @@ def test_approving_turns_a_recent_seller_into_an_unbriefed_buyer_lead():
     item.id = 9
     activity = approve_as_buyer(item, user_id="agent-1", now=datetime.now(timezone.utc))
 
-    # A possible buyer, worked by the agent who approved it; no brief yet, so no matchmaking.
-    assert (item.intent, item.record_kind, item.assigned_user_id) == (
-        "buy",
-        "opportunity",
-        "agent-1",
-    )
+    # A possible buyer with no brief yet, so no matchmaking. Who works it is decided through
+    # the shared assignment operation (see the PostgreSQL approval test), not here.
+    assert (item.intent, item.record_kind, item.assigned_user_id) == ("buy", "opportunity", None)
     assert item.criteria == {}
     # The sale stays with the lead.
     assert item.raw_notes == owner.notes and item.observed_data["recent_sales"] == owner.sales
@@ -398,6 +395,7 @@ def test_a_later_sync_keeps_the_approval():
     old = summarize_sold_owners([_sold("o1", "p1", date(2026, 9, 1))])[0]
     item = _item(old.notes, old.sales)
     approve_as_buyer(item, user_id="agent-1", now=datetime.now(timezone.utc))
+    item.assigned_user_id = "agent-1"  # as approve_recent_seller assigns the approving agent
     new = summarize_sold_owners(
         [_sold("o1", "p1", date(2026, 9, 1)), _sold("o1", "p2", date(2026, 10, 5))]
     )[0]

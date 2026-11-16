@@ -8,6 +8,8 @@ import type {
 	OrganizationInvitationResponse,
 	OwnerOrganizationCreateResponse,
 	SubscriptionResponse,
+	TeamMemberInput,
+	TeamsResponse,
 	ValidateInviteTokenResponse
 } from './generated/hey-api/types.gen'
 
@@ -19,6 +21,8 @@ export type {
 	OperationSuccessResponse,
 	OrganizationInvitationResponse,
 	OwnerOrganizationCreateResponse,
+	TeamMemberInput,
+	TeamsResponse,
 	ValidateInviteTokenResponse
 }
 
@@ -88,4 +92,41 @@ export async function getCustomerPortalUrl(): Promise<CustomerPortalResponse> {
 
 export async function removeOrganizationMember(userId: string): Promise<OperationSuccessResponse> {
 	return client.delete<OperationSuccessResponse>(`/api/v1/organization/members/${userId}`)
+}
+
+/* ── teams (organization administrators) ── */
+
+export async function getTeams(): Promise<TeamsResponse> {
+	return client.get<TeamsResponse>('/api/v1/organization/teams')
+}
+
+export async function createTeam(name: string): Promise<TeamsResponse> {
+	return client.post<TeamsResponse>('/api/v1/organization/teams', { name })
+}
+
+export async function renameTeam(teamId: string, name: string): Promise<TeamsResponse> {
+	return client.patch<TeamsResponse>(`/api/v1/organization/teams/${teamId}`, { name })
+}
+
+/** The complete membership of a team; anyone left out leaves it. */
+export async function setTeamMembers(
+	teamId: string,
+	members: TeamMemberInput[]
+): Promise<TeamsResponse> {
+	return client.put<TeamsResponse>(`/api/v1/organization/teams/${teamId}/members`, { members })
+}
+
+export async function deleteTeam(teamId: string): Promise<OperationSuccessResponse> {
+	return client.delete<OperationSuccessResponse>(`/api/v1/organization/teams/${teamId}`)
+}
+
+/** Owners only: make a member an organization administrator, or stop that. */
+export async function setOrganizationAdmin(
+	userId: string,
+	organizationAdmin: boolean
+): Promise<OperationSuccessResponse> {
+	return client.put<OperationSuccessResponse>(
+		`/api/v1/organization/members/${userId}/organization-admin`,
+		{ organization_admin: organizationAdmin }
+	)
 }

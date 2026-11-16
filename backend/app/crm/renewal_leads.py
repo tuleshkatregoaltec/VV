@@ -31,6 +31,7 @@ from app.crm.models import (
     CrmAgentAreaPreference,
     CrmAreaPreferencesResponse,
     CrmAreaPreferencesUpdate,
+    CrmLeadDetailResponse,
     CrmRenewalArea,
     CrmRenewalLead,
     CrmRenewalLeadCounts,
@@ -425,7 +426,25 @@ async def open_renewal_lead(
         user_id=user_id,
         organization_id=organization_id,
     )
-    owner = owners.get(lead.unit_candidate_key)
+    return await open_lead_from_detail(
+        db,
+        detail=detail,
+        owner=owners.get(lead.unit_candidate_key),
+        user_id=user_id,
+        organization_id=organization_id,
+    )
+
+
+async def open_lead_from_detail(
+    db: AsyncSession,
+    *,
+    detail: CrmLeadDetailResponse,
+    owner: CrmRenewalOwner | None,
+    user_id: str,
+    organization_id: str,
+) -> InboundEnquiryResponse:
+    """open_renewal_lead once the lease and its owner are known; bulk issue fetches those in batch."""
+    lead = detail.lead
     criteria = {
         "building": lead.building_name or lead.project_name,
         "unit_number": lead.unit_number,

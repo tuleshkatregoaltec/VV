@@ -9,12 +9,13 @@ from app.billing import service as billing_service
 from app.billing.models import CustomerPortalResponse, SubscriptionResponse
 from app.core.dependencies import (
     AuthContext,
+    require_active_organization_admin,
     require_active_owner,
     require_admin,
     require_auth,
     require_owner_membership,
 )
-from app.organization import invitations
+from app.organization import invitations, teams
 from app.organization import service as organization_service
 from app.organization.models import (
     AcceptInviteRequest,
@@ -22,6 +23,7 @@ from app.organization.models import (
     InviteUserRequest,
     InviteUserResponse,
     OperationSuccessResponse,
+    OrganizationAdminUpdateRequest,
     OrganizationCreateRequest,
     OrganizationDetailResponse,
     OrganizationInvitationResponse,
@@ -29,6 +31,9 @@ from app.organization.models import (
     OrganizationUpdateRequest,
     OwnerOrganizationCreateRequest,
     OwnerOrganizationCreateResponse,
+    TeamMembersUpdateRequest,
+    TeamsResponse,
+    TeamWriteRequest,
     UserTokenLimitUpdateResponse,
     UserUpdateRequest,
     ValidateInviteTokenResponse,
@@ -71,6 +76,7 @@ class OrganizationMemberResponse(BaseModel):
     first_name: str
     last_name: str
     role: str
+    organization_admin: bool = False
 
 
 @router.get("/members", response_model=List[OrganizationMemberResponse])
@@ -85,6 +91,68 @@ async def get_organization_members(
             context_organization=context.organization, db=db
         )
     ]
+
+
+@router.put("/members/{user_id}/organization-admin", response_model=OperationSuccessResponse)
+async def set_member_organization_admin(
+    user_id: str,
+    request: OrganizationAdminUpdateRequest,
+    context: AuthContext = Depends(require_active_owner),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Make a member an organization administrator, or remove that (owner only)."""
+    return await teams.set_organization_admin(
+        db, context.organization.id, user_id, request.organization_admin
+    )
+
+
+@router.get("/teams", response_model=TeamsResponse)
+async def list_teams(
+    context: AuthContext = Depends(require_active_organization_admin),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Teams with their agents and supervising managers, and everyone who can join one."""
+    return await teams.list_teams(db, context.organization.id)
+
+
+@router.post("/teams", response_model=TeamsResponse, status_code=201)
+async def create_team(
+    request: TeamWriteRequest,
+    context: AuthContext = Depends(require_active_organization_admin),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await teams.create_team(db, context.organization.id, request)
+
+
+@router.patch("/teams/{team_id}", response_model=TeamsResponse)
+async def rename_team(
+    team_id: str,
+    request: TeamWriteRequest,
+    context: AuthContext = Depends(require_active_organization_admin),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await teams.rename_team(db, context.organization.id, team_id, request)
+
+
+@router.put("/teams/{team_id}/members", response_model=TeamsResponse)
+async def replace_team_members(
+    team_id: str,
+    request: TeamMembersUpdateRequest,
+    context: AuthContext = Depends(require_active_organization_admin),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Set a team's agents and supervisors; anyone left out leaves the team."""
+    return await teams.replace_team_members(db, context.organization.id, team_id, request)
+
+
+@router.delete("/teams/{team_id}", response_model=OperationSuccessResponse)
+async def delete_team(
+    team_id: str,
+    context: AuthContext = Depends(require_active_organization_admin),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Delete a team that no routing rule uses; its members stay in the organization."""
+    return await teams.delete_team(db, context.organization.id, team_id)
 
 
 @router.get("/invitations", response_model=List[OrganizationInvitationResponse])

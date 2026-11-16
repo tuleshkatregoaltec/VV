@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.crm import company_listings, match_repository
+from app.crm import assignment, company_listings, match_repository
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import (
     CrmInboundEnquiry,
@@ -295,15 +295,28 @@ async def _upsert_match(
     return item
 
 
+async def _visible_targets(
+    db: AsyncSession, scope: assignment.AssignmentScope, items: list[CrmInboundMatch]
+) -> list[CrmInboundMatch]:
+    """Leave out reverse-demand matches whose lead this user may not see: they carry that lead's
+    name, phone and email. Stored matches stay; only what this user is shown is filtered."""
+    if scope.organization_admin:
+        return list(items)
+    demand = {int(item.target_key) for item in items if item.target_type == "demand"}
+    seen = await assignment.visible_ids(db, scope, demand)
+    return [item for item in items if item.target_type != "demand" or int(item.target_key) in seen]
+
+
 async def refresh_inbound_matches(
     db: AsyncSession,
     *,
     enquiry_id: int,
     organization_id: str,
+    scope: assignment.AssignmentScope,
     expand_units: bool = False,
 ) -> InboundMatchesResponse:
     enquiry = await match_repository.get_crm_inbound_enquiry(db, enquiry_id)
-    if not enquiry or enquiry.organization_id != organization_id:
+    if not enquiry or enquiry.organization_id != organization_id or not scope.can_view(enquiry):
         raise HTTPException(status_code=404, detail="Inbound enquiry not found")
     if not _qualification_complete(enquiry):
         raise HTTPException(
@@ -683,7 +696,9 @@ async def refresh_inbound_matches(
 
     await match_repository.mark_algorithm_version(db, enquiry_id, _ALGORITHM_VERSION)
     await db.commit()
-    stored = await match_repository.list_matches_by_score(db, enquiry_id)
+    stored = await _visible_targets(
+        db, scope, list(await match_repository.list_matches_by_score(db, enquiry_id))
+    )
     lanes = _visible_lanes(stored, listing_fresh=listing_fresh)
     return InboundMatchesResponse(
         enquiry_id=enquiry_id,
@@ -719,10 +734,10 @@ def _visible_lanes(items, *, listing_fresh: bool) -> dict[str, list[InboundMatch
 
 
 async def get_inbound_matches(
-    db: AsyncSession, enquiry_id: int, organization_id: str
+    db: AsyncSession, enquiry_id: int, organization_id: str, *, scope: assignment.AssignmentScope
 ) -> InboundMatchesResponse:
     enquiry = await match_repository.get_crm_inbound_enquiry(db, enquiry_id)
-    if not enquiry or enquiry.organization_id != organization_id:
+    if not enquiry or enquiry.organization_id != organization_id or not scope.can_view(enquiry):
         raise HTTPException(status_code=404, detail="Inbound enquiry not found")
     if not _qualification_complete(enquiry):
         return InboundMatchesResponse(
@@ -744,8 +759,9 @@ async def get_inbound_matches(
     items = result
     if items and _needs_refresh(items):
         return await refresh_inbound_matches(
-            db, enquiry_id=enquiry_id, organization_id=organization_id
+            db, enquiry_id=enquiry_id, organization_id=organization_id, scope=scope
         )
+    items = await _visible_targets(db, scope, list(items))
     listing_last_refresh, listing_fresh = await get_inventory_freshness()
     offplan_last_refresh = await get_catalog_freshness()
     lanes = _visible_lanes(items, listing_fresh=listing_fresh)
@@ -760,11 +776,26 @@ async def get_inbound_matches(
 
 
 async def update_inbound_match_state(
-    db: AsyncSession, *, match_id: int, organization_id: str, state: str
+    db: AsyncSession,
+    *,
+    match_id: int,
+    organization_id: str,
+    state: str,
+    scope: assignment.AssignmentScope,
 ) -> InboundMatchResponse:
+    """Save, dismiss or mark a match: on a lead this user may change, and (for reverse demand) a
+    target lead they may see."""
     item = await match_repository.get_crm_inbound_match(db, match_id)
-    if not item or item.organization_id != organization_id:
+    enquiry = await match_repository.get_crm_inbound_enquiry(db, item.enquiry_id) if item else None
+    if (
+        not item
+        or item.organization_id != organization_id
+        or not enquiry
+        or not scope.can_view(enquiry)
+        or not await _visible_targets(db, scope, [item])
+    ):
         raise HTTPException(status_code=404, detail="Inbound match not found")
+    assignment.require_edit(scope, enquiry)
     item.state = state
     item.updated_at = _utcnow()
     match_repository.save(db, item)

@@ -299,6 +299,7 @@ async def get_organization_members(context_organization, db: AsyncSession):
                     first_name=user.first_name,
                     last_name=user.last_name,
                     role=member.role,
+                    organization_admin=member.role == "owner" or member.organization_admin,
                 )
             )
 
