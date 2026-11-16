@@ -517,7 +517,7 @@ async def get_project_trends(
     project_name: str, days: int, filter_type: ProjectScopeType = "project", usage: str = "auto"
 ) -> ProjectTrendsResponse:
     """Price trend time series for a project over the given number of days."""
-    end_dt = date.today()
+    end_dt = business_today()
     start_dt = end_dt - timedelta(days=days)
     interval = _trend_interval_for_days(days)
 
@@ -859,10 +859,10 @@ def _resolve_period(
     timeframe_days: Optional[int], start_date: Optional[date], end_date: Optional[date]
 ) -> tuple[date, date]:
     if timeframe_days:
-        end_date = date.today()
+        end_date = business_today()
         return end_date - timedelta(days=timeframe_days), end_date
-    end_date = end_date or date.today()
-    return start_date or date.today() - timedelta(days=180), end_date  # default 6 months
+    today = business_today()
+    return start_date or today - timedelta(days=180), end_date or today  # default 6 months
 
 
 def _previous_period(start_date: date, end_date: date) -> tuple[date, date]:
@@ -1199,7 +1199,7 @@ async def get_market_trend(
         market = MARKET_FILTERS[market_type]
         resolved_property_usage = None
 
-    end_date = date.today()
+    end_date = business_today()
     start_date = end_date - timedelta(days=days)
     # The equal period just before: both cover whole days and share none.
     prev_end = start_date - timedelta(days=1)

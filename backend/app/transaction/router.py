@@ -64,7 +64,7 @@ def _file_response(export: ExportFile, *, name: str, export_format: str) -> Stre
 
 
 @router.get("/sales", response_model=TransactionListResponse)
-@cached_endpoint(prefix="transactions:dxbi-sales:v5", expire=600)
+@cached_endpoint(prefix="transactions:dxbi-sales:v5", expire=600, daily=True)
 async def get_sales_transactions(
     context: AuthContext = Depends(require_active_subscription),
     limit: int = _page_size(),
@@ -76,7 +76,7 @@ async def get_sales_transactions(
 
 
 @router.get("/rentals", response_model=RentalContractListResponse)
-@cached_endpoint(prefix="transactions:dxbi-rentals:v5", expire=600)
+@cached_endpoint(prefix="transactions:dxbi-rentals:v5", expire=600, daily=True)
 async def get_rental_contracts(
     context: AuthContext = Depends(require_active_subscription),
     limit: int = _page_size(),

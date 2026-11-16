@@ -127,3 +127,54 @@ async def test_every_query_parameter_changes_the_cache_key(
         cache_spy.reset_mock()
         await fn(context=object(), **changed)
         assert _key(cache_spy) != baseline, f"{name} is not in the cache key"
+
+
+# Endpoints whose result depends on today's date (relative windows, "as of today").
+DAILY = {
+    "get_sales_analytics",
+    "get_rental_analytics",
+    "get_market_trend",
+    "get_project_summary_endpoint",
+    "get_project_trends_endpoint",
+    "get_project_forecast_endpoint",
+    "get_project_pipeline_endpoint",
+}
+
+
+@pytest.mark.parametrize("endpoint,service_fn,prefix,params", CASES)
+async def test_date_dependent_endpoints_change_key_after_dubai_midnight(
+    monkeypatch, cache_spy, endpoint, service_fn, prefix, params
+):
+    from datetime import datetime
+
+    from app.market.periods import BUSINESS_TIMEZONE, business_today
+
+    service = AsyncMock(return_value={"ok": True})
+    _stub_service(monkeypatch, endpoint, service_fn, service)
+    fn = getattr(router, endpoint)
+
+    keys = []
+    for moment in (
+        datetime(2026, 11, 16, 23, 59, tzinfo=BUSINESS_TIMEZONE),
+        datetime(2026, 11, 17, 0, 1, tzinfo=BUSINESS_TIMEZONE),
+    ):
+        monkeypatch.setattr(
+            "app.core.decorators.business_today", lambda m=moment: business_today(m)
+        )
+        cache_spy.reset_mock()
+        await fn(context=object(), **params)
+        keys.append(_key(cache_spy))
+
+    if endpoint in DAILY:
+        assert keys[0] != keys[1]
+    else:
+        assert keys[0] == keys[1]
+
+
+def test_relative_windows_use_the_same_dubai_day_as_the_cache_key(monkeypatch):
+    from app.analytics import service
+
+    day = date(2026, 11, 17)
+    monkeypatch.setattr(service, "business_today", lambda: day)
+    assert service._resolve_period(90, None, None) == (day - timedelta(days=90), day)
+    assert service._resolve_period(None, None, None) == (day - timedelta(days=180), day)
