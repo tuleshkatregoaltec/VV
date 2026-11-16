@@ -200,3 +200,90 @@ async def test_the_fill_lock_is_released_after_the_fill(monkeypatch):
     from app.core import decorators
 
     decorators.cache.release_lock.assert_awaited_once_with('flight:{"limit":20}', "abc")
+
+
+# A relative window ("last 90 days") must not outlive the Dubai day it was computed on.
+def _dubai(year, month, day, hour, minute=0):
+    from datetime import datetime
+
+    from app.market.periods import BUSINESS_TIMEZONE
+
+    return datetime(year, month, day, hour, minute, tzinfo=BUSINESS_TIMEZONE)
+
+
+def _freeze_dubai(monkeypatch, moment):
+    from app.market.periods import business_today
+
+    monkeypatch.setattr("app.core.decorators.business_today", lambda: business_today(moment))
+
+
+async def test_daily_endpoint_key_changes_at_dubai_midnight(monkeypatch):
+    seen = []
+
+    async def get(key):
+        seen.append(key)
+        return None
+
+    monkeypatch.setattr("app.core.decorators.cache.get", get)
+    monkeypatch.setattr("app.core.decorators.cache.set", AsyncMock())
+    monkeypatch.setattr("app.core.decorators.cache.acquire_lock", AsyncMock(return_value="t"))
+    monkeypatch.setattr("app.core.decorators.cache.release_lock", AsyncMock())
+
+    @cached_endpoint(prefix="window", daily=True)
+    async def endpoint(timeframe_days: int = 90):
+        return {"days": timeframe_days}
+
+    _freeze_dubai(monkeypatch, _dubai(2026, 11, 16, 23, 59))
+    await endpoint(timeframe_days=90)
+    _freeze_dubai(monkeypatch, _dubai(2026, 11, 17, 0, 1))
+    await endpoint(timeframe_days=90)
+    await endpoint(timeframe_days=90)
+
+    assert seen[0] != seen[1]
+    assert seen[1] == seen[2]
+    assert "2026-11-16" in seen[0] and "2026-11-17" in seen[1]
+    assert seen[0].startswith("window:")
+
+
+async def test_dateless_endpoint_key_is_unchanged_by_midnight(monkeypatch):
+    seen = []
+
+    async def get(key):
+        seen.append(key)
+        return None
+
+    monkeypatch.setattr("app.core.decorators.cache.get", get)
+    monkeypatch.setattr("app.core.decorators.cache.set", AsyncMock())
+    monkeypatch.setattr("app.core.decorators.cache.acquire_lock", AsyncMock(return_value="t"))
+    monkeypatch.setattr("app.core.decorators.cache.release_lock", AsyncMock())
+
+    @cached_endpoint(prefix="static")
+    async def endpoint(limit: int = 20):
+        return {"limit": limit}
+
+    _freeze_dubai(monkeypatch, _dubai(2026, 11, 16, 23, 59))
+    await endpoint(limit=5)
+    _freeze_dubai(monkeypatch, _dubai(2026, 11, 17, 0, 1))
+    await endpoint(limit=5)
+
+    assert seen[0] == seen[1] == 'static:{"limit":5}'
+
+
+async def test_daily_endpoint_keeps_single_flight(monkeypatch):
+    import asyncio
+
+    _no_cache(monkeypatch)
+    _freeze_dubai(monkeypatch, _dubai(2026, 11, 16, 12))
+    calls = 0
+
+    @cached_endpoint(prefix="window", daily=True)
+    async def endpoint(timeframe_days: int = 90):
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.05)
+        return {"days": timeframe_days}
+
+    results = await asyncio.gather(*(endpoint(timeframe_days=7) for _ in range(5)))
+
+    assert calls == 1
+    assert results == [{"days": 7}] * 5

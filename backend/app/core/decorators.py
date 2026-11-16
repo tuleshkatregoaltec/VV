@@ -3,6 +3,7 @@ import inspect
 import json
 import logging
 import time
+from datetime import date
 from functools import wraps
 from typing import Callable
 
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.core.cache import RedisCache
+from app.market.periods import business_today
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,9 @@ def _is_dependency_parameter(parameter: inspect.Parameter) -> bool:
     return isinstance(parameter.default, DependsParam)
 
 
-def _build_cache_key(prefix: str, signature: inspect.Signature, *args, **kwargs) -> str:
+def _build_cache_key(
+    prefix: str, signature: inspect.Signature, *args, day: date | None = None, **kwargs
+) -> str:
     ignored_names = {"request", "response"}
     bound_arguments = signature.bind_partial(*args, **kwargs)
     bound_arguments.apply_defaults()
@@ -50,15 +54,16 @@ def _build_cache_key(prefix: str, signature: inspect.Signature, *args, **kwargs)
 
         cacheable_arguments[name] = jsonable_encoder(value)
 
-    if not cacheable_arguments:
-        return prefix
-
-    encoded_arguments = json.dumps(
-        cacheable_arguments,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return f"{prefix}:{encoded_arguments}"
+    key = prefix
+    if cacheable_arguments:
+        encoded_arguments = json.dumps(
+            cacheable_arguments,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        key = f"{prefix}:{encoded_arguments}"
+    # A relative window ("last 90 days") is a different answer after midnight in Dubai.
+    return f"{key}:day={day.isoformat()}" if day else key
 
 
 async def _wait_for_peer(cache_key: str):
@@ -97,15 +102,21 @@ def _forget(cache_key: str, task: asyncio.Future) -> None:
         task.exception()  # Retrieved here, so a fill whose callers all left logs nothing.
 
 
-def cached_endpoint(prefix: str, expire: int = 600):
-    """Cache endpoint responses in Redis, computing each missing key once at a time."""
+def cached_endpoint(prefix: str, expire: int = 600, daily: bool = False):
+    """Cache endpoint responses in Redis, computing each missing key once at a time.
+
+    ``daily`` adds today's date in Dubai to the key, for responses that depend on the current day
+    (relative day windows, "as of today"). The previous day's entries are then never served.
+    """
 
     def decorator(func: Callable):
         signature = inspect.signature(func)
 
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            cache_key = _build_cache_key(prefix, signature, *args, **kwargs)
+            cache_key = _build_cache_key(
+                prefix, signature, *args, day=business_today() if daily else None, **kwargs
+            )
 
             cached_data = await cache.get(cache_key)
             if cached_data is not None:
