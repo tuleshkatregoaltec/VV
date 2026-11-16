@@ -5,6 +5,16 @@ import io
 from pathlib import PurePosixPath
 from zipfile import BadZipFile, ZipFile
 
+
+class ImportInputError(ValueError):
+    """A problem with the uploaded file that the person can fix; its message is safe to show."""
+
+
+def client_message(exc: BaseException, fallback: str) -> str:
+    """The exception's own text if it is a fixable file problem, else a generic message."""
+    return str(exc) if isinstance(exc, ImportInputError) else fallback
+
+
 MAX_IMPORT_ROWS = 500_000
 MAX_IMPORT_COLUMNS = 512
 _MAX_MEMBERS = 2_048
@@ -20,7 +30,7 @@ def validate_xlsx(data: bytes) -> None:
         with ZipFile(io.BytesIO(data)) as archive:
             members = archive.infolist()
             if len(members) > _MAX_MEMBERS:
-                raise ValueError("Workbook contains too many archive members")
+                raise ImportInputError("Workbook contains too many archive members")
             names: set[str] = set()
             expanded = 0
             for member in members:
@@ -30,24 +40,24 @@ def validate_xlsx(data: bytes) -> None:
                     or PurePosixPath(name).is_absolute()
                     or ".." in PurePosixPath(name).parts
                 ):
-                    raise ValueError("Workbook contains ambiguous archive paths")
+                    raise ImportInputError("Workbook contains ambiguous archive paths")
                 names.add(name)
                 if member.flag_bits & 1:
-                    raise ValueError("Encrypted workbooks are not supported")
+                    raise ImportInputError("Encrypted workbooks are not supported")
                 expanded += member.file_size
                 if expanded > _MAX_EXPANDED_BYTES or member.file_size > _MAX_MEMBER_BYTES:
-                    raise ValueError("Workbook expanded size exceeds the import limit")
+                    raise ImportInputError("Workbook expanded size exceeds the import limit")
                 if name == "xl/sharedStrings.xml" and member.file_size > _MAX_SHARED_STRINGS_BYTES:
-                    raise ValueError("Workbook shared strings exceed the import limit")
+                    raise ImportInputError("Workbook shared strings exceed the import limit")
                 if (
                     member.file_size > 1024 * 1024
                     and member.file_size > max(1, member.compress_size) * _MAX_EXPANSION_RATIO
                 ):
-                    raise ValueError("Workbook compression ratio exceeds the import limit")
+                    raise ImportInputError("Workbook compression ratio exceeds the import limit")
             if not {"[Content_Types].xml", "xl/workbook.xml"} <= names:
-                raise ValueError("Upload a valid XLSX workbook")
+                raise ImportInputError("Upload a valid XLSX workbook")
     except BadZipFile as exc:
-        raise ValueError("Upload a valid XLSX workbook") from exc
+        raise ImportInputError("Upload a valid XLSX workbook") from exc
 
 
 def csv_rows(data: bytes, *, max_rows: int = MAX_IMPORT_ROWS + 15) -> list[list[str]]:
@@ -55,8 +65,8 @@ def csv_rows(data: bytes, *, max_rows: int = MAX_IMPORT_ROWS + 15) -> list[list[
     rows: list[list[str]] = []
     for row in csv.reader(io.StringIO(data.decode("utf-8-sig"))):
         if len(row) > MAX_IMPORT_COLUMNS:
-            raise ValueError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
+            raise ImportInputError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
         if len(rows) >= max_rows:
-            raise ValueError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
+            raise ImportInputError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
         rows.append(row)
     return rows

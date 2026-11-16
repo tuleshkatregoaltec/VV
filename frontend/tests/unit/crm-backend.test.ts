@@ -122,6 +122,50 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 		expect(res.counts.all).toBe(1)
 	})
 
+	it.each([
+		{ building: 'null', unit_number: 'NULL' },
+		{ building: 'NULL', unit_number: '#NULL' },
+		{ building: 'undefined', unit_number: 'NaN' },
+		{ unit: 'null #NULL' }
+	])('shows a missing unit as not stated, never as the text "null" (%o)', async (criteria) => {
+		serve({
+			'/api/v1/crm/inbound/enquiries': {
+				enquiries: [
+					enquiry({ id: 5, intent: 'sell', criteria: { locations: ['JVC'], ...criteria } })
+				],
+				total: 1,
+				summary: {}
+			}
+		})
+		const [row] = (await backend.listLeads({})).items
+		expect(row.summary.line).toBe('Unit not stated')
+		expect(row.fields.unit).toBeUndefined()
+		expect(JSON.stringify(row)).not.toMatch(/null #|#null|"null"|undefined/i)
+	})
+
+	it('keeps a real building and unit number and drops only the missing half', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries': {
+				enquiries: [
+					enquiry({
+						id: 5,
+						intent: 'sell',
+						criteria: { building: 'FIVE LUXE', unit_number: 'NULL' }
+					}),
+					enquiry({
+						id: 6,
+						intent: 'sell',
+						criteria: { building: 'Null Tower', unit_number: '4901' }
+					})
+				],
+				total: 2,
+				summary: {}
+			}
+		})
+		const lines = (await backend.listLeads({})).items.map((l) => l.summary.line)
+		expect(lines).toEqual(['FIVE LUXE', 'Null Tower #4901'])
+	})
+
 	it('maps backend statuses onto the stage bar of each lead type', async () => {
 		serve({
 			'/api/v1/crm/inbound/enquiries': {

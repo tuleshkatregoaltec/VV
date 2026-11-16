@@ -21,6 +21,7 @@ from app.crm.models import (
     CrmNoteCreate,
     CrmSavedLead,
     CrmSavedLeadResponse,
+    CrmWorkspacePage,
     CrmWorkspaceResponse,
     CrmWorkspaceSummary,
     CrmWorkspaceUpdate,
@@ -445,11 +446,15 @@ async def list_lead_workspaces(
     *,
     user_id: str,
     organization_id: str,
-) -> list[CrmWorkspaceSummary]:
-    result = await workspace_repository.list_lead_workspaces(db, organization_id, user_id)
+    limit: int = 100,
+    offset: int = 0,
+) -> CrmWorkspacePage:
+    result, total = await workspace_repository.page_lead_workspaces(
+        db, organization_id, user_id, limit=limit, offset=offset
+    )
     workspaces = list(result)
     if not workspaces:
-        return []
+        return CrmWorkspacePage(items=[], total=total, limit=limit, offset=offset)
     workspace_ids = [workspace.id for workspace in workspaces if workspace.id is not None]
     notes_result = await workspace_repository.list_lead_notes(
         db, organization_id, user_id, workspace_ids
@@ -465,14 +470,19 @@ async def list_lead_workspaces(
         user_id=user_id,
         organization_id=organization_id,
     )
-    return [
-        _workspace_summary(
-            workspace,
-            note_count=note_counts.get(workspace.id or 0, 0),
-            imported_owner=owners.get(workspace.unit_candidate_key),
-        )
-        for workspace in workspaces
-    ]
+    return CrmWorkspacePage(
+        items=[
+            _workspace_summary(
+                workspace,
+                note_count=note_counts.get(workspace.id or 0, 0),
+                imported_owner=owners.get(workspace.unit_candidate_key),
+            )
+            for workspace in workspaces
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 async def get_lead_workspace(

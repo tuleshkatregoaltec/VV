@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -146,17 +147,24 @@ async def list_workspace_notes(db: AsyncSession, organization_id, user_id, works
     ).all()
 
 
-async def list_lead_workspaces(db: AsyncSession, organization_id, user_id):
-    return (
+async def page_lead_workspaces(db: AsyncSession, organization_id, user_id, *, limit, offset):
+    """One page of the agent's workspaces, newest first, and how many they have in all."""
+    scope = (
+        CrmLeadWorkspace.user_id == user_id,
+        CrmLeadWorkspace.organization_id == organization_id,
+    )
+    total = (await db.exec(select(func.count()).select_from(CrmLeadWorkspace).where(*scope))).one()
+    rows = (
         await db.exec(
             select(CrmLeadWorkspace)
-            .where(
-                CrmLeadWorkspace.user_id == user_id,
-                CrmLeadWorkspace.organization_id == organization_id,
-            )
-            .order_by(CrmLeadWorkspace.updated_at.desc())
+            .where(*scope)
+            # id breaks ties so two pages never repeat or skip a row.
+            .order_by(CrmLeadWorkspace.updated_at.desc(), CrmLeadWorkspace.id.desc())
+            .limit(limit)
+            .offset(offset)
         )
     ).all()
+    return rows, int(total)
 
 
 async def list_lead_notes(db: AsyncSession, organization_id, user_id, workspace_ids):

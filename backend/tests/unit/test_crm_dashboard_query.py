@@ -199,3 +199,78 @@ async def test_assets_renewals_rank_once_and_look_the_page_up_by_key(monkeypatch
     # The page lookup keeps the area narrowing the ranking used.
     assert "display_area_name" in page_sql.split("FROM dxbi_rental_unit_candidates AS c2")[0]
     assert page_params["areas"] == ["Al Barsha"]
+
+
+UPCOMING_FIRST_KEY = (
+    "if(lease_end >= {as_of:Date}, toInt32(lease_end), 1000000 - toInt32(lease_end))"
+)
+
+
+async def test_dashboard_page_lists_upcoming_leases_before_recently_expired_ones(monkeypatch):
+    calls = []
+
+    async def query(sql, params=None):
+        calls.append(sql)
+        if "groupArraySortedIf" in sql:
+            return [_combined_row()]
+        return [{"event_key": "e1"}]
+
+    monkeypatch.setattr(opportunity_queries, "query", query)
+    await opportunity_queries.fetch_dashboard(
+        date(2026, 11, 15), None, None, "area", None, 365, 2, 0, None, None, None, None, None
+    )
+    ranking_sql = calls[0]
+    # The sorted prefix starts with the upcoming-first key, not the oldest expired lease.
+    assert f"groupArraySortedIf(2)(({UPCOMING_FIRST_KEY}, -toInt64(raw_score)" in ranking_sql
+    assert "-toInt64(raw_score), lease_end," not in ranking_sql
+
+
+async def test_deep_dashboard_and_renewal_pages_rank_upcoming_first_too(monkeypatch):
+    calls = []
+
+    async def query(sql, params=None):
+        calls.append(sql)
+        if "groupArraySortedIf" in sql:
+            row = _combined_row()
+            row["page"] = []
+            return [row]
+        return [{"event_key": "deep"}]
+
+    monkeypatch.setattr(opportunity_queries, "query", query)
+    await opportunity_queries.fetch_dashboard(
+        date(2026, 11, 15), None, None, "area", None, 365, 50, 100_000, None, None, None, None, None
+    )
+    deep = [sql for sql in calls if "OFFSET" in sql][0]
+    assert f"ORDER BY {UPCOMING_FIRST_KEY}, raw_score DESC" in deep
+    assert "raw_score DESC, lease_end ASC" not in deep
+
+
+async def test_renewals_page_lists_upcoming_leases_before_recently_expired_ones(monkeypatch):
+    calls = []
+
+    async def query(sql, params=None):
+        calls.append(sql)
+        if "groupArraySortedIf" in sql:
+            return [{"total": 1, "page": [[1, 1, -1, "e1"]], "property_types": []}]
+        return [{"event_key": "e1"}]
+
+    monkeypatch.setattr(opportunity_queries, "query", query)
+    await opportunity_queries.fetch_renewals(
+        date(2026, 11, 15),
+        status=None,
+        unlet_only=False,
+        expired_days=365,
+        area=None,
+        property_type=None,
+        project=None,
+        building=None,
+        limit=2,
+        offset=0,
+    )
+    assert f"groupArraySortedIf(2)(({UPCOMING_FIRST_KEY}, -toInt64(raw_score)" in calls[0]
+
+
+def test_lead_page_cache_key_changes_with_the_new_order():
+    from app.crm import lead_cache
+
+    assert lead_cache.CACHE_VERSION != "1"

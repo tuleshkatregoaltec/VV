@@ -94,8 +94,8 @@ from app.crm.models import (
     CrmRenewalLeadsResponse,
     CrmRenewalsResponse,
     CrmSavedLeadResponse,
+    CrmWorkspacePage,
     CrmWorkspaceResponse,
-    CrmWorkspaceSummary,
     CrmWorkspaceUpdate,
 )
 from app.crm.opportunities import get_dashboard
@@ -1143,17 +1143,21 @@ async def crm_property_report(
     return await _until_disconnect(request, get_property_report(lead_id, as_of=as_of))
 
 
-@router.get("/workspaces", response_model=list[CrmWorkspaceSummary], dependencies=LIGHT_LANE)
+@router.get("/workspaces", response_model=CrmWorkspacePage, dependencies=LIGHT_LANE)
 async def crm_workspaces(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """List the current agent's persisted CRM state for queue decoration."""
+    """One page of the current agent's persisted CRM state, newest first, with the total."""
     user_id, organization_id = _auth_ids(context)
     return await list_lead_workspaces(
         db,
         user_id=user_id,
         organization_id=organization_id,
+        limit=limit,
+        offset=offset,
     )
 
 

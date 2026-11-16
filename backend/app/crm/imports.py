@@ -63,6 +63,7 @@ from app.crm.import_parsing import (
     _parse_xlsx,
     _summary,
 )
+from app.crm.import_safety import ImportInputError, client_message
 from app.crm.owner_match_stage import run_owner_matching, stored_verdicts
 from app.crm.owner_match_status import summarize_owner_matches
 from app.crm.owner_store import open_store
@@ -285,11 +286,11 @@ async def _execute_contact_import(
             candidate.evidence["source_file_sha256"] = sha256
         if not total_rows:
             if replay:
-                raise ValueError(
+                raise ImportInputError(
                     "Replay parsed no source records; existing results were preserved."
                 )
             if _record is not None:
-                raise ValueError(_EMPTY_FILE)
+                raise ImportInputError(_EMPTY_FILE)
             # Nothing to import: remove the record so no empty import or list is left behind.
             await import_repository.delete_record(db, record)
             await db.commit()
@@ -305,7 +306,9 @@ async def _execute_contact_import(
             or not _missing_owner_name(existing_claims[source].contact_name)
             for source in missing_sources
         ):
-            raise ValueError("Replay would lose named source records; results were preserved.")
+            raise ImportInputError(
+                "Replay would lose named source records; results were preserved."
+            )
         await run_in_thread(annotate_source_lifecycle, candidates)
         await prepare_file_context(candidates)
         await _recover_property_identity_from_transaction(candidates)
@@ -427,7 +430,9 @@ async def _execute_contact_import(
             else await save_drop_log(organization_id, record.id, dropped, revision=drop_revision)
         )
         if missing_sources and not summary.dropped_log:
-            raise ValueError("Nameless rows cannot be removed without a saved dropped-row log.")
+            raise ImportInputError(
+                "Nameless rows cannot be removed without a saved dropped-row log."
+            )
         record.status = "completed"
         record.error_message = None
         record.mapping = {
@@ -467,13 +472,15 @@ async def _execute_contact_import(
         # Rollback expires ORM attributes; reload explicitly before marking failure.
         await db.refresh(record)
         record.status = "failed"
-        record.error_message = str(exc)[:2_000]
+        message = client_message(exc, _GENERIC_IMPORT_FAILURE)
+        record.error_message = message[:2_000]
         record.completed_at = datetime.now(timezone.utc)
         import_repository.save(db, record)
         await db.commit()
-        raise HTTPException(status_code=422, detail=f"Import failed: {exc}") from exc
+        raise HTTPException(status_code=422, detail=f"Import failed: {message}") from exc
 
 
+_GENERIC_IMPORT_FAILURE = "The file could not be processed. Check it and try again."
 _UNFETCHED_LIST = object()
 
 

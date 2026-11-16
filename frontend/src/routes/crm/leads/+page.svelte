@@ -208,6 +208,19 @@ const typeLine = (l: LeadRow) =>
 	<button type="button" class="btn ghost sm" onclick={() => panel.open({ kind: 'areas' })}>My areas</button>
 </div>
 
+{#if feed.data && !feed.data.areas.length}
+	<div class="card noareas" role="status">
+		<b>No areas chosen, so no lease leads are listed.</b>
+		<span class="muted">
+			Lease leads follow the areas you pick. This is not an empty market: choose your areas to see
+			the leases ending in them.
+		</span>
+		<button type="button" class="btn sm" onclick={() => panel.open({ kind: 'areas' })}>
+			Choose your areas
+		</button>
+	</div>
+{/if}
+
 <Tabs label="Lead type" items={tabs} value={ui.leadTab} onselect={selectTab} />
 
 <div class="filters">

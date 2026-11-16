@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from app.crm import owner_assessment, renewal_leads, workspaces
+from app.crm.models import CrmWorkspaceSummary
 
 
 def _install_metadata(monkeypatch, *, loader):
@@ -59,9 +60,8 @@ async def test_owners_by_candidate_asks_for_its_own_units_only(monkeypatch):
 
 async def test_workspace_list_does_not_assess_the_whole_organization(monkeypatch):
     workspace = SimpleNamespace(id=1, unit_candidate_key="unit-a")
-    monkeypatch.setattr(
-        workspaces.workspace_repository, "list_lead_workspaces", AsyncMock(return_value=[workspace])
-    )
+    page = AsyncMock(return_value=([workspace], 4_745))
+    monkeypatch.setattr(workspaces.workspace_repository, "page_lead_workspaces", page)
     monkeypatch.setattr(
         workspaces.workspace_repository, "list_lead_notes", AsyncMock(return_value=[])
     )
@@ -72,10 +72,32 @@ async def test_workspace_list_does_not_assess_the_whole_organization(monkeypatch
         return {}
 
     monkeypatch.setattr(renewal_leads, "_owners_by_candidate", owners)
-    monkeypatch.setattr(workspaces, "_workspace_summary", lambda *a, **k: "summary")
-    result = await workspaces.list_lead_workspaces(None, user_id="u", organization_id="org")
-    assert result == ["summary"]
+    summary = CrmWorkspaceSummary(
+        lead_id="lead-a",
+        unit_candidate_key="unit-a",
+        pipeline_status="new",
+        highlight_color="none",
+        updated_at=datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(workspaces, "_workspace_summary", lambda *a, **k: summary)
+    result = await workspaces.list_lead_workspaces(
+        None, user_id="u", organization_id="org", limit=50, offset=100
+    )
+    assert result.items == [summary]
+    assert (result.total, result.limit, result.offset) == (4_745, 50, 100)
     assert captured["keys"] == ["unit-a"]
+    assert page.await_args.kwargs == {"limit": 50, "offset": 100}
+
+
+async def test_workspace_list_with_no_rows_still_reports_the_total(monkeypatch):
+    # An offset past the end has no rows but the real total, so a pager can step back.
+    monkeypatch.setattr(
+        workspaces.workspace_repository, "page_lead_workspaces", AsyncMock(return_value=([], 7))
+    )
+    result = await workspaces.list_lead_workspaces(
+        None, user_id="u", organization_id="org", limit=10, offset=70
+    )
+    assert (result.items, result.total) == ([], 7)
 
 
 async def test_scoped_assessment_is_reused_until_the_inputs_change(monkeypatch):

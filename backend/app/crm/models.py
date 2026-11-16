@@ -301,6 +301,13 @@ class CrmWorkspaceSummary(BaseModel):
     updated_at: datetime
 
 
+class CrmWorkspacePage(BaseModel):
+    items: list[CrmWorkspaceSummary]
+    total: int
+    limit: int
+    offset: int
+
+
 class CrmWorkspaceResponse(CrmWorkspaceSummary):
     notes: list[CrmLeadNoteResponse] = Field(default_factory=list)
 
