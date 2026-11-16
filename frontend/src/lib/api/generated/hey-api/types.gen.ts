@@ -4431,6 +4431,28 @@ export type CrmTimelineEvent = {
 };
 
 /**
+ * CrmWorkspacePage
+ */
+export type CrmWorkspacePage = {
+    /**
+     * Items
+     */
+    items: Array<CrmWorkspaceSummary>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+};
+
+/**
  * CrmWorkspaceResponse
  */
 export type CrmWorkspaceResponse = {
@@ -15243,17 +15265,33 @@ export type CrmCrmPropertyReportResponse = CrmCrmPropertyReportResponses[keyof C
 export type CrmCrmWorkspacesData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
     url: '/api/v1/crm/workspaces';
 };
 
+export type CrmCrmWorkspacesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmWorkspacesError = CrmCrmWorkspacesErrors[keyof CrmCrmWorkspacesErrors];
+
 export type CrmCrmWorkspacesResponses = {
     /**
-     * Response Crm-Crm Workspaces
-     *
      * Successful Response
      */
-    200: Array<CrmWorkspaceSummary>;
+    200: CrmWorkspacePage;
 };
 
 export type CrmCrmWorkspacesResponse = CrmCrmWorkspacesResponses[keyof CrmCrmWorkspacesResponses];

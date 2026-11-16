@@ -29,7 +29,12 @@ from app.crm.import_models import (
     CrmSheetMapping,
 )
 from app.crm.import_normalization import location_evidence, positive_decimal
-from app.crm.import_safety import MAX_IMPORT_COLUMNS, csv_rows, validate_xlsx
+from app.crm.import_safety import (
+    MAX_IMPORT_COLUMNS,
+    ImportInputError,
+    csv_rows,
+    validate_xlsx,
+)
 
 _MAX_ROWS = 500_000
 
@@ -425,7 +430,7 @@ def _populated_xlsx_rows(workbook, sheet) -> list[int]:
                 continue
             if any(node.text for node in element.iter() if node.tag in {ns + "v", ns + "t"}):
                 if len(rows) >= _MAX_ROWS + 15:
-                    raise ValueError(f"Import exceeds the {_MAX_ROWS:,}-row limit")
+                    raise ImportInputError(f"Import exceeds the {_MAX_ROWS:,}-row limit")
                 rows.append(int(element.attrib["r"]))
             element.clear()
             if parent is not None:
@@ -440,7 +445,7 @@ def _inspect_xlsx(data: bytes, filename: str) -> list[SheetProfile]:
     try:
         for sheet in workbook.worksheets:
             if (sheet.max_column or 0) > MAX_IMPORT_COLUMNS:
-                raise ValueError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
+                raise ImportInputError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
             initial_rows = list(
                 sheet.iter_rows(
                     min_row=1,
@@ -1147,7 +1152,7 @@ def _parse_xlsx(
                     continue
                 total_rows += 1
                 if total_rows > _MAX_ROWS:
-                    raise ValueError(f"Import exceeds the {_MAX_ROWS:,}-row limit")
+                    raise ImportInputError(f"Import exceeds the {_MAX_ROWS:,}-row limit")
                 candidate = _candidate_from_row(
                     row,
                     profile=profile,
@@ -1197,7 +1202,7 @@ def _parse_csv(
             continue
         total_rows += 1
         if total_rows > _MAX_ROWS:
-            raise ValueError(f"Import exceeds the {_MAX_ROWS:,}-row limit")
+            raise ImportInputError(f"Import exceeds the {_MAX_ROWS:,}-row limit")
         candidate = _candidate_from_row(
             row,
             profile=profile,

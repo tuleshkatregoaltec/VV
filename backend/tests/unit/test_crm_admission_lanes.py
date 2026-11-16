@@ -99,6 +99,8 @@ async def test_cheap_reads_answer_while_the_dashboard_holds_the_only_slot(
         service.return_value = {"enquiries": [], "total": 0, "summary": {}}
     if service_name == "get_area_preferences":
         service.return_value = {"areas": []}
+    if service_name == "list_lead_workspaces":
+        service.return_value = {"items": [], "total": 0, "limit": 100, "offset": 0}
     monkeypatch.setattr("app.crm.router." + service_name, service)
     async with execution.expensive_crm("1"):
         response = await client.get(path)
@@ -260,3 +262,19 @@ async def test_uncached_whole_org_assessment_from_a_light_request_is_admitted(mo
     async with execution.light_crm("org"):
         await owner_assessment.get_owner_assessment(None, organization_id="org")
     assert observed == [1]
+
+
+async def test_workspaces_are_paged_with_a_default_and_a_maximum(client, monkeypatch):
+    service = AsyncMock(return_value={"items": [], "total": 4_745, "limit": 100, "offset": 0})
+    monkeypatch.setattr("app.crm.router.list_lead_workspaces", service)
+
+    first = await client.get("/api/v1/crm/workspaces")
+    assert first.status_code == 200, first.text
+    assert first.json()["total"] == 4_745
+    assert (service.await_args.kwargs["limit"], service.await_args.kwargs["offset"]) == (100, 0)
+
+    await client.get("/api/v1/crm/workspaces?limit=500&offset=1000")
+    assert (service.await_args.kwargs["limit"], service.await_args.kwargs["offset"]) == (500, 1000)
+
+    for bad in ("limit=501", "limit=0", "offset=-1"):
+        assert (await client.get(f"/api/v1/crm/workspaces?{bad}")).status_code == 422

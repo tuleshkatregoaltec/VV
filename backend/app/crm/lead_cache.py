@@ -31,7 +31,7 @@ from app.core.cache import RedisCache
 logger = logging.getLogger(__name__)
 
 # Bump when a cached page's shape or SQL changes, so an old answer is never served by new code.
-CACHE_VERSION = "1"
+CACHE_VERSION = "2"
 PREFIX = "crm:lead-pages"
 # Keys already change with every release and as-of day; the TTL only bounds Redis memory.
 TTL_SECONDS = 12 * 3600

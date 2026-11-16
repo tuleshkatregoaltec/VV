@@ -4785,19 +4785,50 @@
 			"get": {
 				"tags": ["crm", "crm"],
 				"summary": "Crm Workspaces",
-				"description": "List the current agent's persisted CRM state for queue decoration.",
+				"description": "One page of the current agent's persisted CRM state, newest first, with the total.",
 				"operationId": "crm-crm_workspaces",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
 								"schema": {
-									"items": {
-										"$ref": "#/components/schemas/CrmWorkspaceSummary"
-									},
-									"type": "array",
-									"title": "Response Crm-Crm Workspaces"
+									"$ref": "#/components/schemas/CrmWorkspacePage"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
 								}
 							}
 						}
@@ -19581,6 +19612,32 @@
 					"confidence"
 				],
 				"title": "CrmTimelineEvent"
+			},
+			"CrmWorkspacePage": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/CrmWorkspaceSummary"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": ["items", "total", "limit", "offset"],
+				"title": "CrmWorkspacePage"
 			},
 			"CrmWorkspaceResponse": {
 				"properties": {

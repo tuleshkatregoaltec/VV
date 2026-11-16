@@ -382,8 +382,12 @@ _EXPIRED_UNLET = """
     AND ownership_timing = 'stable_rental_history'
     AND unit_match_status = 'unique'
 """
-_PAGE_ORDER = "raw_score DESC, lease_end ASC, annual_rent_aed DESC, event_key"
-_PAGE_TUPLE = "(-toInt64(raw_score), lease_end, -toInt64(annual_rent_aed), event_key)"
+# Running leases first, the soonest end on top; then ended ones, the most recent first. One
+# Int32 carries both: upcoming ends sort as their day number, ended ones after every upcoming
+# one and descending by end date, so the page never opens on the oldest expired lease.
+_UPCOMING_FIRST = "if(lease_end >= {as_of:Date}, toInt32(lease_end), 1000000 - toInt32(lease_end))"
+_PAGE_ORDER = f"{_UPCOMING_FIRST}, raw_score DESC, annual_rent_aed DESC, event_key"
+_PAGE_TUPLE = f"({_UPCOMING_FIRST}, -toInt64(raw_score), -toInt64(annual_rent_aed), event_key)"
 
 
 async def _page_keys(cte, where, params, *, page, limit, offset):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -15,7 +16,14 @@ from app.core.async_work import run_in_thread
 from app.crm import import_jobs, inbound_repository
 from app.crm.ai import _ai_extract, _ai_header_mapping
 from app.crm.identity import _normalize_email, _normalize_phone
-from app.crm.import_safety import MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS, csv_rows, validate_xlsx
+from app.crm.import_safety import (
+    MAX_IMPORT_COLUMNS,
+    MAX_IMPORT_ROWS,
+    ImportInputError,
+    client_message,
+    csv_rows,
+    validate_xlsx,
+)
 from app.crm.inbound import _bulk_ownership_enrichments, _find_or_create_contact
 from app.crm.inbound_models import (
     CrmInboundActivity,
@@ -42,6 +50,8 @@ from app.crm.inbound_policy import (
 )
 
 _MAX_FILE_BYTES = 50 * 1024 * 1024
+
+logger = logging.getLogger(__name__)
 
 
 def _header_mapping(headers: list[Any]) -> dict[str, int]:
@@ -123,7 +133,7 @@ def _file_rows(
             }
         )
         if len(rows) > MAX_IMPORT_ROWS:
-            raise ValueError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
+            raise ImportInputError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
         return rows, {"sheets": mappings}
 
     validate_xlsx(data)
@@ -131,9 +141,9 @@ def _file_rows(
     try:
         for sheet in workbook.worksheets:
             if sheet.max_column and sheet.max_column > MAX_IMPORT_COLUMNS:
-                raise ValueError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
+                raise ImportInputError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
             if sheet.max_row and sheet.max_row > MAX_IMPORT_ROWS + 15:
-                raise ValueError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
+                raise ImportInputError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
             preview = list(sheet.iter_rows(min_row=1, max_row=15, values_only=True))
             header_index, header_values, mapping = _best_header(preview)
             mapping = _mapping_override_for_sheet(
@@ -153,10 +163,10 @@ def _file_rows(
                 sheet.iter_rows(min_row=header_index + 2, values_only=True), start=header_index + 2
             ):
                 if len(values) > MAX_IMPORT_COLUMNS:
-                    raise ValueError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
+                    raise ImportInputError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
                 if any(value not in (None, "") for value in values):
                     if len(rows) >= MAX_IMPORT_ROWS:
-                        raise ValueError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
+                        raise ImportInputError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
                     rows.append(
                         (
                             sheet.title,
@@ -262,7 +272,9 @@ async def preview_inbound_import(
             )
         return preview
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Could not read import: {exc}") from exc
+        logger.warning("Inbound import preview failed", exc_info=True)
+        message = client_message(exc, "Check that it is a valid CSV or XLSX file.")
+        raise HTTPException(status_code=422, detail=f"Could not read import: {message}") from exc
 
 
 async def process_inbound_import(
@@ -353,11 +365,11 @@ async def _execute_inbound_import(
         for sheet_mapping in mapping.get("sheets", []):
             fields = set(sheet_mapping.get("field_map", {}))
             if not ({"full_name", "first_name"} & fields):
-                raise ValueError(
+                raise ImportInputError(
                     f"Map a full-name or first-name column for {sheet_mapping.get('sheet', 'the import')}"
                 )
             if not ({"phone", "email", "whatsapp"} & fields):
-                raise ValueError(
+                raise ImportInputError(
                     f"Map a phone, email, or WhatsApp column for {sheet_mapping.get('sheet', 'the import')}"
                 )
         row_fingerprints: set[str] = set()
@@ -535,7 +547,8 @@ async def _execute_inbound_import(
         await db.rollback()
         await db.refresh(record)
         record.status = "failed"
-        record.error_message = str(exc)[:1_000]
+        logger.exception("Inbound import failed", extra={"import_id": record.id})
+        record.error_message = client_message(exc, "The file could not be processed.")[:1_000]
         record.summary = summary.model_dump()
         record.completed_at = _utcnow()
         inbound_repository.save(db, record)

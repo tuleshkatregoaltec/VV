@@ -287,9 +287,16 @@ const CRITERIA_KEY: Partial<Record<LeadFieldKey, string>> = {
 	areas: 'locations'
 }
 
+/**
+ * Imported files and exports write a missing value as the word NULL (or "#NULL"). Those are
+ * placeholders, not data: they must never reach the screen as "null #NULL".
+ */
+const PLACEHOLDER = /^(?:[\s·,#-]*(?:null|undefined|nan)\b)+[\s·,#-]*$/i
+
 const text = (v: unknown): string | null => {
 	if (v === null || v === undefined || v === '') return null
-	return Array.isArray(v) ? v.join(', ') || null : String(v)
+	const out = Array.isArray(v) ? v.join(', ') : String(v)
+	return !out || PLACEHOLDER.test(out) ? null : out
 }
 const num = (v: unknown): number | null => {
 	const n = Number(v)
@@ -471,7 +478,9 @@ function leadDetail(e: InboundEnquiryResponse, u: AuthMeResponse): LeadDetail {
 		owner_match: {
 			summary: row.known,
 			records: (e.contact.registry_profiles ?? []).map((p) => ({
-				unit: [p.building_name || p.project_name, p.unit_number].filter(Boolean).join(' #'),
+				unit: [text(p.building_name) || text(p.project_name), text(p.unit_number)]
+					.filter(Boolean)
+					.join(' #'),
 				area: p.area_name,
 				status: p.ownership_status.replaceAll('_', ' '),
 				purchase: p.transaction_price_aed
@@ -888,8 +897,9 @@ export async function shortlistMatch(
 const OWNERSHIP: Record<CrmOwnerProperty['ownership_status'], Chip> = STATUS_INFO
 
 const unitLabel = (p: CrmOwnerProperty) => {
-	const location = p.building_name || p.project_name
-	if (p.unit_number) return [location, p.unit_number].filter(Boolean).join(' #')
+	const location = text(p.building_name) || text(p.project_name)
+	const unit = text(p.unit_number)
+	if (unit) return [location, unit].filter(Boolean).join(' #')
 	const ref = p.source_reference
 	return (
 		[
