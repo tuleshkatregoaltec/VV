@@ -1835,6 +1835,19 @@
 		.feedstrip .sep {
 			color: var(--text3);
 		}
+		.noareas {
+			display: flex;
+			align-items: center;
+			gap: 6px 12px;
+			flex-wrap: wrap;
+			padding: 12px 14px;
+			margin-bottom: 12px;
+			font-size: 13px;
+			border-left: 3px solid var(--amber, #d97706);
+		}
+		.noareas > .btn {
+			margin-left: auto;
+		}
 		.srcdot {
 			display: inline-flex;
 			align-items: center;

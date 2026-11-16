@@ -130,7 +130,9 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 	])('shows a missing unit as not stated, never as the text "null" (%o)', async (criteria) => {
 		serve({
 			'/api/v1/crm/inbound/enquiries': {
-				enquiries: [enquiry({ id: 5, intent: 'sell', criteria: { locations: ['JVC'], ...criteria } })],
+				enquiries: [
+					enquiry({ id: 5, intent: 'sell', criteria: { locations: ['JVC'], ...criteria } })
+				],
 				total: 1,
 				summary: {}
 			}
