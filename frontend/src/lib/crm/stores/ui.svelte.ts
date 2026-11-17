@@ -27,7 +27,10 @@ export type MatchTabId = 'ready' | 'offplan' | 'sell'
 
 const defaults = {
 	leadTab: 'all' as LeadTab,
-	leadView: 'list' as 'list' | 'board',
+	/** Managers also get 'agents': per-person lead analytics (17 Nov). */
+	leadView: 'list' as 'list' | 'board' | 'agents',
+	/** Agents view and agent page window, in days. */
+	analyticsDays: 30 as 7 | 30 | 90,
 	/** Leads › Board: which group's columns show (6 Oct). */
 	leadGroup: 'bt' as 'bt' | 'sl',
 	q: '',
@@ -54,6 +57,8 @@ const defaults = {
 	renewalPtype: '',
 	renewalProject: '',
 	renewalBuilding: '',
+	/** Assets › Renewals: lease ids a manager ticked to issue to agents. */
+	renewalSelected: [] as string[],
 	ownerTab: 'all' as OwnerTab,
 	ownerOwnership: 'current' as 'current' | 'former',
 	ownerTransactionMatch: '' as '' | 'matched' | 'unmatched' | 'ambiguous' | 'excluded',

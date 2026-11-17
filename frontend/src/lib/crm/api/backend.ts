@@ -11,6 +11,10 @@
 import { me as authMe } from '$lib/api/auth'
 import { ApiError, client } from '$lib/api/client'
 import type {
+	AgentAnalyticsDetail,
+	AgentLanguagesResponse,
+	AssignmentEventResponse,
+	AssignmentScopeResponse,
 	AuthMeResponse,
 	CrmAreaPreferencesResponse,
 	CrmContactImportPreview,
@@ -35,7 +39,18 @@ import type {
 	InboundImportPreviewResponse,
 	InboundImportResponse,
 	InboundMatchesResponse,
-	InboundMatchResponse
+	InboundMatchResponse,
+	LeadAssignmentResponse,
+	OwnerImportRequestResponse,
+	OwnerIssueRequest,
+	OwnerIssueResponse,
+	RenewalIssueResponse,
+	RoutingRuleOrder,
+	RoutingRuleResponse,
+	RoutingRuleUpdate,
+	RoutingRuleWrite,
+	TeamAnalyticsResponse,
+	WorkloadResponse
 } from '$lib/api/generated/hey-api/types.gen'
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { currentUser } from '$lib/stores/user.svelte'
@@ -59,6 +74,7 @@ import type {
 	FeedArea,
 	FeedPreferences,
 	FeedSummary,
+	ImportAssignment,
 	ImportPreview,
 	ImportRequest,
 	InboxFilter,
@@ -141,6 +157,8 @@ const OFF_PLAN_TAG = 'off-plan'
 const VITEVUE_SOURCE = 'Vitevue lease lead'
 /** Owners on the agency file whose unit just resold (backend SOLD_OWNER_SOURCE). */
 const SOLD_OWNER_SOURCE = 'Owner file · recently sold'
+/** Owners a manager issued from an owner sheet for outbound contact (backend OWNER_OUTBOUND_SOURCE). */
+const OWNER_OUTBOUND_SOURCE = 'Owner file · outbound'
 
 type Intent = InboundEnquiryResponse['intent']
 type Status = InboundEnquiryResponse['status']
@@ -393,7 +411,7 @@ function criteriaWith(current: Criteria, fields: LeadFields): Criteria {
 const sourceOf = (label: string): Source =>
 	label === VITEVUE_SOURCE
 		? 'vitevue'
-		: label === SOLD_OWNER_SOURCE
+		: label === SOLD_OWNER_SOURCE || label === OWNER_OUTBOUND_SOURCE
 			? 'file'
 			: (SOURCE_OPTIONS.find((o) => o.label.toLowerCase() === label.toLowerCase())?.source ??
 				'inbound')
@@ -452,6 +470,10 @@ function leadRow(e: InboundEnquiryResponse, u: AuthMeResponse): LeadRow {
 				? fullName(u)
 				: 'Another agent'
 			: null,
+		assigned_user_id: e.assigned_user_id ?? null,
+		assignment_revision: e.assignment_revision ?? 0,
+		team_id: e.team_id ?? null,
+		shared: e.shared ?? false,
 		score: lease ? vitevueScore(lease.days_left, lease.vacant) : (e.priority?.score ?? 0),
 		area: (Array.isArray(locations) ? text(locations[0]) : null) ?? text(e.criteria.building) ?? '',
 		language: e.contact.preferred_language ?? '',
@@ -1368,15 +1390,131 @@ export async function previewImport(file: File): Promise<ImportPreview> {
 	}
 }
 
-/** The import endpoints take no areas; the Areas box is not sent. */
-export async function createImport(file: File): Promise<Written<ImportRequest>> {
+/**
+ * Import a leads file with the importer's explicit choice of who handles the new leads. The
+ * import endpoints take no areas; the Areas box is not sent.
+ */
+export async function createImport(
+	file: File,
+	assignment: ImportAssignment
+): Promise<Written<ImportRequest>> {
 	const fd = new FormData()
 	fd.append('file', file)
 	fd.append('name', file.name)
+	fd.append('assignment_mode', assignment.mode)
+	if (assignment.mode === 'agent') fd.append('assignee_user_id', assignment.assignee_user_id)
+	if (assignment.mode !== 'self' && assignment.team_id) fd.append('team_id', assignment.team_id)
 	const r = await client.post<InboundImportResponse>(`${CRM}/inbound/imports`, fd)
 	const { created: _c, ...row } = importRow('Leads', r)
 	return done(row)
 }
+
+/* ── lead assignment and routing ── */
+
+/** What the signed-in user may do with assignment, decided by the server. */
+export const assignmentScope = () => client.get<AssignmentScopeResponse>(`${CRM}/assignment/scope`)
+
+/** Assign (or with null, unassign) leads at the revisions shown; all change or none do. */
+export async function assignLeads(
+	leads: { id: number; assignment_revision: number }[],
+	assignee: string | null,
+	team: string | null = null
+): Promise<Written<LeadAssignmentResponse>> {
+	return done(
+		await client.post<LeadAssignmentResponse>(`${CRM}/inbound/assignments`, {
+			enquiry_ids: leads.map((l) => l.id),
+			assignee_user_id: assignee,
+			// Which of the assignee's teams owns the leads; the server infers it when unambiguous.
+			team_id: team,
+			expected_revisions: Object.fromEntries(leads.map((l) => [l.id, l.assignment_revision]))
+		})
+	)
+}
+
+/** Put unassigned leads in a team's shared pool at the revisions shown; all or none. */
+export async function releaseToPool(
+	leads: { id: number; assignment_revision: number }[],
+	team: string
+): Promise<Written<LeadAssignmentResponse>> {
+	return done(
+		await client.post<LeadAssignmentResponse>(`${CRM}/inbound/pool`, {
+			enquiry_ids: leads.map((l) => l.id),
+			team_id: team,
+			expected_revisions: Object.fromEntries(leads.map((l) => [l.id, l.assignment_revision]))
+		})
+	)
+}
+
+/** Each managed team's recorded workload (managers and administrators). */
+export const teamWorkload = () => client.get<WorkloadResponse>(`${CRM}/assignment/workload`)
+
+/** Each managed person's lead figures over the last 7, 30 or 90 days (managers and administrators). */
+export const teamAnalytics = (days: 7 | 30 | 90) =>
+	client.get<TeamAnalyticsResponse>(`${CRM}/assignment/analytics?days=${days}`)
+
+/** One person's figures, sources, last 7 days of activity and leads; 404 outside your teams. */
+export const agentAnalytics = (userId: string, days: 7 | 30 | 90) =>
+	client.get<AgentAnalyticsDetail>(
+		`${CRM}/assignment/analytics/${encodeURIComponent(userId)}?days=${days}`
+	)
+
+/** Record the languages a team member speaks (used by "speakers only" routing rules). */
+export const setAgentLanguages = async (userId: string, languages: string[]) =>
+	done(
+		await client.put<AgentLanguagesResponse>(
+			`${CRM}/assignment/people/${encodeURIComponent(userId)}/languages`,
+			{ languages }
+		)
+	)
+
+/* ── owner files waiting for a manager's approval ── */
+
+export const ownerImportRequests = () =>
+	client.get<OwnerImportRequestResponse[]>(`${CRM}/contact-import-requests`)
+
+/** An agent's owner file goes to their manager; nothing is imported until approved. */
+export async function requestOwnerImport(
+	file: File,
+	name: string,
+	teamId?: string
+): Promise<Written<OwnerImportRequestResponse>> {
+	const problem = ownerFileProblem(file)
+	if (problem) throw new ApiError(problem, 400)
+	const fd = new FormData()
+	fd.append('file', file)
+	if (teamId) fd.append('team_id', teamId)
+	fd.append('name', name.trim() || file.name.replace(/\.[^.]+$/, '') || file.name)
+	return done(await client.post<OwnerImportRequestResponse>(`${CRM}/contact-import-requests`, fd))
+}
+
+export const decideOwnerImport = async (id: number, decision: 'approve' | 'reject') =>
+	done(
+		await client.post<OwnerImportRequestResponse>(
+			`${CRM}/contact-import-requests/${id}/${decision}`,
+			{}
+		)
+	)
+
+export const leadAssignments = (id: number) =>
+	client.get<AssignmentEventResponse[]>(`${CRM}/inbound/enquiries/${id}/assignments`)
+
+export const routingRules = () => client.get<RoutingRuleResponse[]>(`${CRM}/routing/rules`)
+
+export const createRoutingRule = async (body: RoutingRuleWrite) =>
+	done(await client.post<RoutingRuleResponse>(`${CRM}/routing/rules`, body))
+
+export const updateRoutingRule = async (id: number, body: RoutingRuleUpdate) =>
+	done(await client.put<RoutingRuleResponse>(`${CRM}/routing/rules/${id}`, body))
+
+export async function deleteRoutingRule(id: number, revision: number): Promise<Written<null>> {
+	await client.delete(
+		client.withQuery(`${CRM}/routing/rules/${id}`, { expected_revision: revision })
+	)
+	return done(null)
+}
+
+export const reorderRoutingRules = async (body: RoutingRuleOrder) =>
+	done(await client.put<RoutingRuleResponse[]>(`${CRM}/routing/rules/order`, body))
 
 /* ── owner files (/contact-imports) ── */
 
@@ -1982,6 +2120,43 @@ export async function saveRenewalOwner(
 	return done(await getRenewal(id))
 }
 
+/**
+ * Issue owners from a processed owner sheet to agents as outbound leads: the chosen rows, or the
+ * sheet's first `limit` owners with `status` (null: any status). One lead per owner.
+ */
+export async function issueOwners(
+	listId: number,
+	pick: {
+		claimIds?: number[]
+		status?: OwnerIssueRequest['status']
+		limit?: number
+		offset?: number
+	},
+	assignment: ImportAssignment
+): Promise<OwnerIssueResponse> {
+	return client.post<OwnerIssueResponse>(`${CRM}/contact-lists/${listId}/issue`, {
+		claim_ids: pick.claimIds,
+		status: pick.status,
+		limit: pick.limit,
+		offset: pick.offset,
+		assignment
+	})
+}
+
+/**
+ * Issue renewal units to agents for outbound contact: each unit becomes (or reuses) its lead and
+ * is routed like a Leads import. Leads someone already holds are left as they are.
+ */
+export async function issueRenewals(
+	leaseIds: string[],
+	assignment: ImportAssignment
+): Promise<RenewalIssueResponse> {
+	return client.post<RenewalIssueResponse>(`${CRM}/renewal-leads/issue`, {
+		lease_ids: leaseIds,
+		assignment
+	})
+}
+
 /* My areas: the agent's areas and lease-end windows that fill the Leads inbox. */
 
 const preferences = (p: CrmAreaPreferencesResponse): FeedPreferences => ({
@@ -2133,6 +2308,10 @@ function unopenedVitevueLead(item: CrmRenewalLeadsResponse['items'][number]): Le
 		received_label: lease.end_chip.label,
 		stage: 'new',
 		agent: null,
+		assigned_user_id: null,
+		assignment_revision: 0,
+		team_id: null,
+		shared: false,
 		score: vitevueScore(lease.days_left, lease.vacant),
 		area: lease.area,
 		language: '',

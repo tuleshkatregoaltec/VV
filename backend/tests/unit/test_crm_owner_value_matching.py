@@ -9,10 +9,22 @@ from datetime import date, datetime, timezone
 import pytest
 
 from app.crm import company_listings, match_repository, matching
+from app.crm.assignment import AssignmentScope
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import CrmInboundEnquiry
 from app.crm.matching_policy import _owner_budget_band, _owner_value_fit
 from app.listings.models import ListingListResponse
+
+# Matching now takes the caller's visibility scope (lead assignment). These tests are about timing
+# and value matching, not visibility, so they run as an organization administrator, who sees all.
+_ADMIN = AssignmentScope(
+    organization_id="org",
+    user_id="admin",
+    organization_admin=True,
+    supervised_team_ids=frozenset(),
+    team_members={},
+    member_team_ids=frozenset(),
+)
 
 NOW = datetime(2026, 11, 5, 9, 0, tzinfo=timezone.utc)
 AREA = "Town Square"
@@ -152,7 +164,9 @@ def world(monkeypatch):
 
 async def _refresh(world, enquiry):
     world["enquiry"] = enquiry
-    response = await matching.refresh_inbound_matches(_Db(), enquiry_id=9, organization_id="org")
+    response = await matching.refresh_inbound_matches(
+        _Db(), enquiry_id=9, organization_id="org", scope=_ADMIN
+    )
     return response.lanes.get("owners", [])
 
 

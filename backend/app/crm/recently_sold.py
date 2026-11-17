@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.crm import inbound_repository, owner_queries
+from app.crm import assignment, inbound_repository, owner_queries
 from app.crm.identity import _normalize_email, _normalize_phone
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import (
@@ -349,8 +349,8 @@ def approve_as_buyer(
     """Move a recently sold owner from the Inbox into Leads as a possible buyer.
 
     Their budget, area and property type are unknown until an agent has spoken to them, so the
-    brief stays empty and matchmaking stays off. The sale notes stay with the lead, and the
-    approving agent becomes its owner. Returns the history entry to save.
+    brief stays empty and matchmaking stays off. The sale notes stay with the lead. Who handles
+    it is decided by approve_recent_seller. Returns the history entry to save.
     """
     if enquiry.source != SOLD_OWNER_SOURCE or enquiry.intent != "unknown":
         raise HTTPException(
@@ -359,7 +359,6 @@ def approve_as_buyer(
         )
     enquiry.intent = "buy"
     enquiry.record_kind = "opportunity"
-    enquiry.assigned_user_id = user_id
     enquiry.updated_at = now
     return CrmInboundActivity(
         enquiry_id=enquiry.id or 0,
@@ -377,9 +376,15 @@ async def approve_recent_seller(
 ) -> InboundEnquiryResponse:
     from app.crm.inbound import _enquiry_response
 
-    enquiry = await inbound_repository.get_crm_inbound_enquiry(db, enquiry_id)
-    if not enquiry or enquiry.organization_id != organization_id:
-        raise HTTPException(status_code=404, detail="Inbound enquiry not found")
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    enquiry = await assignment.load_visible(db, scope, enquiry_id)
+    assignment.require_edit(scope, enquiry)
+    # The approving agent takes an unassigned item; one already someone's lead stays theirs.
+    # Assigned first: it locks and reloads the row, before the approval changes it.
+    if enquiry.assigned_user_id is None:
+        await assignment.reassign(
+            db, scope, [enquiry_id], user_id, reason="approved_from_inbox", allow_self=True
+        )
     inbound_repository.save(db, approve_as_buyer(enquiry, user_id=user_id, now=_utcnow()))
     inbound_repository.save(db, enquiry)
     await db.commit()

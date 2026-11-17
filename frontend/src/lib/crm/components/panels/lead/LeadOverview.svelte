@@ -11,6 +11,7 @@ import { write } from '../../../write'
 import Chain, { type ChainPart } from '../../ui/Chain.svelte'
 import Chip from '../../ui/Chip.svelte'
 import Kv from '../../ui/Kv.svelte'
+import LeadAssignment from './LeadAssignment.svelte'
 
 let { lead }: { lead: LeadDetail } = $props()
 
@@ -117,6 +118,8 @@ const chain = $derived.by((): ChainPart[] => {
 		{/if}
 	</div>
 {/if}
+
+{#if lead.id > 0}<LeadAssignment {lead} />{/if}
 
 <section class="sec">
 	<h3>

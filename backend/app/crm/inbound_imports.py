@@ -13,7 +13,7 @@ from fastapi import HTTPException, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.async_work import run_in_thread
-from app.crm import import_jobs, inbound_repository
+from app.crm import agent_languages, assignment, import_jobs, inbound_repository, rotation, routing
 from app.crm.ai import _ai_extract, _ai_header_mapping
 from app.crm.identity import _normalize_email, _normalize_phone
 from app.crm.import_safety import (
@@ -30,11 +30,13 @@ from app.crm.inbound_models import (
     CrmInboundContact,
     CrmInboundEnquiry,
     CrmInboundImport,
+    InboundImportAssignmentSummary,
     InboundImportPreviewResponse,
     InboundImportPreviewSheet,
     InboundImportResponse,
     InboundImportSummary,
     InboundOwnershipEnrichmentResponse,
+    UnassignedReason,
 )
 from app.crm.inbound_policy import (
     _ALIASES,
@@ -49,6 +51,7 @@ from app.crm.inbound_policy import (
     _token,
     _utcnow,
 )
+from app.crm.routing_models import ImportAssignmentPolicy
 
 _MAX_FILE_BYTES = 50 * 1024 * 1024
 
@@ -287,7 +290,11 @@ async def process_inbound_import(
     organization_id: str,
     campaign_context: str = "",
     mapping_override: dict[str, Any] | None = None,
+    assignment_policy: ImportAssignmentPolicy,
 ) -> InboundImportResponse:
+    # Who handles the new leads is settled before the file is read, and checked again when the
+    # queued job runs (the importer's teams or the rules may have changed in between).
+    await _resolve_policy(db, organization_id, user_id, assignment_policy)
     filename = Path(upload.filename or "inbound-leads.xlsx").name
     if not filename.lower().endswith((".xlsx", ".csv")):
         raise HTTPException(status_code=415, detail="Upload a CSV or XLSX file")
@@ -306,6 +313,7 @@ async def process_inbound_import(
         organization_id=organization_id,
         campaign_context=campaign_context,
         mapping_override=mapping_override,
+        assignment_policy=assignment_policy.model_dump(),
     )
     return _import_response(record)
 
@@ -319,9 +327,13 @@ async def _execute_inbound_import(
     organization_id: str,
     campaign_context: str = "",
     mapping_override: dict[str, Any] | None = None,
+    assignment_policy: dict[str, Any] | None = None,
     _record: CrmInboundImport | None = None,
     _commit: Callable[[], Awaitable[None]] | None = None,
 ) -> InboundImportResponse:
+    # Jobs queued before routing existed carry no policy: the importer keeps their leads.
+    policy = ImportAssignmentPolicy.model_validate(assignment_policy or {"mode": "self"})
+    pool_team, rules = await _resolve_policy(db, organization_id, user_id, policy)
     filename = Path(upload.filename or "inbound-leads.xlsx").name
     if not filename.lower().endswith((".xlsx", ".csv")):
         raise HTTPException(status_code=415, detail="Upload a CSV or XLSX file")
@@ -355,7 +367,16 @@ async def _execute_inbound_import(
         inbound_repository.save(db, record)
         await db.commit()
         await db.refresh(record)
-    summary = InboundImportSummary()
+    summary = InboundImportSummary(
+        assignment=InboundImportAssignmentSummary(
+            mode=policy.mode,
+            assignee_user_id=policy.assignee_user_id,
+            team_id=pool_team,
+        )
+    )
+    # Each new lead's routing decision: the person it should go to, the rule that chose them and
+    # the lead's own language (for rules that route to its speakers only).
+    routed: list[tuple[CrmInboundEnquiry, str | None, routing.RuleSnapshot | None, str | None]] = []
     imported_enquiries: list[CrmInboundEnquiry] = []
     imported_contacts: dict[int, CrmInboundContact] = {}
     try:
@@ -462,7 +483,6 @@ async def _execute_inbound_import(
                 contact_id=contact.id or 0,
                 source_import_id=record.id,
                 created_by_user_id=user_id,
-                assigned_user_id=user_id,
                 record_kind=record_kind,
                 intent=intent or "unknown",
                 status="needs_review" if review else "new",
@@ -495,6 +515,16 @@ async def _execute_inbound_import(
             await db.flush()
             imported_enquiries.append(enquiry)
             imported_contacts[contact.id or 0] = contact
+            if policy.mode == "self":
+                routed.append((enquiry, user_id, None, None))
+            elif policy.mode == "agent":
+                routed.append((enquiry, policy.assignee_user_id, None, None))
+            elif policy.mode == "rules":
+                rule = routing.first_match(rules, enquiry, contact)
+                language = routing.lead_language(contact) if rule and rule.speakers_only else None
+                routed.append((enquiry, rule.destination_user_id if rule else None, rule, language))
+            else:
+                routed.append((enquiry, None, None, None))
             inbound_repository.save(
                 db,
                 CrmInboundActivity(
@@ -532,6 +562,9 @@ async def _execute_inbound_import(
             summary.rental_owners += int(enrichment.rental_owner)
             summary.portfolio_owners += int(enrichment.multiple_property_owner)
             summary.high_priority += int(_lead_priority(enquiry, enrichment).band == "high")
+        await _assign_imported(
+            db, routed, summary.assignment, organization_id, user_id, record.id or 0, pool_team
+        )
         record.status = "completed"
         record.summary = summary.model_dump()
         record.completed_at = _utcnow()
@@ -547,6 +580,12 @@ async def _execute_inbound_import(
             raise
         await db.rollback()
         await db.refresh(record)
+        # Nothing was assigned: the rollback removed the leads and their history together.
+        summary.assignment = InboundImportAssignmentSummary(
+            mode=policy.mode,
+            assignee_user_id=policy.assignee_user_id,
+            team_id=pool_team,
+        )
         record.status = "failed"
         logger.exception("Inbound import failed", extra={"import_id": record.id})
         record.error_message = client_message(exc, "The file could not be processed.")[:1_000]
@@ -555,6 +594,146 @@ async def _execute_inbound_import(
         inbound_repository.save(db, record)
         await db.commit()
     return _import_response(record)
+
+
+async def _resolve_policy(
+    db: AsyncSession, organization_id: str, user_id: str, policy: ImportAssignmentPolicy
+) -> tuple[str | None, list[routing.RuleSnapshot]]:
+    """The team owning leads nobody receives, and the rules to apply, for this importer.
+
+    An agent imports only for themselves ("self", whatever their teams); every other mode
+    distributes leads and needs a manager or organization administrator.
+    """
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    if policy.mode != "self":
+        assignment.require_assigner(scope)
+    rules: list[routing.RuleSnapshot] = []
+    pool_team = _pool_team(scope, policy)
+    if policy.mode == "agent":
+        pool_team = assignment.assignable_team(scope, policy.assignee_user_id or "", policy.team_id)
+    elif policy.mode == "rules":
+        rules = await routing.rule_snapshot(db, scope)
+        if not rules:
+            raise HTTPException(
+                status_code=422, detail="There are no enabled routing rules for your teams"
+            )
+    return pool_team, rules
+
+
+async def _assign_imported(
+    db: AsyncSession,
+    routed: list[tuple[CrmInboundEnquiry, str | None, routing.RuleSnapshot | None, str | None]],
+    outcome: InboundImportAssignmentSummary,
+    organization_id: str,
+    user_id: str,
+    import_id: int | None,
+    pool_team: str | None,
+) -> None:
+    """Assign the new leads in the transaction that creates them.
+
+    Eligibility is checked again here, after the file work: the importer's teams and every
+    destination are reloaded, and a destination that left meanwhile gets no leads. A matching
+    rule whose destination is unavailable leaves the lead unassigned; no later rule is tried.
+    A "speakers only" rule gives a lead with a known language to the first person in its order
+    recorded as speaking it (a lead with no language goes to the destination as usual).
+    Leads nobody receives belong to `pool_team` (shared in its pool in "team" mode).
+    """
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    available: dict[tuple[str, frozenset[str]], bool] = {}
+    now = _utcnow()
+    self_team = assignment.own_team(scope) if outcome.mode == "self" else None
+
+    def leave_unassigned(enquiry: CrmInboundEnquiry, reason: UnassignedReason) -> None:
+        outcome.unassigned += 1
+        outcome.unassigned_reasons[reason] = outcome.unassigned_reasons.get(reason, 0) + 1
+        enquiry.team_id = pool_team
+        inbound_repository.save(db, enquiry)
+
+    async def eligible(target: str, teams: frozenset[str]) -> bool:
+        key = (target, teams)
+        if key not in available:
+            available[key] = (
+                # A self-import needs no team: only that the importer is still a member.
+                await assignment.importer_still_member(db, scope)
+                if outcome.mode == "self"
+                else await assignment.destination_available(db, scope, target, teams)
+            )
+        return available[key]
+
+    for enquiry, target, rule, language in routed:
+        if target is None and outcome.mode == "team":
+            assignment.record_assignment(
+                db,
+                enquiry,
+                None,
+                actor_user_id=user_id,
+                reason="released",
+                now=now,
+                team_id=pool_team,
+                shared=True,
+                import_id=import_id,
+            )
+            outcome.unassigned += 1
+            outcome.shared += 1
+            continue
+        if target is None:
+            leave_unassigned(
+                enquiry, "no_matching_rule" if outcome.mode == "rules" else "chosen_unassigned"
+            )
+            continue
+        teams = frozenset({rule.team_id if rule else pool_team or ""})
+        if rule and language is not None:
+            # The first person in the rule's order who is still eligible and speaks the language.
+            target = None
+            for person in rule.order:
+                if await agent_languages.speaks(
+                    db, organization_id, person, language
+                ) and await eligible(person, teams):
+                    target = person
+                    break
+            if target is None:
+                leave_unassigned(enquiry, "no_language_speaker")
+                continue
+        elif not await eligible(target, teams):
+            leave_unassigned(enquiry, "destination_ineligible")
+            continue
+        assignment.record_assignment(
+            db,
+            enquiry,
+            target,
+            actor_user_id=user_id,
+            reason="import_rule" if rule else "import_agent",
+            now=now,
+            team_id=rule.team_id if rule else (self_team if outcome.mode == "self" else pool_team),
+            rule_id=rule.id if rule else None,
+            rule_revision=rule.revision if rule else None,
+            import_id=import_id,
+        )
+        if rule:
+            rotation.start(db, enquiry, rule, holder=target, required_language=language, now=now)
+        outcome.assigned += 1
+        outcome.by_assignee[target] = outcome.by_assignee.get(target, 0) + 1
+        if rule:
+            outcome.by_rule[str(rule.id)] = outcome.by_rule.get(str(rule.id), 0) + 1
+
+
+def _pool_team(scope: assignment.AssignmentScope, policy: ImportAssignmentPolicy) -> str | None:
+    """The team that owns imported leads nobody receives: the one chosen, else the importer's
+    only managed team. A manager of several teams must choose; "team" mode always needs one."""
+    if policy.mode in {"self", "agent"}:
+        return None
+    if policy.team_id is not None:
+        if policy.team_id not in scope.team_members:
+            raise HTTPException(status_code=403, detail="You do not manage that team")
+        return policy.team_id
+    if len(scope.supervised_team_ids) == 1 and not scope.organization_admin:
+        return next(iter(scope.supervised_team_ids))
+    if scope.organization_admin and policy.mode != "team":
+        return None  # administrators see unowned leads; nothing is guessed for them
+    raise HTTPException(
+        status_code=422,
+        detail={"code": "TEAM_REQUIRED", "message": "Choose the team these leads belong to."},
+    )
 
 
 def _import_response(record: CrmInboundImport) -> InboundImportResponse:
@@ -572,16 +751,25 @@ def _import_response(record: CrmInboundImport) -> InboundImportResponse:
 
 
 async def list_inbound_imports(
-    db: AsyncSession, organization_id: str
+    db: AsyncSession, organization_id: str, *, user_id: str
 ) -> list[InboundImportResponse]:
+    """Administrators see every import of the organization; anyone else their own imports."""
+    scope = await assignment.load_scope(db, organization_id, user_id)
     result = await inbound_repository.list_imports(db, organization_id)
-    return [_import_response(item) for item in result]
+    return [
+        _import_response(item)
+        for item in result
+        if scope.organization_admin or item.created_by_user_id == user_id
+    ]
 
 
-async def delete_inbound_import(db: AsyncSession, import_id: int, organization_id: str) -> None:
-    result = await inbound_repository.get_import_for_org(db, import_id, organization_id)
-    record = result
-    if not record:
+async def delete_inbound_import(
+    db: AsyncSession, import_id: int, organization_id: str, *, user_id: str
+) -> None:
+    """Delete an import and every lead it created: only its importer or an administrator."""
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    record = await inbound_repository.get_import_for_org(db, import_id, organization_id)
+    if not record or not (scope.organization_admin or record.created_by_user_id == user_id):
         raise HTTPException(status_code=404, detail="Inbound import not found")
     input_key = await import_jobs.delete_input_for_import(db, record)
     imported_enquiries = await inbound_repository.list_import_contact_ids(

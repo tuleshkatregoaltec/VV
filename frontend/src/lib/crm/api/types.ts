@@ -140,6 +140,12 @@ export interface LeadRow {
 	received_label: string
 	stage: LeadStage
 	agent: string | null
+	/** Who handles the lead (user id) and the assignment revision a reassignment must quote. */
+	assigned_user_id: string | null
+	assignment_revision: number
+	/** The team that owns the lead; `shared` while it waits in that team's pool to be taken. */
+	team_id: string | null
+	shared: boolean
 	score: number
 	area: string
 	language: string
@@ -1527,3 +1533,12 @@ export interface Connection {
 	tone: Tone
 	kind: 'source' | 'import'
 }
+
+/** Who handles the leads an import creates; chosen explicitly on every leads import. */
+export type ImportAssignment =
+	| { mode: 'self' }
+	| { mode: 'agent'; assignee_user_id: string; team_id?: string }
+	| { mode: 'rules'; team_id?: string }
+	/** Every new lead waits in the team's shared pool; the first agent to log contact takes it. */
+	| { mode: 'team'; team_id?: string }
+	| { mode: 'unassigned'; team_id?: string }

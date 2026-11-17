@@ -20,7 +20,8 @@ vi.mock('@tanstack/svelte-query', async (importOriginal) => ({
 			data.requestedOwnership = (key[5] as { ownership: string }).ownership
 		}
 		return {
-			data: key[4] === 'owners' ? data.owners : [],
+			// The assignment scope is an object, not a list: leave it unloaded, as on first render.
+			data: key[4] === 'owners' ? data.owners : key[4] === 'assignment' ? undefined : [],
 			isPlaceholderData: false,
 			isError: false
 		}

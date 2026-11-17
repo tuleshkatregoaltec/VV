@@ -1,10 +1,19 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, LiteralString, Optional
+from typing import List, Literal, LiteralString, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, EmailStr
-from sqlalchemy import CheckConstraint, Column, DateTime, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKeyConstraint,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlmodel import Field, SQLModel
 
 
@@ -51,11 +60,82 @@ class OrganizationMembership(SQLModel, table=True):
     organization_id: str = Field(foreign_key="organizations.id", index=True)
     user_id: str = Field(index=True)
     role: str = Field(default="member")
+    # Granted by an owner: organization administration (teams, routing, assignment) without
+    # billing ownership. Owners are always organization administrators.
+    organization_admin: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+    )
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
     )
     updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+
+
+class OrganizationTeam(SQLModel, table=True):
+    """A group of organization members supervised by one or more managers."""
+
+    __tablename__: LiteralString = "organization_teams"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_organization_team_name"),
+        # Target of the composite keys that keep team rows inside one organization.
+        UniqueConstraint("id", "organization_id", name="uq_organization_team_id_org"),
+        ForeignKeyConstraint(
+            ["organization_id"],
+            ["organizations.id"],
+            name="fk_organization_team_organization",
+            ondelete="CASCADE",
+        ),
+    )
+
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    organization_id: str = Field(index=True)
+    name: str = Field(sa_column=Column(String(120), nullable=False))
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+
+
+class OrganizationTeamMember(SQLModel, table=True):
+    """A member's place in a team: an agent or a supervising manager.
+
+    Both keys are composite with the organization, so a team can only hold members of its own
+    organization, and removing someone from the organization removes them from every team.
+    """
+
+    __tablename__: LiteralString = "organization_team_members"
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id", name="uq_organization_team_member"),
+        CheckConstraint("role IN ('agent', 'supervisor')", name="ck_organization_team_member_role"),
+        ForeignKeyConstraint(
+            ["team_id", "organization_id"],
+            ["organization_teams.id", "organization_teams.organization_id"],
+            name="fk_organization_team_member_team",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "user_id"],
+            ["organization_memberships.organization_id", "organization_memberships.user_id"],
+            name="fk_organization_team_member_membership",
+            ondelete="CASCADE",
+        ),
+    )
+
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    team_id: str = Field(index=True)
+    organization_id: str = Field(index=True)
+    user_id: str = Field(index=True)
+    role: str = Field(default="agent")
+    created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
     )
@@ -232,3 +312,54 @@ class InviteConflictResponse(BaseModel):
     current_role: str
     member_count: int
     is_single_seat: bool
+
+
+class OrganizationAdminUpdateRequest(BaseModel):
+    """Grant or remove organization administration for a non-owner member (owner only)."""
+
+    organization_admin: bool
+
+
+class TeamWriteRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class TeamMemberInput(BaseModel):
+    user_id: str = Field(min_length=1, max_length=200)
+    role: Literal["agent", "supervisor"]
+
+
+class TeamMembersUpdateRequest(BaseModel):
+    """The complete membership of a team; members left out are removed."""
+
+    members: List[TeamMemberInput] = Field(max_length=500)
+
+
+class TeamMemberResponse(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    role: Literal["agent", "supervisor"]
+
+
+class TeamResponse(BaseModel):
+    id: str
+    name: str
+    members: List[TeamMemberResponse]
+    created_at: datetime
+    updated_at: datetime
+
+
+class TeamPersonResponse(BaseModel):
+    """An organization member who can be placed in a team."""
+
+    user_id: str
+    name: str
+    email: str
+    role: str
+    organization_admin: bool
+
+
+class TeamsResponse(BaseModel):
+    teams: List[TeamResponse]
+    people: List[TeamPersonResponse]

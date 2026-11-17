@@ -1076,7 +1076,6 @@ describe('CRM areas with no backend yet', () => {
 		const { crm } = await import('$lib/crm/api')
 		const get = vi.spyOn(client, 'get')
 		expect((await crm.deals.list('pipeline')).items).toEqual([])
-		expect(await crm.events.list('2026-10-01', '2026-10-31')).toEqual([])
 		expect((await crm.listings.list('mine')).items).toEqual([])
 		expect(await crm.notifications.list()).toEqual([])
 		expect(get).not.toHaveBeenCalled()
@@ -1093,7 +1092,7 @@ describe('CRM areas with no backend yet', () => {
 			} as never)
 		).rejects.toMatchObject({ status: 501 })
 		await expect(
-			crm.events.create({ title: 'Call', date: '2026-10-08', time: null, kind: 'call' })
+			crm.listings.create({ address: 'JVC', price_aed: 1 } as never)
 		).rejects.toMatchObject({ status: 501 })
 	})
 

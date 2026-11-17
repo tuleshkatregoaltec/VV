@@ -8,6 +8,8 @@ import DayPanel from './DayPanel.svelte'
 import DealPanel from './DealPanel.svelte'
 import EventPanel from './EventPanel.svelte'
 import ImportPanel from './ImportPanel.svelte'
+import IssueOwnersPanel from './IssueOwnersPanel.svelte'
+import IssueRenewalsPanel from './IssueRenewalsPanel.svelte'
 import LeadPanel from './LeadPanel.svelte'
 import ListingPanel from './ListingPanel.svelte'
 import MarketPanel from './MarketPanel.svelte'
@@ -74,6 +76,10 @@ const key = $derived.by(() => {
 		<ClientPanel client={p.client} />
 	{:else if p.kind === 'renewal'}
 		<RenewalPanel id={p.id} />
+	{:else if p.kind === 'issue-owners'}
+		<IssueOwnersPanel listId={p.listId} name={p.name} />
+	{:else if p.kind === 'issue-renewals'}
+		<IssueRenewalsPanel />
 	{:else if p.kind === 'event'}
 		<EventPanel id={p.id} />
 	{:else if p.kind === 'day'}

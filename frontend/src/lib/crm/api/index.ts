@@ -28,6 +28,7 @@ import type {
 	HandoutMode,
 	HandoutSettings,
 	HomeResponse,
+	ImportAssignment,
 	ImportPreview,
 	ImportRequest,
 	InboxFilter,
@@ -314,6 +315,9 @@ const liveCrm = {
 		list: (p: RenewalListParams, signal?: AbortSignal): Promise<RenewalListResponse> =>
 			backend.listRenewals(p, signal),
 		get: (id: string): Promise<RenewalDetail> => backend.getRenewal(id),
+		/** A manager issues selected units to agents as outbound leads. */
+		issue: (leaseIds: string[], assignment: ImportAssignment) =>
+			backend.issueRenewals(leaseIds, assignment),
 		saveOwner: (id: string, owner: { name: string; phone: string; email: string }) =>
 			backend.saveRenewalOwner(id, owner),
 		/** Starting a renewal opens a rent deal; deals are not stored yet. */
@@ -331,6 +335,8 @@ const liveCrm = {
 
 	/** Backend: /api/v1/crm/owner-registry and /owner-workspaces (the agency's imported owner file). */
 	owners: {
+		/** A manager issues owners from a processed owner sheet to agents as outbound leads. */
+		issue: backend.issueOwners,
 		list: (p: OwnerListParams): Promise<OwnerListResponse> => backend.listOwners(p),
 		get: (id: string): Promise<OwnerDetail> => backend.getOwner(id),
 		history: (id: string, p: OwnerHistoryParams = {}): Promise<OwnerHistory> =>
@@ -355,13 +361,18 @@ const liveCrm = {
 		list: (): Promise<ImportRequest[]> => backend.listImports(),
 		/** The backend reads a leads file and picks the columns. */
 		preview: (file: File): Promise<ImportPreview> => backend.previewImport(file),
-		/** The import endpoints take no areas, so `areas` is not sent. */
-		create: (file: File, _areas: string) => backend.createImport(file),
+		/** Import leads; `assignment` says who handles them. The endpoint takes no areas. */
+		create: (file: File, _areas: string, assignment: ImportAssignment) =>
+			backend.createImport(file, assignment),
 		/** An owners file is read in the browser; the backend only says which field each column feeds. */
 		previewOwners: (file: File): Promise<OwnerFilePreview> => backend.previewOwnerFile(file),
 		/** Upload, match against DLD and save an owners file (/contact-imports). */
 		importOwners: (file: File, name: string): Promise<Written<OwnerImportResult>> =>
 			backend.importOwnerFile(file, name),
+		/** An agent's owner file, held until their manager approves it (/contact-import-requests). */
+		requestOwners: backend.requestOwnerImport,
+		ownerRequests: backend.ownerImportRequests,
+		decideOwnerRequest: backend.decideOwnerImport,
 		/** Owner files uploaded by the organization, newest first. */
 		ownerHistory: (): Promise<OwnerImport[]> => backend.listOwnerImports(),
 		/** Owner files with counts, sheet mappings and checks (dashboard and report). */
@@ -404,7 +415,30 @@ const liveCrm = {
 		})
 	},
 
-	connections: async (): Promise<Connection[]> => []
+	connections: async (): Promise<Connection[]> => [],
+
+	/** Backend: /api/v1/crm/assignment, /inbound/assignments and /routing/rules. */
+	assignment: {
+		/** Capabilities and assignable teams, decided by the server (not by a display role). */
+		scope: backend.assignmentScope,
+		assign: backend.assignLeads,
+		/** Put leads in a team's shared pool; the first agent to log contact takes each one. */
+		release: backend.releaseToPool,
+		history: backend.leadAssignments,
+		workload: backend.teamWorkload,
+		/** Per-person lead analytics for managers (response and claim times, contacts). */
+		analytics: backend.teamAnalytics,
+		agentAnalytics: backend.agentAnalytics,
+		/** The languages a person speaks, as their manager records them; never inferred. */
+		setLanguages: backend.setAgentLanguages
+	},
+	routing: {
+		list: backend.routingRules,
+		create: backend.createRoutingRule,
+		update: backend.updateRoutingRule,
+		remove: backend.deleteRoutingRule,
+		reorder: backend.reorderRoutingRules
+	}
 }
 
 export type CrmApi = typeof liveCrm

@@ -11,6 +11,7 @@ import type {
 	OwnerTab,
 	PropertyKind
 } from '$lib/crm/api/types'
+import OwnerImportRequests from '$lib/crm/components/manager/OwnerImportRequests.svelte'
 import SourceAuditSummary from '$lib/crm/components/owners/SourceAuditSummary.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
@@ -315,6 +316,7 @@ const facts = $derived(
 			Import a file
 		</button>
 	</div>
+	<OwnerImportRequests />
 	<QueryView query={imports} rows={2}>
 		{#snippet children(list)}
 			{#if list.length}

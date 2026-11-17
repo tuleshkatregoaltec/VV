@@ -101,7 +101,12 @@ async def run_once(factory, *, lease_seconds: int = 120) -> bool:
                     raise InvalidImportInput("Unknown import kind")
                 kwargs = {
                     key: job.parameters[key]
-                    for key in ("mapping_override", "campaign_context", "reprocess_import_id")
+                    for key in (
+                        "mapping_override",
+                        "campaign_context",
+                        "reprocess_import_id",
+                        "assignment_policy",
+                    )
                     if key in job.parameters
                 }
                 if kind == "source_only":

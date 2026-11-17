@@ -2,10 +2,17 @@
 
 from datetime import datetime
 
+from sqlalchemy import delete
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.organization.models import Organization, OrganizationInvitation, OrganizationMembership
+from app.organization.models import (
+    Organization,
+    OrganizationInvitation,
+    OrganizationMembership,
+    OrganizationTeam,
+    OrganizationTeamMember,
+)
 
 
 async def get_organization_by_id(db: AsyncSession, org_id: str):
@@ -65,6 +72,16 @@ async def get_membership_in_org(db: AsyncSession, org_id: str, user_id: str):
         select(OrganizationMembership)
         .where(OrganizationMembership.organization_id == org_id)
         .where(OrganizationMembership.user_id == user_id)
+    )
+    return result.first()
+
+
+async def lock_membership_in_org(db: AsyncSession, org_id: str, user_id: str):
+    result = await db.exec(
+        select(OrganizationMembership)
+        .where(OrganizationMembership.organization_id == org_id)
+        .where(OrganizationMembership.user_id == user_id)
+        .with_for_update(read=True)
     )
     return result.first()
 
@@ -135,3 +152,60 @@ async def get_owner_membership_for_user(db: AsyncSession, org_id: str, user_id: 
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def list_teams(db: AsyncSession, org_id: str):
+    result = await db.exec(
+        select(OrganizationTeam)
+        .where(OrganizationTeam.organization_id == org_id)
+        .order_by(OrganizationTeam.name, OrganizationTeam.id)
+    )
+    return result.all()
+
+
+async def get_team_in_org(db: AsyncSession, org_id: str, team_id: str):
+    result = await db.exec(
+        select(OrganizationTeam).where(
+            OrganizationTeam.organization_id == org_id, OrganizationTeam.id == team_id
+        )
+    )
+    return result.first()
+
+
+async def list_team_members(db: AsyncSession, org_id: str):
+    result = await db.exec(
+        select(OrganizationTeamMember)
+        .where(OrganizationTeamMember.organization_id == org_id)
+        .order_by(OrganizationTeamMember.team_id, OrganizationTeamMember.user_id)
+    )
+    return result.all()
+
+
+async def lock_team_membership(db: AsyncSession, org_id: str, user_id: str, team_ids):
+    """The user's rows in these teams, share-locked until commit so a concurrent removal waits."""
+    if not team_ids:
+        return []
+    result = await db.exec(
+        select(OrganizationTeamMember)
+        .where(
+            OrganizationTeamMember.organization_id == org_id,
+            OrganizationTeamMember.user_id == user_id,
+            OrganizationTeamMember.team_id.in_(list(team_ids)),  # type: ignore[attr-defined]
+        )
+        .with_for_update(read=True)
+    )
+    return result.all()
+
+
+async def delete_team_members(db: AsyncSession, team_id: str):
+    await db.exec(
+        delete(OrganizationTeamMember).where(OrganizationTeamMember.team_id == team_id)  # type: ignore[arg-type]
+    )
+
+
+def save_team(db: AsyncSession, record):
+    db.add(record)
+
+
+async def delete_team(db: AsyncSession, team: OrganizationTeam):
+    await db.delete(team)

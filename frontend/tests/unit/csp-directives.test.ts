@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cspDirectives } from '../../csp-directives.js'
+import { configuredOrigins, cspDirectives } from '../../csp-directives.js'
 
 const d = cspDirectives as Record<string, string[] | true>
 
@@ -25,5 +25,17 @@ describe('content security policy', () => {
 		expect(connect).toContain('https://basemaps.cartocdn.com')
 		expect(d['script-src']).toContain('https://connect.facebook.net')
 		expect(d['worker-src']).toContain('blob:')
+	})
+
+	it('allows the API and auth servers the environment points at, as origins only', () => {
+		// Without this, local development (API on localhost, auth on a LAN host) cannot sign in.
+		expect(
+			configuredOrigins({
+				PUBLIC_API_BASE_URL: 'http://localhost:8000',
+				PUBLIC_AUTH_BASE_URL: 'http://192.168.1.25:9999/auth/v1'
+			})
+		).toEqual(['http://localhost:8000', 'http://192.168.1.25:9999'])
+		expect(configuredOrigins({ PUBLIC_API_BASE_URL: 'not a url' })).toEqual([])
+		expect(configuredOrigins({})).toEqual([])
 	})
 })

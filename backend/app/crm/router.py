@@ -14,9 +14,19 @@ from fastapi import (
     Response,
     UploadFile,
 )
+from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_owner, require_active_subscription
+from app.crm import (
+    agent_analytics,
+    agent_languages,
+    assignment,
+    oversight,
+    owner_import_requests,
+    routing,
+)
+from app.crm.analytics_models import AgentAnalyticsDetail, AnalyticsWindow, TeamAnalyticsResponse
 from app.crm.company_listings import (
     clear_company_source,
     list_company_listings,
@@ -38,6 +48,7 @@ from app.crm.import_models import (
     CrmOwnerProfile,
     CrmOwnerRegistryResponse,
     CrmOwnerWorkspaceSummary,
+    OwnerImportRequestResponse,
 )
 from app.crm.imports import (
     delete_contact_import,
@@ -100,6 +111,7 @@ from app.crm.models import (
 )
 from app.crm.opportunities import get_dashboard
 from app.crm.owner_history import get_owner_history, get_owner_history_summary
+from app.crm.owner_issue import OwnerIssueRequest, OwnerIssueResponse, issue_owner_leads
 from app.crm.owners import (
     get_contact_list,
     get_owner_profile,
@@ -108,6 +120,11 @@ from app.crm.owners import (
     list_lead_imported_contacts,
 )
 from app.crm.recently_sold import approve_recent_seller
+from app.crm.renewal_issue import (
+    RenewalIssueRequest,
+    RenewalIssueResponse,
+    issue_renewal_leads,
+)
 from app.crm.renewal_leads import (
     get_area_preferences,
     get_renewal_detail,
@@ -119,6 +136,21 @@ from app.crm.renewal_leads import (
     update_area_preferences,
 )
 from app.crm.reports import get_property_report
+from app.crm.routing_models import (
+    AgentLanguagesResponse,
+    AgentLanguagesWrite,
+    AssignmentEventResponse,
+    AssignmentScopeResponse,
+    ImportAssignmentPolicy,
+    LeadAssignmentRequest,
+    LeadAssignmentResponse,
+    PoolReleaseRequest,
+    RoutingRuleOrder,
+    RoutingRuleResponse,
+    RoutingRuleUpdate,
+    RoutingRuleWrite,
+    WorkloadResponse,
+)
 from app.crm.workspaces import (
     add_lead_note,
     bulk_update_owner_workspaces,
@@ -227,10 +259,11 @@ async def crm_inbound_enquiries(
     sold owner is dated by the sale. `leads_only` leaves out contacts that are not leads yet
     (the Leads list), so Inbox contacts cannot crowd leads out of a page.
     """
-    _, organization_id = _auth_ids(context)
+    user_id, organization_id = _auth_ids(context)
     return await list_inbound_enquiries(
         db,
         organization_id=organization_id,
+        user_id=user_id,
         intent_group=intent_group,
         workspace=workspace,
         status=status,
@@ -269,8 +302,8 @@ async def crm_inbound_enquiry(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    _, organization_id = _auth_ids(context)
-    return await get_inbound_enquiry(db, enquiry_id, organization_id)
+    user_id, organization_id = _auth_ids(context)
+    return await get_inbound_enquiry(db, enquiry_id, organization_id, user_id=user_id)
 
 
 @router.patch(
@@ -347,8 +380,9 @@ async def crm_inbound_matches(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    _, organization_id = _auth_ids(context)
-    return await get_inbound_matches(db, enquiry_id, organization_id)
+    user_id, organization_id = _auth_ids(context)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return await get_inbound_matches(db, enquiry_id, organization_id, scope=scope)
 
 
 @router.post(
@@ -362,11 +396,12 @@ async def crm_refresh_inbound_matches(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    _, organization_id = _auth_ids(context)
+    user_id, organization_id = _auth_ids(context)
     return await refresh_inbound_matches(
         db,
         enquiry_id=enquiry_id,
         organization_id=organization_id,
+        scope=await assignment.load_scope(db, organization_id, user_id),
         expand_units=expand_units,
     )
 
@@ -380,9 +415,13 @@ async def crm_update_inbound_match(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    _, organization_id = _auth_ids(context)
+    user_id, organization_id = _auth_ids(context)
     return await update_inbound_match_state(
-        db, match_id=match_id, organization_id=organization_id, state=payload.state
+        db,
+        match_id=match_id,
+        organization_id=organization_id,
+        state=payload.state,
+        scope=await assignment.load_scope(db, organization_id, user_id),
     )
 
 
@@ -397,11 +436,31 @@ async def crm_inbound_import(
     name: str = Form(default="", max_length=200),
     campaign_context: str = Form(default="", max_length=4_000),
     mapping_json: str = Form(default="", max_length=50_000),
+    assignment_mode: Literal["self", "agent", "rules", "team", "unassigned"] = Form(...),
+    assignee_user_id: str | None = Form(default=None, max_length=200),
+    team_id: str | None = Form(default=None, max_length=200),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Normalize a campaign or CRM lead export into actionable enquiries."""
+    """Normalize a campaign or CRM lead export into actionable enquiries.
+
+    `assignment_mode` is required: `self` gives every new lead to the signed-in importer (the
+    only mode for agents), `agent` gives them to `assignee_user_id`, `rules` applies the enabled
+    routing rules (first match wins), `team` puts them in `team_id`'s shared pool for its agents
+    to claim, `unassigned` leaves them with `team_id` for its manager to assign. Every mode but
+    `self` needs a manager or organization administrator; `team_id` may be left out when the
+    importer manages exactly one team.
+    """
     user_id, organization_id = _auth_ids(context)
+    try:
+        policy = ImportAssignmentPolicy(
+            mode=assignment_mode,
+            assignee_user_id=assignee_user_id or None,
+            team_id=team_id or None,
+        )
+    except ValidationError as exc:
+        message = exc.errors()[0]["msg"].removeprefix("Value error, ")
+        raise HTTPException(status_code=422, detail=message) from exc
     try:
         mapping_override = json.loads(mapping_json) if mapping_json else None
     except json.JSONDecodeError as exc:
@@ -414,7 +473,193 @@ async def crm_inbound_import(
         organization_id=organization_id,
         campaign_context=campaign_context,
         mapping_override=mapping_override,
+        assignment_policy=policy,
     )
+
+
+@router.get("/assignment/scope", response_model=AssignmentScopeResponse, dependencies=LIGHT_LANE)
+async def crm_assignment_scope(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """What the signed-in user may do with lead assignment, and whom they may assign to."""
+    user_id, organization_id = _auth_ids(context)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return await assignment.scope_response(db, scope)
+
+
+@router.put(
+    "/assignment/people/{person_user_id}/languages",
+    response_model=AgentLanguagesResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_set_agent_languages(
+    person_user_id: str,
+    payload: AgentLanguagesWrite,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Record the languages a team member speaks (a manager for their teams' people, an
+    administrator for anyone). Used by routing rules set to "speakers only"; never inferred."""
+    user_id, organization_id = _auth_ids(context)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return await agent_languages.set_languages(db, scope, person_user_id, payload)
+
+
+@router.post(
+    "/inbound/assignments", response_model=LeadAssignmentResponse, dependencies=EXPENSIVE_LANE
+)
+async def crm_assign_leads(
+    payload: LeadAssignmentRequest,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Assign, reassign or (with a null assignee) unassign up to 100 leads, all or none.
+
+    A lead changed since `expected_revisions` was read makes the whole request a 409.
+    """
+    user_id, organization_id = _auth_ids(context)
+    return await assignment.assign_leads(db, organization_id, user_id, payload)
+
+
+@router.get("/assignment/workload", response_model=WorkloadResponse, dependencies=EXPENSIVE_LANE)
+async def crm_team_workload(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """For managers and administrators: each managed team's open leads per person, by stage,
+    with first contacts still to make and overdue, the team's waiting and shared leads, and each
+    person's last logged activity. Recorded facts only; nothing is scored or ranked."""
+    user_id, organization_id = _auth_ids(context)
+    return await oversight.team_workload(db, organization_id, user_id)
+
+
+@router.get(
+    "/assignment/analytics", response_model=TeamAnalyticsResponse, dependencies=EXPENSIVE_LANE
+)
+async def crm_team_analytics(
+    days: AnalyticsWindow = Query(AnalyticsWindow.month),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """For managers and administrators: each person in their teams with open work, average
+    first-response and pool claim times and leads contacted in the last 24 hours, over the last
+    7, 30 or 90 days. Recorded facts only; nothing is scored or ranked."""
+    user_id, organization_id = _auth_ids(context)
+    return await agent_analytics.team_analytics(db, organization_id, user_id, days=int(days))
+
+
+@router.get(
+    "/assignment/analytics/{agent_user_id}",
+    response_model=AgentAnalyticsDetail,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_agent_analytics(
+    agent_user_id: str,
+    days: AnalyticsWindow = Query(AnalyticsWindow.month),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """One person's figures, lead sources, last 7 days of activity and leads, for a manager of
+    their team. Anyone outside the caller's teams answers 404. Recorded facts only."""
+    user_id, organization_id = _auth_ids(context)
+    return await agent_analytics.agent_analytics(
+        db, organization_id, user_id, agent_user_id, days=int(days)
+    )
+
+
+@router.post("/inbound/pool", response_model=LeadAssignmentResponse, dependencies=EXPENSIVE_LANE)
+async def crm_release_leads_to_pool(
+    payload: PoolReleaseRequest,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Put up to 100 leads, unassigned, in a team's shared pool, all or none: the team's agents
+    see them and the first to log contact takes each one."""
+    user_id, organization_id = _auth_ids(context)
+    return await assignment.release_to_pool(db, organization_id, user_id, payload)
+
+
+@router.get(
+    "/inbound/enquiries/{enquiry_id}/assignments",
+    response_model=list[AssignmentEventResponse],
+    dependencies=LIGHT_LANE,
+)
+async def crm_lead_assignment_history(
+    enquiry_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    return await assignment.assignment_history(db, organization_id, user_id, enquiry_id)
+
+
+@router.get("/routing/rules", response_model=list[RoutingRuleResponse], dependencies=EXPENSIVE_LANE)
+async def crm_routing_rules(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Lead routing rules in first-match order (managers see their own teams' rules)."""
+    user_id, organization_id = _auth_ids(context)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return await routing.list_rules(db, scope)
+
+
+@router.post(
+    "/routing/rules",
+    response_model=RoutingRuleResponse,
+    status_code=201,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_create_routing_rule(
+    payload: RoutingRuleWrite,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Add a rule at the end of the order (organization administrators)."""
+    user_id, organization_id = _auth_ids(context)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return await routing.create_rule(db, scope, payload)
+
+
+@router.put(
+    "/routing/rules/order", response_model=list[RoutingRuleResponse], dependencies=EXPENSIVE_LANE
+)
+async def crm_reorder_routing_rules(
+    payload: RoutingRuleOrder,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return await routing.reorder_rules(db, scope, payload)
+
+
+@router.put(
+    "/routing/rules/{rule_id}", response_model=RoutingRuleResponse, dependencies=EXPENSIVE_LANE
+)
+async def crm_update_routing_rule(
+    rule_id: int,
+    payload: RoutingRuleUpdate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return await routing.update_rule(db, scope, rule_id, payload)
+
+
+@router.delete("/routing/rules/{rule_id}", status_code=204, dependencies=EXPENSIVE_LANE)
+async def crm_delete_routing_rule(
+    rule_id: int,
+    expected_revision: int = Query(ge=1),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    await routing.delete_rule(db, scope, rule_id, expected_revision)
+    return Response(status_code=204)
 
 
 @router.post(
@@ -503,8 +748,8 @@ async def crm_inbound_imports(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    _, organization_id = _auth_ids(context)
-    return await list_inbound_imports(db, organization_id)
+    user_id, organization_id = _auth_ids(context)
+    return await list_inbound_imports(db, organization_id, user_id=user_id)
 
 
 @router.delete("/inbound/imports/{import_id}", status_code=204, dependencies=EXPENSIVE_LANE)
@@ -513,8 +758,8 @@ async def crm_delete_inbound_import(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    _, organization_id = _auth_ids(context)
-    await delete_inbound_import(db, import_id, organization_id)
+    user_id, organization_id = _auth_ids(context)
+    await delete_inbound_import(db, import_id, organization_id, user_id=user_id)
     return Response(status_code=204)
 
 
@@ -531,8 +776,21 @@ async def crm_contact_import(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Upload, normalize, verify, and publish an owner-contact workbook."""
+    """Upload, normalize, verify, and publish an owner-contact workbook.
+
+    Managers and organization administrators only: an agent sends the file for approval
+    (`POST /contact-import-requests`) instead.
+    """
     user_id, organization_id = _auth_ids(context)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    if owner_import_requests.needs_approval(scope):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "OWNER_IMPORT_NEEDS_APPROVAL",
+                "message": "Send the owner file to your manager for approval.",
+            },
+        )
     try:
         mapping_override = json.loads(mapping_json) if mapping_json else None
     except json.JSONDecodeError as exc:
@@ -582,6 +840,79 @@ async def crm_source_only_import(
     user_id, organization_id = _auth_ids(context)
     return await process_source_audit_import(
         db, upload=file, name=name, user_id=user_id, organization_id=organization_id
+    )
+
+
+@router.post(
+    "/contact-import-requests",
+    response_model=OwnerImportRequestResponse,
+    status_code=201,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_request_owner_import(
+    file: UploadFile = File(...),
+    name: str = Form(default="", max_length=200),
+    team_id: str | None = Form(default=None, max_length=200),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """An agent sends an owner file; it is imported once their manager approves it."""
+    user_id, organization_id = _auth_ids(context)
+    return await owner_import_requests.request_import(
+        db,
+        organization_id=organization_id,
+        user_id=user_id,
+        upload=file,
+        name=name,
+        team_id=team_id,
+    )
+
+
+@router.get(
+    "/contact-import-requests",
+    response_model=list[OwnerImportRequestResponse],
+    dependencies=LIGHT_LANE,
+)
+async def crm_owner_import_requests(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Your own owner-file requests, and those you may approve, newest first."""
+    user_id, organization_id = _auth_ids(context)
+    return await owner_import_requests.list_requests(
+        db, organization_id=organization_id, user_id=user_id
+    )
+
+
+@router.post(
+    "/contact-import-requests/{request_id}/approve",
+    response_model=OwnerImportRequestResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_approve_owner_import(
+    request_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    return await owner_import_requests.approve(
+        db, organization_id=organization_id, user_id=user_id, request_id=request_id
+    )
+
+
+@router.post(
+    "/contact-import-requests/{request_id}/reject",
+    response_model=OwnerImportRequestResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_reject_owner_import(
+    request_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    return await owner_import_requests.reject(
+        db, organization_id=organization_id, user_id=user_id, request_id=request_id
     )
 
 
@@ -1095,6 +1426,41 @@ async def crm_open_renewal_lead(
     user_id, organization_id = _auth_ids(context)
     return await open_renewal_lead(
         db, lease_id=lease_id, user_id=user_id, organization_id=organization_id
+    )
+
+
+@router.post(
+    "/contact-lists/{list_id}/issue",
+    response_model=OwnerIssueResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_issue_owner_leads(
+    list_id: int,
+    payload: OwnerIssueRequest,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Issue owners from a processed owner sheet to agents as outbound leads."""
+    user_id, organization_id = _auth_ids(context)
+    return await issue_owner_leads(
+        db, list_id=list_id, request=payload, user_id=user_id, organization_id=organization_id
+    )
+
+
+@router.post(
+    "/renewal-leads/issue",
+    response_model=RenewalIssueResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_issue_renewal_leads(
+    payload: RenewalIssueRequest,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Issue selected renewal units to agents as outbound leads, routed like a Leads import."""
+    user_id, organization_id = _auth_ids(context)
+    return await issue_renewal_leads(
+        db, request=payload, user_id=user_id, organization_id=organization_id
     )
 
 

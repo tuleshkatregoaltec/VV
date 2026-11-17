@@ -184,3 +184,22 @@ async def require_active_owner(
     context = await require_owner_membership(current_user, db)
 
     return ensure_active_subscription(context)
+
+
+async def require_active_organization_admin(
+    current_user: AuthenticatedUser = Depends(require_auth),
+    db: AsyncSession = Depends(get_db_session),
+) -> AuthContext:
+    """Require an organization administrator (an owner, or a member an owner made one)."""
+    context = await require_membership(current_user, db)
+
+    if context.membership.role != "owner" and not context.membership.organization_admin:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "ORGANIZATION_ADMIN_REQUIRED",
+                "message": "Organization administrator access required for this action.",
+            },
+        )
+
+    return ensure_active_subscription(context)

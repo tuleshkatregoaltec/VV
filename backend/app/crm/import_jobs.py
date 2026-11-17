@@ -65,6 +65,7 @@ async def enqueue(
     mapping_override: dict | None = None,
     campaign_context: str = "",
     reprocess_import_id: int | None = None,
+    assignment_policy: dict | None = None,
 ):
     mapping_override = mapping_override or None
     raw_digest = hashlib.sha256(data).hexdigest()
@@ -91,6 +92,9 @@ async def enqueue(
     fingerprint = semantic_key(kind, raw_digest, identity_parameters)
     if kind == "source_only":
         parameters["source_name"] = name.strip()[:200]
+    if kind == "inbound" and assignment_policy is not None:
+        # Who receives the leads; outside the identity, so the same file is still one import.
+        parameters["assignment_policy"] = assignment_policy
     repository = inbound_repository if kind == "inbound" else import_repository
     replay = reprocess_import_id is not None
     try:

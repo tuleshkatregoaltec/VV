@@ -55,8 +55,12 @@ async def test_assigning_a_member_is_allowed(monkeypatch):
 
 
 async def test_create_checks_the_assignee(monkeypatch):
+    # The named assignee goes through the shared assignment check (membership and the creator's
+    # right to assign to them) before anything is written.
+    scope = SimpleNamespace(user_id="u-1")
+    monkeypatch.setattr(inbound.assignment, "load_scope", AsyncMock(return_value=scope))
     check = AsyncMock(side_effect=HTTPException(status_code=422, detail="nope"))
-    monkeypatch.setattr(inbound, "_require_member", check)
+    monkeypatch.setattr(inbound.assignment, "check_new_assignee", check)
     with pytest.raises(HTTPException):
         await inbound.create_inbound_enquiry(
             None,
@@ -64,16 +68,19 @@ async def test_create_checks_the_assignee(monkeypatch):
             user_id="u-1",
             organization_id="org-1",
         )
-    check.assert_awaited_once_with(None, "org-1", "other")
+    check.assert_awaited_once_with(None, scope, "other", requested_team=None)
 
 
 async def test_update_checks_the_assignee(monkeypatch):
-    enquiry = SimpleNamespace(organization_id="org-1")
-    monkeypatch.setattr(
-        inbound.inbound_repository, "get_crm_inbound_enquiry", AsyncMock(return_value=enquiry)
-    )
-    check = AsyncMock(side_effect=HTTPException(status_code=422, detail="nope"))
-    monkeypatch.setattr(inbound, "_require_member", check)
+    # Changing the assignee is never a plain field write: it goes through the authorized
+    # reassignment, which refuses people outside the organization or the editor's teams.
+    scope = SimpleNamespace(user_id="u-1")
+    enquiry = SimpleNamespace(organization_id="org-1", assigned_user_id="u-1")
+    monkeypatch.setattr(inbound.assignment, "load_scope", AsyncMock(return_value=scope))
+    monkeypatch.setattr(inbound.assignment, "load_visible", AsyncMock(return_value=enquiry))
+    monkeypatch.setattr(inbound.assignment, "require_edit", lambda *_: None)
+    reassign = AsyncMock(side_effect=HTTPException(status_code=422, detail="nope"))
+    monkeypatch.setattr(inbound.assignment, "reassign", reassign)
     with pytest.raises(HTTPException):
         await inbound.update_inbound_enquiry(
             None,
@@ -82,4 +89,4 @@ async def test_update_checks_the_assignee(monkeypatch):
             user_id="u-1",
             payload=InboundEnquiryUpdate(assigned_user_id="other"),
         )
-    check.assert_awaited_once_with(None, "org-1", "other")
+    reassign.assert_awaited_once_with(None, scope, [1], "other", reason="manual")

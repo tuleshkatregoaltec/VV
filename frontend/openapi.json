@@ -2580,7 +2580,7 @@
 			"post": {
 				"tags": ["crm", "crm"],
 				"summary": "Crm Inbound Import",
-				"description": "Normalize a campaign or CRM lead export into actionable enquiries.",
+				"description": "Normalize a campaign or CRM lead export into actionable enquiries.\n\n`assignment_mode` is required: `self` gives every new lead to the signed-in importer (the\nonly mode for agents), `agent` gives them to `assignee_user_id`, `rules` applies the enabled\nrouting rules (first match wins), `team` puts them in `team_id`'s shared pool for its agents\nto claim, `unassigned` leaves them with `team_id` for its manager to assign. Every mode but\n`self` needs a manager or organization administrator; `team_id` may be left out when the\nimporter manages exactly one team.",
 				"operationId": "crm-crm_inbound_import",
 				"requestBody": {
 					"content": {
@@ -2602,6 +2602,508 @@
 								}
 							}
 						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assignment/scope": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Assignment Scope",
+				"description": "What the signed-in user may do with lead assignment, and whom they may assign to.",
+				"operationId": "crm-crm_assignment_scope",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AssignmentScopeResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assignment/people/{person_user_id}/languages": {
+			"put": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Set Agent Languages",
+				"description": "Record the languages a team member speaks (a manager for their teams' people, an\nadministrator for anyone). Used by routing rules set to \"speakers only\"; never inferred.",
+				"operationId": "crm-crm_set_agent_languages",
+				"parameters": [
+					{
+						"name": "person_user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Person User Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AgentLanguagesWrite"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentLanguagesResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/inbound/assignments": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Assign Leads",
+				"description": "Assign, reassign or (with a null assignee) unassign up to 100 leads, all or none.\n\nA lead changed since `expected_revisions` was read makes the whole request a 409.",
+				"operationId": "crm-crm_assign_leads",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/LeadAssignmentRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/LeadAssignmentResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assignment/workload": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Team Workload",
+				"description": "For managers and administrators: each managed team's open leads per person, by stage,\nwith first contacts still to make and overdue, the team's waiting and shared leads, and each\nperson's last logged activity. Recorded facts only; nothing is scored or ranked.",
+				"operationId": "crm-crm_team_workload",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WorkloadResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assignment/analytics": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Team Analytics",
+				"description": "For managers and administrators: each person in their teams with open work, average\nfirst-response and pool claim times and leads contacted in the last 24 hours, over the last\n7, 30 or 90 days. Recorded facts only; nothing is scored or ranked.",
+				"operationId": "crm-crm_team_analytics",
+				"parameters": [
+					{
+						"name": "days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/AnalyticsWindow",
+							"default": 30
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TeamAnalyticsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assignment/analytics/{agent_user_id}": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Agent Analytics",
+				"description": "One person's figures, lead sources, last 7 days of activity and leads, for a manager of\ntheir team. Anyone outside the caller's teams answers 404. Recorded facts only.",
+				"operationId": "crm-crm_agent_analytics",
+				"parameters": [
+					{
+						"name": "agent_user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Agent User Id"
+						}
+					},
+					{
+						"name": "days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/AnalyticsWindow",
+							"default": 30
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentAnalyticsDetail"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/inbound/pool": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Release Leads To Pool",
+				"description": "Put up to 100 leads, unassigned, in a team's shared pool, all or none: the team's agents\nsee them and the first to log contact takes each one.",
+				"operationId": "crm-crm_release_leads_to_pool",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/PoolReleaseRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/LeadAssignmentResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/inbound/enquiries/{enquiry_id}/assignments": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Lead Assignment History",
+				"operationId": "crm-crm_lead_assignment_history",
+				"parameters": [
+					{
+						"name": "enquiry_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Enquiry Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/AssignmentEventResponse"
+									},
+									"title": "Response Crm-Crm Lead Assignment History"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/routing/rules": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Routing Rules",
+				"description": "Lead routing rules in first-match order (managers see their own teams' rules).",
+				"operationId": "crm-crm_routing_rules",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/RoutingRuleResponse"
+									},
+									"type": "array",
+									"title": "Response Crm-Crm Routing Rules"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Create Routing Rule",
+				"description": "Add a rule at the end of the order (organization administrators).",
+				"operationId": "crm-crm_create_routing_rule",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RoutingRuleWrite"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RoutingRuleResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/routing/rules/order": {
+			"put": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Reorder Routing Rules",
+				"operationId": "crm-crm_reorder_routing_rules",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RoutingRuleOrder"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/RoutingRuleResponse"
+									},
+									"type": "array",
+									"title": "Response Crm-Crm Reorder Routing Rules"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/routing/rules/{rule_id}": {
+			"put": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Update Routing Rule",
+				"operationId": "crm-crm_update_routing_rule",
+				"parameters": [
+					{
+						"name": "rule_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Rule Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RoutingRuleUpdate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RoutingRuleResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Delete Routing Rule",
+				"operationId": "crm-crm_delete_routing_rule",
+				"parameters": [
+					{
+						"name": "rule_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Rule Id"
+						}
+					},
+					{
+						"name": "expected_revision",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"title": "Expected Revision"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
 					},
 					"422": {
 						"description": "Validation Error",
@@ -2899,7 +3401,7 @@
 			"post": {
 				"tags": ["crm", "crm"],
 				"summary": "Crm Contact Import",
-				"description": "Upload, normalize, verify, and publish an owner-contact workbook.",
+				"description": "Upload, normalize, verify, and publish an owner-contact workbook.\n\nManagers and organization administrators only: an agent sends the file for approval\n(`POST /contact-import-requests`) instead.",
 				"operationId": "crm-crm_contact_import",
 				"requestBody": {
 					"content": {
@@ -2998,6 +3500,148 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/CrmContactImportResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/contact-import-requests": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Owner Import Requests",
+				"description": "Your own owner-file requests, and those you may approve, newest first.",
+				"operationId": "crm-crm_owner_import_requests",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/OwnerImportRequestResponse"
+									},
+									"type": "array",
+									"title": "Response Crm-Crm Owner Import Requests"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Request Owner Import",
+				"description": "An agent sends an owner file; it is imported once their manager approves it.",
+				"operationId": "crm-crm_request_owner_import",
+				"requestBody": {
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"$ref": "#/components/schemas/Body_crm-crm_request_owner_import"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OwnerImportRequestResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/contact-import-requests/{request_id}/approve": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Approve Owner Import",
+				"operationId": "crm-crm_approve_owner_import",
+				"parameters": [
+					{
+						"name": "request_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Request Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OwnerImportRequestResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/contact-import-requests/{request_id}/reject": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Reject Owner Import",
+				"operationId": "crm-crm_reject_owner_import",
+				"parameters": [
+					{
+						"name": "request_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Request Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OwnerImportRequestResponse"
 								}
 							}
 						}
@@ -4614,6 +5258,97 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/InboundEnquiryResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/contact-lists/{list_id}/issue": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Issue Owner Leads",
+				"description": "Issue owners from a processed owner sheet to agents as outbound leads.",
+				"operationId": "crm-crm_issue_owner_leads",
+				"parameters": [
+					{
+						"name": "list_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "List Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/OwnerIssueRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OwnerIssueResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/renewal-leads/issue": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Issue Renewal Leads",
+				"description": "Issue selected renewal units to agents as outbound leads, routed like a Leads import.",
+				"operationId": "crm-crm_issue_renewal_leads",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RenewalIssueRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RenewalIssueResponse"
 								}
 							}
 						}
@@ -6373,6 +7108,254 @@
 									},
 									"type": "array",
 									"title": "Response Organization-Get Organization Members"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/members/{user_id}/organization-admin": {
+			"put": {
+				"tags": ["organization", "organization"],
+				"summary": "Set Member Organization Admin",
+				"description": "Make a member an organization administrator, or remove that (owner only).",
+				"operationId": "organization-set_member_organization_admin",
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "User Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/OrganizationAdminUpdateRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OperationSuccessResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/teams": {
+			"get": {
+				"tags": ["organization", "organization"],
+				"summary": "List Teams",
+				"description": "Teams with their agents and supervising managers, and everyone who can join one.",
+				"operationId": "organization-list_teams",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TeamsResponse"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["organization", "organization"],
+				"summary": "Create Team",
+				"operationId": "organization-create_team",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/TeamWriteRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TeamsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/teams/{team_id}": {
+			"patch": {
+				"tags": ["organization", "organization"],
+				"summary": "Rename Team",
+				"operationId": "organization-rename_team",
+				"parameters": [
+					{
+						"name": "team_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Team Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/TeamWriteRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TeamsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["organization", "organization"],
+				"summary": "Delete Team",
+				"description": "Delete a team that no routing rule uses; its members stay in the organization.",
+				"operationId": "organization-delete_team",
+				"parameters": [
+					{
+						"name": "team_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Team Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OperationSuccessResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/teams/{team_id}/members": {
+			"put": {
+				"tags": ["organization", "organization"],
+				"summary": "Replace Team Members",
+				"description": "Set a team's agents and supervisors; anyone left out leaves the team.",
+				"operationId": "organization-replace_team_members",
+				"parameters": [
+					{
+						"name": "team_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Team Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/TeamMembersUpdateRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TeamsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
 								}
 							}
 						}
@@ -12697,6 +13680,41 @@
 				],
 				"title": "AdminConnectionRow"
 			},
+			"AgentAnalyticsDetail": {
+				"properties": {
+					"days": {
+						"type": "integer",
+						"title": "Days"
+					},
+					"metrics": {
+						"$ref": "#/components/schemas/AgentLeadMetrics"
+					},
+					"sources": {
+						"items": {
+							"$ref": "#/components/schemas/SourceCount"
+						},
+						"type": "array",
+						"title": "Sources"
+					},
+					"activity": {
+						"items": {
+							"$ref": "#/components/schemas/DailyActivity"
+						},
+						"type": "array",
+						"title": "Activity"
+					},
+					"leads": {
+						"items": {
+							"$ref": "#/components/schemas/AgentLeadRow"
+						},
+						"type": "array",
+						"title": "Leads"
+					}
+				},
+				"type": "object",
+				"required": ["days", "metrics", "sources", "activity", "leads"],
+				"title": "AgentAnalyticsDetail"
+			},
 			"AgentConnectionStatus": {
 				"properties": {
 					"state": {
@@ -12894,6 +13912,212 @@
 				"title": "AgentConnectionStatus",
 				"description": "State of the signed-in agent's WhatsApp number.\n\nstate: not_configured (Meta setup missing on the server), not_connected,\nconnected, disconnected."
 			},
+			"AgentLanguagesResponse": {
+				"properties": {
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"languages": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Languages"
+					}
+				},
+				"type": "object",
+				"required": ["user_id", "languages"],
+				"title": "AgentLanguagesResponse"
+			},
+			"AgentLanguagesWrite": {
+				"properties": {
+					"languages": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 20,
+						"title": "Languages"
+					}
+				},
+				"type": "object",
+				"title": "AgentLanguagesWrite"
+			},
+			"AgentLeadMetrics": {
+				"properties": {
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"team_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Team Ids"
+					},
+					"open_leads": {
+						"type": "integer",
+						"title": "Open Leads",
+						"default": 0
+					},
+					"by_status": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "By Status"
+					},
+					"awaiting_first_contact": {
+						"type": "integer",
+						"title": "Awaiting First Contact",
+						"default": 0
+					},
+					"overdue_first_contact": {
+						"type": "integer",
+						"title": "Overdue First Contact",
+						"default": 0
+					},
+					"contacted_24h": {
+						"type": "integer",
+						"title": "Contacted 24H",
+						"default": 0
+					},
+					"avg_first_response_minutes": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg First Response Minutes"
+					},
+					"avg_claim_minutes": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Claim Minutes"
+					},
+					"assigned_in_window": {
+						"type": "integer",
+						"title": "Assigned In Window",
+						"default": 0
+					},
+					"qualified_or_better": {
+						"type": "integer",
+						"title": "Qualified Or Better",
+						"default": 0
+					},
+					"last_activity_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Activity At"
+					}
+				},
+				"type": "object",
+				"required": ["user_id", "name"],
+				"title": "AgentLeadMetrics"
+			},
+			"AgentLeadRow": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"source": {
+						"type": "string",
+						"title": "Source"
+					},
+					"source_kind": {
+						"type": "string",
+						"enum": ["marketing", "vitevue_lease", "vitevue_sold", "own"],
+						"title": "Source Kind"
+					},
+					"assigned_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assigned At"
+					},
+					"first_contact_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "First Contact At"
+					},
+					"last_contact_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Contact At"
+					},
+					"next_follow_up": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Next Follow Up"
+					},
+					"overdue": {
+						"type": "boolean",
+						"title": "Overdue",
+						"default": false
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "status", "source", "source_kind"],
+				"title": "AgentLeadRow"
+			},
 			"AnalyticsResponse": {
 				"properties": {
 					"timeframe_days": {
@@ -13064,6 +14288,12 @@
 				"type": "object",
 				"required": ["rooms", "count", "pct_of_total"],
 				"title": "AnalyticsUnitComposition"
+			},
+			"AnalyticsWindow": {
+				"type": "integer",
+				"enum": [7, 30, 90],
+				"title": "AnalyticsWindow",
+				"description": "The windows a manager can pick, as a query parameter (a Literal would reject \"7\")."
 			},
 			"ApprovedFact": {
 				"properties": {
@@ -13633,6 +14863,231 @@
 				"required": ["lead_id", "assignee_id"],
 				"title": "AssignLead"
 			},
+			"AssignmentCapabilities": {
+				"properties": {
+					"organization_admin": {
+						"type": "boolean",
+						"title": "Organization Admin"
+					},
+					"can_import": {
+						"type": "boolean",
+						"title": "Can Import"
+					},
+					"can_assign": {
+						"type": "boolean",
+						"title": "Can Assign"
+					},
+					"can_manage_rules": {
+						"type": "boolean",
+						"title": "Can Manage Rules"
+					},
+					"can_manage_teams": {
+						"type": "boolean",
+						"title": "Can Manage Teams"
+					}
+				},
+				"type": "object",
+				"required": [
+					"organization_admin",
+					"can_import",
+					"can_assign",
+					"can_manage_rules",
+					"can_manage_teams"
+				],
+				"title": "AssignmentCapabilities"
+			},
+			"AssignmentEventResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"previous_user_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Previous User Id"
+					},
+					"assigned_user_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assigned User Id"
+					},
+					"actor_user_id": {
+						"type": "string",
+						"title": "Actor User Id"
+					},
+					"reason": {
+						"type": "string",
+						"enum": [
+							"created",
+							"import_agent",
+							"import_rule",
+							"manual",
+							"approved_from_inbox",
+							"released",
+							"claimed",
+							"rotation"
+						],
+						"title": "Reason"
+					},
+					"rule_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Rule Id"
+					},
+					"rule_revision": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Rule Revision"
+					},
+					"import_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Import Id"
+					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
+					},
+					"revision": {
+						"type": "integer",
+						"title": "Revision"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"previous_user_id",
+					"assigned_user_id",
+					"actor_user_id",
+					"reason",
+					"revision",
+					"created_at"
+				],
+				"title": "AssignmentEventResponse"
+			},
+			"AssignmentPerson": {
+				"properties": {
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"languages": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Languages"
+					}
+				},
+				"type": "object",
+				"required": ["user_id", "name"],
+				"title": "AssignmentPerson"
+			},
+			"AssignmentScopeResponse": {
+				"properties": {
+					"capabilities": {
+						"$ref": "#/components/schemas/AssignmentCapabilities"
+					},
+					"teams": {
+						"items": {
+							"$ref": "#/components/schemas/AssignmentTeam"
+						},
+						"type": "array",
+						"title": "Teams"
+					},
+					"my_teams": {
+						"items": {
+							"$ref": "#/components/schemas/MyTeam"
+						},
+						"type": "array",
+						"title": "My Teams"
+					},
+					"people": {
+						"items": {
+							"$ref": "#/components/schemas/AssignmentPerson"
+						},
+						"type": "array",
+						"title": "People"
+					}
+				},
+				"type": "object",
+				"required": ["capabilities", "teams", "people"],
+				"title": "AssignmentScopeResponse",
+				"description": "What the signed-in user may do, and to whom they may assign, derived on the server."
+			},
+			"AssignmentTeam": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"supervised": {
+						"type": "boolean",
+						"title": "Supervised"
+					},
+					"members": {
+						"items": {
+							"$ref": "#/components/schemas/AssignmentPerson"
+						},
+						"type": "array",
+						"title": "Members"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "supervised", "members"],
+				"title": "AssignmentTeam"
+			},
 			"AuthMeResponse": {
 				"properties": {
 					"id": {
@@ -13833,10 +15288,39 @@
 						"maxLength": 50000,
 						"title": "Mapping Json",
 						"default": ""
+					},
+					"assignment_mode": {
+						"type": "string",
+						"enum": ["self", "agent", "rules", "team", "unassigned"],
+						"title": "Assignment Mode"
+					},
+					"assignee_user_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assignee User Id"
+					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
 					}
 				},
 				"type": "object",
-				"required": ["file"],
+				"required": ["file", "assignment_mode"],
 				"title": "Body_crm-crm_inbound_import"
 			},
 			"Body_crm-crm_preview_inbound_import": {
@@ -13856,6 +15340,36 @@
 				"type": "object",
 				"required": ["file"],
 				"title": "Body_crm-crm_preview_inbound_import"
+			},
+			"Body_crm-crm_request_owner_import": {
+				"properties": {
+					"file": {
+						"type": "string",
+						"format": "binary",
+						"title": "File"
+					},
+					"name": {
+						"type": "string",
+						"maxLength": 200,
+						"title": "Name",
+						"default": ""
+					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
+					}
+				},
+				"type": "object",
+				"required": ["file"],
+				"title": "Body_crm-crm_request_owner_import"
 			},
 			"Body_crm-crm_source_only_import": {
 				"properties": {
@@ -20567,6 +22081,33 @@
 				"title": "DDAPlotFeature",
 				"description": "DDA GIS plot polygon for map overlay."
 			},
+			"DailyActivity": {
+				"properties": {
+					"date": {
+						"type": "string",
+						"format": "date",
+						"title": "Date"
+					},
+					"calls": {
+						"type": "integer",
+						"title": "Calls",
+						"default": 0
+					},
+					"messages": {
+						"type": "integer",
+						"title": "Messages",
+						"default": 0
+					},
+					"meetings": {
+						"type": "integer",
+						"title": "Meetings",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"required": ["date"],
+				"title": "DailyActivity"
+			},
 			"DataSourceAsOf": {
 				"properties": {
 					"key": {
@@ -22509,6 +24050,42 @@
 				"required": ["status"],
 				"title": "HealthResponse"
 			},
+			"ImportAssignmentPolicy": {
+				"properties": {
+					"mode": {
+						"type": "string",
+						"enum": ["self", "agent", "rules", "team", "unassigned"],
+						"title": "Mode"
+					},
+					"assignee_user_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assignee User Id"
+					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
+					}
+				},
+				"type": "object",
+				"required": ["mode"],
+				"title": "ImportAssignmentPolicy"
+			},
 			"InboundActivityCreate": {
 				"properties": {
 					"activity_type": {
@@ -22744,6 +24321,18 @@
 						],
 						"title": "Assigned User Id"
 					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
+					},
 					"notes": {
 						"anyOf": [
 							{
@@ -22853,6 +24442,39 @@
 							}
 						],
 						"title": "Assigned User Id"
+					},
+					"assignment_revision": {
+						"type": "integer",
+						"title": "Assignment Revision",
+						"default": 0
+					},
+					"assigned_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assigned At"
+					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
+					},
+					"shared": {
+						"type": "boolean",
+						"title": "Shared",
+						"default": false
 					},
 					"source": {
 						"type": "string",
@@ -23327,6 +24949,84 @@
 				"type": "object",
 				"title": "InboundEnquiryUpdate"
 			},
+			"InboundImportAssignmentSummary": {
+				"properties": {
+					"mode": {
+						"type": "string",
+						"enum": ["self", "agent", "rules", "team", "unassigned"],
+						"title": "Mode"
+					},
+					"assignee_user_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assignee User Id"
+					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
+					},
+					"assigned": {
+						"type": "integer",
+						"title": "Assigned",
+						"default": 0
+					},
+					"unassigned": {
+						"type": "integer",
+						"title": "Unassigned",
+						"default": 0
+					},
+					"by_assignee": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "By Assignee"
+					},
+					"by_rule": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "By Rule"
+					},
+					"shared": {
+						"type": "integer",
+						"title": "Shared",
+						"default": 0
+					},
+					"unassigned_reasons": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"propertyNames": {
+							"enum": [
+								"chosen_unassigned",
+								"no_matching_rule",
+								"destination_ineligible",
+								"no_language_speaker"
+							]
+						},
+						"type": "object",
+						"title": "Unassigned Reasons"
+					}
+				},
+				"type": "object",
+				"required": ["mode"],
+				"title": "InboundImportAssignmentSummary"
+			},
 			"InboundImportPreviewResponse": {
 				"properties": {
 					"original_filename": {
@@ -23551,6 +25251,16 @@
 						"type": "integer",
 						"title": "High Priority",
 						"default": 0
+					},
+					"assignment": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/InboundImportAssignmentSummary"
+							},
+							{
+								"type": "null"
+							}
+						]
 					}
 				},
 				"type": "object",
@@ -24173,6 +25883,114 @@
 					"price_sqm"
 				],
 				"title": "LandSaleEvidence"
+			},
+			"LeadAssignmentRequest": {
+				"properties": {
+					"enquiry_ids": {
+						"items": {
+							"type": "integer"
+						},
+						"type": "array",
+						"maxItems": 100,
+						"minItems": 1,
+						"title": "Enquiry Ids"
+					},
+					"assignee_user_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assignee User Id"
+					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
+					},
+					"expected_revisions": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Expected Revisions"
+					}
+				},
+				"type": "object",
+				"required": ["enquiry_ids", "expected_revisions"],
+				"title": "LeadAssignmentRequest",
+				"description": "Assign (or with null, unassign) a bounded set of leads; all succeed or none change."
+			},
+			"LeadAssignmentResponse": {
+				"properties": {
+					"results": {
+						"items": {
+							"$ref": "#/components/schemas/LeadAssignmentResult"
+						},
+						"type": "array",
+						"title": "Results"
+					}
+				},
+				"type": "object",
+				"required": ["results"],
+				"title": "LeadAssignmentResponse"
+			},
+			"LeadAssignmentResult": {
+				"properties": {
+					"enquiry_id": {
+						"type": "integer",
+						"title": "Enquiry Id"
+					},
+					"assigned_user_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assigned User Id"
+					},
+					"assignment_revision": {
+						"type": "integer",
+						"title": "Assignment Revision"
+					},
+					"changed": {
+						"type": "boolean",
+						"title": "Changed"
+					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
+					},
+					"shared": {
+						"type": "boolean",
+						"title": "Shared",
+						"default": false
+					}
+				},
+				"type": "object",
+				"required": ["enquiry_id", "assigned_user_id", "assignment_revision", "changed"],
+				"title": "LeadAssignmentResult"
 			},
 			"LeadTarget": {
 				"properties": {
@@ -26835,6 +28653,56 @@
 				"title": "MasterProjectSummary",
 				"description": "Summary of a sub-project within a master"
 			},
+			"MemberWorkload": {
+				"properties": {
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"open_leads": {
+						"type": "integer",
+						"title": "Open Leads",
+						"default": 0
+					},
+					"by_status": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "By Status"
+					},
+					"awaiting_first_contact": {
+						"type": "integer",
+						"title": "Awaiting First Contact",
+						"default": 0
+					},
+					"overdue_first_contact": {
+						"type": "integer",
+						"title": "Overdue First Contact",
+						"default": 0
+					},
+					"last_activity_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Activity At"
+					}
+				},
+				"type": "object",
+				"required": ["user_id", "name"],
+				"title": "MemberWorkload",
+				"description": "Recorded facts only: no ratings, response-time scores or rankings are computed."
+			},
 			"MessageResponse": {
 				"properties": {
 					"id": {
@@ -26875,6 +28743,22 @@
 				"required": ["id", "conversation_id", "role", "content", "created_at"],
 				"title": "MessageResponse",
 				"description": "Response model for message data"
+			},
+			"MyTeam": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name"],
+				"title": "MyTeam",
+				"description": "A team the signed-in user belongs to (any role): its shared pool is theirs to claim from."
 			},
 			"NewsArticleCreate": {
 				"properties": {
@@ -27380,6 +29264,18 @@
 				],
 				"title": "OrgUserResponse"
 			},
+			"OrganizationAdminUpdateRequest": {
+				"properties": {
+					"organization_admin": {
+						"type": "boolean",
+						"title": "Organization Admin"
+					}
+				},
+				"type": "object",
+				"required": ["organization_admin"],
+				"title": "OrganizationAdminUpdateRequest",
+				"description": "Grant or remove organization administration for a non-owner member (owner only)."
+			},
 			"OrganizationCreateRequest": {
 				"properties": {
 					"name": {
@@ -27634,6 +29530,230 @@
 					"usage_percentage"
 				],
 				"title": "OrganizationUserDetailResponse"
+			},
+			"OwnerImportRequestResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"requested_by_user_id": {
+						"type": "string",
+						"title": "Requested By User Id"
+					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"original_filename": {
+						"type": "string",
+						"title": "Original Filename"
+					},
+					"size_bytes": {
+						"type": "integer",
+						"title": "Size Bytes"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["pending", "queued", "processing", "approved", "rejected", "failed"],
+						"title": "Status"
+					},
+					"decided_by_user_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Decided By User Id"
+					},
+					"decided_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Decided At"
+					},
+					"import_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Import Id"
+					},
+					"error_message": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Error Message"
+					},
+					"attempts": {
+						"type": "integer",
+						"title": "Attempts",
+						"default": 0
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"requested_by_user_id",
+					"name",
+					"original_filename",
+					"size_bytes",
+					"status",
+					"created_at"
+				],
+				"title": "OwnerImportRequestResponse"
+			},
+			"OwnerIssueRequest": {
+				"properties": {
+					"claim_ids": {
+						"anyOf": [
+							{
+								"items": {
+									"type": "integer"
+								},
+								"type": "array",
+								"maxItems": 500,
+								"minItems": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Claim Ids"
+					},
+					"status": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"verified_current_owner",
+									"probable_current_owner",
+									"unit_linked_unverified",
+									"former_owner",
+									"unverified_former_owner",
+									"conflicting_claim",
+									"insufficient_property_data",
+									"registry_not_observed",
+									"unmatched"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Status",
+						"default": "verified_current_owner"
+					},
+					"limit": {
+						"type": "integer",
+						"maximum": 500.0,
+						"minimum": 1.0,
+						"title": "Limit",
+						"default": 100
+					},
+					"offset": {
+						"type": "integer",
+						"minimum": 0.0,
+						"title": "Offset",
+						"default": 0
+					},
+					"assignment": {
+						"$ref": "#/components/schemas/ImportAssignmentPolicy"
+					}
+				},
+				"type": "object",
+				"required": ["assignment"],
+				"title": "OwnerIssueRequest"
+			},
+			"OwnerIssueResponse": {
+				"properties": {
+					"requested": {
+						"type": "integer",
+						"title": "Requested"
+					},
+					"issued": {
+						"type": "integer",
+						"title": "Issued"
+					},
+					"already_assigned": {
+						"type": "integer",
+						"title": "Already Assigned"
+					},
+					"skipped": {
+						"type": "integer",
+						"title": "Skipped"
+					},
+					"remaining": {
+						"type": "integer",
+						"title": "Remaining"
+					},
+					"next_offset": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Next Offset"
+					},
+					"enquiry_ids": {
+						"items": {
+							"type": "integer"
+						},
+						"type": "array",
+						"title": "Enquiry Ids"
+					},
+					"assignment": {
+						"$ref": "#/components/schemas/InboundImportAssignmentSummary"
+					}
+				},
+				"type": "object",
+				"required": [
+					"requested",
+					"issued",
+					"already_assigned",
+					"skipped",
+					"remaining",
+					"enquiry_ids",
+					"assignment"
+				],
+				"title": "OwnerIssueResponse"
 			},
 			"OwnerOrganizationCreateRequest": {
 				"properties": {
@@ -28243,6 +30363,36 @@
 				"type": "object",
 				"required": ["plot_number", "usage", "market_area", "headline", "assumptions"],
 				"title": "PlotResearch"
+			},
+			"PoolReleaseRequest": {
+				"properties": {
+					"enquiry_ids": {
+						"items": {
+							"type": "integer"
+						},
+						"type": "array",
+						"maxItems": 100,
+						"minItems": 1,
+						"title": "Enquiry Ids"
+					},
+					"team_id": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Team Id"
+					},
+					"expected_revisions": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Expected Revisions"
+					}
+				},
+				"type": "object",
+				"required": ["enquiry_ids", "team_id", "expected_revisions"],
+				"title": "PoolReleaseRequest",
+				"description": "Put unassigned leads in a team's shared pool, all or none."
 			},
 			"PriceDistributionBucket": {
 				"properties": {
@@ -30688,6 +32838,65 @@
 				"required": ["id", "lead_id", "title", "due_at"],
 				"title": "ReminderResponse"
 			},
+			"RenewalIssueRequest": {
+				"properties": {
+					"lease_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 100,
+						"minItems": 1,
+						"title": "Lease Ids"
+					},
+					"assignment": {
+						"$ref": "#/components/schemas/ImportAssignmentPolicy"
+					}
+				},
+				"type": "object",
+				"required": ["lease_ids", "assignment"],
+				"title": "RenewalIssueRequest"
+			},
+			"RenewalIssueResponse": {
+				"properties": {
+					"requested": {
+						"type": "integer",
+						"title": "Requested"
+					},
+					"issued": {
+						"type": "integer",
+						"title": "Issued"
+					},
+					"already_assigned": {
+						"type": "integer",
+						"title": "Already Assigned"
+					},
+					"skipped": {
+						"type": "integer",
+						"title": "Skipped"
+					},
+					"enquiry_ids": {
+						"items": {
+							"type": "integer"
+						},
+						"type": "array",
+						"title": "Enquiry Ids"
+					},
+					"assignment": {
+						"$ref": "#/components/schemas/InboundImportAssignmentSummary"
+					}
+				},
+				"type": "object",
+				"required": [
+					"requested",
+					"issued",
+					"already_assigned",
+					"skipped",
+					"enquiry_ids",
+					"assignment"
+				],
+				"title": "RenewalIssueResponse"
+			},
 			"RentalAnalyticsResponse": {
 				"properties": {
 					"timeframe_days": {
@@ -31356,6 +33565,302 @@
 				"title": "RoomAnalytics",
 				"description": "Combined sales + rental + yield metrics per bedroom count"
 			},
+			"RoutingCondition": {
+				"properties": {
+					"field": {
+						"type": "string",
+						"enum": ["intent", "source", "area", "language"],
+						"title": "Field"
+					},
+					"operator": {
+						"type": "string",
+						"const": "is_any_of",
+						"title": "Operator",
+						"default": "is_any_of"
+					},
+					"values": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 50,
+						"minItems": 1,
+						"title": "Values"
+					}
+				},
+				"type": "object",
+				"required": ["field", "values"],
+				"title": "RoutingCondition",
+				"description": "Matches when the lead's value equals any listed value (case-insensitive).\n\n`area` compares against the lead's preferred locations and `language` against the contact's\npreferred language (from an imported Language column); a lead with no value never matches."
+			},
+			"RoutingRuleOrder": {
+				"properties": {
+					"rule_ids": {
+						"items": {
+							"type": "integer"
+						},
+						"type": "array",
+						"maxItems": 500,
+						"minItems": 1,
+						"title": "Rule Ids"
+					},
+					"expected_revisions": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Expected Revisions"
+					}
+				},
+				"type": "object",
+				"required": ["rule_ids", "expected_revisions"],
+				"title": "RoutingRuleOrder",
+				"description": "Every rule of the organization, first match first, with the revisions the editor saw."
+			},
+			"RoutingRuleResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"team_id": {
+						"type": "string",
+						"title": "Team Id"
+					},
+					"enabled": {
+						"type": "boolean",
+						"title": "Enabled"
+					},
+					"priority": {
+						"type": "integer",
+						"title": "Priority"
+					},
+					"match_mode": {
+						"type": "string",
+						"enum": ["all", "any"],
+						"title": "Match Mode"
+					},
+					"conditions": {
+						"items": {
+							"$ref": "#/components/schemas/RoutingCondition"
+						},
+						"type": "array",
+						"title": "Conditions"
+					},
+					"destination_user_id": {
+						"type": "string",
+						"title": "Destination User Id"
+					},
+					"rotation_user_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Rotation User Ids"
+					},
+					"rotation_minutes": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Rotation Minutes"
+					},
+					"speakers_only": {
+						"type": "boolean",
+						"title": "Speakers Only",
+						"default": false
+					},
+					"revision": {
+						"type": "integer",
+						"title": "Revision"
+					},
+					"updated_by_user_id": {
+						"type": "string",
+						"title": "Updated By User Id"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"team_id",
+					"enabled",
+					"priority",
+					"match_mode",
+					"conditions",
+					"destination_user_id",
+					"revision",
+					"updated_by_user_id",
+					"created_at",
+					"updated_at"
+				],
+				"title": "RoutingRuleResponse"
+			},
+			"RoutingRuleUpdate": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Name"
+					},
+					"team_id": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Team Id"
+					},
+					"enabled": {
+						"type": "boolean",
+						"title": "Enabled",
+						"default": true
+					},
+					"match_mode": {
+						"type": "string",
+						"enum": ["all", "any"],
+						"title": "Match Mode",
+						"default": "all"
+					},
+					"conditions": {
+						"items": {
+							"$ref": "#/components/schemas/RoutingCondition"
+						},
+						"type": "array",
+						"maxItems": 10,
+						"minItems": 1,
+						"title": "Conditions"
+					},
+					"destination_user_id": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Destination User Id"
+					},
+					"rotation_user_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 20,
+						"title": "Rotation User Ids"
+					},
+					"rotation_minutes": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 10080.0,
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Rotation Minutes"
+					},
+					"speakers_only": {
+						"type": "boolean",
+						"title": "Speakers Only",
+						"default": false
+					},
+					"expected_revision": {
+						"type": "integer",
+						"minimum": 1.0,
+						"title": "Expected Revision"
+					}
+				},
+				"type": "object",
+				"required": ["name", "team_id", "conditions", "destination_user_id", "expected_revision"],
+				"title": "RoutingRuleUpdate"
+			},
+			"RoutingRuleWrite": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Name"
+					},
+					"team_id": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Team Id"
+					},
+					"enabled": {
+						"type": "boolean",
+						"title": "Enabled",
+						"default": true
+					},
+					"match_mode": {
+						"type": "string",
+						"enum": ["all", "any"],
+						"title": "Match Mode",
+						"default": "all"
+					},
+					"conditions": {
+						"items": {
+							"$ref": "#/components/schemas/RoutingCondition"
+						},
+						"type": "array",
+						"maxItems": 10,
+						"minItems": 1,
+						"title": "Conditions"
+					},
+					"destination_user_id": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Destination User Id"
+					},
+					"rotation_user_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 20,
+						"title": "Rotation User Ids"
+					},
+					"rotation_minutes": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 10080.0,
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Rotation Minutes"
+					},
+					"speakers_only": {
+						"type": "boolean",
+						"title": "Speakers Only",
+						"default": false
+					}
+				},
+				"type": "object",
+				"required": ["name", "team_id", "conditions", "destination_user_id"],
+				"title": "RoutingRuleWrite"
+			},
 			"ScheduleViewing": {
 				"properties": {
 					"lead_id": {
@@ -31564,6 +34069,26 @@
 				],
 				"title": "SignupConfigResponse",
 				"description": "Public values for FB.init/FB.login. `configured` is false until Meta is set up."
+			},
+			"SourceCount": {
+				"properties": {
+					"kind": {
+						"type": "string",
+						"enum": ["marketing", "vitevue_lease", "vitevue_sold", "own"],
+						"title": "Kind"
+					},
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					}
+				},
+				"type": "object",
+				"required": ["kind", "label", "count"],
+				"title": "SourceCount"
 			},
 			"StudyContext": {
 				"properties": {
@@ -32819,6 +35344,213 @@
 				"title": "SyncAfterCheckoutRequest",
 				"description": "Request to sync after checkout"
 			},
+			"TeamAnalyticsResponse": {
+				"properties": {
+					"days": {
+						"type": "integer",
+						"title": "Days"
+					},
+					"generated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Generated At"
+					},
+					"agents": {
+						"items": {
+							"$ref": "#/components/schemas/AgentLeadMetrics"
+						},
+						"type": "array",
+						"title": "Agents"
+					}
+				},
+				"type": "object",
+				"required": ["days", "generated_at", "agents"],
+				"title": "TeamAnalyticsResponse"
+			},
+			"TeamMemberInput": {
+				"properties": {
+					"user_id": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "User Id"
+					},
+					"role": {
+						"type": "string",
+						"enum": ["agent", "supervisor"],
+						"title": "Role"
+					}
+				},
+				"type": "object",
+				"required": ["user_id", "role"],
+				"title": "TeamMemberInput"
+			},
+			"TeamMemberResponse": {
+				"properties": {
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"role": {
+						"type": "string",
+						"enum": ["agent", "supervisor"],
+						"title": "Role"
+					}
+				},
+				"type": "object",
+				"required": ["user_id", "name", "email", "role"],
+				"title": "TeamMemberResponse"
+			},
+			"TeamMembersUpdateRequest": {
+				"properties": {
+					"members": {
+						"items": {
+							"$ref": "#/components/schemas/TeamMemberInput"
+						},
+						"type": "array",
+						"maxItems": 500,
+						"title": "Members"
+					}
+				},
+				"type": "object",
+				"required": ["members"],
+				"title": "TeamMembersUpdateRequest",
+				"description": "The complete membership of a team; members left out are removed."
+			},
+			"TeamPersonResponse": {
+				"properties": {
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"organization_admin": {
+						"type": "boolean",
+						"title": "Organization Admin"
+					}
+				},
+				"type": "object",
+				"required": ["user_id", "name", "email", "role", "organization_admin"],
+				"title": "TeamPersonResponse",
+				"description": "An organization member who can be placed in a team."
+			},
+			"TeamResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"members": {
+						"items": {
+							"$ref": "#/components/schemas/TeamMemberResponse"
+						},
+						"type": "array",
+						"title": "Members"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "members", "created_at", "updated_at"],
+				"title": "TeamResponse"
+			},
+			"TeamWorkload": {
+				"properties": {
+					"team_id": {
+						"type": "string",
+						"title": "Team Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"unassigned": {
+						"type": "integer",
+						"title": "Unassigned",
+						"default": 0
+					},
+					"shared": {
+						"type": "integer",
+						"title": "Shared",
+						"default": 0
+					},
+					"members": {
+						"items": {
+							"$ref": "#/components/schemas/MemberWorkload"
+						},
+						"type": "array",
+						"title": "Members"
+					}
+				},
+				"type": "object",
+				"required": ["team_id", "name", "members"],
+				"title": "TeamWorkload"
+			},
+			"TeamWriteRequest": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Name"
+					}
+				},
+				"type": "object",
+				"required": ["name"],
+				"title": "TeamWriteRequest"
+			},
+			"TeamsResponse": {
+				"properties": {
+					"teams": {
+						"items": {
+							"$ref": "#/components/schemas/TeamResponse"
+						},
+						"type": "array",
+						"title": "Teams"
+					},
+					"people": {
+						"items": {
+							"$ref": "#/components/schemas/TeamPersonResponse"
+						},
+						"type": "array",
+						"title": "People"
+					}
+				},
+				"type": "object",
+				"required": ["teams", "people"],
+				"title": "TeamsResponse"
+			},
 			"ThreadResponse": {
 				"properties": {
 					"id": {
@@ -33891,6 +36623,20 @@
 				"title": "WebhookStatusResponse",
 				"description": "Simple webhook acknowledgement response."
 			},
+			"WorkloadResponse": {
+				"properties": {
+					"teams": {
+						"items": {
+							"$ref": "#/components/schemas/TeamWorkload"
+						},
+						"type": "array",
+						"title": "Teams"
+					}
+				},
+				"type": "object",
+				"required": ["teams"],
+				"title": "WorkloadResponse"
+			},
 			"app__admin__models__OrganizationMemberResponse": {
 				"properties": {
 					"id": {
@@ -33944,6 +36690,11 @@
 					"role": {
 						"type": "string",
 						"title": "Role"
+					},
+					"organization_admin": {
+						"type": "boolean",
+						"title": "Organization Admin",
+						"default": false
 					}
 				},
 				"type": "object",

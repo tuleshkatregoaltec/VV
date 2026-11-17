@@ -230,6 +230,29 @@ export type AdminConnectionRow = {
 };
 
 /**
+ * AgentAnalyticsDetail
+ */
+export type AgentAnalyticsDetail = {
+    /**
+     * Days
+     */
+    days: number;
+    metrics: AgentLeadMetrics;
+    /**
+     * Sources
+     */
+    sources: Array<SourceCount>;
+    /**
+     * Activity
+     */
+    activity: Array<DailyActivity>;
+    /**
+     * Leads
+     */
+    leads: Array<AgentLeadRow>;
+};
+
+/**
  * AgentConnectionStatus
  *
  * State of the signed-in agent's WhatsApp number.
@@ -317,6 +340,136 @@ export type AgentConnectionStatus = {
      */
     payment_method_status?: 'unknown';
     contacts?: ContactCounts | null;
+};
+
+/**
+ * AgentLanguagesResponse
+ */
+export type AgentLanguagesResponse = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Languages
+     */
+    languages: Array<string>;
+};
+
+/**
+ * AgentLanguagesWrite
+ */
+export type AgentLanguagesWrite = {
+    /**
+     * Languages
+     */
+    languages?: Array<string>;
+};
+
+/**
+ * AgentLeadMetrics
+ */
+export type AgentLeadMetrics = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Team Ids
+     */
+    team_ids?: Array<string>;
+    /**
+     * Open Leads
+     */
+    open_leads?: number;
+    /**
+     * By Status
+     */
+    by_status?: {
+        [key: string]: number;
+    };
+    /**
+     * Awaiting First Contact
+     */
+    awaiting_first_contact?: number;
+    /**
+     * Overdue First Contact
+     */
+    overdue_first_contact?: number;
+    /**
+     * Contacted 24H
+     */
+    contacted_24h?: number;
+    /**
+     * Avg First Response Minutes
+     */
+    avg_first_response_minutes?: number | null;
+    /**
+     * Avg Claim Minutes
+     */
+    avg_claim_minutes?: number | null;
+    /**
+     * Assigned In Window
+     */
+    assigned_in_window?: number;
+    /**
+     * Qualified Or Better
+     */
+    qualified_or_better?: number;
+    /**
+     * Last Activity At
+     */
+    last_activity_at?: string | null;
+};
+
+/**
+ * AgentLeadRow
+ */
+export type AgentLeadRow = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Source Kind
+     */
+    source_kind: 'marketing' | 'vitevue_lease' | 'vitevue_sold' | 'own';
+    /**
+     * Assigned At
+     */
+    assigned_at?: string | null;
+    /**
+     * First Contact At
+     */
+    first_contact_at?: string | null;
+    /**
+     * Last Contact At
+     */
+    last_contact_at?: string | null;
+    /**
+     * Next Follow Up
+     */
+    next_follow_up?: string | null;
+    /**
+     * Overdue
+     */
+    overdue?: boolean;
 };
 
 /**
@@ -427,6 +580,13 @@ export type AnalyticsUnitComposition = {
      */
     avg_unit_size_sqft?: number;
 };
+
+/**
+ * AnalyticsWindow
+ *
+ * The windows a manager can pick, as a query parameter (a Literal would reject "7").
+ */
+export type AnalyticsWindow = 7 | 30 | 90;
 
 /**
  * ApprovedFact
@@ -743,6 +903,143 @@ export type AssignLead = {
 };
 
 /**
+ * AssignmentCapabilities
+ */
+export type AssignmentCapabilities = {
+    /**
+     * Organization Admin
+     */
+    organization_admin: boolean;
+    /**
+     * Can Import
+     */
+    can_import: boolean;
+    /**
+     * Can Assign
+     */
+    can_assign: boolean;
+    /**
+     * Can Manage Rules
+     */
+    can_manage_rules: boolean;
+    /**
+     * Can Manage Teams
+     */
+    can_manage_teams: boolean;
+};
+
+/**
+ * AssignmentEventResponse
+ */
+export type AssignmentEventResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Previous User Id
+     */
+    previous_user_id: string | null;
+    /**
+     * Assigned User Id
+     */
+    assigned_user_id: string | null;
+    /**
+     * Actor User Id
+     */
+    actor_user_id: string;
+    /**
+     * Reason
+     */
+    reason: 'created' | 'import_agent' | 'import_rule' | 'manual' | 'approved_from_inbox' | 'released' | 'claimed' | 'rotation';
+    /**
+     * Rule Id
+     */
+    rule_id?: number | null;
+    /**
+     * Rule Revision
+     */
+    rule_revision?: number | null;
+    /**
+     * Import Id
+     */
+    import_id?: number | null;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * AssignmentPerson
+ */
+export type AssignmentPerson = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Languages
+     */
+    languages?: Array<string>;
+};
+
+/**
+ * AssignmentScopeResponse
+ *
+ * What the signed-in user may do, and to whom they may assign, derived on the server.
+ */
+export type AssignmentScopeResponse = {
+    capabilities: AssignmentCapabilities;
+    /**
+     * Teams
+     */
+    teams: Array<AssignmentTeam>;
+    /**
+     * My Teams
+     */
+    my_teams?: Array<MyTeam>;
+    /**
+     * People
+     */
+    people: Array<AssignmentPerson>;
+};
+
+/**
+ * AssignmentTeam
+ */
+export type AssignmentTeam = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Supervised
+     */
+    supervised: boolean;
+    /**
+     * Members
+     */
+    members: Array<AssignmentPerson>;
+};
+
+/**
  * AuthMeResponse
  */
 export type AuthMeResponse = {
@@ -878,6 +1175,18 @@ export type BodyCrmCrmInboundImport = {
      * Mapping Json
      */
     mapping_json?: string;
+    /**
+     * Assignment Mode
+     */
+    assignment_mode: 'self' | 'agent' | 'rules' | 'team' | 'unassigned';
+    /**
+     * Assignee User Id
+     */
+    assignee_user_id?: string | null;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
 };
 
 /**
@@ -892,6 +1201,24 @@ export type BodyCrmCrmPreviewInboundImport = {
      * Campaign Context
      */
     campaign_context?: string;
+};
+
+/**
+ * Body_crm-crm_request_owner_import
+ */
+export type BodyCrmCrmRequestOwnerImport = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Name
+     */
+    name?: string;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
 };
 
 /**
@@ -4887,6 +5214,28 @@ export type DdaPlotFeature = {
 };
 
 /**
+ * DailyActivity
+ */
+export type DailyActivity = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Calls
+     */
+    calls?: number;
+    /**
+     * Messages
+     */
+    messages?: number;
+    /**
+     * Meetings
+     */
+    meetings?: number;
+};
+
+/**
  * DataSourceAsOf
  *
  * How current one input of a study is: DXBI is current, DLD ends where its feed ends.
@@ -6189,6 +6538,24 @@ export type HealthResponse = {
 };
 
 /**
+ * ImportAssignmentPolicy
+ */
+export type ImportAssignmentPolicy = {
+    /**
+     * Mode
+     */
+    mode: 'self' | 'agent' | 'rules' | 'team' | 'unassigned';
+    /**
+     * Assignee User Id
+     */
+    assignee_user_id?: string | null;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
+};
+
+/**
  * InboundActivityCreate
  */
 export type InboundActivityCreate = {
@@ -6321,6 +6688,10 @@ export type InboundEnquiryCreate = {
      */
     assigned_user_id?: string | null;
     /**
+     * Team Id
+     */
+    team_id?: string | null;
+    /**
      * Notes
      */
     notes?: string | null;
@@ -6385,6 +6756,22 @@ export type InboundEnquiryResponse = {
      * Assigned User Id
      */
     assigned_user_id?: string | null;
+    /**
+     * Assignment Revision
+     */
+    assignment_revision?: number;
+    /**
+     * Assigned At
+     */
+    assigned_at?: string | null;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
+    /**
+     * Shared
+     */
+    shared?: boolean;
     /**
      * Source
      */
@@ -6596,6 +6983,54 @@ export type InboundEnquiryUpdate = {
 };
 
 /**
+ * InboundImportAssignmentSummary
+ */
+export type InboundImportAssignmentSummary = {
+    /**
+     * Mode
+     */
+    mode: 'self' | 'agent' | 'rules' | 'team' | 'unassigned';
+    /**
+     * Assignee User Id
+     */
+    assignee_user_id?: string | null;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
+    /**
+     * Assigned
+     */
+    assigned?: number;
+    /**
+     * Unassigned
+     */
+    unassigned?: number;
+    /**
+     * By Assignee
+     */
+    by_assignee?: {
+        [key: string]: number;
+    };
+    /**
+     * By Rule
+     */
+    by_rule?: {
+        [key: string]: number;
+    };
+    /**
+     * Shared
+     */
+    shared?: number;
+    /**
+     * Unassigned Reasons
+     */
+    unassigned_reasons?: {
+        [key: string]: number;
+    };
+};
+
+/**
  * InboundImportPreviewResponse
  */
 export type InboundImportPreviewResponse = {
@@ -6768,6 +7203,7 @@ export type InboundImportSummary = {
      * High Priority
      */
     high_priority?: number;
+    assignment?: InboundImportAssignmentSummary | null;
 };
 
 /**
@@ -7166,6 +7602,72 @@ export type LandSaleEvidence = {
      * Nearest Landmark
      */
     nearest_landmark?: string | null;
+};
+
+/**
+ * LeadAssignmentRequest
+ *
+ * Assign (or with null, unassign) a bounded set of leads; all succeed or none change.
+ */
+export type LeadAssignmentRequest = {
+    /**
+     * Enquiry Ids
+     */
+    enquiry_ids: Array<number>;
+    /**
+     * Assignee User Id
+     */
+    assignee_user_id?: string | null;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
+    /**
+     * Expected Revisions
+     */
+    expected_revisions: {
+        [key: string]: number;
+    };
+};
+
+/**
+ * LeadAssignmentResponse
+ */
+export type LeadAssignmentResponse = {
+    /**
+     * Results
+     */
+    results: Array<LeadAssignmentResult>;
+};
+
+/**
+ * LeadAssignmentResult
+ */
+export type LeadAssignmentResult = {
+    /**
+     * Enquiry Id
+     */
+    enquiry_id: number;
+    /**
+     * Assigned User Id
+     */
+    assigned_user_id: string | null;
+    /**
+     * Assignment Revision
+     */
+    assignment_revision: number;
+    /**
+     * Changed
+     */
+    changed: boolean;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
+    /**
+     * Shared
+     */
+    shared?: boolean;
 };
 
 /**
@@ -8476,6 +8978,44 @@ export type MasterProjectSummary = {
 };
 
 /**
+ * MemberWorkload
+ *
+ * Recorded facts only: no ratings, response-time scores or rankings are computed.
+ */
+export type MemberWorkload = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Open Leads
+     */
+    open_leads?: number;
+    /**
+     * By Status
+     */
+    by_status?: {
+        [key: string]: number;
+    };
+    /**
+     * Awaiting First Contact
+     */
+    awaiting_first_contact?: number;
+    /**
+     * Overdue First Contact
+     */
+    overdue_first_contact?: number;
+    /**
+     * Last Activity At
+     */
+    last_activity_at?: string | null;
+};
+
+/**
  * MessageResponse
  *
  * Response model for message data
@@ -8507,6 +9047,22 @@ export type MessageResponse = {
      * Created At
      */
     created_at: string;
+};
+
+/**
+ * MyTeam
+ *
+ * A team the signed-in user belongs to (any role): its shared pool is theirs to claim from.
+ */
+export type MyTeam = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
 };
 
 /**
@@ -8860,6 +9416,18 @@ export type OrgUserResponse = {
 };
 
 /**
+ * OrganizationAdminUpdateRequest
+ *
+ * Grant or remove organization administration for a non-owner member (owner only).
+ */
+export type OrganizationAdminUpdateRequest = {
+    /**
+     * Organization Admin
+     */
+    organization_admin: boolean;
+};
+
+/**
  * OrganizationCreateRequest
  */
 export type OrganizationCreateRequest = {
@@ -9038,6 +9606,122 @@ export type OrganizationUserDetailResponse = {
      * Usage Percentage
      */
     usage_percentage: number;
+};
+
+/**
+ * OwnerImportRequestResponse
+ */
+export type OwnerImportRequestResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Requested By User Id
+     */
+    requested_by_user_id: string;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Original Filename
+     */
+    original_filename: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Status
+     */
+    status: 'pending' | 'queued' | 'processing' | 'approved' | 'rejected' | 'failed';
+    /**
+     * Decided By User Id
+     */
+    decided_by_user_id?: string | null;
+    /**
+     * Decided At
+     */
+    decided_at?: string | null;
+    /**
+     * Import Id
+     */
+    import_id?: number | null;
+    /**
+     * Error Message
+     */
+    error_message?: string | null;
+    /**
+     * Attempts
+     */
+    attempts?: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * OwnerIssueRequest
+ */
+export type OwnerIssueRequest = {
+    /**
+     * Claim Ids
+     */
+    claim_ids?: Array<number> | null;
+    /**
+     * Status
+     */
+    status?: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'unverified_former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched' | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Offset
+     */
+    offset?: number;
+    assignment: ImportAssignmentPolicy;
+};
+
+/**
+ * OwnerIssueResponse
+ */
+export type OwnerIssueResponse = {
+    /**
+     * Requested
+     */
+    requested: number;
+    /**
+     * Issued
+     */
+    issued: number;
+    /**
+     * Already Assigned
+     */
+    already_assigned: number;
+    /**
+     * Skipped
+     */
+    skipped: number;
+    /**
+     * Remaining
+     */
+    remaining: number;
+    /**
+     * Next Offset
+     */
+    next_offset?: number | null;
+    /**
+     * Enquiry Ids
+     */
+    enquiry_ids: Array<number>;
+    assignment: InboundImportAssignmentSummary;
 };
 
 /**
@@ -9406,6 +10090,28 @@ export type PlotResearchOutput = {
      * Land Cost Estimate Aed High
      */
     land_cost_estimate_aed_high?: number | null;
+};
+
+/**
+ * PoolReleaseRequest
+ *
+ * Put unassigned leads in a team's shared pool, all or none.
+ */
+export type PoolReleaseRequest = {
+    /**
+     * Enquiry Ids
+     */
+    enquiry_ids: Array<number>;
+    /**
+     * Team Id
+     */
+    team_id: string;
+    /**
+     * Expected Revisions
+     */
+    expected_revisions: {
+        [key: string]: number;
+    };
 };
 
 /**
@@ -10889,6 +11595,44 @@ export type ReminderResponse = {
 };
 
 /**
+ * RenewalIssueRequest
+ */
+export type RenewalIssueRequest = {
+    /**
+     * Lease Ids
+     */
+    lease_ids: Array<string>;
+    assignment: ImportAssignmentPolicy;
+};
+
+/**
+ * RenewalIssueResponse
+ */
+export type RenewalIssueResponse = {
+    /**
+     * Requested
+     */
+    requested: number;
+    /**
+     * Issued
+     */
+    issued: number;
+    /**
+     * Already Assigned
+     */
+    already_assigned: number;
+    /**
+     * Skipped
+     */
+    skipped: number;
+    /**
+     * Enquiry Ids
+     */
+    enquiry_ids: Array<number>;
+    assignment: InboundImportAssignmentSummary;
+};
+
+/**
  * RentalAnalyticsResponse
  *
  * Complete rental analytics response for dashboard
@@ -11278,6 +12022,201 @@ export type RoomAnalytics = {
 };
 
 /**
+ * RoutingCondition
+ *
+ * Matches when the lead's value equals any listed value (case-insensitive).
+ *
+ * `area` compares against the lead's preferred locations and `language` against the contact's
+ * preferred language (from an imported Language column); a lead with no value never matches.
+ */
+export type RoutingCondition = {
+    /**
+     * Field
+     */
+    field: 'intent' | 'source' | 'area' | 'language';
+    /**
+     * Operator
+     */
+    operator?: 'is_any_of';
+    /**
+     * Values
+     */
+    values: Array<string>;
+};
+
+/**
+ * RoutingRuleOrder
+ *
+ * Every rule of the organization, first match first, with the revisions the editor saw.
+ */
+export type RoutingRuleOrder = {
+    /**
+     * Rule Ids
+     */
+    rule_ids: Array<number>;
+    /**
+     * Expected Revisions
+     */
+    expected_revisions: {
+        [key: string]: number;
+    };
+};
+
+/**
+ * RoutingRuleResponse
+ */
+export type RoutingRuleResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Team Id
+     */
+    team_id: string;
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Priority
+     */
+    priority: number;
+    /**
+     * Match Mode
+     */
+    match_mode: 'all' | 'any';
+    /**
+     * Conditions
+     */
+    conditions: Array<RoutingCondition>;
+    /**
+     * Destination User Id
+     */
+    destination_user_id: string;
+    /**
+     * Rotation User Ids
+     */
+    rotation_user_ids?: Array<string>;
+    /**
+     * Rotation Minutes
+     */
+    rotation_minutes?: number | null;
+    /**
+     * Speakers Only
+     */
+    speakers_only?: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Updated By User Id
+     */
+    updated_by_user_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * RoutingRuleUpdate
+ */
+export type RoutingRuleUpdate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Team Id
+     */
+    team_id: string;
+    /**
+     * Enabled
+     */
+    enabled?: boolean;
+    /**
+     * Match Mode
+     */
+    match_mode?: 'all' | 'any';
+    /**
+     * Conditions
+     */
+    conditions: Array<RoutingCondition>;
+    /**
+     * Destination User Id
+     */
+    destination_user_id: string;
+    /**
+     * Rotation User Ids
+     */
+    rotation_user_ids?: Array<string>;
+    /**
+     * Rotation Minutes
+     */
+    rotation_minutes?: number | null;
+    /**
+     * Speakers Only
+     */
+    speakers_only?: boolean;
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+};
+
+/**
+ * RoutingRuleWrite
+ */
+export type RoutingRuleWrite = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Team Id
+     */
+    team_id: string;
+    /**
+     * Enabled
+     */
+    enabled?: boolean;
+    /**
+     * Match Mode
+     */
+    match_mode?: 'all' | 'any';
+    /**
+     * Conditions
+     */
+    conditions: Array<RoutingCondition>;
+    /**
+     * Destination User Id
+     */
+    destination_user_id: string;
+    /**
+     * Rotation User Ids
+     */
+    rotation_user_ids?: Array<string>;
+    /**
+     * Rotation Minutes
+     */
+    rotation_minutes?: number | null;
+    /**
+     * Speakers Only
+     */
+    speakers_only?: boolean;
+};
+
+/**
  * ScheduleViewing
  */
 export type ScheduleViewing = {
@@ -11399,6 +12338,24 @@ export type SignupConfigResponse = {
      * State
      */
     state: string | null;
+};
+
+/**
+ * SourceCount
+ */
+export type SourceCount = {
+    /**
+     * Kind
+     */
+    kind: 'marketing' | 'vitevue_lease' | 'vitevue_sold' | 'own';
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Count
+     */
+    count: number;
 };
 
 /**
@@ -12073,6 +13030,176 @@ export type SyncAfterCheckoutRequest = {
      * Session Id
      */
     session_id: string;
+};
+
+/**
+ * TeamAnalyticsResponse
+ */
+export type TeamAnalyticsResponse = {
+    /**
+     * Days
+     */
+    days: number;
+    /**
+     * Generated At
+     */
+    generated_at: string;
+    /**
+     * Agents
+     */
+    agents: Array<AgentLeadMetrics>;
+};
+
+/**
+ * TeamMemberInput
+ */
+export type TeamMemberInput = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Role
+     */
+    role: 'agent' | 'supervisor';
+};
+
+/**
+ * TeamMemberResponse
+ */
+export type TeamMemberResponse = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Role
+     */
+    role: 'agent' | 'supervisor';
+};
+
+/**
+ * TeamMembersUpdateRequest
+ *
+ * The complete membership of a team; members left out are removed.
+ */
+export type TeamMembersUpdateRequest = {
+    /**
+     * Members
+     */
+    members: Array<TeamMemberInput>;
+};
+
+/**
+ * TeamPersonResponse
+ *
+ * An organization member who can be placed in a team.
+ */
+export type TeamPersonResponse = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Organization Admin
+     */
+    organization_admin: boolean;
+};
+
+/**
+ * TeamResponse
+ */
+export type TeamResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Members
+     */
+    members: Array<TeamMemberResponse>;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * TeamWorkload
+ */
+export type TeamWorkload = {
+    /**
+     * Team Id
+     */
+    team_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Unassigned
+     */
+    unassigned?: number;
+    /**
+     * Shared
+     */
+    shared?: number;
+    /**
+     * Members
+     */
+    members: Array<MemberWorkload>;
+};
+
+/**
+ * TeamWriteRequest
+ */
+export type TeamWriteRequest = {
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * TeamsResponse
+ */
+export type TeamsResponse = {
+    /**
+     * Teams
+     */
+    teams: Array<TeamResponse>;
+    /**
+     * People
+     */
+    people: Array<TeamPersonResponse>;
 };
 
 /**
@@ -12756,6 +13883,16 @@ export type WebhookStatusResponse = {
 };
 
 /**
+ * WorkloadResponse
+ */
+export type WorkloadResponse = {
+    /**
+     * Teams
+     */
+    teams: Array<TeamWorkload>;
+};
+
+/**
  * OrganizationMemberResponse
  */
 export type AppAdminModelsOrganizationMemberResponse = {
@@ -12811,6 +13948,10 @@ export type AppOrganizationRouterOrganizationMemberResponse = {
      * Role
      */
     role: string;
+    /**
+     * Organization Admin
+     */
+    organization_admin?: boolean;
 };
 
 export type AuthGetUserData = {
@@ -14289,6 +15430,344 @@ export type CrmCrmInboundImportResponses = {
 
 export type CrmCrmInboundImportResponse = CrmCrmInboundImportResponses[keyof CrmCrmInboundImportResponses];
 
+export type CrmCrmAssignmentScopeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/assignment/scope';
+};
+
+export type CrmCrmAssignmentScopeResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssignmentScopeResponse;
+};
+
+export type CrmCrmAssignmentScopeResponse = CrmCrmAssignmentScopeResponses[keyof CrmCrmAssignmentScopeResponses];
+
+export type CrmCrmSetAgentLanguagesData = {
+    body: AgentLanguagesWrite;
+    path: {
+        /**
+         * Person User Id
+         */
+        person_user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/assignment/people/{person_user_id}/languages';
+};
+
+export type CrmCrmSetAgentLanguagesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmSetAgentLanguagesError = CrmCrmSetAgentLanguagesErrors[keyof CrmCrmSetAgentLanguagesErrors];
+
+export type CrmCrmSetAgentLanguagesResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentLanguagesResponse;
+};
+
+export type CrmCrmSetAgentLanguagesResponse = CrmCrmSetAgentLanguagesResponses[keyof CrmCrmSetAgentLanguagesResponses];
+
+export type CrmCrmAssignLeadsData = {
+    body: LeadAssignmentRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/inbound/assignments';
+};
+
+export type CrmCrmAssignLeadsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmAssignLeadsError = CrmCrmAssignLeadsErrors[keyof CrmCrmAssignLeadsErrors];
+
+export type CrmCrmAssignLeadsResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeadAssignmentResponse;
+};
+
+export type CrmCrmAssignLeadsResponse = CrmCrmAssignLeadsResponses[keyof CrmCrmAssignLeadsResponses];
+
+export type CrmCrmTeamWorkloadData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/assignment/workload';
+};
+
+export type CrmCrmTeamWorkloadResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkloadResponse;
+};
+
+export type CrmCrmTeamWorkloadResponse = CrmCrmTeamWorkloadResponses[keyof CrmCrmTeamWorkloadResponses];
+
+export type CrmCrmTeamAnalyticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        days?: AnalyticsWindow;
+    };
+    url: '/api/v1/crm/assignment/analytics';
+};
+
+export type CrmCrmTeamAnalyticsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmTeamAnalyticsError = CrmCrmTeamAnalyticsErrors[keyof CrmCrmTeamAnalyticsErrors];
+
+export type CrmCrmTeamAnalyticsResponses = {
+    /**
+     * Successful Response
+     */
+    200: TeamAnalyticsResponse;
+};
+
+export type CrmCrmTeamAnalyticsResponse = CrmCrmTeamAnalyticsResponses[keyof CrmCrmTeamAnalyticsResponses];
+
+export type CrmCrmAgentAnalyticsData = {
+    body?: never;
+    path: {
+        /**
+         * Agent User Id
+         */
+        agent_user_id: string;
+    };
+    query?: {
+        days?: AnalyticsWindow;
+    };
+    url: '/api/v1/crm/assignment/analytics/{agent_user_id}';
+};
+
+export type CrmCrmAgentAnalyticsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmAgentAnalyticsError = CrmCrmAgentAnalyticsErrors[keyof CrmCrmAgentAnalyticsErrors];
+
+export type CrmCrmAgentAnalyticsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentAnalyticsDetail;
+};
+
+export type CrmCrmAgentAnalyticsResponse = CrmCrmAgentAnalyticsResponses[keyof CrmCrmAgentAnalyticsResponses];
+
+export type CrmCrmReleaseLeadsToPoolData = {
+    body: PoolReleaseRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/inbound/pool';
+};
+
+export type CrmCrmReleaseLeadsToPoolErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmReleaseLeadsToPoolError = CrmCrmReleaseLeadsToPoolErrors[keyof CrmCrmReleaseLeadsToPoolErrors];
+
+export type CrmCrmReleaseLeadsToPoolResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeadAssignmentResponse;
+};
+
+export type CrmCrmReleaseLeadsToPoolResponse = CrmCrmReleaseLeadsToPoolResponses[keyof CrmCrmReleaseLeadsToPoolResponses];
+
+export type CrmCrmLeadAssignmentHistoryData = {
+    body?: never;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/enquiries/{enquiry_id}/assignments';
+};
+
+export type CrmCrmLeadAssignmentHistoryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmLeadAssignmentHistoryError = CrmCrmLeadAssignmentHistoryErrors[keyof CrmCrmLeadAssignmentHistoryErrors];
+
+export type CrmCrmLeadAssignmentHistoryResponses = {
+    /**
+     * Response Crm-Crm Lead Assignment History
+     *
+     * Successful Response
+     */
+    200: Array<AssignmentEventResponse>;
+};
+
+export type CrmCrmLeadAssignmentHistoryResponse = CrmCrmLeadAssignmentHistoryResponses[keyof CrmCrmLeadAssignmentHistoryResponses];
+
+export type CrmCrmRoutingRulesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/routing/rules';
+};
+
+export type CrmCrmRoutingRulesResponses = {
+    /**
+     * Response Crm-Crm Routing Rules
+     *
+     * Successful Response
+     */
+    200: Array<RoutingRuleResponse>;
+};
+
+export type CrmCrmRoutingRulesResponse = CrmCrmRoutingRulesResponses[keyof CrmCrmRoutingRulesResponses];
+
+export type CrmCrmCreateRoutingRuleData = {
+    body: RoutingRuleWrite;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/routing/rules';
+};
+
+export type CrmCrmCreateRoutingRuleErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCreateRoutingRuleError = CrmCrmCreateRoutingRuleErrors[keyof CrmCrmCreateRoutingRuleErrors];
+
+export type CrmCrmCreateRoutingRuleResponses = {
+    /**
+     * Successful Response
+     */
+    201: RoutingRuleResponse;
+};
+
+export type CrmCrmCreateRoutingRuleResponse = CrmCrmCreateRoutingRuleResponses[keyof CrmCrmCreateRoutingRuleResponses];
+
+export type CrmCrmReorderRoutingRulesData = {
+    body: RoutingRuleOrder;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/routing/rules/order';
+};
+
+export type CrmCrmReorderRoutingRulesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmReorderRoutingRulesError = CrmCrmReorderRoutingRulesErrors[keyof CrmCrmReorderRoutingRulesErrors];
+
+export type CrmCrmReorderRoutingRulesResponses = {
+    /**
+     * Response Crm-Crm Reorder Routing Rules
+     *
+     * Successful Response
+     */
+    200: Array<RoutingRuleResponse>;
+};
+
+export type CrmCrmReorderRoutingRulesResponse = CrmCrmReorderRoutingRulesResponses[keyof CrmCrmReorderRoutingRulesResponses];
+
+export type CrmCrmDeleteRoutingRuleData = {
+    body?: never;
+    path: {
+        /**
+         * Rule Id
+         */
+        rule_id: number;
+    };
+    query: {
+        /**
+         * Expected Revision
+         */
+        expected_revision: number;
+    };
+    url: '/api/v1/crm/routing/rules/{rule_id}';
+};
+
+export type CrmCrmDeleteRoutingRuleErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDeleteRoutingRuleError = CrmCrmDeleteRoutingRuleErrors[keyof CrmCrmDeleteRoutingRuleErrors];
+
+export type CrmCrmDeleteRoutingRuleResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmDeleteRoutingRuleResponse = CrmCrmDeleteRoutingRuleResponses[keyof CrmCrmDeleteRoutingRuleResponses];
+
+export type CrmCrmUpdateRoutingRuleData = {
+    body: RoutingRuleUpdate;
+    path: {
+        /**
+         * Rule Id
+         */
+        rule_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/routing/rules/{rule_id}';
+};
+
+export type CrmCrmUpdateRoutingRuleErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmUpdateRoutingRuleError = CrmCrmUpdateRoutingRuleErrors[keyof CrmCrmUpdateRoutingRuleErrors];
+
+export type CrmCrmUpdateRoutingRuleResponses = {
+    /**
+     * Successful Response
+     */
+    200: RoutingRuleResponse;
+};
+
+export type CrmCrmUpdateRoutingRuleResponse = CrmCrmUpdateRoutingRuleResponses[keyof CrmCrmUpdateRoutingRuleResponses];
+
 export type CrmCrmPreviewInboundImportData = {
     body: BodyCrmCrmPreviewInboundImport;
     path?: never;
@@ -14531,6 +16010,109 @@ export type CrmCrmSourceOnlyImportResponses = {
 };
 
 export type CrmCrmSourceOnlyImportResponse = CrmCrmSourceOnlyImportResponses[keyof CrmCrmSourceOnlyImportResponses];
+
+export type CrmCrmOwnerImportRequestsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/contact-import-requests';
+};
+
+export type CrmCrmOwnerImportRequestsResponses = {
+    /**
+     * Response Crm-Crm Owner Import Requests
+     *
+     * Successful Response
+     */
+    200: Array<OwnerImportRequestResponse>;
+};
+
+export type CrmCrmOwnerImportRequestsResponse = CrmCrmOwnerImportRequestsResponses[keyof CrmCrmOwnerImportRequestsResponses];
+
+export type CrmCrmRequestOwnerImportData = {
+    body: BodyCrmCrmRequestOwnerImport;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/contact-import-requests';
+};
+
+export type CrmCrmRequestOwnerImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRequestOwnerImportError = CrmCrmRequestOwnerImportErrors[keyof CrmCrmRequestOwnerImportErrors];
+
+export type CrmCrmRequestOwnerImportResponses = {
+    /**
+     * Successful Response
+     */
+    201: OwnerImportRequestResponse;
+};
+
+export type CrmCrmRequestOwnerImportResponse = CrmCrmRequestOwnerImportResponses[keyof CrmCrmRequestOwnerImportResponses];
+
+export type CrmCrmApproveOwnerImportData = {
+    body?: never;
+    path: {
+        /**
+         * Request Id
+         */
+        request_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/contact-import-requests/{request_id}/approve';
+};
+
+export type CrmCrmApproveOwnerImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmApproveOwnerImportError = CrmCrmApproveOwnerImportErrors[keyof CrmCrmApproveOwnerImportErrors];
+
+export type CrmCrmApproveOwnerImportResponses = {
+    /**
+     * Successful Response
+     */
+    200: OwnerImportRequestResponse;
+};
+
+export type CrmCrmApproveOwnerImportResponse = CrmCrmApproveOwnerImportResponses[keyof CrmCrmApproveOwnerImportResponses];
+
+export type CrmCrmRejectOwnerImportData = {
+    body?: never;
+    path: {
+        /**
+         * Request Id
+         */
+        request_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/contact-import-requests/{request_id}/reject';
+};
+
+export type CrmCrmRejectOwnerImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRejectOwnerImportError = CrmCrmRejectOwnerImportErrors[keyof CrmCrmRejectOwnerImportErrors];
+
+export type CrmCrmRejectOwnerImportResponses = {
+    /**
+     * Successful Response
+     */
+    200: OwnerImportRequestResponse;
+};
+
+export type CrmCrmRejectOwnerImportResponse = CrmCrmRejectOwnerImportResponses[keyof CrmCrmRejectOwnerImportResponses];
 
 export type CrmCrmDeleteContactImportData = {
     body?: never;
@@ -15307,6 +16889,61 @@ export type CrmCrmOpenRenewalLeadResponses = {
 };
 
 export type CrmCrmOpenRenewalLeadResponse = CrmCrmOpenRenewalLeadResponses[keyof CrmCrmOpenRenewalLeadResponses];
+
+export type CrmCrmIssueOwnerLeadsData = {
+    body: OwnerIssueRequest;
+    path: {
+        /**
+         * List Id
+         */
+        list_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/contact-lists/{list_id}/issue';
+};
+
+export type CrmCrmIssueOwnerLeadsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmIssueOwnerLeadsError = CrmCrmIssueOwnerLeadsErrors[keyof CrmCrmIssueOwnerLeadsErrors];
+
+export type CrmCrmIssueOwnerLeadsResponses = {
+    /**
+     * Successful Response
+     */
+    200: OwnerIssueResponse;
+};
+
+export type CrmCrmIssueOwnerLeadsResponse = CrmCrmIssueOwnerLeadsResponses[keyof CrmCrmIssueOwnerLeadsResponses];
+
+export type CrmCrmIssueRenewalLeadsData = {
+    body: RenewalIssueRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/renewal-leads/issue';
+};
+
+export type CrmCrmIssueRenewalLeadsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmIssueRenewalLeadsError = CrmCrmIssueRenewalLeadsErrors[keyof CrmCrmIssueRenewalLeadsErrors];
+
+export type CrmCrmIssueRenewalLeadsResponses = {
+    /**
+     * Successful Response
+     */
+    200: RenewalIssueResponse;
+};
+
+export type CrmCrmIssueRenewalLeadsResponse = CrmCrmIssueRenewalLeadsResponses[keyof CrmCrmIssueRenewalLeadsResponses];
 
 export type CrmCrmLeadDetailData = {
     body?: never;
@@ -16178,6 +17815,167 @@ export type OrganizationGetOrganizationMembersResponses = {
 };
 
 export type OrganizationGetOrganizationMembersResponse = OrganizationGetOrganizationMembersResponses[keyof OrganizationGetOrganizationMembersResponses];
+
+export type OrganizationSetMemberOrganizationAdminData = {
+    body: OrganizationAdminUpdateRequest;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/organization/members/{user_id}/organization-admin';
+};
+
+export type OrganizationSetMemberOrganizationAdminErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OrganizationSetMemberOrganizationAdminError = OrganizationSetMemberOrganizationAdminErrors[keyof OrganizationSetMemberOrganizationAdminErrors];
+
+export type OrganizationSetMemberOrganizationAdminResponses = {
+    /**
+     * Successful Response
+     */
+    200: OperationSuccessResponse;
+};
+
+export type OrganizationSetMemberOrganizationAdminResponse = OrganizationSetMemberOrganizationAdminResponses[keyof OrganizationSetMemberOrganizationAdminResponses];
+
+export type OrganizationListTeamsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/organization/teams';
+};
+
+export type OrganizationListTeamsResponses = {
+    /**
+     * Successful Response
+     */
+    200: TeamsResponse;
+};
+
+export type OrganizationListTeamsResponse = OrganizationListTeamsResponses[keyof OrganizationListTeamsResponses];
+
+export type OrganizationCreateTeamData = {
+    body: TeamWriteRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/organization/teams';
+};
+
+export type OrganizationCreateTeamErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OrganizationCreateTeamError = OrganizationCreateTeamErrors[keyof OrganizationCreateTeamErrors];
+
+export type OrganizationCreateTeamResponses = {
+    /**
+     * Successful Response
+     */
+    201: TeamsResponse;
+};
+
+export type OrganizationCreateTeamResponse = OrganizationCreateTeamResponses[keyof OrganizationCreateTeamResponses];
+
+export type OrganizationDeleteTeamData = {
+    body?: never;
+    path: {
+        /**
+         * Team Id
+         */
+        team_id: string;
+    };
+    query?: never;
+    url: '/api/v1/organization/teams/{team_id}';
+};
+
+export type OrganizationDeleteTeamErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OrganizationDeleteTeamError = OrganizationDeleteTeamErrors[keyof OrganizationDeleteTeamErrors];
+
+export type OrganizationDeleteTeamResponses = {
+    /**
+     * Successful Response
+     */
+    200: OperationSuccessResponse;
+};
+
+export type OrganizationDeleteTeamResponse = OrganizationDeleteTeamResponses[keyof OrganizationDeleteTeamResponses];
+
+export type OrganizationRenameTeamData = {
+    body: TeamWriteRequest;
+    path: {
+        /**
+         * Team Id
+         */
+        team_id: string;
+    };
+    query?: never;
+    url: '/api/v1/organization/teams/{team_id}';
+};
+
+export type OrganizationRenameTeamErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OrganizationRenameTeamError = OrganizationRenameTeamErrors[keyof OrganizationRenameTeamErrors];
+
+export type OrganizationRenameTeamResponses = {
+    /**
+     * Successful Response
+     */
+    200: TeamsResponse;
+};
+
+export type OrganizationRenameTeamResponse = OrganizationRenameTeamResponses[keyof OrganizationRenameTeamResponses];
+
+export type OrganizationReplaceTeamMembersData = {
+    body: TeamMembersUpdateRequest;
+    path: {
+        /**
+         * Team Id
+         */
+        team_id: string;
+    };
+    query?: never;
+    url: '/api/v1/organization/teams/{team_id}/members';
+};
+
+export type OrganizationReplaceTeamMembersErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OrganizationReplaceTeamMembersError = OrganizationReplaceTeamMembersErrors[keyof OrganizationReplaceTeamMembersErrors];
+
+export type OrganizationReplaceTeamMembersResponses = {
+    /**
+     * Successful Response
+     */
+    200: TeamsResponse;
+};
+
+export type OrganizationReplaceTeamMembersResponse = OrganizationReplaceTeamMembersResponses[keyof OrganizationReplaceTeamMembersResponses];
 
 export type OrganizationGetOrganizationInvitationsData = {
     body?: never;

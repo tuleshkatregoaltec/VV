@@ -2,6 +2,7 @@
 import { createQuery } from '@tanstack/svelte-query'
 import { crm } from '$lib/crm/api'
 import type { HandoutMode } from '$lib/crm/api/types'
+import TeamAnalytics from '$lib/crm/components/manager/TeamAnalytics.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
@@ -44,6 +45,9 @@ function onkeydown(e: KeyboardEvent, i: number) {
 <svelte:head><title>Manager view · CRM</title></svelte:head>
 
 <PageHeader title="Manager view" />
+<section class="mv-team" aria-label="Your team">
+	<TeamAnalytics />
+</section>
 
 {#if handout.data}
 	{@const h = handout.data}

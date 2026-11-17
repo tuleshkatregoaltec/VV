@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
-from app.crm import inbound_repository, owner_queries
+from app.crm import assignment, inbound_repository, owner_queries, rotation
 from app.crm.identity import _identity_text, _location_key, _normalize_email, _normalize_phone
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import (
@@ -367,8 +367,12 @@ async def create_inbound_enquiry(
     user_id: str,
     organization_id: str,
 ) -> InboundEnquiryResponse:
-    if payload.assigned_user_id and payload.assigned_user_id != user_id:
-        await _require_member(db, organization_id, payload.assigned_user_id)
+    # The creator handles their own lead unless they name someone they may assign to.
+    assignee = payload.assigned_user_id or user_id
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    team_id = await assignment.check_new_assignee(
+        db, scope, assignee, requested_team=payload.team_id
+    )
     contact = await _find_or_create_contact(
         db,
         organization_id=organization_id,
@@ -389,7 +393,6 @@ async def create_inbound_enquiry(
         organization_id=organization_id,
         contact_id=contact.id or 0,
         created_by_user_id=user_id,
-        assigned_user_id=payload.assigned_user_id or user_id,
         record_kind=record_kind,
         intent=payload.intent if record_kind == "opportunity" else "unknown",
         status="new",
@@ -428,6 +431,9 @@ async def create_inbound_enquiry(
             metadata_json={"source": payload.source},
             created_at=now,
         ),
+    )
+    assignment.record_assignment(
+        db, enquiry, assignee, actor_user_id=user_id, reason="created", now=now, team_id=team_id
     )
     await db.commit()
     await db.refresh(enquiry)
@@ -740,6 +746,10 @@ async def _enquiry_response(
         intent=enquiry.intent,  # type: ignore[arg-type]
         status=enquiry.status,  # type: ignore[arg-type]
         assigned_user_id=enquiry.assigned_user_id,
+        assignment_revision=enquiry.assignment_revision,
+        assigned_at=enquiry.assigned_at,
+        team_id=enquiry.team_id,
+        shared=enquiry.pool_released_at is not None,
         source=enquiry.source,
         campaign=enquiry.campaign,
         source_import_id=enquiry.source_import_id,
@@ -792,6 +802,7 @@ async def list_inbound_enquiries(
     db: AsyncSession,
     *,
     organization_id: str,
+    user_id: str,
     intent_group: str | None,
     workspace: str | None,
     status: str | None,
@@ -801,7 +812,9 @@ async def list_inbound_enquiries(
     within_days: int | None = None,
     leads_only: bool = False,
 ) -> InboundEnquiryListResponse:
-    result = await inbound_repository.list_enquiries(db, organization_id)
+    # Only the leads this user may see: lists, counts and search are all built from these.
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    result = await inbound_repository.list_enquiries(db, assignment.visible_clause(scope))
     today = date.today()
     # Items outside the chosen window are left out entirely (lists and counts).
     enquiries = [
@@ -956,11 +969,10 @@ async def list_inbound_enquiries(
 
 
 async def get_inbound_enquiry(
-    db: AsyncSession, enquiry_id: int, organization_id: str
+    db: AsyncSession, enquiry_id: int, organization_id: str, *, user_id: str
 ) -> InboundEnquiryResponse:
-    enquiry = await inbound_repository.get_crm_inbound_enquiry(db, enquiry_id)
-    if not enquiry or enquiry.organization_id != organization_id:
-        raise HTTPException(status_code=404, detail="Inbound enquiry not found")
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    enquiry = await assignment.load_visible(db, scope, enquiry_id)
     return await _enquiry_response(
         db, enquiry, include_registry_profiles=True, include_history=True
     )
@@ -974,12 +986,15 @@ async def update_inbound_enquiry(
     user_id: str,
     payload: InboundEnquiryUpdate,
 ) -> InboundEnquiryResponse:
-    enquiry = await inbound_repository.get_crm_inbound_enquiry(db, enquiry_id)
-    if not enquiry or enquiry.organization_id != organization_id:
-        raise HTTPException(status_code=404, detail="Inbound enquiry not found")
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    enquiry = await assignment.load_visible(db, scope, enquiry_id, lock=True)
+    assignment.require_edit(scope, enquiry)
     changes = payload.model_dump(exclude_unset=True)
-    if changes.get("assigned_user_id") and changes["assigned_user_id"] != user_id:
-        await _require_member(db, organization_id, changes["assigned_user_id"])
+    # Assignment goes through the shared, authorized operation, never a plain field write.
+    if "assigned_user_id" in changes:
+        assignee = changes.pop("assigned_user_id")
+        if assignee != enquiry.assigned_user_id:
+            await assignment.reassign(db, scope, [enquiry_id], assignee, reason="manual")
     contact_changes = {
         key: changes.pop(key)
         for key in (
@@ -1055,6 +1070,8 @@ async def update_inbound_enquiry(
     if matching_changed:
         await inbound_repository.mark_enquiry_matches_stale(db, enquiry, enquiry_id)
     if enquiry.status != previous_status:
+        # The holder moved the lead on: a timed rotation stops with them.
+        await rotation.stop_if_holder(db, enquiry, user_id, "stage_changed")
         inbound_repository.save(
             db,
             CrmInboundActivity(
@@ -1077,9 +1094,9 @@ async def update_inbound_enquiry(
 async def add_inbound_note(
     db: AsyncSession, *, enquiry_id: int, organization_id: str, user_id: str, body: str
 ) -> InboundEnquiryResponse:
-    enquiry = await inbound_repository.get_crm_inbound_enquiry(db, enquiry_id)
-    if not enquiry or enquiry.organization_id != organization_id:
-        raise HTTPException(status_code=404, detail="Inbound enquiry not found")
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    enquiry = await assignment.load_visible(db, scope, enquiry_id)
+    assignment.require_edit(scope, enquiry)
     inbound_repository.save(
         db,
         CrmInboundNote(
@@ -1110,6 +1127,32 @@ async def add_inbound_note(
     )
 
 
+def _taken_by_someone_else() -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={
+            "code": "LEAD_CLAIMED",
+            "message": "Another agent has already taken this lead from the pool.",
+        },
+    )
+
+
+async def _raise_if_claimed_from_my_pool(
+    db: AsyncSession, scope: assignment.AssignmentScope, enquiry_id: int
+) -> None:
+    """Someone who lost a claim race gets a clear 409, not a 404: the lead was in their own
+    team's pool a moment ago, so this reveals nothing they could not already see."""
+    enquiry = await inbound_repository.get_crm_inbound_enquiry(db, enquiry_id)
+    if (
+        enquiry
+        and enquiry.organization_id == scope.organization_id
+        and enquiry.team_id in scope.member_team_ids
+        and enquiry.assigned_user_id not in (None, scope.user_id)
+        and await inbound_repository.was_claimed(db, enquiry_id)
+    ):
+        raise _taken_by_someone_else()
+
+
 async def add_inbound_activity(
     db: AsyncSession,
     *,
@@ -1119,10 +1162,22 @@ async def add_inbound_activity(
     activity_type: str,
     body: str | None,
 ) -> InboundEnquiryResponse:
-    enquiry = await inbound_repository.get_crm_inbound_enquiry(db, enquiry_id)
-    if not enquiry or enquiry.organization_id != organization_id:
-        raise HTTPException(status_code=404, detail="Inbound enquiry not found")
+    """Log a contact attempt. On a lead waiting in the pool of a team the user belongs to, the
+    first logged contact claims it for them (agreed: "whoever makes the first contact")."""
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    try:
+        enquiry = await assignment.load_visible(db, scope, enquiry_id, lock=True)
+    except HTTPException:
+        await _raise_if_claimed_from_my_pool(db, scope, enquiry_id)
+        raise
     now = _utcnow()
+    pooled = enquiry.assigned_user_id is None and enquiry.pool_released_at is not None
+    if pooled and enquiry.team_id in scope.member_team_ids:
+        if not await assignment.claim(db, scope, enquiry, now=now):
+            raise _taken_by_someone_else()
+    else:
+        assignment.require_edit(scope, enquiry)
+        await rotation.stop_if_holder(db, enquiry, user_id, "contact_logged")
     enquiry.contact_attempt_count += 1
     enquiry.last_contact_at = now
     enquiry.first_contact_at = enquiry.first_contact_at or now

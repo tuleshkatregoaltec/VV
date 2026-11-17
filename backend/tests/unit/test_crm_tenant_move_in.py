@@ -9,9 +9,21 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from app.crm import company_listings, match_repository, matching
+from app.crm.assignment import AssignmentScope
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import CrmInboundEnquiry
 from app.listings.models import ListingCardResponse, ListingListResponse
+
+# Matching now takes the caller's visibility scope (lead assignment). These tests are about timing
+# and value matching, not visibility, so they run as an organization administrator, who sees all.
+_ADMIN = AssignmentScope(
+    organization_id="org",
+    user_id="admin",
+    organization_admin=True,
+    supervised_team_ids=frozenset(),
+    team_members={},
+    member_team_ids=frozenset(),
+)
 
 JVC = "Jumeirah Village Circle"
 NOW = datetime(2026, 11, 3, 9, 0, tzinfo=timezone.utc)
@@ -195,7 +207,9 @@ def world(monkeypatch):
 
 async def _refresh(world, enquiry):
     world["enquiry"] = enquiry
-    return await matching.refresh_inbound_matches(_Db(), enquiry_id=7, organization_id="org")
+    return await matching.refresh_inbound_matches(
+        _Db(), enquiry_id=7, organization_id="org", scope=_ADMIN
+    )
 
 
 async def test_tenant_unit_with_lease_ending_after_move_in_is_disqualified(world):
@@ -283,7 +297,7 @@ async def test_hidden_count_survives_a_plain_load_without_rerunning(world, monke
         raise AssertionError("matching re-ran")
 
     monkeypatch.setattr(matching, "refresh_inbound_matches", no_rerun)
-    res = await matching.get_inbound_matches(_Db(), 7, "org")
+    res = await matching.get_inbound_matches(_Db(), 7, "org", scope=_ADMIN)
     assert [m.target_key for m in res.lanes["units"]] == ["A"]
     assert res.hidden_after == {"units": 1}
     assert res.move_in == date(2027, 2, 1)
@@ -350,7 +364,7 @@ async def test_relative_asap_matches_refresh_when_the_resolved_date_changes(worl
     await _refresh(world, _enquiry(budget_max_aed=120_000, move_in="ASAP"))
     assert world["anchor_written"] == "2026-11-03"
     monkeypatch.setattr(matching, "_utcnow", lambda: NOW + timedelta(days=1))
-    result = await matching.get_inbound_matches(_Db(), 7, "org")
+    result = await matching.get_inbound_matches(_Db(), 7, "org", scope=_ADMIN)
     assert {match.target_key for match in result.lanes["units"]} == {"A", "B"}
     assert result.move_in == date(2026, 11, 4)
     assert result.hidden_after == {}

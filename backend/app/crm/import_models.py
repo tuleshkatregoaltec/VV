@@ -2,7 +2,17 @@ from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Text, UniqueConstraint, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
@@ -872,3 +882,68 @@ class CrmOwnerBulkUpdate(BaseModel):
     ) = None
     highlight_color: Literal["none", "amber", "green", "blue", "red", "purple"] | None = None
     note: str | None = Field(default=None, max_length=4_000)
+
+
+OwnerImportRequestStatus = Literal[
+    "pending", "queued", "processing", "approved", "rejected", "failed"
+]
+
+
+class CrmOwnerImportRequest(SQLModel, table=True):
+    """An agent's owner file waiting for a manager's approval before it is imported.
+
+    The file is held in private object storage (`storage_key`) until someone decides. Approving
+    runs the ordinary owner import, attributed to the agent who sent the file.
+    """
+
+    __tablename__ = "crm_owner_import_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'queued', 'processing', 'approved', 'rejected', 'failed')",
+            name="ck_crm_owner_import_request_status",
+        ),
+    )
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    organization_id: str = SQLField(index=True)
+    requested_by_user_id: str = SQLField(index=True)
+    team_id: str | None = SQLField(default=None, index=True)
+    name: str
+    original_filename: str
+    sha256: str
+    size_bytes: int
+    storage_key: str
+    status: str = SQLField(default="pending", index=True)
+    decided_by_user_id: str | None = None
+    decided_at: datetime | None = SQLField(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    import_id: int | None = SQLField(
+        default=None,
+        sa_column=Column(ForeignKey("crm_contact_imports.id", ondelete="SET NULL"), nullable=True),
+    )
+    error_message: str | None = SQLField(default=None, sa_column=Column(Text))
+    # When the current import attempt began; older than the lease without an outcome = crashed.
+    processing_started_at: datetime | None = SQLField(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    attempts: int = SQLField(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class OwnerImportRequestResponse(BaseModel):
+    id: int
+    requested_by_user_id: str
+    team_id: str | None = None
+    name: str
+    original_filename: str
+    size_bytes: int
+    status: OwnerImportRequestStatus
+    decided_by_user_id: str | None = None
+    decided_at: datetime | None = None
+    import_id: int | None = None
+    error_message: str | None = None
+    attempts: int = 0
+    created_at: datetime
