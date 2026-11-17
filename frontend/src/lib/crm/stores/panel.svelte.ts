@@ -18,12 +18,13 @@ export type LeadPanelTab =
 	| 'note'
 	| `stage:${LeadStage}`
 export type DealPanelTab = 'overview' | 'documents' | 'commission' | 'forms' | 'compliance'
+export type ListingPanelTab = 'overview' | 'documents'
 export type RecordKind = 'lead' | 'deal' | 'listing' | 'owner'
 
 export type PanelState =
 	| { kind: 'lead'; id: number; tab?: LeadPanelTab }
 	| { kind: 'deal'; id: string; tab?: DealPanelTab }
-	| { kind: 'listing'; id: string }
+	| { kind: 'listing'; id: string; tab?: ListingPanelTab }
 	| { kind: 'owner'; id: string; unit?: string }
 	| { kind: 'market'; id: string }
 	| { kind: 'client'; client: string }
@@ -45,7 +46,6 @@ export type PanelState =
 	| { kind: 'owner-lead'; id: string }
 	| { kind: 'add-record'; ownerId: string }
 	| { kind: 'send'; target: 'listing' | 'market'; id: string }
-	| { kind: 'brochure'; id: string }
 	| { kind: 'owner-report'; id: string }
 	| { kind: 'which-doc'; dealId: string; files: File[]; index: number }
 
@@ -57,13 +57,15 @@ function toParams(p: PanelState | null): Record<string, string> {
 		return { lead: String(p.id), ...(p.tab && p.tab !== 'overview' ? { tab: p.tab } : {}) }
 	if (p.kind === 'deal')
 		return { deal: p.id, ...(p.tab && p.tab !== 'overview' ? { tab: p.tab } : {}) }
-	if (p.kind === 'listing') return { listing: p.id }
+	if (p.kind === 'listing')
+		return { listing: p.id, ...(p.tab && p.tab !== 'overview' ? { tab: p.tab } : {}) }
 	if (p.kind === 'owner') return { owner: p.id }
 	return {}
 }
 
 const LEAD_TABS = ['overview', 'conversation', 'matches', 'history']
 const DEAL_TABS = ['overview', 'documents', 'commission', 'forms', 'compliance']
+const LISTING_TABS = ['overview', 'documents']
 
 export function panelFromUrl(url: URL): PanelState | null {
 	const s = url.searchParams
@@ -83,7 +85,12 @@ export function panelFromUrl(url: URL): PanelState | null {
 			tab: tab && DEAL_TABS.includes(tab) ? (tab as DealPanelTab) : undefined
 		}
 	const listing = s.get('listing')
-	if (listing) return { kind: 'listing', id: listing }
+	if (listing)
+		return {
+			kind: 'listing',
+			id: listing,
+			tab: tab && LISTING_TABS.includes(tab) ? (tab as ListingPanelTab) : undefined
+		}
 	const owner = s.get('owner')
 	if (owner) return { kind: 'owner', id: owner }
 	return null
@@ -157,6 +164,7 @@ class PanelStore {
 		const c = this.current
 		if (c?.kind === 'lead') this.current = { ...c, tab: tab as LeadPanelTab }
 		else if (c?.kind === 'deal') this.current = { ...c, tab: tab as DealPanelTab }
+		else if (c?.kind === 'listing') this.current = { ...c, tab: tab as ListingPanelTab }
 		this.#syncUrl()
 	}
 
@@ -194,7 +202,8 @@ export const panel = new PanelStore()
 
 export const openLead = (id: number, tab?: LeadPanelTab) => panel.open({ kind: 'lead', id, tab })
 export const openDeal = (id: string, tab?: DealPanelTab) => panel.open({ kind: 'deal', id, tab })
-export const openListing = (id: string) => panel.open({ kind: 'listing', id })
+export const openListing = (id: string, tab?: ListingPanelTab) =>
+	panel.open({ kind: 'listing', id, tab })
 /** `unit` (a unit number) opens that unit's row, e.g. the row clicked on an import report. */
 export const openOwner = (id: string, unit?: string) => panel.open({ kind: 'owner', id, unit })
 export const closeRecord = (kind: RecordKind, id: string | number) => panel.drop(kind, id)

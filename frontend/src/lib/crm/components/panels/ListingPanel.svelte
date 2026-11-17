@@ -5,8 +5,11 @@ import type { ListingDetail } from '../../api/types'
 import { stageOf } from '../../config'
 import { addDays, fileSize, fmt, price } from '../../format'
 import { crmKeys, crmQueries } from '../../queries'
-import { openDeal, openLead, panel } from '../../stores/panel.svelte'
+import { type ListingPanelTab, openDeal, openLead, panel } from '../../stores/panel.svelte'
 import { patchCache, write } from '../../write'
+import DocumentInfoForm from '../documents/DocumentInfoForm.svelte'
+import GenerateActions from '../documents/GenerateActions.svelte'
+import GeneratedDocumentList from '../documents/GeneratedDocumentList.svelte'
 import Chain, { type ChainPart } from '../ui/Chain.svelte'
 import Chip from '../ui/Chip.svelte'
 import Kv from '../ui/Kv.svelte'
@@ -15,7 +18,13 @@ import Panel from '../ui/Panel.svelte'
 import PanelLoading from '../ui/PanelLoading.svelte'
 import StageChip from '../ui/StageChip.svelte'
 
-let { id }: { id: string } = $props()
+let { id, tab = 'overview' }: { id: string; tab?: ListingPanelTab } = $props()
+
+/** Private documents exist only for listings of the organization's connected company. */
+const DOC_TABS = [
+	{ id: 'overview', label: 'Overview' },
+	{ id: 'documents', label: 'Documents' }
+]
 
 const listing = createQuery(() => crmQueries.listing(id))
 const me = createQuery(() => crmQueries.me())
@@ -102,16 +111,25 @@ function relist(x: ListingDetail) {
 	{@const chain = chainOf(x)}
 	{@const needsPermit = mine && x.permit_status !== 'valid'}
 	{@const renew = x.permit_status === 'expired'}
+	{@const documentsKey = x.scope === 'company' && x.managed ? x.listing_key : undefined}
+	{@const showDocuments = Boolean(documentsKey) && tab === 'documents'}
 	<Panel
 		kicker="{x.deal_type === 'sale' ? 'Sale' : 'Rent'} · {statusLabel(x.status)}"
 		title={x.unit}
 		sub="{x.area}{mine ? '' : ` · ${x.agent}'s listing`}"
+		tabs={documentsKey ? DOC_TABS : []}
+		tab={showDocuments ? 'documents' : 'overview'}
 	>
 		{#snippet tags()}
 			<Chip chip={x.permit_chip} />
 			<Chip>{statusLabel(x.status)}</Chip>
 		{/snippet}
 
+		{#if showDocuments && documentsKey}
+			<DocumentInfoForm listingKey={documentsKey} />
+			<GenerateActions listingKey={documentsKey} />
+			<GeneratedDocumentList listingKey={documentsKey} />
+		{:else}
 		<input
 			bind:this={input}
 			type="file"
@@ -243,6 +261,8 @@ function relist(x: ListingDetail) {
 			{/if}
 		</section>
 
+		{/if}
+
 		{#snippet footer()}
 			{#if x.status === 'pocket' && mine}
 				<button type="button" class="btn" disabled={!x.can_publish} onclick={() => setStatus(x, 'publish')}>
@@ -250,9 +270,6 @@ function relist(x: ListingDetail) {
 				</button>
 				{#if !x.can_publish}<span class="small muted">{renew ? 'Renew the permit first' : 'Add a permit first'}</span>{/if}
 			{:else if x.status === 'live'}
-				<button type="button" class="btn" onclick={() => panel.open({ kind: 'brochure', id })}>
-					Brochure PDF
-				</button>
 				<button
 					type="button"
 					class="btn ghost"

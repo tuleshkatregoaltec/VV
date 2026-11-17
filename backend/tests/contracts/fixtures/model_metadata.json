@@ -86,6 +86,13 @@
       "CREATE INDEX ix_crm_contact_lists_source_import_id ON crm_contact_lists (source_import_id)"
     ]
   },
+  "crm_generated_documents": {
+    "ddl": "\nCREATE TABLE crm_generated_documents (\n\tid UUID NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tinfo_id UUID NOT NULL, \n\tsource VARCHAR NOT NULL, \n\tlisting_key VARCHAR NOT NULL, \n\tlisting_title VARCHAR NOT NULL, \n\tdoc_type VARCHAR NOT NULL, \n\ttemplate_version VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tinput_revision INTEGER NOT NULL, \n\tidempotency_key UUID NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tobject_key VARCHAR, \n\tsize_bytes INTEGER, \n\tsha256 VARCHAR, \n\tfailure_code VARCHAR, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_generated_document_idempotency UNIQUE (organization_id, idempotency_key), \n\tCONSTRAINT ck_crm_generated_document_type CHECK (doc_type IN ('noc', 'brochure', 'lease', 'a2a')), \n\tCONSTRAINT ck_crm_generated_document_status CHECK (status IN ('generating', 'ready', 'failed')), \n\tFOREIGN KEY(organization_id) REFERENCES organizations (id) ON DELETE CASCADE, \n\tFOREIGN KEY(info_id) REFERENCES crm_listing_document_info (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_generated_documents_listing ON crm_generated_documents (organization_id, source, listing_key, created_at)",
+      "CREATE INDEX ix_crm_generated_documents_organization_id ON crm_generated_documents (organization_id)"
+    ]
+  },
   "crm_import_jobs": {
     "ddl": "\nCREATE TABLE crm_import_jobs (\n\tid VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\towner_import_id INTEGER, \n\tinbound_import_id INTEGER, \n\tinput_object_key VARCHAR NOT NULL, \n\tinput_sha256 VARCHAR(64) NOT NULL, \n\tinput_size_bytes INTEGER NOT NULL, \n\tidempotency_key VARCHAR(64) NOT NULL, \n\tparameters JSONB NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tattempt_count INTEGER NOT NULL, \n\tmax_attempts INTEGER NOT NULL, \n\tlease_token VARCHAR, \n\tlease_expires_at TIMESTAMP WITH TIME ZONE, \n\tavailable_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcompleted_at TIMESTAMP WITH TIME ZONE, \n\tlast_error VARCHAR(200), \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_crm_import_job_target CHECK ((owner_import_id IS NOT NULL) <> (inbound_import_id IS NOT NULL)), \n\tCONSTRAINT ck_crm_import_job_status CHECK (status IN ('queued', 'processing', 'retry_wait', 'completed', 'failed')), \n\tCONSTRAINT ck_crm_import_job_attempts CHECK (attempt_count >= 0 AND max_attempts BETWEEN 1 AND 10), \n\tUNIQUE (owner_import_id), \n\tFOREIGN KEY(owner_import_id) REFERENCES crm_contact_imports (id) ON DELETE CASCADE, \n\tUNIQUE (inbound_import_id), \n\tFOREIGN KEY(inbound_import_id) REFERENCES crm_inbound_imports (id) ON DELETE CASCADE, \n\tUNIQUE (input_object_key)\n)\n\n",
     "indexes": [
@@ -134,7 +141,7 @@
       "CREATE INDEX ix_crm_inbound_enquiries_source_lead_id ON crm_inbound_enquiries (source_lead_id)",
       "CREATE INDEX ix_crm_inbound_enquiries_status ON crm_inbound_enquiries (status)",
       "CREATE INDEX ix_crm_inbound_enquiries_team_id ON crm_inbound_enquiries (team_id)",
-      "CREATE UNIQUE INDEX uq_crm_inbound_sold_owner ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Owner file · recently sold'",
+      "CREATE UNIQUE INDEX uq_crm_inbound_sold_owner ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Owner file \u00b7 recently sold'",
       "CREATE UNIQUE INDEX uq_crm_inbound_vitevue_lease_unit ON crm_inbound_enquiries (organization_id, source_lead_id) WHERE source = 'Vitevue lease lead'"
     ]
   },
@@ -196,6 +203,12 @@
     "ddl": "\nCREATE TABLE crm_licensed_brokers (\n\tbroker_number SERIAL NOT NULL, \n\tname_key VARCHAR NOT NULL, \n\tphones JSON NOT NULL, \n\temails JSON NOT NULL, \n\tcard_expiry_date DATE, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (broker_number)\n)\n\n",
     "indexes": [
       "CREATE INDEX ix_crm_licensed_brokers_name_key ON crm_licensed_brokers (name_key)"
+    ]
+  },
+  "crm_listing_document_info": {
+    "ddl": "\nCREATE TABLE crm_listing_document_info (\n\tid UUID NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tsource VARCHAR NOT NULL, \n\tlisting_key VARCHAR NOT NULL, \n\tlisting_title VARCHAR NOT NULL, \n\tfields JSON NOT NULL, \n\trevision INTEGER NOT NULL, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tupdated_by_user_id VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_listing_document_info_source UNIQUE (organization_id, source, listing_key), \n\tFOREIGN KEY(organization_id) REFERENCES organizations (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_listing_document_info_organization_id ON crm_listing_document_info (organization_id)"
     ]
   },
   "crm_mutation_audit": {

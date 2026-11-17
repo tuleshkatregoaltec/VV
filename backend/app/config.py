@@ -150,8 +150,9 @@ class Settings(BaseSettings):
     # Object storage. Production currently uses Cloudflare R2 through the S3-compatible API.
     OBJECT_STORAGE_PROVIDER: Literal["r2", "aws_s3", "minio"] = "r2"  # configMap
     OBJECT_STORAGE_ENDPOINT_URL: AnyUrl | None = None  # configMap
-    OBJECT_STORAGE_ACCESS_KEY_ID: str  # Bitwarden Secrets
-    OBJECT_STORAGE_SECRET_ACCESS_KEY: str  # Bitwarden Secrets
+    # Unset in production containers that authenticate with their task role.
+    OBJECT_STORAGE_ACCESS_KEY_ID: str | None = None  # Bitwarden Secrets
+    OBJECT_STORAGE_SECRET_ACCESS_KEY: str | None = None  # Bitwarden Secrets
     OBJECT_STORAGE_BUCKET: str  # configMap
     OBJECT_STORAGE_REGION: str = "auto"  # configMap
     OBJECT_STORAGE_USE_PATH_STYLE: bool = True  # configMap
@@ -341,11 +342,13 @@ def require_env(*names: str) -> str:
 
 
 def build_object_storage_client_kwargs() -> dict[str, str]:
-    kwargs = {
-        "aws_access_key_id": require_env("OBJECT_STORAGE_ACCESS_KEY_ID"),
-        "aws_secret_access_key": require_env("OBJECT_STORAGE_SECRET_ACCESS_KEY"),
-        "region_name": env_value("OBJECT_STORAGE_REGION") or "auto",
-    }
+    kwargs = {"region_name": env_value("OBJECT_STORAGE_REGION") or "auto"}
+    access_key_id = env_value("OBJECT_STORAGE_ACCESS_KEY_ID")
+    secret_access_key = env_value("OBJECT_STORAGE_SECRET_ACCESS_KEY")
+    # Without static keys the SDK's default chain applies (e.g. a container task role).
+    if access_key_id and secret_access_key:
+        kwargs["aws_access_key_id"] = access_key_id
+        kwargs["aws_secret_access_key"] = secret_access_key
     endpoint_url = env_value("OBJECT_STORAGE_ENDPOINT_URL")
     if endpoint_url:
         kwargs["endpoint_url"] = endpoint_url

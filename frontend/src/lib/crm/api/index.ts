@@ -279,7 +279,11 @@ const liveCrm = {
 			scope === 'company'
 				? backend.listCompanyListings(status, limit, offset, companyAgent)
 				: { items: [], counts: { live: 0, pocket: 0, expired: 0 } },
-		get: (_id: string) => notOnBackend<ListingDetail>('Listings'),
+		/** Company listings (PF-<id>) come from Property Finder; other listings aren't on the backend yet. */
+		get: (id: string): Promise<ListingDetail> => {
+			const key = backend.listingKeyOf(id)
+			return key ? backend.getCompanyListing(key) : notOnBackend<ListingDetail>('Listings')
+		},
 		create: (_body: ListingCreate) =>
 			notOnBackend<Written<ListingCreateResult>>('Creating a listing'),
 		addPermit: (_id: string, _body: { number: string; expires: string }) =>
@@ -291,8 +295,18 @@ const liveCrm = {
 		upload: (_id: string, _file: File, _docType: string) =>
 			notOnBackend<Written<ListingDetail>>('Listing documents'),
 		send: (_id: string, _leadIds: number[]) =>
-			notOnBackend<Written<{ sent: number }>>('Sending a listing'),
-		sendBrochure: (_id: string) => notOnBackend<{ sent: boolean }>('Sending a brochure')
+			notOnBackend<Written<{ sent: number }>>('Sending a listing')
+	},
+
+	/** Generated listing documents: private PDFs made from a managed listing's saved details. */
+	documents: {
+		info: backend.getDocumentInfo,
+		saveInfo: backend.saveDocumentInfo,
+		generate: backend.generateDocument,
+		list: backend.listDocuments,
+		get: backend.getDocument,
+		download: backend.downloadDocument,
+		preview: backend.previewDocument
 	},
 
 	portfolio: {

@@ -13,6 +13,7 @@ from app.assistant_actions.models import (
 from app.billing.models import Subscription
 from app.chat.models import ChatTurnLease, Conversation, Message
 from app.crm.audit_models import CrmMutationAudit
+from app.crm.document_models import CrmGeneratedDocument, CrmListingDocumentInfo
 from app.crm.import_job_models import CrmImportJob
 from app.crm.import_models import (
     CrmContactImport,
@@ -100,6 +101,8 @@ __all__ = [
     "CrmLicensedBroker",
     "CrmImportJob",
     "CrmCompanyListingSource",
+    "CrmListingDocumentInfo",
+    "CrmGeneratedDocument",
     "CrmContactImport",
     "CrmOwnerImportRequest",
     "CrmContactList",

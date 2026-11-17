@@ -7,6 +7,7 @@ import type {
 	CompanyListingFilter,
 	DealTab,
 	DealType,
+	DocumentListParams,
 	ImportRequest,
 	ImportStatus,
 	InboxFilter,
@@ -122,6 +123,9 @@ export const crmKeys = {
 	ownerImports: () => [...crmScopeKey(), 'imports', 'owners'] as const,
 	ownerImportRequests: () => [...crmScopeKey(), 'imports', 'owners', 'requests'] as const,
 	ownerImportDetails: () => [...crmScopeKey(), 'imports', 'owners', 'details'] as const,
+	documentInfo: (listingKey: string) => [...crmScopeKey(), 'document-info', listingKey] as const,
+	documentsAll: () => [...crmScopeKey(), 'documents'] as const,
+	documents: (p: DocumentListParams) => [...crmScopeKey(), 'documents', p] as const,
 	ownerImportRows: (listId: number, p: OwnerImportRowsParams) =>
 		[...crmScopeKey(), 'imports', 'owners', 'rows', listId, p] as const,
 	ownerImportDropped: (importId: number, p: OwnerDroppedRowsParams) =>
@@ -260,6 +264,14 @@ export const crmQueries = {
 		enabled: crmIdentityKnown(),
 		queryKey: crmKeys.portfolio(),
 		queryFn: crm.portfolio.get
+	}),
+	documentInfo: (listingKey: string) => ({
+		queryKey: crmKeys.documentInfo(listingKey),
+		queryFn: () => crm.documents.info(listingKey)
+	}),
+	documents: (p: DocumentListParams) => ({
+		queryKey: crmKeys.documents(p),
+		queryFn: () => crm.documents.list(p)
 	}),
 	renewals: (p: RenewalListParams) => ({
 		enabled: crmIdentityKnown(),

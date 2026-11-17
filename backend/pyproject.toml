@@ -55,6 +55,8 @@ dependencies = [
     "langsmith[otel]>=0.14.1",
     "opentelemetry-sdk==1.39.1",
     "opentelemetry-exporter-otlp-proto-http==1.39.1",
+    "weasyprint>=70.0",
+    "jinja2>=3.1.6",
 ]
 
 [tool.uv]
@@ -125,3 +127,8 @@ ignore = [
 
 [tool.uv.sources]
 crm-rental-sql = { path = "../holocron/packages/crm-rental-sql" }
+
+[dependency-groups]
+dev = [
+    "pypdf>=7.0.1",
+]

@@ -5,6 +5,58 @@ export type ClientOptions = {
 };
 
 /**
+ * A2AFields
+ */
+export type A2aFieldsInput = {
+    /**
+     * Other Brokerage
+     */
+    other_brokerage?: string | null;
+    /**
+     * Other Broker Name
+     */
+    other_broker_name?: string | null;
+    /**
+     * Other Broker Brn
+     */
+    other_broker_brn?: string | null;
+    /**
+     * Commission Split Pct
+     */
+    commission_split_pct?: number | string | null;
+    /**
+     * Valid Until
+     */
+    valid_until?: string | null;
+};
+
+/**
+ * A2AFields
+ */
+export type A2aFieldsOutput = {
+    /**
+     * Other Brokerage
+     */
+    other_brokerage?: string | null;
+    /**
+     * Other Broker Name
+     */
+    other_broker_name?: string | null;
+    /**
+     * Other Broker Brn
+     */
+    other_broker_brn?: string | null;
+    /**
+     * Commission Split Pct
+     */
+    commission_split_pct?: string | null;
+    /**
+     * Valid Until
+     */
+    valid_until?: string | null;
+};
+
+/**
  * AcceptInviteRequest
  *
  * Request to accept invitation
@@ -2098,6 +2150,88 @@ export type CrmCompanyListingCompany = {
      * Last Scraped At
      */
     last_scraped_at?: string | null;
+};
+
+/**
+ * CrmCompanyListingDetail
+ *
+ * One Property Finder listing; `managed` when it belongs to the organization's connected company.
+ *
+ * Only managed listings may carry private owner and agreement documents.
+ */
+export type CrmCompanyListingDetail = {
+    /**
+     * Reference
+     */
+    reference: string;
+    /**
+     * Agent Name
+     */
+    agent_name: string;
+    /**
+     * Agent Phone
+     */
+    agent_phone: string | null;
+    /**
+     * Mode
+     */
+    mode: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Bedrooms
+     */
+    bedrooms: number | null;
+    /**
+     * Size Sqft
+     */
+    size_sqft: number | null;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Building Name
+     */
+    building_name: string | null;
+    /**
+     * Unit Number
+     */
+    unit_number: string | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Listed At
+     */
+    listed_at: string;
+    /**
+     * Listing Key
+     */
+    listing_key: string;
+    /**
+     * Broker Id
+     */
+    broker_id: string;
+    /**
+     * Broker Name
+     */
+    broker_name: string;
+    /**
+     * Managed
+     */
+    managed: boolean;
 };
 
 /**
@@ -5559,6 +5693,42 @@ export type DimensionBreakdown = {
 };
 
 /**
+ * DocumentDownloadResponse
+ */
+export type DocumentDownloadResponse = {
+    /**
+     * Url
+     */
+    url: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+};
+
+/**
+ * DocumentFields
+ *
+ * Everything the Documents tab collects for one listing (all optional until a template needs it).
+ */
+export type DocumentFieldsInput = {
+    owner?: OwnerFields;
+    lease?: LeaseFields;
+    a2a?: A2aFieldsInput;
+};
+
+/**
+ * DocumentFields
+ *
+ * Everything the Documents tab collects for one listing (all optional until a template needs it).
+ */
+export type DocumentFieldsOutput = {
+    owner?: OwnerFields;
+    lease?: LeaseFields;
+    a2a?: A2aFieldsOutput;
+};
+
+/**
  * FeasibilityAssumptions
  */
 export type FeasibilityAssumptions = {
@@ -6428,6 +6598,32 @@ export type GisLandUse = {
 };
 
 /**
+ * GenerateDocumentRequest
+ */
+export type GenerateDocumentRequest = {
+    /**
+     * Source
+     */
+    source: 'property_finder';
+    /**
+     * Listing Key
+     */
+    listing_key: string;
+    /**
+     * Doc Type
+     */
+    doc_type: 'noc' | 'lease' | 'a2a';
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Idempotency Key
+     */
+    idempotency_key: string;
+};
+
+/**
  * GenerateStudyRequest
  */
 export type GenerateStudyRequest = {
@@ -6463,6 +6659,88 @@ export type GenerateStudyResponse = {
     chat?: {
         [key: string]: unknown;
     };
+};
+
+/**
+ * GeneratedDocumentListResponse
+ */
+export type GeneratedDocumentListResponse = {
+    /**
+     * Items
+     */
+    items: Array<GeneratedDocumentResponse>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+};
+
+/**
+ * GeneratedDocumentResponse
+ *
+ * What the lists show; never the private snapshot or the storage key.
+ */
+export type GeneratedDocumentResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Listing Key
+     */
+    listing_key: string;
+    /**
+     * Listing Title
+     */
+    listing_title: string;
+    /**
+     * Company Name
+     */
+    company_name?: string | null;
+    /**
+     * Listing Area
+     */
+    listing_area?: string | null;
+    /**
+     * Doc Type
+     */
+    doc_type: 'noc' | 'lease' | 'a2a';
+    /**
+     * Template Version
+     */
+    template_version: string;
+    /**
+     * Status
+     */
+    status: 'generating' | 'ready' | 'failed';
+    /**
+     * Failure Code
+     */
+    failure_code: string | null;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number | null;
+    /**
+     * Created By User Id
+     */
+    created_by_user_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
 };
 
 /**
@@ -7681,6 +7959,44 @@ export type LeadTarget = {
 };
 
 /**
+ * LeaseFields
+ */
+export type LeaseFields = {
+    /**
+     * Tenant Name
+     */
+    tenant_name?: string | null;
+    /**
+     * Tenant Phone
+     */
+    tenant_phone?: string | null;
+    /**
+     * Tenant Email
+     */
+    tenant_email?: string | null;
+    /**
+     * Start Date
+     */
+    start_date?: string | null;
+    /**
+     * End Date
+     */
+    end_date?: string | null;
+    /**
+     * Annual Rent Aed
+     */
+    annual_rent_aed?: number | null;
+    /**
+     * Cheques
+     */
+    cheques?: number | null;
+    /**
+     * Security Deposit Aed
+     */
+    security_deposit_aed?: number | null;
+};
+
+/**
  * ListingAnalyticsResponse
  */
 export type ListingAnalyticsResponse = {
@@ -8236,6 +8552,37 @@ export type ListingDetailResponse = {
      * Valuation Comparables
      */
     valuation_comparables?: Array<ListingComparableSale>;
+};
+
+/**
+ * ListingDocumentInfoResponse
+ */
+export type ListingDocumentInfoResponse = {
+    listing: CrmCompanyListingDetail;
+    fields: DocumentFieldsOutput;
+    /**
+     * Revision
+     */
+    revision: number;
+};
+
+/**
+ * ListingDocumentInfoUpdate
+ */
+export type ListingDocumentInfoUpdate = {
+    /**
+     * Source
+     */
+    source: 'property_finder';
+    /**
+     * Listing Key
+     */
+    listing_key: string;
+    fields: DocumentFieldsInput;
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
 };
 
 /**
@@ -9606,6 +9953,32 @@ export type OrganizationUserDetailResponse = {
      * Usage Percentage
      */
     usage_percentage: number;
+};
+
+/**
+ * OwnerFields
+ */
+export type OwnerFields = {
+    /**
+     * Full Name
+     */
+    full_name?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Title Deed Number
+     */
+    title_deed_number?: string | null;
+    /**
+     * Id Number
+     */
+    id_number?: string | null;
 };
 
 /**
@@ -15846,6 +16219,231 @@ export type CrmCrmCompanyListingsResponses = {
 };
 
 export type CrmCrmCompanyListingsResponse = CrmCrmCompanyListingsResponses[keyof CrmCrmCompanyListingsResponses];
+
+export type CrmCrmCompanyListingData = {
+    body?: never;
+    path: {
+        /**
+         * Listing Key
+         */
+        listing_key: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/company-listings/{listing_key}';
+};
+
+export type CrmCrmCompanyListingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCompanyListingError = CrmCrmCompanyListingErrors[keyof CrmCrmCompanyListingErrors];
+
+export type CrmCrmCompanyListingResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmCompanyListingDetail;
+};
+
+export type CrmCrmCompanyListingResponse = CrmCrmCompanyListingResponses[keyof CrmCrmCompanyListingResponses];
+
+export type CrmCrmListingDocumentInfoData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'property_finder';
+        /**
+         * Listing Key
+         */
+        listing_key: string;
+    };
+    url: '/api/v1/crm/listing-document-info';
+};
+
+export type CrmCrmListingDocumentInfoErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmListingDocumentInfoError = CrmCrmListingDocumentInfoErrors[keyof CrmCrmListingDocumentInfoErrors];
+
+export type CrmCrmListingDocumentInfoResponses = {
+    /**
+     * Successful Response
+     */
+    200: ListingDocumentInfoResponse;
+};
+
+export type CrmCrmListingDocumentInfoResponse = CrmCrmListingDocumentInfoResponses[keyof CrmCrmListingDocumentInfoResponses];
+
+export type CrmCrmSaveListingDocumentInfoData = {
+    body: ListingDocumentInfoUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/listing-document-info';
+};
+
+export type CrmCrmSaveListingDocumentInfoErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmSaveListingDocumentInfoError = CrmCrmSaveListingDocumentInfoErrors[keyof CrmCrmSaveListingDocumentInfoErrors];
+
+export type CrmCrmSaveListingDocumentInfoResponses = {
+    /**
+     * Successful Response
+     */
+    200: ListingDocumentInfoResponse;
+};
+
+export type CrmCrmSaveListingDocumentInfoResponse = CrmCrmSaveListingDocumentInfoResponses[keyof CrmCrmSaveListingDocumentInfoResponses];
+
+export type CrmCrmDocumentsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Listing Key
+         */
+        listing_key?: string | null;
+        /**
+         * Doc Type
+         */
+        doc_type?: 'noc' | 'lease' | 'a2a' | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/documents';
+};
+
+export type CrmCrmDocumentsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDocumentsError = CrmCrmDocumentsErrors[keyof CrmCrmDocumentsErrors];
+
+export type CrmCrmDocumentsResponses = {
+    /**
+     * Successful Response
+     */
+    200: GeneratedDocumentListResponse;
+};
+
+export type CrmCrmDocumentsResponse = CrmCrmDocumentsResponses[keyof CrmCrmDocumentsResponses];
+
+export type CrmCrmGenerateDocumentData = {
+    body: GenerateDocumentRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/documents';
+};
+
+export type CrmCrmGenerateDocumentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmGenerateDocumentError = CrmCrmGenerateDocumentErrors[keyof CrmCrmGenerateDocumentErrors];
+
+export type CrmCrmGenerateDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    201: GeneratedDocumentResponse;
+};
+
+export type CrmCrmGenerateDocumentResponse = CrmCrmGenerateDocumentResponses[keyof CrmCrmGenerateDocumentResponses];
+
+export type CrmCrmDocumentData = {
+    body?: never;
+    path: {
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/documents/{document_id}';
+};
+
+export type CrmCrmDocumentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDocumentError = CrmCrmDocumentErrors[keyof CrmCrmDocumentErrors];
+
+export type CrmCrmDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    200: GeneratedDocumentResponse;
+};
+
+export type CrmCrmDocumentResponse = CrmCrmDocumentResponses[keyof CrmCrmDocumentResponses];
+
+export type CrmCrmDownloadDocumentData = {
+    body?: never;
+    path: {
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: {
+        /**
+         * Inline
+         */
+        inline?: boolean;
+    };
+    url: '/api/v1/crm/documents/{document_id}/download';
+};
+
+export type CrmCrmDownloadDocumentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDownloadDocumentError = CrmCrmDownloadDocumentErrors[keyof CrmCrmDownloadDocumentErrors];
+
+export type CrmCrmDownloadDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    200: DocumentDownloadResponse;
+};
+
+export type CrmCrmDownloadDocumentResponse = CrmCrmDownloadDocumentResponses[keyof CrmCrmDownloadDocumentResponses];
 
 export type CrmCrmClearCompanyListingSourceData = {
     body?: never;

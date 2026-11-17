@@ -1,7 +1,7 @@
 import json
 from datetime import date
 from typing import Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import (
     APIRouter,
@@ -9,6 +9,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Path,
     Query,
     Request,
     Response,
@@ -29,8 +30,27 @@ from app.crm import (
 from app.crm.analytics_models import AgentAnalyticsDetail, AnalyticsWindow, TeamAnalyticsResponse
 from app.crm.company_listings import (
     clear_company_source,
+    get_company_listing,
     list_company_listings,
     select_company_source,
+)
+from app.crm.document_models import (
+    LISTING_KEY_PATTERN,
+    DocType,
+    DocumentDownloadResponse,
+    GeneratedDocumentListResponse,
+    GeneratedDocumentResponse,
+    GenerateDocumentRequest,
+    ListingDocumentInfoResponse,
+    ListingDocumentInfoUpdate,
+)
+from app.crm.documents import (
+    download_document,
+    generate_document,
+    get_document,
+    get_document_info,
+    list_documents,
+    save_document_info,
 )
 from app.crm.execution import expensive_crm, light_crm
 from app.crm.import_models import (
@@ -94,6 +114,7 @@ from app.crm.matching import (
 from app.crm.models import (
     CrmAreaPreferencesResponse,
     CrmAreaPreferencesUpdate,
+    CrmCompanyListingDetail,
     CrmCompanyListingSourceResponse,
     CrmCompanyListingSourceUpdate,
     CrmCompanyListingsResponse,
@@ -708,6 +729,145 @@ async def crm_company_listings(
         agent_name=agent_name,
         search=search,
     )
+
+
+@router.get(
+    "/company-listings/{listing_key}",
+    response_model=CrmCompanyListingDetail,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_company_listing(
+    listing_key: str = Path(pattern=LISTING_KEY_PATTERN),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """One current Property Finder listing; `managed` when it is the connected company's."""
+    _, organization_id = _auth_ids(context)
+    listing = await get_company_listing(db, organization_id, listing_key)
+    if listing is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    return listing
+
+
+@router.get(
+    "/listing-document-info",
+    response_model=ListingDocumentInfoResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_listing_document_info(
+    source: Literal["property_finder"] = Query(),
+    listing_key: str = Query(pattern=LISTING_KEY_PATTERN),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """A managed listing with the document information saved for it (revision 0 = none yet)."""
+    _, organization_id = _auth_ids(context)
+    return await get_document_info(db, organization_id=organization_id, listing_key=listing_key)
+
+
+@router.put(
+    "/listing-document-info",
+    response_model=ListingDocumentInfoResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_save_listing_document_info(
+    payload: ListingDocumentInfoUpdate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Save a listing's document information; 409 `stale_revision` if someone saved first."""
+    user_id, organization_id = _auth_ids(context)
+    return await save_document_info(
+        db, organization_id=organization_id, user_id=user_id, payload=payload
+    )
+
+
+@router.post(
+    "/documents",
+    response_model=GeneratedDocumentResponse,
+    status_code=201,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_generate_document(
+    payload: GenerateDocumentRequest,
+    response: Response,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Generate one PDF from a managed listing's saved information.
+
+    201 = made now; 200 = this idempotency key already has a document (returned as is).
+    422 `missing_fields`, 409 `stale_revision`, 502 when rendering or storage failed.
+    """
+    user_id, organization_id = _auth_ids(context)
+    document, created = await generate_document(
+        db, organization_id=organization_id, user_id=user_id, payload=payload
+    )
+    if not created:
+        response.status_code = 200
+    return document
+
+
+@router.get("/documents", response_model=GeneratedDocumentListResponse, dependencies=EXPENSIVE_LANE)
+async def crm_documents(
+    listing_key: str | None = Query(default=None, pattern=LISTING_KEY_PATTERN),
+    doc_type: DocType | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=120),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """The organization's generated documents, newest first."""
+    _, organization_id = _auth_ids(context)
+    return await list_documents(
+        db,
+        organization_id=organization_id,
+        listing_key=listing_key,
+        doc_type=doc_type,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/documents/{document_id}",
+    response_model=GeneratedDocumentResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_document(
+    document_id: UUID,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    _, organization_id = _auth_ids(context)
+    return await get_document(db, organization_id=organization_id, document_id=document_id)
+
+
+@router.post(
+    "/documents/{document_id}/download",
+    response_model=DocumentDownloadResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_download_document(
+    document_id: UUID,
+    response: Response,
+    inline: bool = Query(default=False),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """A link valid for 5 minutes (`inline=true` previews it in the browser).
+
+    409 `not_ready` unless the PDF was made.
+    """
+    _, organization_id = _auth_ids(context)
+    link = await download_document(
+        db, organization_id=organization_id, document_id=document_id, inline=inline
+    )
+    # The link is a bearer credential: never cache it.
+    response.headers["Cache-Control"] = "no-store"
+    return link
 
 
 @router.put(
