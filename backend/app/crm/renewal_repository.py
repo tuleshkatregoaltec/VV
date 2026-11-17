@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy import ARRAY, String, any_, literal
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -49,6 +50,25 @@ async def list_imported_unit_keys(db: AsyncSession, organization_id) -> list[str
             )
         ).all()
     )
+
+
+async def has_imported_unit_keys(
+    db: AsyncSession, organization_id, candidate_keys: list[str]
+) -> bool:
+    """Manual-only units do not depend on imported ownership evidence availability."""
+    if not candidate_keys:
+        return False
+    keys = any_(literal(sorted(set(candidate_keys)), ARRAY(String)))
+    return (
+        await db.exec(
+            select(CrmPropertyContactClaim.id)
+            .where(
+                CrmPropertyContactClaim.organization_id == organization_id,
+                CrmPropertyContactClaim.unit_candidate_key == keys,
+            )
+            .limit(1)
+        )
+    ).first() is not None
 
 
 def save(db: AsyncSession, record):

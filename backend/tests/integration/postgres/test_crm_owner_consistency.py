@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 from owner_store_support import install_rows
 
-from app.crm import owners, renewal_leads, workspaces
+from app.crm import owner_assessment, owner_store, owners, renewal_leads, workspaces
 from app.crm.import_models import CrmOwnerHistorySummary, CrmOwnerNote, CrmOwnerWorkspace
 from app.crm.models import CrmLeadWorkspace
 from app.crm.owner_assessment import OwnerAssessmentSnapshot
@@ -96,8 +96,12 @@ class DB:
 
 async def install_snapshot(monkeypatch, rows):
     value = snapshot(rows)
-    # renewal still assesses just its own units, from a snapshot
-    monkeypatch.setattr(renewal_leads, "get_owner_assessment", AsyncMock(return_value=value))
+    from app.crm.owner_store import open_store
+
+    async def renewal_store(db, organization_id):
+        return await open_store(DB.session, organization_id)
+
+    monkeypatch.setattr(renewal_leads, "open_store", renewal_store)
     monkeypatch.setattr(
         owners, "_enrich_owner_profile_registry", AsyncMock(side_effect=lambda profile: profile)
     )
@@ -106,7 +110,11 @@ async def install_snapshot(monkeypatch, rows):
 
 
 @pytest.fixture(autouse=True)
-def _session(pg_session):
+def _session(pg_session, monkeypatch):
+    # These cases install published projections directly, with their source evidence assumed.
+    monkeypatch.setattr(
+        renewal_leads.renewal_repository, "has_imported_unit_keys", AsyncMock(return_value=True)
+    )
     DB.session = pg_session
     yield
     DB.session = None
@@ -250,6 +258,218 @@ async def test_renewal_uses_canonical_assessment_and_rejects_stale_green_claims(
         )
         == {}
     )
+
+
+async def test_renewal_projection_scopes_tenant_generation_and_unit(pg_session, monkeypatch):
+    await install_rows(
+        pg_session, monkeypatch, [event(contact_name="Other tenant")], organization_id="other"
+    )
+    await install_rows(
+        pg_session,
+        monkeypatch,
+        [event(contact_name="Current owner"), event(2, unit_candidate_key="other-unit")],
+    )
+    store = await owner_store.open_store(pg_session, "org")
+    await owner_store._write(
+        pg_session.bind,
+        "org",
+        store.state.generation + 1000,
+        [event(contact_name="Unpublished owner")],
+    )
+    rows = await store.renewal_rows(["unit"])
+    assert len(rows) == 1 and rows[0]["contact_name"] == "Current owner"
+    assert rows[0]["transaction_date"] == date(2025, 1, 1)
+    assert rows[0]["property_identity"] == ("businessbay", "tower|101")
+    assert rows[0]["event_assessed_status"] == "verified_current_owner"
+    assert "evidence" not in rows[0]  # large warehouse payloads do not enter the request
+
+
+async def test_renewal_projection_preserves_exact_eligibility_and_competitors(
+    pg_session, monkeypatch
+):
+    await install_rows(
+        pg_session,
+        monkeypatch,
+        [
+            event(),  # legacy rows without an event status use their assessed status
+            event(
+                2,
+                canonical_owner_key="seller",
+                party_role="Seller",
+                assessed_status="probable_current_owner",
+                event_assessed_status="probable_current_owner",
+            ),
+            event(
+                3,
+                canonical_owner_key="competitor",
+                assessed_status="conflicting_claim",
+                event_assessed_status="conflicting_claim",
+                phone_primary=None,
+                lead_id=None,
+            ),
+            event(4, assessed_status="former_owner"),
+            event(5, event_assessed_status="former_owner"),
+            event(6, event_assessed_status=None),  # explicit null must not use the legacy fallback
+            event(7, property_identity=None),
+            event(8, assessed_status="unit_linked_unverified"),
+        ],
+    )
+    store = await owner_store.open_store(pg_session, "org")
+    projected = {row["id"]: row for row in await store.renewal_rows(["unit", "unit"])}
+    assert set(projected) == {1, 2, 3}
+    assert projected[1]["event_assessed_status"] == "verified_current_owner"
+    assert projected[2]["party_role"] == "Seller"
+    assert projected[3]["lead_id"] is None
+    assert (
+        await renewal_leads._owners_by_candidate(
+            pg_session, candidate_keys=["unit"], user_id="sql-prefilter", organization_id="org"
+        )
+        == {}
+    )
+
+
+@pytest.mark.parametrize("owner", ["known", "unknown"])
+async def test_large_renewal_filter_reuses_published_rows(pg_session, monkeypatch, owner):
+    rows = [
+        event(),
+        event(2, unit_candidate_key="former", assessed_status="former_owner"),
+        event(3, unit_candidate_key="conflict", assessed_status="conflicting_claim"),
+        event(4, unit_candidate_key="ambiguous", canonical_owner_key="one"),
+        event(5, unit_candidate_key="ambiguous", canonical_owner_key="two"),
+        event(6, unit_candidate_key="event-former", event_assessed_status="former_owner"),
+        event(7, unit_candidate_key="clear"),
+        event(8, unit_candidate_key="import-only"),
+        event(9, unit_candidate_key="unreachable", phone_primary=None),
+    ]
+    await install_rows(pg_session, monkeypatch, rows)
+    user = f"renewal-{owner}"
+    for tenant, agent, key, name in (
+        ("org", user, "unit", "My manual owner"),
+        ("org", user, "clear", None),
+        ("org", f"other-{user}", "unit", "Other agent's owner"),
+        ("other", user, "unit", "Other tenant's owner"),
+    ):
+        pg_session.add(
+            CrmLeadWorkspace(
+                organization_id=tenant,
+                user_id=agent,
+                lead_id=f"lease-{key}",
+                unit_candidate_key=key,
+                owner_source="manual",
+                owner_name=name,
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+    await pg_session.commit()
+    rebuild = AsyncMock(side_effect=AssertionError("Renewals must reuse the published assessment"))
+    monkeypatch.setattr(owner_assessment, "_build", rebuild)
+    monkeypatch.setattr(owner_assessment, "_scoped_assessment", rebuild)
+    monkeypatch.setattr(owner_store, "_build_exclusively", rebuild)
+    keys = [row["unit_candidate_key"] for row in rows] + [
+        f"unit-{index}" for index in range(owner_assessment.SCOPED_CACHE_MAX_ROWS + 1)
+    ]
+    monkeypatch.setattr(
+        renewal_leads.renewal_repository, "list_imported_unit_keys", AsyncMock(return_value=keys)
+    )
+    leases = AsyncMock(
+        return_value=renewal_leads.CrmRenewalsResponse(
+            leads=[], total=0, limit=50, offset=0, as_of=date.today()
+        )
+    )
+    monkeypatch.setattr(renewal_leads, "list_renewals", leases)
+    await renewal_leads.list_owner_renewals(
+        pg_session,
+        user_id=user,
+        organization_id="org",
+        window=None,
+        area=None,
+        property_type=None,
+        project=None,
+        building=None,
+        limit=50,
+        offset=0,
+        owner=owner,
+    )
+    assert leases.await_args.kwargs["unit_keys"] == ["import-only", "unit"]
+    assert leases.await_args.kwargs.get("exclude_units", False) == (owner == "unknown")
+    resolved = await renewal_leads._owners_by_candidate(
+        pg_session,
+        candidate_keys=["unit", "clear", "import-only"],
+        user_id=user,
+        organization_id="org",
+    )
+    assert set(resolved) == {"unit", "import-only"}
+    assert resolved["unit"].name == "My manual owner"
+    assert resolved["unit"].source == "workspace"
+    assert resolved["import-only"].source == "owner_import"
+    rebuild.assert_not_awaited()
+
+
+@pytest.mark.parametrize("owner", ["known", "unknown"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "source",
+        "warehouse",
+        "unavailable",
+        "source_during_read",
+        "warehouse_during_read",
+        "generation",
+    ],
+)
+async def test_stale_renewal_projection_fails_before_listing_leases(
+    pg_session, monkeypatch, owner, change
+):
+    from dataclasses import replace
+
+    await install_rows(pg_session, monkeypatch, [event()])
+    store = await owner_store.open_store(pg_session, "org")
+    if change == "unavailable":
+        store.state = replace(store.state, warehouse_status="unavailable")
+    elif change == "generation":
+        # A same-input publication discards the reader's old rows: an empty SELECT
+        # must be a retry, never proof that every known owner has disappeared.
+        await install_rows(pg_session, monkeypatch, [event(contact_name="New generation")])
+    else:
+        tokens = (
+            ("changed", "test-evidence")
+            if change.startswith("source")
+            else ("test-revision", "changed")
+        )
+        current = ("test-revision", "test-evidence")
+        token_read = (
+            AsyncMock(side_effect=[current, tokens])
+            if change.endswith("during_read")
+            else AsyncMock(return_value=tokens)
+        )
+        monkeypatch.setattr(owner_store, "_tokens", token_read)
+    monkeypatch.setattr(renewal_leads, "open_store", AsyncMock(return_value=store))
+    monkeypatch.setattr(
+        renewal_leads.renewal_repository,
+        "list_imported_unit_keys",
+        AsyncMock(return_value=["unit"]),
+    )
+    leases = AsyncMock(
+        side_effect=AssertionError("Staleness must not alter the known/unknown split")
+    )
+    monkeypatch.setattr(renewal_leads, "list_renewals", leases)
+    with pytest.raises(HTTPException) as error:
+        await renewal_leads.list_owner_renewals(
+            pg_session,
+            user_id="user",
+            organization_id="org",
+            window=None,
+            area=None,
+            property_type=None,
+            project=None,
+            building=None,
+            limit=50,
+            offset=0,
+            owner=owner,
+        )
+    assert error.value.status_code == 503
+    leases.assert_not_awaited()
 
 
 async def test_imported_workspace_retracts_owner_and_green_without_changing_saved_work(monkeypatch):

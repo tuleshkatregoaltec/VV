@@ -44,10 +44,13 @@ async def test_scoped_assessment_loads_only_the_requested_units(monkeypatch):
     assert owner_assessment._recent is None
 
 
-async def test_owners_by_candidate_asks_for_its_own_units_only(monkeypatch):
-    assessed = owner_assessment._project([], datetime.now(timezone.utc), "available")
-    assess = AsyncMock(return_value=assessed)
-    monkeypatch.setattr(renewal_leads, "get_owner_assessment", assess)
+async def test_owners_by_candidate_reads_only_its_units_from_the_published_assessment(monkeypatch):
+    monkeypatch.setattr(
+        "app.crm.renewal_repository.has_imported_unit_keys", AsyncMock(return_value=True)
+    )
+    rows = AsyncMock(return_value=[])
+    open_store = AsyncMock(return_value=SimpleNamespace(renewal_rows=rows))
+    monkeypatch.setattr(renewal_leads, "open_store", open_store)
     monkeypatch.setattr(
         "app.crm.workspace_repository.list_lead_workspaces_for_candidates",
         AsyncMock(return_value=[]),
@@ -55,7 +58,8 @@ async def test_owners_by_candidate_asks_for_its_own_units_only(monkeypatch):
     await renewal_leads._owners_by_candidate(
         None, candidate_keys=["unit-b", "unit-a"], user_id="u", organization_id="org"
     )
-    assert assess.await_args.kwargs["unit_candidate_keys"] == ["unit-a", "unit-b"]
+    open_store.assert_awaited_once_with(None, "org")
+    rows.assert_awaited_once_with(["unit-a", "unit-b"])
 
 
 async def test_workspace_list_does_not_assess_the_whole_organization(monkeypatch):

@@ -206,8 +206,14 @@ async def resolved(monkeypatch, claims, workspaces=()):
         for index, item in enumerate(claims, 1)
     ]
     assessed = _project(rows, datetime.now(timezone.utc), "available")
+    from types import SimpleNamespace
+
     monkeypatch.setattr(
-        "app.crm.renewal_leads.get_owner_assessment", AsyncMock(return_value=assessed)
+        "app.crm.renewal_repository.has_imported_unit_keys", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        "app.crm.renewal_leads.open_store",
+        AsyncMock(return_value=SimpleNamespace(renewal_rows=AsyncMock(return_value=assessed.rows))),
     )
     monkeypatch.setattr(
         "app.crm.workspace_repository.list_lead_workspaces_for_candidates",

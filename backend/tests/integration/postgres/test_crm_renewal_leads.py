@@ -1,6 +1,7 @@
 """Renewal leads: per-agent area preferences and the rule that owner fields are never inferred."""
 
 from datetime import date, datetime, timezone
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -43,6 +44,10 @@ def synthetic_owner_registry(monkeypatch):
         }
 
     monkeypatch.setattr("app.crm.owner_assessment._fresh_sales", sales)
+    monkeypatch.setattr(
+        "app.crm.owner_assessment._warehouse_revision",
+        AsyncMock(return_value="synthetic-owner-registry"),
+    )
 
 
 def _row(event_key, candidate):
@@ -208,6 +213,11 @@ async def test_owner_is_blank_unless_entered_or_import_matched_as_current_owner(
     monkeypatch.setattr(opportunity_queries, "_tables_exist", tables_exist)
     monkeypatch.setattr(opportunity_queries, "fetch_renewal_leads", fetch)
 
+    has_imports = renewal_leads.renewal_repository.has_imported_unit_keys
+    assert await has_imports(pg_session, org, ["unit-imported"])
+    assert not await has_imports(pg_session, str(uuid4()), ["unit-imported"])
+    assert not await has_imports(pg_session, org, ["unit-not-imported"])
+
     result = await renewal_leads.list_renewal_leads(
         pg_session, user_id=agent, organization_id=org, limit=50, offset=0, as_of=AS_OF
     )
@@ -223,6 +233,48 @@ async def test_owner_is_blank_unless_entered_or_import_matched_as_current_owner(
         "Typed By Agent",
         "workspace",
     )
+
+
+async def test_manual_and_blank_owners_without_imports_do_not_require_assessment(
+    pg_session, monkeypatch
+):
+    org, agent = str(uuid4()), str(uuid4())
+    now = datetime.now(timezone.utc)
+    pg_session.add(
+        CrmLeadWorkspace(
+            user_id=agent,
+            organization_id=org,
+            lead_id="lease-manual-only",
+            unit_candidate_key="unit-manual-only",
+            owner_name="Entered By Agent",
+            owner_source="manual",
+            tags=[],
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await pg_session.commit()
+    unavailable = AsyncMock(side_effect=AssertionError("no imported evidence is needed"))
+    monkeypatch.setattr(renewal_leads, "open_store", unavailable)
+
+    result = await renewal_leads._owners_by_candidate(
+        pg_session,
+        candidate_keys=["unit-manual-only", "unit-blank"],
+        user_id=agent,
+        organization_id=org,
+    )
+    assert result["unit-manual-only"].name == "Entered By Agent"
+    assert "unit-blank" not in result
+    assert (
+        await renewal_leads._owners_by_candidate(
+            pg_session,
+            candidate_keys=["unit-manual-only"],
+            user_id=str(uuid4()),
+            organization_id=org,
+        )
+        == {}
+    )
+    unavailable.assert_not_awaited()
 
 
 def _lease_detail(event_key, candidate, *, unit_number="216"):
