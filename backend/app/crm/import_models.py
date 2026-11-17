@@ -1,22 +1,28 @@
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
-CrmContactImportStatus = Literal["processing", "completed", "failed"]
+CrmContactImportStatus = Literal["queued", "processing", "retry_wait", "completed", "failed"]
 CrmOwnershipStatus = Literal[
     "verified_current_owner",
     "probable_current_owner",
     "unit_linked_unverified",
     "former_owner",
+    "unverified_former_owner",
     "conflicting_claim",
     "insufficient_property_data",
     "registry_not_observed",
     "unmatched",
 ]
+
+
+# JSONB on PostgreSQL, plain JSON where the unit tests create tables in SQLite
+_JSONB = JSON().with_variant(JSONB(), "postgresql")
 
 
 class CrmContactImport(SQLModel, table=True):
@@ -41,6 +47,13 @@ class CrmContactImport(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSON, nullable=False),
     )
+    owner_source_metadata: dict[str, Any] = SQLField(
+        default_factory=dict,
+        exclude=True,
+        sa_column=Column(
+            JSON().with_variant(JSONB(), "postgresql"), nullable=False, server_default=text("'{}'")
+        ),
+    )
     summary: dict[str, Any] = SQLField(
         default_factory=dict,
         sa_column=Column(JSON, nullable=False),
@@ -51,6 +64,141 @@ class CrmContactImport(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),
     )
+
+
+class CrmOwnerAssessmentRevision(SQLModel, table=True):
+    """Transactionally visible, non-reused source token for one tenant."""
+
+    __tablename__ = "crm_owner_assessment_revisions"
+
+    organization_id: str = SQLField(primary_key=True)
+    revision: int = SQLField(sa_type=BigInteger)
+
+
+class CrmOwnerAssessmentState(SQLModel, table=True):
+    """Which stored assessment generation is current for a tenant, and what it was built from."""
+
+    __tablename__ = "crm_owner_assessment_state"
+
+    organization_id: str = SQLField(primary_key=True)
+    generation: int = SQLField(sa_type=BigInteger)
+    revision: str
+    warehouse_revision: str
+    checked_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    warehouse_status: str
+    built_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    summary: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    import_summaries: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    list_counts: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    source_audit: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+
+
+class CrmOwnerAssessedClaim(SQLModel, table=True):
+    """One claim's assessed row for one generation; see ``app.crm.owner_store``."""
+
+    __tablename__ = "crm_owner_assessed_claims"
+    __table_args__ = (
+        Index(
+            "ix_crm_assessed_claim_canonical",
+            "organization_id",
+            "generation",
+            "canonical_owner_key",
+        ),
+        Index("ix_crm_assessed_claim_owner", "organization_id", "generation", "owner_key"),
+        Index("ix_crm_assessed_claim_list", "organization_id", "generation", "list_id", "ord"),
+        Index("ix_crm_assessed_claim_import", "organization_id", "generation", "import_id", "ord"),
+        Index(
+            "ix_crm_assessed_claim_identity",
+            "organization_id",
+            "generation",
+            "identity_key",
+            "identity_area",
+        ),
+        Index("ix_crm_assessed_claim_property", "organization_id", "generation", "property_key"),
+    )
+
+    organization_id: str = SQLField(primary_key=True)
+    generation: int = SQLField(sa_column=Column(BigInteger, primary_key=True))
+    claim_id: int = SQLField(primary_key=True)
+    list_id: int
+    import_id: int
+    owner_key: str
+    canonical_owner_key: str
+    property_key: str
+    identity_area: str | None = None
+    identity_key: str | None = None
+    group_ident: str
+    is_source: bool
+    ord: int = SQLField(sa_type=BigInteger)
+    assessed_status: str
+    party_role: str
+    transaction_date: date | None = None
+    event_conf: int
+    pref_support: bool
+    pref_buyer: bool
+    ready_row: bool
+    lead_id: str | None = None
+    building_name: str | None = None
+    project_name: str | None = None
+    unit_number: str | None = None
+    area_name: str | None = None
+    match_colour: str | None = None
+    match_outcome: str | None = None
+    search_text: str = SQLField(sa_column=Column(Text, nullable=False))
+    props_search_text: str = SQLField(sa_column=Column(Text, nullable=False))
+    row: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+
+
+class CrmOwnerRegistryOwner(SQLModel, table=True):
+    """One owner's profile in one generation; ``list_id`` 0 is the whole tenant."""
+
+    __tablename__ = "crm_owner_registry_owners"
+    __table_args__ = (
+        Index("ix_crm_registry_owner_key", "organization_id", "generation", "list_id", "owner_key"),
+    )
+
+    organization_id: str = SQLField(primary_key=True)
+    generation: int = SQLField(sa_column=Column(BigInteger, primary_key=True))
+    list_id: int = SQLField(primary_key=True)
+    canonical_owner_key: str = SQLField(primary_key=True)
+    owner_key: str
+    profile: dict[str, Any] = SQLField(sa_column=Column(_JSONB, nullable=False))
+    search_text: str = SQLField(sa_column=Column(Text, nullable=False))
+    property_count: int
+    contact_ready_count: int
+    highest_confidence_score: int
+    next_lease_end: date | None = None
+    developer_side_seller: bool
+    invalid_identity_sources: bool
+    no_properties: bool
+    in_rental: bool
+    in_registry: bool
+    in_prior: bool
+    in_review: bool
+    in_multi: bool
+
+
+class CrmOwnerRegistryProperty(SQLModel, table=True):
+    """What the registry filters on for one property of an owner's profile."""
+
+    __tablename__ = "crm_owner_registry_properties"
+
+    organization_id: str = SQLField(primary_key=True)
+    generation: int = SQLField(sa_column=Column(BigInteger, primary_key=True))
+    list_id: int = SQLField(primary_key=True)
+    canonical_owner_key: str = SQLField(primary_key=True)
+    ordinal: int = SQLField(primary_key=True)
+    status: str
+    ready: bool
+    rental_linked: bool
+    lease_end: date | None = None
+    annual_rent_aed: int | None = SQLField(default=None, sa_type=BigInteger)
+    sale_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
+    estimated_value_aed: int | None = SQLField(default=None, sa_type=BigInteger)
+    match_status: str | None = None
+    location_text: str = SQLField(sa_column=Column(Text, nullable=False))
+    headline_rank: int
+    confidence: int
 
 
 class CrmContactList(SQLModel, table=True):
@@ -73,18 +221,11 @@ class CrmContactList(SQLModel, table=True):
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
-_CLAIM_PREFERENCE = (
-    "CASE ownership_status WHEN 'former_owner' THEN 6 WHEN 'verified_current_owner' THEN 5"
-    " WHEN 'probable_current_owner' THEN 4 WHEN 'unit_linked_unverified' THEN 3"
-    " WHEN 'conflicting_claim' THEN 2 ELSE 1 END"
-)
-
-
 class CrmPropertyContactClaim(SQLModel, table=True):
     __tablename__ = "crm_property_contact_claims"
-    # Indexes and BIGINT amounts mirror migrations b7d2f4a8c1e6 and d9f4b6c8e3a2, which are the
-    # schema authority; tests compare this model with a freshly migrated database. The ranking
-    # indexes use PostgreSQL-only syntax, so SQLite unit fixtures skip them.
+    # Indexes and BIGINT amounts mirror the migrations, which are the schema authority; tests
+    # compare this model with a freshly migrated database. The ranking indexes of d9f4b6c8e3a2
+    # were dropped by b6d2f8a4c1e7: no query could use them.
     __table_args__ = (
         UniqueConstraint(
             "import_id",
@@ -93,26 +234,8 @@ class CrmPropertyContactClaim(SQLModel, table=True):
             name="uq_crm_property_contact_claim_source_row",
         ),
         Index("ix_crm_claim_org_owner", "organization_id", "owner_key"),
+        Index("ix_crm_claim_org_property", "organization_id", "property_key"),
         Index("ix_crm_claim_org_owner_property", "organization_id", "owner_key", "property_key"),
-        Index(
-            "ix_crm_claim_owner_property_preference",
-            "organization_id",
-            "owner_key",
-            "property_key",
-            text(f"({_CLAIM_PREFERENCE}) DESC"),
-            text("confidence_score DESC"),
-            text("transaction_date DESC NULLS LAST"),
-        ).ddl_if(dialect="postgresql"),
-        Index(
-            "ix_crm_claim_list_owner_property_preference",
-            "organization_id",
-            "list_id",
-            "owner_key",
-            "property_key",
-            text(f"({_CLAIM_PREFERENCE}) DESC"),
-            text("confidence_score DESC"),
-            text("transaction_date DESC NULLS LAST"),
-        ).ddl_if(dialect="postgresql"),
     )
 
     id: int | None = SQLField(default=None, primary_key=True)
@@ -171,6 +294,13 @@ class CrmPropertyContactClaim(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSON, nullable=False, server_default=text("'{}'")),
     )
+    owner_history_evidence: dict[str, Any] = SQLField(
+        default_factory=dict,
+        exclude=True,
+        sa_column=Column(
+            JSON().with_variant(JSONB(), "postgresql"), nullable=False, server_default=text("'{}'")
+        ),
+    )
     created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
@@ -192,7 +322,71 @@ class CrmSourcePropertyCounts(BaseModel):
     unit_rows_without_location: int = 0
 
 
+class CrmSourceAuditSummary(BaseModel):
+    mode: Literal["source_only", "source_transaction_matched"] = "source_only"
+    matched_reference_count: int = 0
+    matched_registry_property_count: int = 0
+    unmatched_reference_count: int = 0
+    ambiguous_reference_count: int = 0
+    excluded_match_reference_count: int = 0
+    current_owner_association_count: int = 0
+    former_owner_association_count: int = 0
+    import_count: int = 0
+    reference_count: int = 0
+    owner_candidate_reference_count: int = 0
+    bank_reference_count: int = 0
+    excluded_nonownership_reference_count: int = 0
+    review_reference_count: int = 0
+    excluded_scope_reference_count: int = 0
+    source_row_count: int = 0
+    disposition_counts: dict[str, int] = Field(default_factory=dict)
+
+
+CrmMatchColour = Literal["green", "amber", "blue", "red", "grey"]
+
+
+class CrmOwnerMatchUnits(BaseModel):
+    """Distinct units (building or project label + identifier keys) by their best row's tier."""
+
+    model_config = ConfigDict(json_schema_mode_override="serialization")
+
+    total: int
+    confirmed: int  # green
+    review: int  # amber
+    property_only: int  # blue
+    not_matched: int  # red or grey
+
+
+class CrmOwnerMatchSales(BaseModel):
+    """Distinct sales that confirmed rows are tied to, by where the sale came from."""
+
+    model_config = ConfigDict(json_schema_mode_override="serialization")
+
+    transactions: int = 0  # found in the Transactions data
+    registry: int = 0  # a sale event of the property registry
+    total: int = 0
+
+
+class CrmOwnerMatchSummary(BaseModel):
+    """What the property-first matcher made of an import's rows."""
+
+    # One schema for request and response: a nested model otherwise makes FastAPI split the
+    # whole import summary into -Input and -Output copies, which renames the generated types.
+    model_config = ConfigDict(json_schema_mode_override="serialization")
+
+    version: str
+    rows: dict[str, int]  # outcome -> rows
+    units: CrmOwnerMatchUnits
+    rows_without_unit: int
+    # Rows in review (amber) by their one primary reason: unit_differs, two_units_named,
+    # share_differs, size_differs, unit_unverified, type_differs, other. Only non-zero keys.
+    review_reasons: dict[str, int] = Field(default_factory=dict)
+    sales_matched: CrmOwnerMatchSales = Field(default_factory=CrmOwnerMatchSales)
+
+
 class CrmContactImportSummary(BaseModel):
+    owner_match: CrmOwnerMatchSummary | None = None
+    source_audit: CrmSourceAuditSummary | None = None
     total_rows: int = 0
     candidate_rows: int = 0
     # Distinct properties (building + unit) among the kept rows: one unit sold several times,
@@ -200,6 +394,7 @@ class CrmContactImportSummary(BaseModel):
     distinct_properties: int | None = None
     source_property_counts: CrmSourcePropertyCounts | None = None
     rows_with_sales_history: int | None = None
+    properties_linked_rows: int | None = None
     plot_only_rows: int | None = None
     duplicate_rows_collapsed: int = 0
     dropped_no_unit: int = 0
@@ -208,6 +403,7 @@ class CrmContactImportSummary(BaseModel):
     probable_current_owners: int = 0
     unit_linked_unverified: int = 0
     former_owners: int = 0
+    unverified_former_owners: int = 0
     conflicting_claims: int = 0
     insufficient_property_data: int = 0
     registry_not_observed: int = 0
@@ -281,6 +477,7 @@ class CrmImportProperty(BaseModel):
     latest_date: date | None = None
     latest_price_aed: int | None = None
     records: list[CrmImportPropertyRecord]
+    records_truncated: bool = False
 
 
 class CrmImportPropertiesResponse(BaseModel):
@@ -295,10 +492,28 @@ class CrmSheetMapping(BaseModel):
     header_row: int
     meaningful_rows: int
     sheet_family: str
-    mapping_source: Literal["heuristic", "llm", "heuristic_fallback"]
+    mapping_source: Literal["heuristic", "llm", "reused", "override", "heuristic_fallback"]
     confidence: float = Field(ge=0, le=1)
     field_map: dict[str, str] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
+
+
+class CrmPreviewColumn(BaseModel):
+    header: str
+    # The field this column feeds; None when the import will not read it.
+    field: str | None = None
+
+
+class CrmSheetPreview(BaseModel):
+    sheet_name: str
+    rows: int
+    columns: list[CrmPreviewColumn] = Field(default_factory=list)
+    # Some data columns still have no role; the model assigns them when the file is imported.
+    mapped_at_import: bool = False
+
+
+class CrmContactImportPreview(BaseModel):
+    sheets: list[CrmSheetPreview] = Field(default_factory=list)
 
 
 class CrmContactImportResponse(BaseModel):
@@ -309,8 +524,6 @@ class CrmContactImportResponse(BaseModel):
     status: CrmContactImportStatus
     summary: CrmContactImportSummary
     mappings: list[CrmSheetMapping] = Field(default_factory=list)
-    # Report-only: mortgage rows per stored status, shown as their own "Mortgage" category.
-    mortgage_by_status: dict[str, int] = Field(default_factory=dict)
     error_message: str | None = None
     created_at: datetime
     completed_at: datetime | None = None
@@ -331,6 +544,19 @@ class CrmContactListSummary(BaseModel):
     former_owners: int = 0
     created_at: datetime
     updated_at: datetime
+
+
+class CrmMatchedSale(BaseModel):
+    """The sale a row was matched to: a DXBI event or a Transactions (DLD) row."""
+
+    unit: str = ""
+    building: str = ""
+    project: str = ""
+    area: str = ""
+    amount_aed: int | None = SQLField(default=None, sa_type=BigInteger)
+    date: str = ""
+    sqft: float | None = None
+    source: str = ""
 
 
 class CrmContactClaimResponse(BaseModel):
@@ -360,10 +586,13 @@ class CrmContactClaimResponse(BaseModel):
     lease_end: date | None = None
     annual_rent_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     owner_key: str
-    # Report-only category; "mortgage" for a mortgage row that is unverified or needs review.
-    report_status: str | None = None
     duplicate_count: int = 1
     source_rows: list[str] = Field(default_factory=list)
+    match_outcome: str | None = None
+    match_colour: CrmMatchColour | None = None
+    match_reasons: list[str] = Field(default_factory=list)
+    match_warnings: list[str] = Field(default_factory=list)
+    matched_sale: CrmMatchedSale | None = None
 
 
 class CrmContactListDetail(BaseModel):
@@ -393,7 +622,21 @@ class CrmLeadImportedContact(BaseModel):
     source_lists: list[str] = Field(default_factory=list)
 
 
+class CrmOwnerSourceReference(BaseModel):
+    transaction_match_status: Literal["matched", "unmatched", "ambiguous", "excluded"] | None = None
+    ownership_evidence_basis: Literal["transaction_supported", "workbook_only"] | None = None
+    reference_id: str
+    kind: str
+    source_key: list[str]
+    building_number: str = ""
+    land_number: str = ""
+    dm_sub_number: str = ""
+    size_sqm: str | None = None
+    disposition: str
+
+
 class CrmOwnerProperty(BaseModel):
+    source_reference: CrmOwnerSourceReference | None = None
     property_key: str
     area_name: str
     project_name: str
@@ -438,7 +681,62 @@ class CrmOwnerProperty(BaseModel):
     source_rows: list[str] = Field(default_factory=list)
 
 
+class CrmOwnerHistorySummary(BaseModel):
+    """Source rows and evidence associations, not a legal ownership guarantee."""
+
+    source_event_count: int
+    identifiable_property_count: int
+    owner_property_count: int
+    verified_current_count: int
+    probable_current_count: int
+    former_count: int
+    unresolved_count: int
+    invalid_identity_source_count: int
+    legacy_source_event_count: int
+    resolver_versions: dict[str, int]
+    unverified_former_count: int = 0
+    checked_at: datetime | None = None
+    warehouse_status: Literal["available", "unavailable", "not_requested"] = "unavailable"
+    assessment_version: str = ""
+
+
+class CrmOwnerHistoryEvent(BaseModel):
+    id: int
+    import_id: int
+    source_filename: str
+    source_sheet: str
+    source_row_number: int
+    contact_name: str
+    property_key: str | None = None
+    area_name: str
+    project_name: str
+    building_name: str
+    unit_number: str
+    property_type: str
+    party_role: str
+    procedure_type: str
+    event_family: str
+    transaction_date: date | None = None
+    transaction_price_aed: int | None = None
+    observed_ownership_status: CrmOwnershipStatus
+    current_ownership_status: CrmOwnershipStatus
+    confidence_score: int
+    evidence_reason: str
+    current_evidence_reason: str
+    resolver_version: str | None = None
+
+
+class CrmOwnerHistoryResponse(BaseModel):
+    owner_key: str
+    summary: CrmOwnerHistorySummary
+    events: list[CrmOwnerHistoryEvent]
+    total: int
+    limit: int
+    offset: int
+
+
 class CrmOwnerProfile(BaseModel):
+    phone_numbers: list[str] = Field(default_factory=list)
     owner_key: str
     contact_name: str
     phone_primary: str | None = None
@@ -452,18 +750,40 @@ class CrmOwnerProfile(BaseModel):
     annual_rent_aed: int
     next_lease_end: date | None = None
     properties: list[CrmOwnerProperty] = Field(default_factory=list)
+    history_summary: CrmOwnerHistorySummary | None = None
+    relationship_role: Literal["unknown", "possible_intermediary", "organization"] = "unknown"
+    role_signals: list[str] = Field(default_factory=list)
+    # A developer, or a person selling for one; never listed among former owners.
+    developer_side_seller: bool = False
+    # Properties held now (verified or probable current owner).
+    current_property_count: int = 0
+    # Every associated property, when the list counts only those in its view.
+    total_property_count: int | None = None
+    # A list row carries at most a few properties; the owner profile has them all.
+    properties_truncated: bool = False
 
 
 class CrmOwnerRegistrySummary(BaseModel):
+    """Folder counts. Folders overlap (an owner can be in Registry and Prior owners), and some
+    owners are in no folder, so All = rental + registry + prior - folder_overlap + unfiled."""
+
     rental_owner_profiles: int = 0
     registry_owner_profiles: int = 0
     prior_owner_profiles: int = 0
     needs_review_profiles: int = 0
     multi_property_owners: int = 0
+    # In none of the rental, registry and prior folders: developer-side sellers, which Prior
+    # owners leaves out. They are listed under All only.
+    unfiled_profiles: int = 0
+    # Extra folder memberships: an owner in two folders adds 1, in three adds 2.
+    folder_overlap: int = 0
 
 
 class CrmOwnerRegistryResponse(BaseModel):
-    scope: Literal["all", "rental_ready", "registry", "prior_owners"]
+    source_audit: CrmSourceAuditSummary | None = None
+    scope: Literal[
+        "all", "current_owners", "rental_ready", "registry", "prior_owners", "needs_review"
+    ]
     owners: list[CrmOwnerProfile]
     total: int
     limit: int

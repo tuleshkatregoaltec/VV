@@ -140,6 +140,28 @@ def test_villa_path_markers_do_not_leak_into_the_area_name() -> None:
     assert event["area_name"] == "Jumeirah Village Circle"
 
 
+def test_a_whole_building_let_is_typed_and_its_place_kept_clean() -> None:
+    """DXBI types a whole building let as "Building". Unknown to the parser, the type was lost
+    and "Building" stayed glued to the place (2026-10-08: 6,562 leases), so the lease matched no
+    DXBI place and sat under no Commercial / Residential switch."""
+    payload = {
+        "columns": [
+            {"id": "PATH_NAME", "text": "Jabal Ali Industrial First Building , No. 12"},
+            {"id": "PROP_SIZES", "text": "12,000 sqft"},
+            {"id": "TOTAL_PRICES", "text": "900,000 New"},
+            {"id": "START_DATE", "text": "1 Jan, 2026 - 31 Dec, 2026 12 Months"},
+        ]
+    }
+
+    event = normalize_rental_row(payload)
+
+    assert event is not None
+    assert event["property_type"] == "Building"
+    assert event["location_name"] == "Jabal Ali Industrial First"
+    assert event["area_name"] == "Jabal Ali Industrial 1"
+    assert event["unit_number"] == "12"
+
+
 def test_area_aliases_and_ordinals_are_canonicalized() -> None:
     assert canonical_area_name("Dubai Hills") == "Dubai Hills Estate"
     assert canonical_area_name("Dubai Hills Estate") == "Dubai Hills Estate"

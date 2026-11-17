@@ -1,0 +1,245 @@
+"""Shared name normalization for market-facing labels and search aliases."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+from app.market.units import SQM_TO_SQFT as SQM_TO_SQFT
+
+# Explicit translations keep the Python and ClickHouse lookup contracts identical.
+_UNIT_TRANSLATE_FROM = "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹０１２３４５６７８９‐‑‒–—−﹘﹣－\u00a0\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u202f\u205f\u3000"
+_UNIT_TRANSLATE_TO = "012345678901234567890123456789---------               "
+_UNIT_TRANSLATION = str.maketrans(_UNIT_TRANSLATE_FROM, _UNIT_TRANSLATE_TO)
+_UNIT_LABEL = r"^(UNIT|FLAT|APT|APARTMENT|APPARTMENT)(\s+NO)?([\s.:#-]+|([0-9]))"
+
+
+def normalize_unit_text(value: str) -> str:
+    """Normalize explicit Unicode digit/dash equivalents without changing identity."""
+    return value.translate(_UNIT_TRANSLATION)
+
+
+def normalize_unit_text_sql(expression: str) -> str:
+    """SQL counterpart of :func:`normalize_unit_text` for trusted SQL expressions."""
+    return f"translateUTF8({expression}, '{_UNIT_TRANSLATE_FROM}', '{_UNIT_TRANSLATE_TO}')"
+
+
+def unit_lookup_key(value: str | None) -> str:
+    """A lookup candidate, never ownership proof or a persisted property key.
+
+    Reuse Analytics' label/spacing/zero equivalences, but retain estate prefixes
+    and share suffixes: DH2-XR1 and XR1, or 2510 (Q 3) and 2510, need separate
+    evidence before they can represent the same property.
+    """
+    text = normalize_unit_text(value or "").upper().strip()
+    if text.lower() in {"", "-", "n/a", "na", "none", "null", "unknown"}:
+        return ""
+    text = re.sub(_UNIT_LABEL, r"\4", text)
+    text = re.sub(r"\s+", "", text)
+    if re.fullmatch(r"[0-9]+\.0", text):
+        text = text[:-2]
+    text = re.sub(r"[^A-Z0-9]", "", text)
+    return re.sub(r"(^|[^0-9])0+([0-9])", r"\1\2", text).lower()
+
+
+def unit_lookup_key_sql(expression: str) -> str:
+    """ClickHouse expression matching :func:`unit_lookup_key` for source units.
+
+    ``expression`` is trusted application SQL, never user input.
+    """
+    translated = normalize_unit_text_sql(expression)
+    upper = f"upperUTF8(trimBoth({translated}))"
+    escaped_label = _UNIT_LABEL.replace("\\", "\\\\")
+    bare = f"replaceRegexpOne({upper}, '{escaped_label}', '\\\\4')"
+    compact = f"replaceRegexpAll({bare}, '\\\\s+', '')"
+    numeric = f"replaceRegexpOne({compact}, '^([0-9]+)\\\\.0$', '\\\\1')"
+    alphanumeric = f"replaceRegexpAll({numeric}, '[^A-Z0-9]', '')"
+    key = f"lowerUTF8(replaceRegexpAll({alphanumeric}, '(^|[^0-9])0+([0-9])', '\\\\1\\\\2'))"
+    return f"if(lowerUTF8(trimBoth({translated})) IN ('', '-', 'n/a', 'na', 'none', 'null', 'unknown'), '', {key})"
+
+
+def property_name_lookup_key(value: str) -> str:
+    """Exact Analytics name key; aliases still require community/project scope."""
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+AREA_ALIASES = {
+    "jvc": "Jumeirah Village Circle",
+    "jumeirah village circle": "Jumeirah Village Circle",
+    "dubai marina": "Dubai Marina",
+    "jlt": "Jumeirah Lakes Towers",
+    "jumeirah lake towers": "Jumeirah Lakes Towers",
+    "jumeirah lakes towers": "Jumeirah Lakes Towers",
+    "jbr": "Jumeirah Beach Residence",
+    "jumeirah beach residence": "Jumeirah Beach Residence",
+    "downtown": "Downtown Dubai",
+    "downtown dubai": "Downtown Dubai",
+}
+
+AREA_CONTAINS_ALIASES = (
+    (("jvc", "jumeirah village circle"), "Jumeirah Village Circle"),
+    (("jbr", "jumeirah beach residence"), "Jumeirah Beach Residence"),
+    (("jlt", "jumeirah lake towers", "jumeirah lakes towers"), "Jumeirah Lakes Towers"),
+)
+
+DEVELOPER_BRAND_ALIASES = {
+    "ALFURJAN ( L.L.C )": "Nakheel",
+    "BUSINESS BAY (L.L.C)": "Dubai Properties",
+    "DISTRICT ONE - FZ": "Meydan",
+    "DUBAI AVIATION CITY CORPORATION": "Dubai South Developers",
+    "DUBAI CREEK HARBOUR L.L.C": "Emaar",
+    "DUBAI HILLS ESTATE L.L.C": "Emaar",
+    "DUBAI LAND (L.L.C)": "Dubai Properties",
+    "DUBAI LAND RESIDENCES (L.L.C)": "Dubai Properties",
+    "DUBAI PROPERTIES(L.L.C)": "Dubai Properties",
+    "DUBAI PROPERTIES (L.L.C)": "Dubai Properties",
+    "EMAAR DEVELOPMENT (P.J.S.C)": "Emaar",
+    "EMAAR DEVELOPMENT P.J.S.C.": "Emaar",
+    "EMAAR PROPERTIES (P.J.S.C)": "Emaar",
+    "INTERNATIONAL CITY ( L.L.C )": "Nakheel",
+    "JUMAIRAH VILLAGE L.L.C": "Nakheel",
+    "MERAAS ESTATES (L.L.C)": "Meraas",
+    "NAKHEEL .(P J S C)": "Nakheel",
+    "LIWAN (L.L.C)": "Dubai Properties",
+    "REMRAAM L.L.C": "Dubai Properties",
+    "SHAMAL ESTATES L.L.C": "Shamal",
+    "DHAM FZ-LLC": "Dubai Holding",
+    "DAMAC PROPERTIES CO. LLC": "DAMAC",
+    "DAMAC WORLD REAL ESTATE L.L.C": "DAMAC",
+    "BINGHATTI DEVELOPERS FZE": "Binghatti",
+    "MEYDAN GROUP (L.L.C)": "Meydan",
+    "MEYDAN CITY CORPORATION": "Meydan",
+    "SOBHA L.L.C": "Sobha",
+    "DUBAI HEALTHCARE CITY FZ - LLC": "Dubai Healthcare City",
+    "JUMEIRAH HILLS DEVELOPMENT L.L.C": "Jumeirah Hills",
+    "CITYWALK RESIDENTIAL 1 L.L.C": "Meraas",
+    "DUBAI MARITIME CITY FZE": "Dubai Maritime City",
+    "TECOM INVESTMENTS FZ-LLC": "TECOM",
+    "DUBAI INVESTMENT REAL ESTATE (L L C)": "Dubai Investments",
+    "MINA RASHID PROPERTIES L.L.C": "Mina Rashid",
+    "AL KHAIL HEIGHTS L.L.C": "Al Khail Heights",
+    "AL HABTOOR CITY REAL ESTATE DEVELOPMENT (BR. OF DUBAI NATIONAL INVESTMENT CO L.L.C)": "Al Habtoor",
+    "ONE ZAABEEL L.L.C": "One Za'abeel",
+    "MERAAS BAY AND RESIDENCE L.L.C": "Meraas",
+    "THE LAGOONS PHASE ONE L.L.C": "Emaar",
+    "THE PALM - DEIRA (L.L.C)": "Nakheel",
+    "THE PALM - JEBEL ALI CO. (L.L.C)": "Nakheel",
+    "THE PALM - JUMEIRAH CO. (L.L.C)": "Nakheel",
+    "THE WORLD ( L.L.C )": "Nakheel",
+}
+
+DEVELOPER_LEGAL_ENTITY_PATTERN = re.compile(
+    r"\b(l\.?\s*l\.?\s*c\.?|fz-?\s*llc|fze|fzco|p\.?\s*j\.?\s*s\.?\s*c\.?|p\.?\s*s\.?\s*c\.?|limited)\b",
+    re.IGNORECASE,
+)
+
+
+def area_search_text(area: str) -> str:
+    normalized = " ".join(area.lower().replace("(", " ").replace(")", " ").split())
+    for tokens, canonical_name in AREA_CONTAINS_ALIASES:
+        if any(token in normalized for token in tokens):
+            return canonical_name
+    return AREA_ALIASES.get(normalized, area.strip())
+
+
+def listing_area_terms(area: str) -> list[str]:
+    search_text = area_search_text(area)
+    terms = [area.strip(), search_text]
+    if search_text == "Jumeirah Village Circle":
+        terms.append("JVC")
+    elif search_text == "Jumeirah Beach Residence":
+        terms.append("JBR")
+    elif search_text == "Jumeirah Lakes Towers":
+        terms.extend(["JLT", "Jumeirah Lake Towers"])
+
+    unique_terms: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        cleaned = " ".join(str(term).strip().split())
+        key = cleaned.lower()
+        if cleaned and key not in seen:
+            seen.add(key)
+            unique_terms.append(cleaned)
+    return unique_terms
+
+
+def developer_match_key(value: str | None) -> str:
+    text_value = (value or "").lower().replace("&", " and ")
+    legal_suffixes = (
+        r"l\.?\s*l\.?\s*c\.?",
+        r"p\.?\s*j\.?\s*s\.?\s*c\.?",
+        r"fze",
+        r"company",
+        r"co",
+        r"owned\s+by",
+    )
+    for suffix in legal_suffixes:
+        text_value = re.sub(rf"\b{suffix}\b", " ", text_value)
+    text_value = re.sub(r"[^a-z0-9]+", " ", text_value)
+    return "".join(part for part in text_value.split() if len(part) > 1)
+
+
+DEVELOPER_ALIAS_MATCH_KEYS = {
+    developer_match_key(alias): brand for alias, brand in DEVELOPER_BRAND_ALIASES.items()
+}
+
+
+def developer_brand_name(developer_name: str) -> str:
+    return DEVELOPER_ALIAS_MATCH_KEYS.get(developer_match_key(developer_name), developer_name)
+
+
+def developer_filter_names(developer_name: str) -> list[str]:
+    normalized = developer_name.strip()
+    if not normalized:
+        return []
+    names = {normalized.lower()}
+    for source_name, brand_name in DEVELOPER_BRAND_ALIASES.items():
+        if brand_name.lower() == normalized.lower():
+            names.add(source_name.lower())
+    return sorted(names)
+
+
+def is_rankable_developer_brand(developer_name: str) -> bool:
+    return DEVELOPER_LEGAL_ENTITY_PATTERN.search(developer_name) is None
+
+
+def location_key(name: str) -> str:
+    """Same key as Holocron's market crosswalk: lower-case, single-spaced."""
+    return " ".join(name.lower().split())
+
+
+@dataclass(frozen=True, slots=True)
+class MarketLocation:
+    """A place name resolved against the canonical market geography (Holocron
+    market_geo_crosswalk). ``communities`` are community keys (DLD master projects);
+    ``districts`` are official DLD district names, lower-case. A community matches only rows
+    placed in it by evidence: a row DLD locates only by a wider district is never counted as
+    a community inside it (see the district-only disclosure in the metrics).
+    """
+
+    name: str
+    communities: tuple[str, ...] = ()
+    districts: tuple[str, ...] = ()
+
+
+# Communities whose DLD master-project names differ from what users call them. One table for
+# every consumer (metrics, delivery, chat); per-consumer aliases contradicted each other.
+COMMUNITY_KEYS = {
+    "jumeirah village circle": ("jumeirah village circle",),
+    "jumeirah lakes towers": ("jumeirah lakes towers",),
+    "dubai marina": ("dubai marina",),
+    "business bay": ("business bay",),
+    "downtown dubai": ("downtown dubai",),
+    "dubai hills estate": ("dubai hills estate", "dubai hills"),
+    "dubai south": ("dubai south residential district", "dubai south"),
+}
+
+
+def community_location(name: str) -> MarketLocation:
+    """Resolve a community alias; any other name matches a community or a district exactly."""
+    canonical = area_search_text(name)
+    keys = COMMUNITY_KEYS.get(location_key(canonical))
+    if keys:
+        return MarketLocation(canonical, communities=keys)
+    key = location_key(name)
+    return MarketLocation(name.strip(), communities=(key,), districts=(key,))

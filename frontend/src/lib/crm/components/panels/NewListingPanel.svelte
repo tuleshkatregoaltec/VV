@@ -75,12 +75,6 @@ async function submit(e: SubmitEvent) {
 </script>
 
 <Panel kicker="New" title={fromLeadId !== undefined ? 'Listing from a lead' : 'Listing'}>
-	{#if lead.data}
-		<div class="notice">
-			From {lead.data.name}'s lead. Starts as pocket; it goes live once Form A, title deed, photos
-			and a permit are on file.
-		</div>
-	{/if}
 	<form class="form" onsubmit={submit}>
 		<div class="fld">
 			<label for="nls-unit">Unit</label>
@@ -125,7 +119,7 @@ async function submit(e: SubmitEvent) {
 		<div class="frow">
 			<div class="fld">
 				<label for="nls-permit">Trakheesi permit</label>
-				<input id="nls-permit" placeholder="Needed to go live" bind:value={permit} />
+				<input id="nls-permit" bind:value={permit} />
 			</div>
 			<div class="fld">
 				<label for="nls-owner">Owner</label>

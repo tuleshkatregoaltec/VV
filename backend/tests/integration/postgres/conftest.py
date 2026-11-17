@@ -54,3 +54,47 @@ async def pg_session(postgres_test_url):
     async with AsyncSession(engine, expire_on_commit=False) as session:
         yield session
     await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def isolated_crm_owner_assessment_cache(request, monkeypatch):
+    """PostgreSQL tests exercise committed evidence without a cross-loop Redis client."""
+    if not request.path.name.startswith("test_crm_"):
+        return
+    from app.crm import owner_assessment
+
+    class AssessmentCache:
+        def __init__(self):
+            self.values = {}
+
+        async def get(self, key):
+            return self.values.get(key)
+
+        async def set(self, key, value, expire=None):
+            self.values[key] = value
+
+    cache = AssessmentCache()
+    monkeypatch.setattr(owner_assessment, "_cache_client", lambda: cache)
+    monkeypatch.setattr(owner_assessment, "_recent", None)
+
+
+@pytest.fixture
+def property_first_matcher():
+    """Request this to run the property-first matcher stage; the fixture below stubs it."""
+    return True
+
+
+@pytest.fixture(autouse=True)
+def legacy_owner_matching(request, monkeypatch):
+    """Tests of the legacy ownership stages must not reach the live warehouse.
+
+    The property-first stage reads ClickHouse; its own tests request ``property_first_matcher``
+    and mock the warehouse queries they need."""
+    if "property_first_matcher" in request.fixturenames:
+        return
+    from unittest.mock import AsyncMock
+
+    from app.crm import imports, ownership
+
+    for module in (imports, ownership):
+        monkeypatch.setattr(module, "run_owner_matching", AsyncMock())

@@ -88,6 +88,10 @@ _VALUATION_COLUMNS = (
     "value_gap_pct",
     "building_key",
     "asking_aed",
+    "bedrooms",
+    "size_sqft",
+    "property_type",
+    "location_names",
     "valued_at",
 )
 _VALUATION_SELECT = ", ".join(f"{c} AS v_{c}" for c in _VALUATION_COLUMNS)
@@ -106,11 +110,12 @@ async def valuations_available() -> bool:
     global _valuations_ready
     if not _valuations_ready:
         rows = await query(
-            "SELECT count() AS n FROM system.tables "
-            "WHERE database = currentDatabase() AND name = {name:String}",
+            "SELECT count() AS n FROM system.columns "
+            "WHERE database = currentDatabase() AND table = {name:String} "
+            "AND name IN ('property_type', 'location_names')",
             {"name": VALUATIONS_TABLE},
         )
-        _valuations_ready = bool(rows and rows[0].get("n"))
+        _valuations_ready = bool(rows and rows[0].get("n") == 2)
     return _valuations_ready
 
 
@@ -190,6 +195,13 @@ _CURRENT_VALUATION = f"""(
     AND lower(trimBoth({PROPERTY_TYPE_EXPR})) IN {tuple(PROPERTY_TYPES)}
     AND {SIZE_VALUE_EXPR} > 0
     AND v_estimate_aed > 0
+    AND v_size_sqft = {SIZE_VALUE_EXPR}
+    AND lower(replaceRegexpAll(v_bedrooms, ' Bed$', ''))
+        = lower(replaceRegexpAll(trimBoth(bedrooms), '[+]$', ''))
+    AND v_property_type = multiIf(
+        lower(trimBoth({PROPERTY_TYPE_EXPR})) IN ('apartment', 'penthouse'), 'Apartment',
+        lower(trimBoth({PROPERTY_TYPE_EXPR})) = 'villa', 'Villa', 'Townhouse')
+    AND v_location_names = JSONExtract(listing_location_names_json, 'Array(String)')
     AND v_asking_aed > 0 AND v_asking_aed = {PRICE_VALUE_EXPR}
 )"""
 
@@ -286,6 +298,9 @@ def _where_sql(
     price_period: str | None = None,
     price_basis: str = "raw",
     market_position: str | None = None,
+    building: str | None = None,
+    min_age_days: int | None = None,
+    max_age_days: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
     clauses = ["category_id IN {category_ids:Array(UInt16)}", "is_available = 1"]
     params: dict[str, Any] = {"category_ids": list(_category_ids(mode, asset_class))}
@@ -297,8 +312,9 @@ def _where_sql(
                 positionCaseInsensitive(title, {search:String}) > 0
                 OR positionCaseInsensitive(reference, {search:String}) > 0
                 OR positionCaseInsensitive(listing_location_names_json, {search:String}) > 0
-                OR positionCaseInsensitive(agent_json, {search:String}) > 0
-                OR positionCaseInsensitive(broker_json, {search:String}) > 0
+                OR positionCaseInsensitive(
+                    JSONExtractString(broker_json, 'name'), {search:String}
+                ) > 0
             )
             """
         )
@@ -326,6 +342,20 @@ def _where_sql(
     if price_max is not None:
         clauses.append(f"{price_filter_expr} <= {{price_max:Int64}}")
         params["price_max"] = price_max
+    if building:
+        clauses.append(f"lowerUTF8({PEER_LOCATION_EXPR}) = lowerUTF8({{building:String}})")
+        params["building"] = building
+    if min_age_days is not None or max_age_days is not None:
+        clauses.append(
+            f"{LISTED_AT_EXPR} >= toDateTime('2010-01-01') AND {LISTED_AT_EXPR} <= {SCRAPED_AT_EXPR}"
+        )
+        age = f"dateDiff('day', {LISTED_AT_EXPR}, {SCRAPED_AT_EXPR})"
+        if min_age_days is not None:
+            clauses.append(f"{age} >= {{min_age_days:UInt32}}")
+            params["min_age_days"] = min_age_days
+        if max_age_days is not None:
+            clauses.append(f"{age} <= {{max_age_days:UInt32}}")
+            params["max_age_days"] = max_age_days
     if market_position:
         clauses.append(
             f"""listing_id IN (
@@ -550,7 +580,7 @@ async def fetch_listing_rows(
             {SIZE_BUCKET_EXPR} AS benchmark_size_bucket,
             {VALID_BENCHMARK_SIZE_EXPR} AS has_valid_benchmark_size,
             {LISTED_AT_EXPR} AS listed_at,
-            coalesce({SCRAPED_AT_EXPR}, now()) AS snapshot_at,
+            {SCRAPED_AT_EXPR} AS snapshot_at,
             {market_price_expr} AS market_price_aed,
             {SIZE_VALUE_EXPR} AS size_sqft,
             if(
@@ -681,7 +711,7 @@ async def fetch_listing_analytics(filters):
                     {SIZE_BUCKET_EXPR} AS benchmark_size_bucket,
                     {VALID_BENCHMARK_SIZE_EXPR} AS has_valid_benchmark_size,
                     {LISTED_AT_EXPR} AS listed_at,
-                    coalesce({SCRAPED_AT_EXPR}, now()) AS snapshot_at,
+                    {SCRAPED_AT_EXPR} AS snapshot_at,
                     {market_price_expr} AS market_price_aed,
                     {SIZE_VALUE_EXPR} AS size_sqft
                 FROM {LISTINGS_TABLE}
@@ -739,7 +769,7 @@ async def fetch_listing_trend(filters):
         FROM (
             SELECT
                 {LISTED_AT_EXPR} AS listed_at,
-                coalesce({SCRAPED_AT_EXPR}, now()) AS snapshot_at,
+                {SCRAPED_AT_EXPR} AS snapshot_at,
                 {market_price_expr} AS market_price_aed,
                 {SIZE_VALUE_EXPR} AS size_sqft
             FROM {LISTINGS_TABLE}

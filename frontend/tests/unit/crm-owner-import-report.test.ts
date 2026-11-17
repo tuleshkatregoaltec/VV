@@ -4,7 +4,9 @@ import {
 	failureReasons,
 	importCounts,
 	isFlagged,
-	mappingChecks
+	mappingChecks,
+	STATUS_HELP,
+	STATUS_INFO
 } from '$lib/crm/ownerImportReport'
 
 /* Real summaries and sheet mappings from imports #14 (Westwood) and #15 (JVT JAN 2025). */
@@ -13,6 +15,7 @@ const JVT_SUMMARY = {
 	candidate_rows: 2141,
 	duplicate_rows_collapsed: 45,
 	valid_contacts: 1615,
+	properties_linked_rows: 1961,
 	verified_current_owners: 466,
 	probable_current_owners: 6,
 	unit_linked_unverified: 0,
@@ -71,15 +74,63 @@ describe('importCounts', () => {
 		expect(c.matched).toBe(1961)
 		expect(c.failed).toBe(180)
 		expect(c.matchRate).toBeCloseTo(0.916, 3)
+		expect(c.sourceMatchRate).toBeCloseTo(1961 / 5764)
+		expect(c.validContacts).toBe(1615)
 		expect(c.byStatus.former_owner).toBe(1489)
 	})
 
 	it('reads an import still processing (empty summary) as zeros, not NaN', () => {
 		const c = importCounts({})
 		expect([c.rows, c.kept, c.merged, c.dropped, c.matched, c.failed, c.readyToContact]).toEqual([
-			0, 0, 0, 0, 0, 0, 0
+			0,
+			0,
+			0,
+			0,
+			null,
+			0,
+			0
 		])
 		expect(c.matchRate).toBeNull()
+		expect(c.sourceMatchRate).toBeNull()
+	})
+
+	it('does not turn an explicit seller status into a property match without registry evidence', () => {
+		const c = importCounts({
+			total_rows: 10,
+			candidate_rows: 8,
+			former_owners: 8,
+			properties_linked_rows: 0
+		})
+		expect(c.byStatus.former_owner).toBe(8)
+		expect(c.matched).toBe(0)
+		expect(c.matchRate).toBe(0)
+		expect(c.sourceMatchRate).toBe(0)
+	})
+
+	it('keeps property linkage, ownership and contact data independent with explicit denominators', () => {
+		const c = importCounts({
+			total_rows: 100,
+			candidate_rows: 50,
+			properties_linked_rows: 40,
+			verified_current_owners: 10,
+			probable_current_owners: 5,
+			former_owners: 25,
+			valid_contacts: 30,
+			contact_ready: 3
+		})
+		expect(c.matched).toBe(40)
+		expect(c.matchRate).toBe(0.8)
+		expect(c.sourceMatchRate).toBe(0.4)
+		expect(c.byStatus.verified_current_owner).toBe(10)
+		expect(c.validContacts).toBe(30)
+		expect(c.readyToContact).toBe(3)
+	})
+
+	it('leaves a legacy linkage metric unknown instead of fabricating matches from ownership statuses', () => {
+		const c = importCounts({ candidate_rows: 12, former_owners: 10, verified_current_owners: 2 })
+		expect(c.matched).toBeNull()
+		expect(c.matchRate).toBeNull()
+		expect(c.sourceMatchRate).toBeNull()
 	})
 
 	it('keeps source identifiers, derived groups and plot-only evidence separate', () => {
@@ -217,7 +268,7 @@ describe('failureReasons', () => {
 			['unmatched', 104],
 			['insufficient_property_data', 1]
 		])
-		expect(reasons[0].label).toBe('Needs review')
+		expect(reasons[0].label).toBe('Unmatched')
 		expect(reasons[0].fix).toBeTruthy()
 	})
 
@@ -228,27 +279,26 @@ describe('failureReasons', () => {
 	})
 })
 
-describe('mortgage category', () => {
-	// Damac Hills 2 (import 113): mortgages move out of "unverified" and "needs review" into their
-	// own tile, so those tiles show only the rows that still need work. Totals stay the same.
-	const DH2 = { candidate_rows: 31393, unit_linked_unverified: 3752, unmatched: 2381 }
-	const MORTGAGES = { unit_linked_unverified: 2371, unmatched: 973 }
-
-	it('reports mortgages as their own category', () => {
-		const c = importCounts(DH2, MORTGAGES)
-		expect(c.byStatus.mortgage).toBe(3344)
-		expect(c.byStatus.unit_linked_unverified).toBe(1381)
-		expect(c.byStatus.unmatched).toBe(1408)
+describe('ownership assessment language', () => {
+	it('keeps uncorroborated seller claims apart from transaction-supported former owners', () => {
+		const counts = importCounts({
+			candidate_rows: 3,
+			former_owners: 1,
+			unverified_former_owners: 2
+		})
+		expect(counts.byStatus.former_owner).toBe(1)
+		expect(counts.byStatus.unverified_former_owner).toBe(2)
+		expect(STATUS_INFO.unverified_former_owner.label).toBe('Seller to check')
+		expect(STATUS_HELP.unverified_former_owner.how).toContain('no recorded sale supports it')
 	})
 
-	it('keeps the matched and failed totals unchanged', () => {
-		const before = importCounts(DH2)
-		const after = importCounts(DH2, MORTGAGES)
-		expect(after.matched).toBe(before.matched)
-		expect(after.failed).toBe(before.failed)
-	})
-
-	it('shows no mortgages for an import without the breakdown', () => {
-		expect(importCounts(DH2).byStatus.mortgage).toBe(0)
+	it('names each status with a short, distinct label and no schema or legal wording', () => {
+		const labels = Object.values(STATUS_INFO).map((s) => s.label)
+		expect(new Set(labels).size).toBe(labels.length)
+		expect(STATUS_INFO.verified_current_owner.label).toBe('Current owner')
+		expect(STATUS_INFO.unit_linked_unverified.label).toBe('Property found, owner unknown')
+		expect(STATUS_INFO.registry_not_observed.label).toBe('No sale found')
+		for (const s of Object.values(STATUS_INFO))
+			expect(`${s.label} ${s.meaning}`).not.toMatch(/dxbi|score|probability|verif/i)
 	})
 })

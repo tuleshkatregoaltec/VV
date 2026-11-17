@@ -346,7 +346,7 @@ function roleLabel(role: string): string {
 						<div class="space-y-3">
 							{#each members as member (member.id)}
 								<div
-									class="flex items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-panel"
+									class="flex items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-app"
 								>
 									<div class="flex items-center gap-4">
 										<div

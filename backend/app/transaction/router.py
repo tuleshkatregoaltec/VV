@@ -1,16 +1,26 @@
-"""Transaction listing and export endpoints - redesigned for ClickHouse."""
+"""DXBI transaction listing and export endpoints (the Transactions pages)."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.core.decorators import cached_endpoint
 from app.core.dependencies import AuthContext, require_active_subscription
-from app.transaction.exports import export_rental_contracts, export_sales_transactions
+from app.transaction.dependencies import rental_filters, sales_filters
+from app.transaction.exports import (
+    ExportFile,
+    export_rental_contracts,
+    export_sales_transactions,
+)
 from app.transaction.models import (
+    MAX_OFFSET,
+    MAX_PAGE_SIZE,
+    MAX_SELECTED_EXPORT_IDS,
     RentalContractListResponse,
+    RentalFilters,
+    SalesFilters,
     TransactionListResponse,
 )
 from app.transaction.service import fetch_rental_contracts, fetch_sales_transactions
@@ -18,265 +28,100 @@ from app.transaction.service import fetch_rental_contracts, fetch_sales_transact
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 
 
+def _page_size():
+    return Query(default=30, ge=1, le=MAX_PAGE_SIZE, description="Page size")
+
+
+def _offset():
+    return Query(default=0, ge=0, le=MAX_OFFSET, description="Page offset")
+
+
+def _selected_ids(value: Optional[str], name: str) -> Optional[str]:
+    """Selected rows for an export: at most MAX_SELECTED_EXPORT_IDS ids, else a 422."""
+    if value is not None and len([item for item in value.split(",") if item.strip()]) > (
+        MAX_SELECTED_EXPORT_IDS
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{name} accepts at most {MAX_SELECTED_EXPORT_IDS:,} ids; "
+            "export the filtered rows instead",
+        )
+    return value
+
+
+def _file_response(export: ExportFile, *, name: str, export_format: str) -> StreamingResponse:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    headers = export.headers()
+    return StreamingResponse(
+        export.chunks(),
+        media_type=export.media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename={name}_{timestamp}.{export_format}",
+            **headers,
+            "Access-Control-Expose-Headers": ", ".join(["Content-Disposition", *headers]),
+        },
+    )
+
+
 @router.get("/sales", response_model=TransactionListResponse)
-@cached_endpoint(prefix="transactions:sales", expire=600)
+@cached_endpoint(prefix="transactions:dxbi-sales:v5", expire=600, daily=True)
 async def get_sales_transactions(
     context: AuthContext = Depends(require_active_subscription),
-    limit: int = Query(default=30, ge=1, le=1000, description="Page size"),
-    offset: int = Query(default=0, ge=0, description="Page offset"),
-    # Category filters
-    property_usage: str = Query(default=None, description="Residential or Commercial"),
-    property_type: str = Query(default=None, description="Property type"),
-    property_sub_type: str = Query(default=None, description="Property sub-type"),
-    rooms: str = Query(default=None, description="Number of rooms"),
-    registration_type: str = Query(default=None, description="Registration type"),
-    # Location filters
-    area: str = Query(default=None, description="Area name"),
-    project: str = Query(default=None, description="Project name"),
-    filter_type: str = Query(
-        default="project",
-        description="Project filter type: master, virtual_master, or project",
-    ),
-    building: str = Query(default=None, description="Building name"),
-    # Range filters
-    timeframe_days: int = Query(default=None, description="Days back from today"),
-    area_min: float = Query(default=None, description="Minimum property area (sqm)"),
-    area_max: float = Query(default=None, description="Maximum property area (sqm)"),
-    price_min: float = Query(default=None, description="Minimum price"),
-    price_max: float = Query(default=None, description="Maximum price"),
-    price_per_sqm_min: float = Query(default=None, description="Minimum price per sqm"),
-    price_per_sqm_max: float = Query(default=None, description="Maximum price per sqm"),
+    limit: int = _page_size(),
+    offset: int = _offset(),
+    filters: SalesFilters = Depends(sales_filters),
 ):
-    """
-    List sales transactions with filtering and pagination.
-
-    Default sort: instance_date DESC (most recent first), split by property_usage_en.
-    """
-    return await fetch_sales_transactions(
-        limit=limit,
-        offset=offset,
-        property_usage=property_usage,
-        property_type=property_type,
-        property_sub_type=property_sub_type,
-        rooms=rooms,
-        registration_type=registration_type,
-        area=area,
-        project=project,
-        filter_type=filter_type,
-        building=building,
-        timeframe_days=timeframe_days,
-        area_min=area_min,
-        area_max=area_max,
-        price_min=price_min,
-        price_max=price_max,
-        price_per_sqm_min=price_per_sqm_min,
-        price_per_sqm_max=price_per_sqm_max,
-    )
+    """DXBI sales, newest first (transaction date, then id, both descending)."""
+    return await fetch_sales_transactions(filters, limit, offset)
 
 
 @router.get("/rentals", response_model=RentalContractListResponse)
-@cached_endpoint(prefix="transactions:rentals", expire=600)
+@cached_endpoint(prefix="transactions:dxbi-rentals:v5", expire=600, daily=True)
 async def get_rental_contracts(
     context: AuthContext = Depends(require_active_subscription),
-    limit: int = Query(default=30, ge=1, le=1000, description="Page size"),
-    offset: int = Query(default=0, ge=0, description="Page offset"),
-    # Category filters
-    property_usage: str = Query(default=None, description="Residential or Commercial"),
-    property_type: str = Query(default=None, description="Property type (ejari)"),
-    property_sub_type: str = Query(default=None, description="Property sub-type (ejari)"),
-    tenant_type: str = Query(default=None, description="Tenant type"),
-    contract_reg_type: str = Query(default=None, description="Contract registration type"),
-    # Location filters
-    area: str = Query(default=None, description="Area name"),
-    project: str = Query(default=None, description="Project name"),
-    filter_type: str = Query(
-        default="project",
-        description="Project filter type: master, virtual_master, or project",
-    ),
-    # Range filters
-    timeframe_days: int = Query(default=None, description="Days back from today"),
-    area_min: float = Query(default=None, description="Minimum property area (sqm)"),
-    area_max: float = Query(default=None, description="Maximum property area (sqm)"),
-    rent_min: float = Query(default=None, description="Minimum annual rent"),
-    rent_max: float = Query(default=None, description="Maximum annual rent"),
+    limit: int = _page_size(),
+    offset: int = _offset(),
+    filters: RentalFilters = Depends(rental_filters),
 ):
-    """
-    List rental contracts with filtering and pagination.
-
-    Default sort: contract_start_date DESC (most recent first), split by property_usage_en.
-    """
-    return await fetch_rental_contracts(
-        limit=limit,
-        offset=offset,
-        property_usage=property_usage,
-        property_type=property_type,
-        property_sub_type=property_sub_type,
-        tenant_type=tenant_type,
-        contract_reg_type=contract_reg_type,
-        area=area,
-        project=project,
-        filter_type=filter_type,
-        timeframe_days=timeframe_days,
-        area_min=area_min,
-        area_max=area_max,
-        rent_min=rent_min,
-        rent_max=rent_max,
-    )
+    """DXBI leases, latest start first (lease start, then id, both descending)."""
+    return await fetch_rental_contracts(filters, limit, offset)
 
 
-@router.get(
-    "/sales/export",
-    response_class=StreamingResponse,
-)
+@router.get("/sales/export", response_class=StreamingResponse)
 async def export_sales_transactions_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     export_format: Literal["xlsx", "csv"] = Query(
-        default="xlsx",
-        alias="format",
-        description="Export file format: xlsx or csv",
+        default="xlsx", alias="format", description="Export file format: xlsx or csv"
     ),
-    transaction_ids: str = Query(
+    transaction_ids: Optional[str] = Query(
         default=None,
-        description="Comma-separated transaction IDs (overrides filters and limit)",
+        max_length=100_000,
+        description="Comma-separated transaction IDs, at most 1,000 (overrides the filters)",
     ),
-    # Category filters
-    property_usage: str = Query(default=None, description="Residential or Commercial"),
-    property_type: str = Query(default=None, description="Property type"),
-    property_sub_type: str = Query(default=None, description="Property sub-type"),
-    rooms: str = Query(default=None, description="Number of rooms"),
-    registration_type: str = Query(default=None, description="Registration type"),
-    # Location filters
-    area: str = Query(default=None, description="Area name"),
-    project: str = Query(default=None, description="Project name"),
-    filter_type: str = Query(
-        default="project",
-        description="Project filter type: master, virtual_master, or project",
-    ),
-    building: str = Query(default=None, description="Building name"),
-    # Range filters
-    timeframe_days: int = Query(default=None, description="Days back from today"),
-    area_min: float = Query(default=None, description="Minimum property area (sqm)"),
-    area_max: float = Query(default=None, description="Maximum property area (sqm)"),
-    price_min: float = Query(default=None, description="Minimum price"),
-    price_max: float = Query(default=None, description="Maximum price"),
-    price_per_sqm_min: float = Query(default=None, description="Minimum price per sqm"),
-    price_per_sqm_max: float = Query(default=None, description="Maximum price per sqm"),
+    filters: SalesFilters = Depends(sales_filters),
 ):
-    """
-    Export sales transactions to Excel or CSV.
-
-    Limit: 50,000 rows max (or specific transaction_ids if provided).
-    """
-    stream = await export_sales_transactions(
-        transaction_ids=transaction_ids,
-        property_usage=property_usage,
-        property_type=property_type,
-        property_sub_type=property_sub_type,
-        rooms=rooms,
-        registration_type=registration_type,
-        area=area,
-        project=project,
-        filter_type=filter_type,
-        building=building,
-        timeframe_days=timeframe_days,
-        area_min=area_min,
-        area_max=area_max,
-        price_min=price_min,
-        price_max=price_max,
-        price_per_sqm_min=price_per_sqm_min,
-        price_per_sqm_max=price_per_sqm_max,
-        file_format=export_format,
-    )
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"sales_transactions_{timestamp}.{export_format}"
-    media_type = (
-        "text/csv; charset=utf-8"
-        if export_format == "csv"
-        else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    return StreamingResponse(
-        iter([stream.getvalue()]),
-        media_type=media_type,
-        headers={
-            "Content-Disposition": f"attachment; filename={filename}",
-            "Access-Control-Expose-Headers": "Content-Disposition",
-        },
-    )
+    """DXBI sales as Excel or CSV: up to 50,000 filtered rows, or the selected ids. When more
+    rows match, X-Export-Truncated is true and the file says so."""
+    transaction_ids = _selected_ids(transaction_ids, "transaction_ids")
+    export = await export_sales_transactions(filters, transaction_ids, export_format)
+    return _file_response(export, name="sales_transactions", export_format=export_format)
 
 
-@router.get(
-    "/rentals/export",
-    response_class=StreamingResponse,
-)
+@router.get("/rentals/export", response_class=StreamingResponse)
 async def export_rental_contracts_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     export_format: Literal["xlsx", "csv"] = Query(
-        default="xlsx",
-        alias="format",
-        description="Export file format: xlsx or csv",
+        default="xlsx", alias="format", description="Export file format: xlsx or csv"
     ),
-    contract_ids: str = Query(
+    contract_ids: Optional[str] = Query(
         default=None,
-        description="Comma-separated contract IDs (overrides filters and limit)",
+        max_length=100_000,
+        description="Comma-separated contract IDs, at most 1,000 (overrides the filters)",
     ),
-    # Category filters
-    property_usage: str = Query(default=None, description="Residential or Commercial"),
-    property_type: str = Query(default=None, description="Property type (ejari)"),
-    property_sub_type: str = Query(default=None, description="Property sub-type (ejari)"),
-    tenant_type: str = Query(default=None, description="Tenant type"),
-    contract_reg_type: str = Query(default=None, description="Contract registration type"),
-    # Location filters
-    area: str = Query(default=None, description="Area name"),
-    project: str = Query(default=None, description="Project name"),
-    filter_type: str = Query(
-        default="project",
-        description="Project filter type: master, virtual_master, or project",
-    ),
-    # Range filters
-    timeframe_days: int = Query(default=None, description="Days back from today"),
-    area_min: float = Query(default=None, description="Minimum property area (sqm)"),
-    area_max: float = Query(default=None, description="Maximum property area (sqm)"),
-    rent_min: float = Query(default=None, description="Minimum annual rent"),
-    rent_max: float = Query(default=None, description="Maximum annual rent"),
+    filters: RentalFilters = Depends(rental_filters),
 ):
-    """
-    Export rental contracts to Excel or CSV.
-
-    Limit: 50,000 rows max (or specific contract_ids if provided).
-    """
-    stream = await export_rental_contracts(
-        contract_ids=contract_ids,
-        property_usage=property_usage,
-        property_type=property_type,
-        property_sub_type=property_sub_type,
-        tenant_type=tenant_type,
-        contract_reg_type=contract_reg_type,
-        area=area,
-        project=project,
-        filter_type=filter_type,
-        timeframe_days=timeframe_days,
-        area_min=area_min,
-        area_max=area_max,
-        rent_min=rent_min,
-        rent_max=rent_max,
-        file_format=export_format,
-    )
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"rental_contracts_{timestamp}.{export_format}"
-    media_type = (
-        "text/csv; charset=utf-8"
-        if export_format == "csv"
-        else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    return StreamingResponse(
-        iter([stream.getvalue()]),
-        media_type=media_type,
-        headers={
-            "Content-Disposition": f"attachment; filename={filename}",
-            "Access-Control-Expose-Headers": "Content-Disposition",
-        },
-    )
+    """DXBI leases as Excel or CSV: up to 50,000 filtered rows, or the selected ids. When more
+    rows match, X-Export-Truncated is true and the file says so."""
+    contract_ids = _selected_ids(contract_ids, "contract_ids")
+    export = await export_rental_contracts(filters, contract_ids, export_format)
+    return _file_response(export, name="rental_contracts", export_format=export_format)

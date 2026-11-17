@@ -72,6 +72,8 @@ def test_definitions_expose_source_assets() -> None:
         "dxbi_evidence_bronze",
         "market_sale_events",
         "market_rental_events",
+        "dxbi_profiles",
+        "crm_rental_ranked_base",
     }
 
 
@@ -99,6 +101,7 @@ def test_assets_use_provider_groups() -> None:
 def test_definitions_expose_named_operational_jobs() -> None:
     assert {job.name for job in _defs_jobs()} == {
         *DLD_OD_INCREMENTAL_JOBS,
+        "dld_od_transactions_weekly_resweep",
         "dxbi_transactions_daily_incremental",
         "dda_planning_layers_weekly_full_refresh",
         *DLD_OD_MANUAL_BACKFILL_JOBS,
@@ -151,6 +154,13 @@ def test_definitions_expose_only_recurring_operational_schedules() -> None:
             )
             for category, cron in DLD_OD_INCREMENTAL_CRONS.items()
         },
+        # Late (weekend) DLD registrations: a 90-day re-read before Sunday's incremental.
+        "dld_od_transactions_weekly_resweep_schedule": (
+            "dld_od_transactions_weekly_resweep",
+            "0 3 * * 0",
+            "Asia/Dubai",
+            DefaultScheduleStatus.STOPPED,
+        ),
         "dxbi_transactions_daily_incremental_schedule": (
             "dxbi_transactions_daily_incremental",
             "0 6 * * *",

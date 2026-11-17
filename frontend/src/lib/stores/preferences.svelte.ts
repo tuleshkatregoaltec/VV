@@ -4,25 +4,19 @@
  */
 
 import { browser } from '$app/environment'
-import type { AreaUnit } from '$lib/utils/units'
+import { PREFERENCES_STORAGE_KEY } from '$lib/auth/user-browser-state'
 
-const STORAGE_KEY = 'vitevue-preferences'
+const STORAGE_KEY = PREFERENCES_STORAGE_KEY
 
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
 
 interface UserPreferences {
-	areaUnit: AreaUnit
 	theme: ThemePreference
 }
 
 const defaultPreferences: UserPreferences = {
-	areaUnit: 'sqm', // Default to metric (raw database values)
 	theme: 'system'
-}
-
-function isAreaUnit(value: unknown): value is AreaUnit {
-	return value === 'sqm' || value === 'sqft'
 }
 
 function isThemePreference(value: unknown): value is ThemePreference {
@@ -31,7 +25,6 @@ function isThemePreference(value: unknown): value is ThemePreference {
 
 function normalizePreferences(value: Partial<UserPreferences>): UserPreferences {
 	return {
-		areaUnit: isAreaUnit(value.areaUnit) ? value.areaUnit : defaultPreferences.areaUnit,
 		theme: isThemePreference(value.theme) ? value.theme : defaultPreferences.theme
 	}
 }
@@ -97,22 +90,6 @@ if (browser) {
 }
 
 /**
- * Reactive area unit preference
- */
-export const areaUnit = {
-	get current(): AreaUnit {
-		return preferences.areaUnit
-	},
-	set current(value: AreaUnit) {
-		preferences.areaUnit = value
-		savePreferences(preferences)
-	},
-	toggle(): void {
-		this.current = this.current === 'sqm' ? 'sqft' : 'sqm'
-	}
-}
-
-/**
  * Reactive color theme preference.
  */
 export const colorTheme = {
@@ -130,18 +107,4 @@ export const colorTheme = {
 	toggle(): void {
 		this.current = this.resolved === 'dark' ? 'light' : 'dark'
 	}
-}
-
-/**
- * Check if using metric units
- */
-export function isMetric(): boolean {
-	return preferences.areaUnit === 'sqm'
-}
-
-/**
- * Check if using imperial units
- */
-export function isImperial(): boolean {
-	return preferences.areaUnit === 'sqft'
 }

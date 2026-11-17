@@ -52,7 +52,8 @@ async def fetch_areas(*, limit, offset, search, sort_by):
             avg_sale_price_sqm_12m,
             avg_rent_price_sqm_12m,
             gross_yield_pct,
-            top_developers
+            top_developers,
+            count() OVER () AS total
         FROM ch_area_fact
         WHERE {where_sql}
         ORDER BY {order_by_sql}
@@ -60,6 +61,10 @@ async def fetch_areas(*, limit, offset, search, sort_by):
         """,
         params,
     )
+    # The view reads ~30M warehouse rows; the page carries its total, so only a page past the
+    # end needs a second read for it.
+    if rows:
+        return rows, [{"total": rows[0]["total"]}]
     count_params = {k: v for k, v in params.items() if k not in {"limit", "offset"}}
     total_result = await query(
         f"""

@@ -1,9 +1,8 @@
 import json
-import secrets
-from datetime import date, datetime, time, timedelta
+from datetime import date
 from typing import Literal
+from uuid import uuid4
 
-import httpx
 from fastapi import (
     APIRouter,
     Depends,
@@ -15,54 +14,17 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.config import settings
 from app.core.dependencies import AuthContext, require_active_owner, require_active_subscription
-from app.crm import calendar_service
-from app.crm.calendar_models import (
-    CalendarEventCreate,
-    CalendarEventMove,
-    CalendarEventResponse,
-    CalendarViewingCreate,
-    CrmCalendarConnection,
-)
 from app.crm.company_listings import (
     clear_company_source,
     list_company_listings,
     select_company_source,
 )
-from app.crm.email_models import (
-    EmailInboundListResponse,
-    EmailLeadListResponse,
-    EmailSendBatchResponse,
-    EmailSendCreate,
-    EmailSendListResponse,
-    EmailStatusResponse,
-    EmailSyncResponse,
-    EmailTemplateResponse,
-    EmailTemplateWrite,
-    EmailThreadItem,
-)
-from app.crm.email_pipeline import (
-    create_template,
-    delete_send,
-    delete_template,
-    email_status,
-    lead_thread,
-    list_email_leads,
-    list_inbound,
-    list_sends,
-    list_templates,
-    receive_inbound,
-    receive_webhook,
-    send_emails,
-    sync_events,
-    update_template,
-)
+from app.crm.execution import expensive_crm, light_crm
 from app.crm.import_models import (
+    CrmContactImportPreview,
     CrmContactImportRename,
     CrmContactImportResponse,
     CrmContactListDetail,
@@ -71,6 +33,8 @@ from app.crm.import_models import (
     CrmImportPropertiesResponse,
     CrmLeadImportedContact,
     CrmOwnerBulkUpdate,
+    CrmOwnerHistoryResponse,
+    CrmOwnerHistorySummary,
     CrmOwnerProfile,
     CrmOwnerRegistryResponse,
     CrmOwnerWorkspaceSummary,
@@ -80,6 +44,7 @@ from app.crm.imports import (
     list_contact_imports,
     list_dropped_rows,
     list_import_properties,
+    preview_contact_import,
     process_contact_import,
     rename_contact_import,
 )
@@ -98,8 +63,6 @@ from app.crm.inbound_imports import (
     process_inbound_import,
 )
 from app.crm.inbound_models import (
-    CrmInboundContact,
-    CrmInboundEnquiry,
     InboundActivityCreate,
     InboundEnquiryCreate,
     InboundEnquiryListResponse,
@@ -131,11 +94,12 @@ from app.crm.models import (
     CrmRenewalLeadsResponse,
     CrmRenewalsResponse,
     CrmSavedLeadResponse,
+    CrmWorkspacePage,
     CrmWorkspaceResponse,
-    CrmWorkspaceSummary,
     CrmWorkspaceUpdate,
 )
-from app.crm.opportunities import get_dashboard, get_lead_detail
+from app.crm.opportunities import get_dashboard
+from app.crm.owner_history import get_owner_history, get_owner_history_summary
 from app.crm.owners import (
     get_contact_list,
     get_owner_profile,
@@ -146,10 +110,10 @@ from app.crm.owners import (
 from app.crm.recently_sold import approve_recent_seller
 from app.crm.renewal_leads import (
     get_area_preferences,
+    get_renewal_detail,
     list_owner_renewals,
     list_renewal_areas,
     list_renewal_leads,
-    list_renewals,
     open_renewal_lead,
     until_disconnected,
     update_area_preferences,
@@ -168,314 +132,68 @@ from app.crm.workspaces import (
     update_lead_workspace,
 )
 from app.postgres import get_db_session
-
-router = APIRouter(prefix="/api/v1/crm", tags=["crm"])
-
-
-class GoogleCalendarConnectResponse(BaseModel):
-    authorization_url: str
+from app.postgres.actor_context import apply_actor_context, transaction_actor
 
 
-class GoogleCalendarStatus(BaseModel):
-    configured: bool
-    connected: bool
-    email: str | None = None
+async def _crm_actor(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    with transaction_actor(
+        actor_id=str(context.user.id),
+        organization_id=str(context.organization.id),
+        request_id=uuid4().hex,
+    ):
+        # Authorization can already have opened this same session's transaction.
+        await apply_actor_context(db)
+        yield
+
+
+async def _release_idle_connection(db: AsyncSession) -> None:
+    """End the read-only authentication transaction so a queued request holds no pool
+    connection; the next query begins a new one with the actor context applied."""
+    if db.in_transaction() and not (db.new or db.dirty or db.deleted):
+        await db.commit()
+
+
+async def _expensive_crm(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    async with expensive_crm(
+        str(context.organization.id), before_wait=lambda: _release_idle_connection(db)
+    ):
+        yield
+
+
+async def _light_crm(context: AuthContext = Depends(require_active_subscription)):
+    async with light_crm(str(context.organization.id)):
+        yield
+
+
+# Every route names its lane. Warehouse pages, owner assessments, imports and reports queue in
+# the expensive lane; reviewed Postgres reads and writes use the light lane, whose occasional
+# heavy step (an uncached owner assessment) is admitted through execution.heavy_section.
+EXPENSIVE_LANE = [Depends(_expensive_crm)]
+LIGHT_LANE = [Depends(_light_crm)]
+
+router = APIRouter(
+    prefix="/api/v1/crm",
+    tags=["crm"],
+    dependencies=[Depends(_crm_actor)],
+)
 
 
 def _auth_ids(auth: AuthContext) -> tuple[str, str]:
     return str(auth.user.id), str(auth.organization.id)
 
 
-@router.get("/calendar/google", response_model=GoogleCalendarStatus)
-async def crm_google_calendar_status(
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    user_id, organization_id = _auth_ids(context)
-    return await calendar_service.connection_status(
-        db, user_id=user_id, organization_id=organization_id
-    )
-
-
-@router.post("/calendar/google/connect", response_model=GoogleCalendarConnectResponse)
-async def crm_google_calendar_connect(context: AuthContext = Depends(require_active_subscription)):
-    user_id, organization_id = _auth_ids(context)
-    try:
-        return {"authorization_url": calendar_service.authorization_url(user_id, organization_id)}
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@router.get("/calendar/google/callback", include_in_schema=False)
-async def crm_google_calendar_callback(
-    code: str | None = None,
-    state: str | None = None,
-    error: str | None = None,
-    db: AsyncSession = Depends(get_db_session),
-):
-    result = "connected"
-    try:
-        if error or not code or not state:
-            raise ValueError("Google authorization was cancelled")
-        await calendar_service.finish_connection(db, code=code, state=state)
-    except (ValueError, RuntimeError, httpx.HTTPError):
-        result = "error"
-    return RedirectResponse(
-        f"{str(settings.FRONTEND_URL).rstrip('/')}/crm/calendar?google_calendar={result}",
-        status_code=303,
-    )
-
-
-@router.delete("/calendar/google", status_code=204)
-async def crm_google_calendar_disconnect(
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    user_id, organization_id = _auth_ids(context)
-    try:
-        await calendar_service.disconnect(db, user_id=user_id, organization_id=organization_id)
-    except (httpx.HTTPError, RuntimeError) as exc:
-        raise HTTPException(status_code=502, detail="Could not disconnect Google Calendar") from exc
-    return Response(status_code=204)
-
-
-@router.get("/calendar/events", response_model=list[CalendarEventResponse])
-async def crm_calendar_events(
-    start: date = Query(),
-    end: date = Query(),
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    if end < start or (end - start).days > 370:
-        raise HTTPException(status_code=422, detail="Calendar range must be within 371 days")
-    user_id, organization_id = _auth_ids(context)
-    try:
-        return await calendar_service.list_events(
-            db, user_id=user_id, organization_id=organization_id, start=start, end=end
-        )
-    except (httpx.HTTPError, RuntimeError) as exc:
-        raise HTTPException(status_code=502, detail="Google Calendar sync failed") from exc
-
-
-@router.get("/calendar/events/{event_id}", response_model=CalendarEventResponse)
-async def crm_calendar_event(
-    event_id: int,
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    user_id, organization_id = _auth_ids(context)
-    event = await calendar_service.get_event(
-        db, id=event_id, user_id=user_id, organization_id=organization_id
-    )
-    if event is None:
-        raise HTTPException(status_code=404, detail="Calendar event not found")
-    return calendar_service.serialize_event(event)
-
-
-@router.post("/calendar/events", response_model=CalendarEventResponse, status_code=201)
-async def crm_create_calendar_event(
-    payload: CalendarEventCreate,
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    user_id, organization_id = _auth_ids(context)
-    if payload.lead_id is not None:
-        lead = await db.get(CrmInboundEnquiry, payload.lead_id)
-        if lead is None or lead.organization_id != organization_id:
-            raise HTTPException(status_code=404, detail="Lead not found")
-    return await calendar_service.create_event(
-        db,
-        user_id=user_id,
-        organization_id=organization_id,
-        title=payload.title.strip(),
-        event_date=payload.date,
-        event_time=payload.time,
-        kind=payload.kind,
-        detail=payload.detail.strip(),
-        lead_id=payload.lead_id,
-        listing_id=payload.listing_id,
-        end_date=payload.end_date or payload.date,
-        end_time=payload.end_time,
-        all_day=payload.all_day,
-        repeat=payload.repeat,
-        meet=payload.meet,
-        location=payload.location.strip(),
-        reminders=payload.reminders,
-        reminders_use_default=payload.reminders_use_default,
-        guests=payload.guests,
-        guests_can_modify=payload.guests_can_modify,
-        guests_can_invite_others=payload.guests_can_invite_others,
-        guests_can_see_other_guests=payload.guests_can_see_other_guests,
-        show_as=payload.show_as,
-        visibility=payload.visibility,
-    )
-
-
-@router.post("/calendar/viewings/{lead_id}", response_model=CalendarEventResponse, status_code=201)
-async def crm_book_calendar_viewing(
-    payload: CalendarViewingCreate,
-    lead_id: int,
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    user_id, organization_id = _auth_ids(context)
-    lead = await db.get(CrmInboundEnquiry, lead_id)
-    if lead is None or lead.organization_id != organization_id:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    contact = await db.get(CrmInboundContact, lead.contact_id)
-    if contact is None:
-        raise HTTPException(status_code=404, detail="Lead contact not found")
-    details = [payload.note.strip()]
-    if payload.listing_id:
-        details.append(f"Listing reference: {payload.listing_id}")
-    return await calendar_service.create_event(
-        db,
-        user_id=user_id,
-        organization_id=organization_id,
-        title=f"Viewing · {contact.full_name}",
-        event_date=payload.date,
-        event_time=payload.time,
-        kind="viewing",
-        detail="\n".join(value for value in details if value),
-        lead_id=lead_id,
-        listing_id=payload.listing_id,
-    )
-
-
-@router.patch("/calendar/events/{event_id}", response_model=CalendarEventResponse)
-async def crm_move_calendar_event(
-    event_id: int,
-    payload: CalendarEventMove,
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    user_id, organization_id = _auth_ids(context)
-    event = await calendar_service.get_event(
-        db, id=event_id, user_id=user_id, organization_id=organization_id
-    )
-    if event is None:
-        raise HTTPException(status_code=404, detail="Calendar event not found")
-    original_date = event.event_date
-    original_time = event.event_time
-    duration_days = (event.event_end_date or original_date) - original_date
-    if (payload.date, payload.time) != (original_date, event.event_time):
-        # A new list, so SQLAlchemy sees the JSON change.
-        event.rescheduled_from = [
-            *event.rescheduled_from,
-            {"date": original_date.isoformat(), "time": event.event_time},
-        ]
-    event.event_date = payload.date
-    event.event_time = payload.time
-    if payload.time is None:
-        event.event_end_date = payload.date + duration_days
-        event.event_end_time = None
-        event.all_day = True
-    else:
-        original_start = datetime.combine(
-            original_date, time.fromisoformat(original_time or "10:00")
-        )
-        original_end = datetime.combine(
-            event.event_end_date or original_date,
-            time.fromisoformat(event.event_end_time or "11:00"),
-        )
-        new_start = datetime.combine(payload.date, time.fromisoformat(payload.time))
-        duration = original_end - original_start
-        new_end = new_start + (duration if duration > timedelta(0) else timedelta(hours=1))
-        event.event_end_date = new_end.date()
-        event.event_end_time = new_end.strftime("%H:%M")
-        event.all_day = False
-    connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
-    return await calendar_service.update_event(db, event=event, connection=connection)
-
-
-@router.put("/calendar/events/{event_id}", response_model=CalendarEventResponse)
-async def crm_edit_calendar_event(
-    event_id: int,
-    payload: CalendarEventCreate,
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    user_id, organization_id = _auth_ids(context)
-    event = await calendar_service.get_event(
-        db, id=event_id, user_id=user_id, organization_id=organization_id
-    )
-    if event is None:
-        raise HTTPException(status_code=404, detail="Calendar event not found")
-    if payload.lead_id is not None:
-        lead = await db.get(CrmInboundEnquiry, payload.lead_id)
-        if lead is None or lead.organization_id != organization_id:
-            raise HTTPException(status_code=404, detail="Lead not found")
-    if payload.meet and not event.meet:
-        # A fresh request id, or Google treats it as the earlier (removed) conference.
-        event.meet_request_id = secrets.token_urlsafe(20)
-    if not payload.meet:
-        event.meet_link = None
-        event.meet_request_id = None
-    event.title = payload.title.strip()
-    event.event_date = payload.date
-    event.event_time = None if payload.all_day else payload.time
-    event.event_end_date = payload.end_date or payload.date
-    event.event_end_time = None if payload.all_day else payload.end_time
-    event.all_day = payload.all_day or payload.time is None
-    event.repeat = payload.repeat
-    event.meet = payload.meet
-    event.location = payload.location.strip()
-    event.reminders = payload.reminders
-    event.reminders_use_default = payload.reminders_use_default
-    event.guests = payload.guests
-    event.guests_can_modify = payload.guests_can_modify
-    event.guests_can_invite_others = payload.guests_can_invite_others
-    event.guests_can_see_other_guests = payload.guests_can_see_other_guests
-    event.show_as = payload.show_as
-    event.visibility = payload.visibility
-    event.kind = payload.kind
-    event.detail = payload.detail.strip()
-    event.lead_id = payload.lead_id
-    event.listing_id = payload.listing_id
-    connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
-    return await calendar_service.update_event(db, event=event, connection=connection)
-
-
-@router.post("/calendar/events/{event_id}/done", response_model=CalendarEventResponse)
-async def crm_complete_calendar_event(
-    event_id: int,
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    user_id, organization_id = _auth_ids(context)
-    event = await calendar_service.get_event(
-        db, id=event_id, user_id=user_id, organization_id=organization_id
-    )
-    if event is None:
-        raise HTTPException(status_code=404, detail="Calendar event not found")
-    event.done = True
-    connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
-    return await calendar_service.update_event(db, event=event, connection=connection)
-
-
-@router.delete("/calendar/events/{event_id}", status_code=204)
-async def crm_delete_calendar_event(
-    event_id: int,
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    user_id, organization_id = _auth_ids(context)
-    event = await calendar_service.get_event(
-        db, id=event_id, user_id=user_id, organization_id=organization_id
-    )
-    if event is None:
-        raise HTTPException(status_code=404, detail="Calendar event not found")
-    connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
-    try:
-        await calendar_service.delete_event(db, event=event, connection=connection)
-    except (httpx.HTTPError, RuntimeError) as exc:
-        raise HTTPException(
-            status_code=502, detail="Could not delete the Google Calendar event"
-        ) from exc
-    return Response(status_code=204)
-
-
-@router.post("/inbound/enquiries", response_model=InboundEnquiryResponse, status_code=201)
+@router.post(
+    "/inbound/enquiries",
+    response_model=InboundEnquiryResponse,
+    status_code=201,
+    dependencies=LIGHT_LANE,
+)
 async def crm_create_inbound_enquiry(
     payload: InboundEnquiryCreate,
     context: AuthContext = Depends(require_active_subscription),
@@ -488,7 +206,9 @@ async def crm_create_inbound_enquiry(
     )
 
 
-@router.get("/inbound/enquiries", response_model=InboundEnquiryListResponse)
+@router.get(
+    "/inbound/enquiries", response_model=InboundEnquiryListResponse, dependencies=LIGHT_LANE
+)
 async def crm_inbound_enquiries(
     intent_group: str | None = Query(default=None, pattern="^(demand|instructions)$"),
     workspace: str | None = Query(default=None, pattern="^(inbox|unqualified|qualified|closed)$"),
@@ -522,7 +242,11 @@ async def crm_inbound_enquiries(
     )
 
 
-@router.post("/inbound/enquiries/{enquiry_id}/approve-buyer", response_model=InboundEnquiryResponse)
+@router.post(
+    "/inbound/enquiries/{enquiry_id}/approve-buyer",
+    response_model=InboundEnquiryResponse,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_approve_recent_seller(
     enquiry_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -535,7 +259,11 @@ async def crm_approve_recent_seller(
     )
 
 
-@router.get("/inbound/enquiries/{enquiry_id}", response_model=InboundEnquiryResponse)
+@router.get(
+    "/inbound/enquiries/{enquiry_id}",
+    response_model=InboundEnquiryResponse,
+    dependencies=LIGHT_LANE,
+)
 async def crm_inbound_enquiry(
     enquiry_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -545,7 +273,11 @@ async def crm_inbound_enquiry(
     return await get_inbound_enquiry(db, enquiry_id, organization_id)
 
 
-@router.patch("/inbound/enquiries/{enquiry_id}", response_model=InboundEnquiryResponse)
+@router.patch(
+    "/inbound/enquiries/{enquiry_id}",
+    response_model=InboundEnquiryResponse,
+    dependencies=LIGHT_LANE,
+)
 async def crm_update_inbound_enquiry(
     enquiry_id: int,
     payload: InboundEnquiryUpdate,
@@ -562,7 +294,11 @@ async def crm_update_inbound_enquiry(
     )
 
 
-@router.post("/inbound/enquiries/{enquiry_id}/notes", response_model=InboundEnquiryResponse)
+@router.post(
+    "/inbound/enquiries/{enquiry_id}/notes",
+    response_model=InboundEnquiryResponse,
+    dependencies=LIGHT_LANE,
+)
 async def crm_add_inbound_note(
     enquiry_id: int,
     payload: InboundNoteCreate,
@@ -579,7 +315,11 @@ async def crm_add_inbound_note(
     )
 
 
-@router.post("/inbound/enquiries/{enquiry_id}/activities", response_model=InboundEnquiryResponse)
+@router.post(
+    "/inbound/enquiries/{enquiry_id}/activities",
+    response_model=InboundEnquiryResponse,
+    dependencies=LIGHT_LANE,
+)
 async def crm_add_inbound_activity(
     enquiry_id: int,
     payload: InboundActivityCreate,
@@ -597,7 +337,11 @@ async def crm_add_inbound_activity(
     )
 
 
-@router.get("/inbound/enquiries/{enquiry_id}/matches", response_model=InboundMatchesResponse)
+@router.get(
+    "/inbound/enquiries/{enquiry_id}/matches",
+    response_model=InboundMatchesResponse,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_inbound_matches(
     enquiry_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -610,6 +354,7 @@ async def crm_inbound_matches(
 @router.post(
     "/inbound/enquiries/{enquiry_id}/matches/refresh",
     response_model=InboundMatchesResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_refresh_inbound_matches(
     enquiry_id: int,
@@ -626,7 +371,9 @@ async def crm_refresh_inbound_matches(
     )
 
 
-@router.patch("/inbound/matches/{match_id}", response_model=InboundMatchResponse)
+@router.patch(
+    "/inbound/matches/{match_id}", response_model=InboundMatchResponse, dependencies=LIGHT_LANE
+)
 async def crm_update_inbound_match(
     match_id: int,
     payload: InboundMatchUpdate,
@@ -639,7 +386,12 @@ async def crm_update_inbound_match(
     )
 
 
-@router.post("/inbound/imports", response_model=InboundImportResponse, status_code=201)
+@router.post(
+    "/inbound/imports",
+    response_model=InboundImportResponse,
+    status_code=202,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_inbound_import(
     file: UploadFile = File(...),
     name: str = Form(default="", max_length=200),
@@ -665,7 +417,11 @@ async def crm_inbound_import(
     )
 
 
-@router.post("/inbound/imports/preview", response_model=InboundImportPreviewResponse)
+@router.post(
+    "/inbound/imports/preview",
+    response_model=InboundImportPreviewResponse,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_preview_inbound_import(
     file: UploadFile = File(...),
     campaign_context: str = Form(default="", max_length=4_000),
@@ -675,7 +431,9 @@ async def crm_preview_inbound_import(
     return await preview_inbound_import(file, campaign_context)
 
 
-@router.get("/company-listings", response_model=CrmCompanyListingsResponse)
+@router.get(
+    "/company-listings", response_model=CrmCompanyListingsResponse, dependencies=EXPENSIVE_LANE
+)
 async def crm_company_listings(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -707,7 +465,11 @@ async def crm_company_listings(
     )
 
 
-@router.put("/company-listings/source", response_model=CrmCompanyListingSourceResponse)
+@router.put(
+    "/company-listings/source",
+    response_model=CrmCompanyListingSourceResponse,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_select_company_listing_source(
     payload: CrmCompanyListingSourceUpdate,
     context: AuthContext = Depends(require_active_owner),
@@ -726,7 +488,7 @@ async def crm_select_company_listing_source(
     )
 
 
-@router.delete("/company-listings/source", status_code=204)
+@router.delete("/company-listings/source", status_code=204, dependencies=EXPENSIVE_LANE)
 async def crm_clear_company_listing_source(
     context: AuthContext = Depends(require_active_owner),
     db: AsyncSession = Depends(get_db_session),
@@ -736,7 +498,7 @@ async def crm_clear_company_listing_source(
     await clear_company_source(db, organization_id=organization_id)
 
 
-@router.get("/inbound/imports", response_model=list[InboundImportResponse])
+@router.get("/inbound/imports", response_model=list[InboundImportResponse], dependencies=LIGHT_LANE)
 async def crm_inbound_imports(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
@@ -745,7 +507,7 @@ async def crm_inbound_imports(
     return await list_inbound_imports(db, organization_id)
 
 
-@router.delete("/inbound/imports/{import_id}", status_code=204)
+@router.delete("/inbound/imports/{import_id}", status_code=204, dependencies=EXPENSIVE_LANE)
 async def crm_delete_inbound_import(
     import_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -759,28 +521,74 @@ async def crm_delete_inbound_import(
 @router.post(
     "/contact-imports",
     response_model=CrmContactImportResponse,
-    status_code=201,
+    status_code=202,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_contact_import(
     file: UploadFile = File(...),
     name: str = Form(default="", max_length=200),
+    mapping_json: str = Form(default="", max_length=50_000),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Upload, normalize, verify, and publish an owner-contact workbook."""
     user_id, organization_id = _auth_ids(context)
+    try:
+        mapping_override = json.loads(mapping_json) if mapping_json else None
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail="Invalid import mapping") from exc
+    if mapping_override is not None and not isinstance(mapping_override, dict):
+        raise HTTPException(status_code=422, detail="Invalid import mapping")
     return await process_contact_import(
         db,
         upload=file,
         name=name,
         user_id=user_id,
         organization_id=organization_id,
+        mapping_override=mapping_override,
+    )
+
+
+@router.post(
+    "/contact-imports/preview",
+    response_model=CrmContactImportPreview,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_contact_import_preview(
+    file: UploadFile = File(...),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Show which field each column of an owner file feeds, without importing it."""
+    _, organization_id = _auth_ids(context)
+    return await preview_contact_import(db, upload=file, organization_id=organization_id)
+
+
+@router.post(
+    "/contact-imports/source-only",
+    response_model=CrmContactImportResponse,
+    status_code=202,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_source_only_import(
+    file: UploadFile = File(...),
+    name: str = Form(default="", max_length=200),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Import reviewed source history without requesting registry evidence."""
+    from app.crm.source_audit import process_source_audit_import
+
+    user_id, organization_id = _auth_ids(context)
+    return await process_source_audit_import(
+        db, upload=file, name=name, user_id=user_id, organization_id=organization_id
     )
 
 
 @router.get(
     "/contact-imports",
     response_model=list[CrmContactImportResponse],
+    dependencies=LIGHT_LANE,
 )
 async def crm_contact_imports(
     context: AuthContext = Depends(require_active_subscription),
@@ -794,6 +602,7 @@ async def crm_contact_imports(
 @router.patch(
     "/contact-imports/{import_id}",
     response_model=CrmContactImportResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_rename_contact_import(
     import_id: int,
@@ -811,7 +620,7 @@ async def crm_rename_contact_import(
     )
 
 
-@router.delete("/contact-imports/{import_id}", status_code=204)
+@router.delete("/contact-imports/{import_id}", status_code=204, dependencies=EXPENSIVE_LANE)
 async def crm_delete_contact_import(
     import_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -830,6 +639,7 @@ async def crm_delete_contact_import(
 @router.get(
     "/contact-imports/{import_id}/dropped-rows",
     response_model=CrmDroppedRowsResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_contact_import_dropped_rows(
     import_id: int,
@@ -863,6 +673,7 @@ async def crm_contact_import_dropped_rows(
 @router.get(
     "/contact-imports/{import_id}/properties",
     response_model=CrmImportPropertiesResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_contact_import_properties(
     import_id: int,
@@ -887,6 +698,7 @@ async def crm_contact_import_properties(
 @router.get(
     "/contact-lists",
     response_model=list[CrmContactListSummary],
+    dependencies=LIGHT_LANE,
 )
 async def crm_contact_lists(
     context: AuthContext = Depends(require_active_subscription),
@@ -900,6 +712,7 @@ async def crm_contact_lists(
 @router.get(
     "/contact-lists/{list_id}",
     response_model=CrmContactListDetail,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_contact_list(
     list_id: int,
@@ -907,9 +720,17 @@ async def crm_contact_list(
         default=None,
         pattern=(
             "^(verified_current_owner|probable_current_owner|unit_linked_unverified|"
-            "former_owner|conflicting_claim|insufficient_property_data|"
-            "registry_not_observed|unmatched|mortgage)$"
+            "former_owner|unverified_former_owner|conflicting_claim|insufficient_property_data|"
+            "registry_not_observed|unmatched)$"
         ),
+    ),
+    match_colour: list[Literal["green", "amber", "blue", "red", "grey"]] | None = Query(
+        default=None,
+        description="Keep rows whose property-first match is one of these colours.",
+    ),
+    match_outcome: list[str] | None = Query(
+        default=None,
+        description="Keep rows with one of these match outcomes (for example `lender` or `broker`).",
     ),
     search: str | None = Query(default=None, max_length=160),
     limit: int = Query(default=100, ge=1, le=500),
@@ -924,6 +745,8 @@ async def crm_contact_list(
         list_id=list_id,
         organization_id=organization_id,
         status=status,
+        match_colour=match_colour,
+        match_outcome=match_outcome,
         search=search,
         limit=limit,
         offset=offset,
@@ -933,20 +756,24 @@ async def crm_contact_list(
 @router.get(
     "/owner-registry",
     response_model=CrmOwnerRegistryResponse,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_owner_registry(
     scope: str = Query(
         default="all",
-        pattern="^(all|rental_ready|registry|prior_owners)$",
+        pattern="^(all|current_owners|rental_ready|registry|prior_owners|needs_review)$",
     ),
     list_id: int | None = Query(default=None, ge=1),
     status: str | None = Query(
         default=None,
         pattern=(
             "^(verified_current_owner|probable_current_owner|unit_linked_unverified|"
-            "former_owner|conflicting_claim|insufficient_property_data|"
+            "former_owner|unverified_former_owner|conflicting_claim|insufficient_property_data|"
             "registry_not_observed|unmatched)$"
         ),
+    ),
+    transaction_match_status: str | None = Query(
+        default=None, pattern="^(matched|unmatched|ambiguous|excluded)$"
     ),
     search: str | None = Query(default=None, max_length=160),
     lease_window: str | None = Query(
@@ -988,12 +815,14 @@ async def crm_owner_registry(
         offset=offset,
         min_properties=min_properties,
         next_event_days=next_event_days,
+        transaction_match_status=transaction_match_status,
     )
 
 
 @router.get(
     "/owner-workspaces",
     response_model=list[CrmOwnerWorkspaceSummary],
+    dependencies=LIGHT_LANE,
 )
 async def crm_owner_workspaces(
     context: AuthContext = Depends(require_active_subscription),
@@ -1011,6 +840,7 @@ async def crm_owner_workspaces(
 @router.patch(
     "/owner-workspaces/bulk",
     response_model=list[CrmOwnerWorkspaceSummary],
+    dependencies=LIGHT_LANE,
 )
 async def crm_bulk_update_owner_workspaces(
     payload: CrmOwnerBulkUpdate,
@@ -1028,9 +858,61 @@ async def crm_bulk_update_owner_workspaces(
 
 
 @router.get(
-    "/owners/{owner_key}",
-    response_model=CrmOwnerProfile,
+    "/owner-history/summary",
+    response_model=CrmOwnerHistorySummary,
+    dependencies=EXPENSIVE_LANE,
 )
+async def crm_owner_history_summary(
+    import_id: int | None = Query(default=None, ge=1),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Count source events and scoped owner/property evidence across imports."""
+    _, organization_id = _auth_ids(context)
+    return await get_owner_history_summary(db, organization_id=organization_id, import_id=import_id)
+
+
+@router.get(
+    "/contact-imports/{import_id}/owner-summary",
+    response_model=CrmOwnerHistorySummary,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_contact_import_owner_summary(
+    import_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Count this file's associations using current evidence from all tenant imports."""
+    _, organization_id = _auth_ids(context)
+    return await get_owner_history_summary(db, organization_id=organization_id, import_id=import_id)
+
+
+@router.get(
+    "/owners/{owner_key}/history",
+    response_model=CrmOwnerHistoryResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_owner_history(
+    owner_key: str,
+    import_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Page one owner's individual source events across organization imports."""
+    _, organization_id = _auth_ids(context)
+    return await get_owner_history(
+        db,
+        organization_id=organization_id,
+        owner_key=owner_key,
+        import_id=import_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/owners/{owner_key}", response_model=CrmOwnerProfile, dependencies=EXPENSIVE_LANE)
 async def crm_owner_profile(
     owner_key: str,
     context: AuthContext = Depends(require_active_subscription),
@@ -1045,8 +927,9 @@ async def crm_owner_profile(
     )
 
 
-@router.get("/dashboard", response_model=CrmDashboardResponse)
+@router.get("/dashboard", response_model=CrmDashboardResponse, dependencies=EXPENSIVE_LANE)
 async def crm_dashboard(
+    request: Request,
     status: str | None = Query(
         default=None, pattern="^(expired|expiring_30|expiring_60|expiring_90)$"
     ),
@@ -1065,24 +948,27 @@ async def crm_dashboard(
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Return actionable lease-expiry leads and location summaries."""
-    return await get_dashboard(
-        status=status,
-        priority=priority,
-        asset_class=asset_class,
-        property_type=property_type,
-        area=area,
-        project=project,
-        building=building,
-        search=search,
-        breakdown=breakdown,
-        expired_days=expired_days,
-        limit=limit,
-        offset=offset,
-        as_of=as_of,
+    return await _until_disconnect(
+        request,
+        get_dashboard(
+            status=status,
+            priority=priority,
+            asset_class=asset_class,
+            property_type=property_type,
+            area=area,
+            project=project,
+            building=building,
+            search=search,
+            breakdown=breakdown,
+            expired_days=expired_days,
+            limit=limit,
+            offset=offset,
+            as_of=as_of,
+        ),
     )
 
 
-@router.get("/area-preferences", response_model=CrmAreaPreferencesResponse)
+@router.get("/area-preferences", response_model=CrmAreaPreferencesResponse, dependencies=LIGHT_LANE)
 async def crm_area_preferences(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
@@ -1092,7 +978,7 @@ async def crm_area_preferences(
     return await get_area_preferences(db, user_id=user_id, organization_id=organization_id)
 
 
-@router.put("/area-preferences", response_model=CrmAreaPreferencesResponse)
+@router.put("/area-preferences", response_model=CrmAreaPreferencesResponse, dependencies=LIGHT_LANE)
 async def crm_update_area_preferences(
     payload: CrmAreaPreferencesUpdate,
     context: AuthContext = Depends(require_active_subscription),
@@ -1115,7 +1001,7 @@ async def _until_disconnect(request: Request, work):
     return Response(status_code=499) if result is None else result
 
 
-@router.get("/renewals", response_model=CrmRenewalsResponse)
+@router.get("/renewals", response_model=CrmRenewalsResponse, dependencies=EXPENSIVE_LANE)
 async def crm_renewals(
     request: Request,
     window: str | None = Query(
@@ -1128,37 +1014,19 @@ async def crm_renewals(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     as_of: date | None = Query(default=None),
-    owner: Literal["known", "unknown"] | None = Query(default=None),
+    owner: Literal["known", "unknown"] = "known",
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Assets › Renewals: every lease in the dataset, narrowed by the tab's filters.
-
-    owner (the Assets › Renewals toggle): known lists only units with a current owner in this
-    agency's owner imports, each with that owner's contact; unknown lists every other lease.
-    """
-    if owner:
-        user_id, organization_id = _auth_ids(context)
-        return await _until_disconnect(
-            request,
-            list_owner_renewals(
-                db,
-                user_id=user_id,
-                organization_id=organization_id,
-                window=window,
-                area=area,
-                property_type=property_type,
-                project=project,
-                building=building,
-                limit=limit,
-                offset=offset,
-                as_of=as_of,
-                owner=owner,
-            ),
-        )
+    """Assets › Renewals: agency owners on file, or units whose owner is still unknown."""
+    user_id, organization_id = _auth_ids(context)
     return await _until_disconnect(
         request,
-        list_renewals(
+        list_owner_renewals(
+            db,
+            user_id=user_id,
+            organization_id=organization_id,
+            owner=owner,
             window=window,
             area=area,
             property_type=property_type,
@@ -1171,7 +1039,7 @@ async def crm_renewals(
     )
 
 
-@router.get("/renewal-areas", response_model=list[CrmRenewalArea])
+@router.get("/renewal-areas", response_model=list[CrmRenewalArea], dependencies=EXPENSIVE_LANE)
 async def crm_renewal_areas(
     request: Request,
     as_of: date | None = Query(default=None),
@@ -1181,20 +1049,22 @@ async def crm_renewal_areas(
     return await _until_disconnect(request, list_renewal_areas(as_of=as_of))
 
 
-@router.get("/renewal-leads", response_model=CrmRenewalLeadsResponse)
+@router.get("/renewal-leads", response_model=CrmRenewalLeadsResponse, dependencies=EXPENSIVE_LANE)
 async def crm_renewal_leads(
     request: Request,
-    kind: str | None = Query(default=None, pattern="^(vacant|upcoming)$"),
+    kind: str | None = Query(default=None, pattern="^(vacant|upcoming|expired)$"),
     limit: int = Query(default=200, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     as_of: date | None = Query(default=None),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Return lease-expiry leads in the current agent's areas and windows.
+    """Return one page of lease-expiry leads in the current agent's areas and windows.
 
-    kind=vacant: units whose lease ended with no later lease registered (Leads › Vacant units).
-    kind=upcoming: leases still running (the Inbox).
+    No kind: leases still running first (soonest end on top), then ended ones (most recent
+    first). kind=upcoming: leases still running. kind=expired: leases that ended inside the
+    look-back window. kind=vacant: ended with no later lease registered for the exact unit.
+    `total` counts the requested kind across all pages; `counts` covers the whole window.
     """
     user_id, organization_id = _auth_ids(context)
     return await _until_disconnect(
@@ -1211,7 +1081,11 @@ async def crm_renewal_leads(
     )
 
 
-@router.post("/renewal-leads/{lease_id}/lead", response_model=InboundEnquiryResponse)
+@router.post(
+    "/renewal-leads/{lease_id}/lead",
+    response_model=InboundEnquiryResponse,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_open_renewal_lead(
     lease_id: str,
     context: AuthContext = Depends(require_active_subscription),
@@ -1224,19 +1098,28 @@ async def crm_open_renewal_lead(
     )
 
 
-@router.get("/leads/{lead_id}", response_model=CrmLeadDetailResponse)
+@router.get("/leads/{lead_id}", response_model=CrmLeadDetailResponse, dependencies=EXPENSIVE_LANE)
 async def crm_lead_detail(
+    request: Request,
     lead_id: str,
     as_of: date | None = Query(default=None),
     context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Return the evidence timeline and recommended action for one lead."""
-    return await get_lead_detail(lead_id, as_of=as_of)
+    user_id, organization_id = _auth_ids(context)
+    return await _until_disconnect(
+        request,
+        get_renewal_detail(
+            db, lead_id=lead_id, as_of=as_of, user_id=user_id, organization_id=organization_id
+        ),
+    )
 
 
 @router.get(
     "/leads/{lead_id}/contacts",
     response_model=list[CrmLeadImportedContact],
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_lead_contacts(
     lead_id: str,
@@ -1252,31 +1135,44 @@ async def crm_lead_contacts(
     )
 
 
-@router.get("/leads/{lead_id}/report", response_model=CrmPropertyReportResponse)
+@router.get(
+    "/leads/{lead_id}/report",
+    response_model=CrmPropertyReportResponse,
+    dependencies=EXPENSIVE_LANE,
+)
 async def crm_property_report(
+    request: Request,
     lead_id: str,
     as_of: date | None = Query(default=None),
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Build a one-year property report with sales, rentals, and indicative analysis."""
-    return await get_property_report(lead_id, as_of=as_of)
+    return await _until_disconnect(request, get_property_report(lead_id, as_of=as_of))
 
 
-@router.get("/workspaces", response_model=list[CrmWorkspaceSummary])
+@router.get("/workspaces", response_model=CrmWorkspacePage, dependencies=LIGHT_LANE)
 async def crm_workspaces(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """List the current agent's persisted CRM state for queue decoration."""
+    """One page of the current agent's persisted CRM state, newest first, with the total."""
     user_id, organization_id = _auth_ids(context)
     return await list_lead_workspaces(
         db,
         user_id=user_id,
         organization_id=organization_id,
+        limit=limit,
+        offset=offset,
     )
 
 
-@router.get("/workspaces/{lead_id}", response_model=CrmWorkspaceResponse)
+@router.get(
+    "/workspaces/{lead_id}",
+    response_model=CrmWorkspaceResponse,
+    dependencies=LIGHT_LANE,
+)
 async def crm_lead_workspace(
     lead_id: str,
     context: AuthContext = Depends(require_active_subscription),
@@ -1292,7 +1188,7 @@ async def crm_lead_workspace(
     )
 
 
-@router.patch("/workspaces/{lead_id}", response_model=CrmWorkspaceResponse)
+@router.patch("/workspaces/{lead_id}", response_model=CrmWorkspaceResponse, dependencies=LIGHT_LANE)
 async def crm_update_workspace(
     lead_id: str,
     payload: CrmWorkspaceUpdate,
@@ -1310,7 +1206,9 @@ async def crm_update_workspace(
     )
 
 
-@router.post("/workspaces/{lead_id}/notes", response_model=CrmWorkspaceResponse)
+@router.post(
+    "/workspaces/{lead_id}/notes", response_model=CrmWorkspaceResponse, dependencies=LIGHT_LANE
+)
 async def crm_add_note(
     lead_id: str,
     payload: CrmNoteCreate,
@@ -1328,7 +1226,7 @@ async def crm_add_note(
     )
 
 
-@router.delete("/notes/{note_id}", status_code=204)
+@router.delete("/notes/{note_id}", status_code=204, dependencies=LIGHT_LANE)
 async def crm_delete_note(
     note_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -1345,7 +1243,11 @@ async def crm_delete_note(
     return Response(status_code=204)
 
 
-@router.get("/saved-leads", response_model=list[CrmSavedLeadResponse])
+@router.get(
+    "/saved-leads",
+    response_model=list[CrmSavedLeadResponse],
+    dependencies=LIGHT_LANE,
+)
 async def crm_saved_leads(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
@@ -1363,6 +1265,7 @@ async def crm_saved_leads(
     "/saved-leads/{lead_id}",
     response_model=CrmSavedLeadResponse,
     status_code=201,
+    dependencies=EXPENSIVE_LANE,
 )
 async def crm_save_lead(
     lead_id: str,
@@ -1379,7 +1282,7 @@ async def crm_save_lead(
     )
 
 
-@router.delete("/saved-leads/{saved_id}", status_code=204)
+@router.delete("/saved-leads/{saved_id}", status_code=204, dependencies=LIGHT_LANE)
 async def crm_delete_saved_lead(
     saved_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -1394,179 +1297,3 @@ async def crm_delete_saved_lead(
         organization_id=organization_id,
     )
     return Response(status_code=204)
-
-
-# ── Connectors › Email (Brevo) ──
-
-
-@router.get("/email/status", response_model=EmailStatusResponse)
-async def crm_email_status(context: AuthContext = Depends(require_active_subscription)):
-    """Whether Brevo is configured on the server, and the sender leads see."""
-    return email_status()
-
-
-@router.get("/email/leads", response_model=EmailLeadListResponse)
-async def crm_email_leads(
-    search: str | None = Query(default=None, max_length=160),
-    intent: str | None = Query(default=None, pattern="^(unknown|buy|rent|sell|let)$"),
-    source: str | None = Query(default=None, max_length=120),
-    ids: list[int] | None = Query(default=None, max_length=100),
-    limit: int = Query(default=200, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Leads of any type whose contact has an email, each with its latest email status.
-
-    `ids` narrows to those leads (Compose showing who it will send to).
-    """
-    _, organization_id = _auth_ids(context)
-    return await list_email_leads(
-        db,
-        organization_id=organization_id,
-        search=search,
-        intent=intent,
-        source=source,
-        limit=limit,
-        offset=offset,
-        ids=ids,
-    )
-
-
-@router.get("/email/templates", response_model=list[EmailTemplateResponse])
-async def crm_email_templates(
-    context: AuthContext = Depends(require_active_subscription),
-):
-    """The organization's email templates, shared by every agent."""
-    _, organization_id = _auth_ids(context)
-    return await list_templates(organization_id=organization_id)
-
-
-@router.post("/email/templates", response_model=EmailTemplateResponse, status_code=201)
-async def crm_create_email_template(
-    payload: EmailTemplateWrite,
-    context: AuthContext = Depends(require_active_subscription),
-):
-    user_id, organization_id = _auth_ids(context)
-    return await create_template(organization_id=organization_id, user_id=user_id, payload=payload)
-
-
-@router.put("/email/templates/{template_id}", response_model=EmailTemplateResponse)
-async def crm_update_email_template(
-    template_id: int,
-    payload: EmailTemplateWrite,
-    context: AuthContext = Depends(require_active_subscription),
-):
-    user_id, organization_id = _auth_ids(context)
-    return await update_template(
-        organization_id=organization_id,
-        user_id=user_id,
-        template_id=template_id,
-        payload=payload,
-    )
-
-
-@router.delete("/email/templates/{template_id}", status_code=204)
-async def crm_delete_email_template(
-    template_id: int,
-    context: AuthContext = Depends(require_active_subscription),
-):
-    _, organization_id = _auth_ids(context)
-    await delete_template(organization_id=organization_id, template_id=template_id)
-    return Response(status_code=204)
-
-
-@router.post("/email/send", response_model=EmailSendBatchResponse)
-async def crm_send_email(
-    payload: EmailSendCreate,
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Send one personalised email per lead through Brevo; each lands on the lead's history."""
-    user_id, organization_id = _auth_ids(context)
-    return await send_emails(db, organization_id=organization_id, user_id=user_id, payload=payload)
-
-
-@router.get("/email/sends", response_model=EmailSendListResponse)
-async def crm_email_sends(
-    status: str | None = Query(default=None, max_length=40),
-    limit: int = Query(default=200, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
-    context: AuthContext = Depends(require_active_subscription),
-):
-    """Tracking: every send, newest first, with its delivery events."""
-    _, organization_id = _auth_ids(context)
-    return await list_sends(
-        organization_id=organization_id, status=status, limit=limit, offset=offset
-    )
-
-
-@router.delete("/email/sends/{send_id}", status_code=204)
-async def crm_delete_email_send(
-    send_id: int,
-    context: AuthContext = Depends(require_active_subscription),
-):
-    """Remove one sent email from Tracking (and from the lead's Conversation tab)."""
-    _, organization_id = _auth_ids(context)
-    await delete_send(organization_id=organization_id, send_id=send_id)
-    return Response(status_code=204)
-
-
-@router.post("/email/tracking/sync", response_model=EmailSyncResponse)
-async def crm_sync_email_events(
-    context: AuthContext = Depends(require_active_subscription),
-):
-    """Pull delivery events from Brevo (the webhook cannot reach localhost)."""
-    _, organization_id = _auth_ids(context)
-    return await sync_events(organization_id=organization_id)
-
-
-@router.post("/email/brevo-webhook")
-async def crm_brevo_webhook(
-    request: Request,
-    secret: str | None = Query(default=None),
-):
-    """Public: Brevo pushes delivery events here. The secret in the query string is the gate."""
-    try:
-        payload = await request.json()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid JSON") from None
-    applied = await receive_webhook(secret=secret, payload=payload)
-    return {"ok": True, "applied": applied}
-
-
-@router.get("/email/inbound", response_model=EmailInboundListResponse)
-async def crm_email_inbound(
-    limit: int = Query(default=200, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Received emails, newest first, with the lead each landed on (or the lead it created)."""
-    _, organization_id = _auth_ids(context)
-    return await list_inbound(db, organization_id=organization_id, limit=limit, offset=offset)
-
-
-@router.get("/email/leads/{enquiry_id}/thread", response_model=list[EmailThreadItem])
-async def crm_email_lead_thread(
-    enquiry_id: int,
-    context: AuthContext = Depends(require_active_subscription),
-):
-    """Every email sent to and received from one lead, oldest first."""
-    _, organization_id = _auth_ids(context)
-    return await lead_thread(organization_id=organization_id, enquiry_id=enquiry_id)
-
-
-@router.post("/email/brevo-inbound")
-async def crm_brevo_inbound(
-    request: Request,
-    secret: str | None = Query(default=None),
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Public: Brevo inbound parsing posts received emails here. The secret is the gate."""
-    try:
-        payload = await request.json()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid JSON") from None
-    stored = await receive_inbound(db, secret=secret, payload=payload)
-    return {"ok": True, "stored": stored}

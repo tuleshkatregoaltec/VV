@@ -31,6 +31,18 @@ DLD_OPEN_DATA_INCREMENTAL_DEFAULTS = {
     "page_size": 10000,
     "slice_days": 14,
 }
+# DLD backdates registrations: a weekend's sales appear days or weeks later under the weekend's
+# date (measured 2026-10-13: 380 of 17,259 sales from 21 Jul - 30 Aug, nearly all Saturdays and
+# Sundays, were missing from loads that re-read only the last days). The daily run re-reads 7
+# days; this weekly run re-reads 90 and replaces those dates in bronze. Rents are fetched by
+# registration date, so they need no re-sweep.
+DLD_OPEN_DATA_TRANSACTIONS_RESWEEP_DEFAULTS = {
+    "mode": "incremental",
+    "checkpointed_incremental": False,
+    "lookback_days": 90,
+    "page_size": 10000,
+    "slice_days": 7,
+}
 DLD_OPEN_DATA_RENTS_FULL_DEFAULTS = {
     **DLD_OPEN_DATA_CHUNK_DEFAULTS,
     "start_date": "2017-01-01",

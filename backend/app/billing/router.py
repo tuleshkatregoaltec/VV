@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -12,6 +14,7 @@ from app.core.dependencies import require_auth
 from app.postgres import get_db_session
 from app.providers.auth import AuthenticatedUser
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 
 
@@ -46,8 +49,9 @@ async def create_checkout_session_endpoint(
             db=db,
         )
         return CheckoutSessionResponse(**result)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        logger.exception("Invalid checkout request for org %s", request.organization_id)
+        raise HTTPException(status_code=400, detail="Invalid checkout request")
 
 
 class SyncAfterCheckoutRequest(BaseModel):

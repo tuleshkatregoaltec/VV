@@ -34,7 +34,9 @@ describe('value label', () => {
 	})
 
 	it('treats a listing inside the range as at value', () => {
-		expect(valueLabel(card({ market_position: 'near_market', value_gap_pct: 0.02 }))).toBe('At value')
+		expect(valueLabel(card({ market_position: 'near_market', value_gap_pct: 0.02 }))).toBe(
+			'At value'
+		)
 	})
 
 	it('never shows a bargain without enough same-bedroom sales', () => {
@@ -62,8 +64,10 @@ describe('value label', () => {
 describe('basis text', () => {
 	it('counts the DLD sales behind the estimate and its confidence', () => {
 		expect(
-			basisText(card({ market_position: 'below_market', comparable_count: 5, valuation_confidence: 'high' }))
-		).toBe('5 DLD sales · high confidence')
+			basisText(
+				card({ market_position: 'below_market', comparable_count: 5, valuation_confidence: 'high' })
+			)
+		).toBe('5 recorded sales · high confidence')
 	})
 
 	it('explains a missing estimate', () => {
@@ -74,9 +78,11 @@ describe('basis text', () => {
 	})
 
 	it('keeps peer-listing wording for the asking-price comparison', () => {
-		expect(basisText(card({ listing_mode: 'rent', valuation_method: 'asking_peers', comparable_count: 7 }))).toBe(
-			'7 peer listings'
-		)
+		expect(
+			basisText(
+				card({ listing_mode: 'rent', valuation_method: 'asking_peers', comparable_count: 7 })
+			)
+		).toBe('7 peer listings')
 	})
 })
 

@@ -6,7 +6,9 @@ from typing import Any
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
+from app.chat import operations as chat_operations
 from app.core.openrouter import create_openrouter_model
+from app.feasibility.chat_units import to_sqft_view
 from app.feasibility.models import FeasibilityPaymentPlan
 from app.feasibility.normalization import Stage
 from app.feasibility.research import (
@@ -31,18 +33,22 @@ class FeasibilityChatDeps:
 
 
 class WorkspaceUnitMixUpdate(BaseModel):
+    """Sizes in sq ft and prices in AED per sq ft, as the user sees them."""
+
     type: str
     count: int = Field(ge=0)
-    avgSizeSqm: float | None = Field(default=None, gt=0)
-    price_sqm: float | None = Field(default=None, gt=0)
+    avgSizeSqft: float | None = Field(default=None, gt=0)
+    price_sqft: float | None = Field(default=None, gt=0)
     parkingRatio: float | None = Field(default=None, ge=0)
 
 
 class WorkspaceUnitMixReplacement(BaseModel):
+    """Sizes in sq ft and prices in AED per sq ft, as the user sees them."""
+
     type: str
     count: int = Field(ge=0)
-    avgSizeSqm: float = Field(gt=0)
-    price_sqm: float | None = Field(default=None, gt=0)
+    avgSizeSqft: float = Field(gt=0)
+    price_sqft: float | None = Field(default=None, gt=0)
     parkingRatio: float | None = Field(default=None, ge=0)
 
 
@@ -53,7 +59,9 @@ workspace_chat_agent = Agent(
     name="feasibility_workspace",
     deps_type=FeasibilityChatDeps,
     model_settings={"temperature": 0.1},
-    system_prompt=(
+    # Each request resends every tool output so far; bound that context per request.
+    history_processors=[chat_operations.compact_tool_outputs],
+    instructions=(
         "You are a Dubai real estate feasibility workspace assistant.\n\n"
         "The frontend owns the live workbook. You receive the current assumptions and workbook state each turn.\n"
         "Use tools for precise context or research, and use mutation tools when you want to suggest changes.\n"
@@ -61,36 +69,39 @@ workspace_chat_agent = Agent(
         "types will be removed. Use update_unit_mix only for partial edits to listed existing unit types.\n"
         "Keep suggestions compact, practical, and evidence-led.\n"
         "When you call a mutation tool, do not write a long rationale. Use at most two short sentences "
-        "that explain what the proposed change is and why it is being staged for approval."
+        "that explain what the proposed change is and why it is being staged for approval.\n\n"
+        "Units: every area is in square feet (sq ft) and every price, rent or cost per area in AED per "
+        "sq ft, in your context, in tool results and in the arguments you pass (keys ending Sqft, "
+        "_sqft, Psqft or psqft). Write sq ft to the user and never use square metres."
     ),
 )
 
 
-@workspace_chat_agent.system_prompt
+@workspace_chat_agent.instructions
 async def inject_workspace_context(ctx: RunContext[FeasibilityChatDeps]) -> str:
     return (
         "## Current feasibility context\n"
         f"Plot number: {ctx.deps.plot_number}\n"
         f"Area: {ctx.deps.area_name}\n\n"
         "### Plot\n"
-        f"{json.dumps(ctx.deps.plot, indent=2)}\n\n"
+        f"{json.dumps(to_sqft_view(ctx.deps.plot), indent=2)}\n\n"
         "### HBU study\n"
-        f"{json.dumps(ctx.deps.study, indent=2)}\n\n"
+        f"{json.dumps(to_sqft_view(ctx.deps.study), indent=2)}\n\n"
         "### Current assumptions\n"
-        f"{json.dumps(ctx.deps.assumptions, indent=2)}\n"
+        f"{json.dumps(to_sqft_view(ctx.deps.assumptions), indent=2)}\n"
     )
 
 
 @workspace_chat_agent.tool
 async def get_current_plot(ctx: RunContext[FeasibilityChatDeps]) -> dict[str, Any]:
-    return {"success": True, "plot": ctx.deps.plot}
+    return {"success": True, "plot": to_sqft_view(ctx.deps.plot)}
 
 
 @workspace_chat_agent.tool_plain
 async def get_area_market_data(
     area: str, usage: Usage = "residential", stage: Stage = "existing", days: int = 365
 ) -> dict[str, Any]:
-    return await get_area_market_research(area, usage, stage, days)
+    return to_sqft_view(await get_area_market_research(area, usage, stage, days))
 
 
 @workspace_chat_agent.tool
@@ -101,7 +112,7 @@ async def rank_pricing_comparables(
     if details is None:
         return {"success": False, "error": "Current plot was not found."}
     rows = await rank_plot_comparables(details, usage=usage, comparison_type="pricing", limit=limit)
-    return {"success": True, "comparables": [row.model_dump() for row in rows]}
+    return {"success": True, "comparables": [to_sqft_view(row.model_dump()) for row in rows]}
 
 
 @workspace_chat_agent.tool
@@ -114,7 +125,7 @@ async def rank_pipeline_comparables(
     rows = await rank_plot_comparables(
         details, usage=usage, comparison_type="pipeline", limit=limit
     )
-    return {"success": True, "comparables": [row.model_dump() for row in rows]}
+    return {"success": True, "comparables": [to_sqft_view(row.model_dump()) for row in rows]}
 
 
 @workspace_chat_agent.tool
@@ -130,7 +141,7 @@ async def get_plot_land_sales(
         days=days,
         limit=limit,
     )
-    return {"success": True, "land_sales": [row.model_dump() for row in rows]}
+    return {"success": True, "land_sales": [to_sqft_view(row.model_dump()) for row in rows]}
 
 
 @workspace_chat_agent.tool_plain
@@ -164,6 +175,7 @@ async def show_analytics(
 
 @workspace_chat_agent.tool
 async def update_prices(ctx: RunContext[FeasibilityChatDeps], prices: dict[str, float]) -> str:
+    """Propose selling prices in AED per sq ft, keyed by unit type id."""
     if ctx.deps.unit_type_keys:
         invalid = [key for key in prices if key not in ctx.deps.unit_type_keys]
         if invalid:
@@ -185,6 +197,7 @@ async def replace_unit_mix(unit_mix: list[WorkspaceUnitMixReplacement]) -> str:
 
 @workspace_chat_agent.tool_plain
 async def update_assumptions(assumptions: dict[str, Any]) -> str:
+    """Propose assumption changes; areas and rates use their sq ft keys (e.g. constructionCostPsqftBua)."""
     return (
         f"Proposed assumption update for {len(assumptions)} parameter(s). Awaiting user approval."
     )

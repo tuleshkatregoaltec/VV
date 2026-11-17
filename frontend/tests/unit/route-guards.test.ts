@@ -18,11 +18,22 @@ function makeUser(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser
 }
 
 describe('getRouteCategory', () => {
+	it('does not treat removed routes as public pages', () => {
+		for (const path of ['/landing2', '/landing-new', '/auth/reset-password', '/organization-setup'])
+			expect(getRouteCategory(path)).not.toBe('public')
+	})
+
 	it('classifies public paths', () => {
 		expect(getRouteCategory('/')).toBe('public')
-		expect(getRouteCategory('/landing-new')).toBe('public')
 		expect(getRouteCategory('/invite')).toBe('public')
 		expect(getRouteCategory('/reset')).toBe('public')
+	})
+
+	it('keeps the legal pages public for logged-out visitors', () => {
+		for (const path of ['/privacy', '/terms', '/data-deletion']) {
+			expect(getRouteCategory(path)).toBe('public')
+			expect(decideRouteAccess(path, null)).toEqual({ action: 'allow' })
+		}
 	})
 
 	it('classifies auth and protected paths', () => {
@@ -138,5 +149,20 @@ describe('decideRouteAccess', () => {
 
 	it('allows fully active users onto protected routes', () => {
 		expect(decideRouteAccess('/dashboard', makeUser())).toEqual({ action: 'allow' })
+	})
+})
+
+describe('enterprise assistant preview boundary', () => {
+	it('allows the sample-only preview without exposing adjacent application routes', () => {
+		expect(decideRouteAccess('/demo/assistant', null)).toEqual({ action: 'allow' })
+		expect(getRouteCategory('/demo/assistant/')).toBe('public')
+		for (const path of [
+			'/demo/assistant/admin',
+			'/demo/assistant-private',
+			'/crm/connectors',
+			'/crm/assistant'
+		]) {
+			expect(decideRouteAccess(path, null)).toEqual({ action: 'redirect', location: '/auth' })
+		}
 	})
 })

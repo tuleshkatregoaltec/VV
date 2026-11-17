@@ -197,3 +197,18 @@ async def test_rent_intent_unchanged(world):
     owners = await _refresh(world, _enquiry(intent="rent", budget_max_aed=160_000))
     assert world["band"] is None
     assert "Within stated budget" in owners[0].reasons
+
+
+async def test_owner_selection_keeps_lower_confidence_unit_matching_strict_bedrooms(world):
+    wrong = _claim(estimate=2_600_000, beds="5 Bed")
+    wrong.confidence_score = 98
+    eligible = wrong.model_copy(
+        update={"confidence_score": 95, "unit_number": "188", "valuation": {"bedrooms": "2 Bed"}}
+    )
+    world["owners"] = [wrong, eligible]
+    enquiry = _enquiry()
+    enquiry.criteria = {**enquiry.criteria, "bedrooms_min": 2, "bedrooms_max": 2}
+    enquiry.strict_fields = ["bedrooms_min"]
+    result = await _refresh(world, enquiry)
+    assert len(result) == 1
+    assert result[0].snapshot["unit_number"] == "188"

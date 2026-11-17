@@ -1,8 +1,8 @@
 <script lang="ts">
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
 import { formatCurrency, formatNumber, titleCase } from '$lib/feasibility/workbook/utils'
-import { feasibilityWorkspace } from '$lib/stores/feasibilityWorkspace.svelte'
 import { type ResearchTab, researchPanelStore } from '$lib/stores/researchPanel.svelte'
+import { toSqft } from '$lib/utils/units'
 import PlotAnnotationSandbox from './PlotAnnotationSandbox.svelte'
 
 const context = $derived(workbookStore.study_context)
@@ -12,7 +12,7 @@ const plotData = $derived(workbookStore.plotData)
 const tabs: Array<{ id: ResearchTab; label: string }> = [
 	{ id: 'summary', label: 'Context' },
 	{ id: 'comparables', label: 'Research' },
-	{ id: 'plot_sandbox', label: 'Plot Sandbox' }
+	{ id: 'plot_sandbox', label: 'Plot sandbox' }
 ]
 </script>
 
@@ -34,7 +34,7 @@ const tabs: Array<{ id: ResearchTab; label: string }> = [
 
 		{#if researchPanelStore.activeTab === 'summary'}
 			<div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-				<p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Study Context</p>
+				<p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Study context</p>
 				<h2 class="mt-2 text-xl font-semibold text-slate-900">
 					{context?.headline ?? '—'}
 				</h2>
@@ -51,7 +51,7 @@ const tabs: Array<{ id: ResearchTab; label: string }> = [
 			</div>
 
 			<div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-				<p class="text-sm font-semibold text-slate-900">Plot Data</p>
+				<p class="text-sm font-semibold text-slate-900">Plot data</p>
 				<div class="mt-4 grid grid-cols-2 gap-3 text-sm">
 					<div class="rounded-md bg-slate-50 p-3">
 						<p class="text-xs uppercase tracking-[0.16em] text-slate-400">Community</p>
@@ -62,12 +62,12 @@ const tabs: Array<{ id: ResearchTab; label: string }> = [
 						<p class="mt-1 text-slate-900">{titleCase(context?.project_tier ?? 'unknown')}</p>
 					</div>
 					<div class="rounded-md bg-slate-50 p-3">
-						<p class="text-xs uppercase tracking-[0.16em] text-slate-400">Plot Area</p>
-						<p class="mt-1 text-slate-900">{formatNumber(plotData?.plot_area_sqm)} sqm</p>
+						<p class="text-xs uppercase tracking-[0.16em] text-slate-400">Plot area</p>
+						<p class="mt-1 text-slate-900">{formatNumber(plotData?.plot_area_sqm == null ? null : toSqft(plotData.plot_area_sqm))} sq ft</p>
 					</div>
 					<div class="rounded-md bg-slate-50 p-3">
 						<p class="text-xs uppercase tracking-[0.16em] text-slate-400">Max GFA</p>
-						<p class="mt-1 text-slate-900">{formatNumber(plotData?.max_gfa_sqm)} sqm</p>
+						<p class="mt-1 text-slate-900">{formatNumber(plotData?.max_gfa_sqm == null ? null : toSqft(plotData.max_gfa_sqm))} sq ft</p>
 					</div>
 				</div>
 			</div>
@@ -76,7 +76,7 @@ const tabs: Array<{ id: ResearchTab; label: string }> = [
 		{:else}
 			<div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
 				<div class="flex items-center justify-between gap-3">
-					<p class="text-sm font-semibold text-slate-900">Research Snapshot</p>
+					<p class="text-sm font-semibold text-slate-900">Research summary</p>
 					<button
 						type="button"
 						class="text-xs font-medium text-navy underline-offset-2 hover:underline"
@@ -91,18 +91,13 @@ const tabs: Array<{ id: ResearchTab; label: string }> = [
 					<p class="mt-1">Land sales: {research?.land_sales_evidence?.length ?? 0}</p>
 					<p class="mt-1">Rental comparables: {research?.rental_comparables?.length ?? 0}</p>
 				</div>
-				{#if feasibilityWorkspace.latestResearchEvent}
-					<div class="mt-4 rounded-md border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
-						<p class="font-medium">Latest chat research action: {feasibilityWorkspace.latestResearchEvent.tab}</p>
-					</div>
-				{/if}
 			</div>
 
 			<div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-				<p class="text-sm font-semibold text-slate-900">Research Flags</p>
+				<p class="text-sm font-semibold text-slate-900">Flags</p>
 				<div class="mt-4 space-y-2 text-sm text-slate-600">
 					{#if (research?.constraints?.length ?? 0) === 0 && (research?.warnings?.length ?? 0) === 0}
-						<p>No research constraints or warnings recorded.</p>
+						<p>No flags.</p>
 					{:else}
 						{#each research?.constraints ?? [] as item}
 							<p class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">{item}</p>

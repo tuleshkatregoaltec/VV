@@ -74,6 +74,31 @@ function serve(routes: Record<string, unknown>) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('CRM leads from /api/v1/crm/inbound', () => {
+	it.each([
+		['not_checked', false, 'Ownership not checked'],
+		['stored', true, 'Ownership on file']
+	] as const)('keeps real leads and labels %s ownership accurately', async (verification, matched, label) => {
+		serve({
+			'/api/v1/crm/inbound/enquiries': {
+				enquiries: [
+					enquiry({
+						ownership_enrichment: {
+							verification,
+							matched,
+							reasons: [label]
+						}
+					})
+				],
+				total: 1,
+				summary: {}
+			}
+		})
+		const res = await backend.listLeads({})
+		expect(res.items).toHaveLength(1)
+		expect(res.items[0].name).toBe('Omar Khan')
+		expect(res.items[0].known).toBe(label)
+	})
+
 	it('asks only for leads, so Inbox contacts cannot crowd them out of the page', async () => {
 		const get = serve({ '/api/v1/crm/inbound/enquiries': { enquiries: [], total: 0, summary: {} } })
 		await backend.listLeads({})
@@ -95,6 +120,50 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 		const res = await backend.listLeads({})
 		expect(res.items.map((l) => l.id)).toEqual([1])
 		expect(res.counts.all).toBe(1)
+	})
+
+	it.each([
+		{ building: 'null', unit_number: 'NULL' },
+		{ building: 'NULL', unit_number: '#NULL' },
+		{ building: 'undefined', unit_number: 'NaN' },
+		{ unit: 'null #NULL' }
+	])('shows a missing unit as not stated, never as the text "null" (%o)', async (criteria) => {
+		serve({
+			'/api/v1/crm/inbound/enquiries': {
+				enquiries: [
+					enquiry({ id: 5, intent: 'sell', criteria: { locations: ['JVC'], ...criteria } })
+				],
+				total: 1,
+				summary: {}
+			}
+		})
+		const [row] = (await backend.listLeads({})).items
+		expect(row.summary.line).toBe('Unit not stated')
+		expect(row.fields.unit).toBeUndefined()
+		expect(JSON.stringify(row)).not.toMatch(/null #|#null|"null"|undefined/i)
+	})
+
+	it('keeps a real building and unit number and drops only the missing half', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries': {
+				enquiries: [
+					enquiry({
+						id: 5,
+						intent: 'sell',
+						criteria: { building: 'FIVE LUXE', unit_number: 'NULL' }
+					}),
+					enquiry({
+						id: 6,
+						intent: 'sell',
+						criteria: { building: 'Null Tower', unit_number: '4901' }
+					})
+				],
+				total: 2,
+				summary: {}
+			}
+		})
+		const lines = (await backend.listLeads({})).items.map((l) => l.summary.line)
+		expect(lines).toEqual(['FIVE LUXE', 'Null Tower #4901'])
 	})
 
 	it('maps backend statuses onto the stage bar of each lead type', async () => {
@@ -396,7 +465,7 @@ describe('CRM owners from /api/v1/crm/owner-registry', () => {
 			return { ...page, total } as never
 		})
 		const res = await backend.listOwners({ tab: 'all' })
-		expect(res.counts).toMatchObject({ all: 3, multi: 1, event: 1, mine: 0 })
+		expect(res.page).toMatchObject({ total: 3, loaded: 3 })
 		expect(res.items[0].units).toEqual([
 			'Bloom Towers #100',
 			'Bloom Towers #101',
@@ -453,6 +522,32 @@ describe('CRM market listings from /api/v1/listings', () => {
 		})
 		expect(list.some((m) => m.id === 'c')).toBe(false)
 		expect(list[0].id).toBe('a')
+	})
+	it('does not turn a suppressed stale or low-confidence raw valuation into an under-market badge', async () => {
+		serve({
+			'/api/v1/listings': {
+				listings: [
+					{
+						...card('stale', 900_000, null),
+						valuation_method: 'dld_sales',
+						estimated_value_aed: 1_000_000,
+						market_position: 'insufficient_data',
+						value_gap_pct: null,
+						valuation_confidence: 'high',
+						valued_at: '2025-01-01'
+					},
+					{
+						...card('low-confidence', 900_000, null),
+						valuation_method: 'dld_sales',
+						estimated_value_aed: 1_000_000,
+						market_position: 'insufficient_data',
+						value_gap_pct: null,
+						valuation_confidence: 'low'
+					}
+				]
+			}
+		})
+		expect(await backend.listMarket()).toEqual([])
 	})
 })
 
@@ -542,38 +637,86 @@ describe('Vitevue lease leads in Leads (/api/v1/crm/renewal-leads)', () => {
 		})
 	})
 
-	it('ranks vacant units first, then the leases that end soonest', async () => {
+	it('loads upcoming renewals first, one server page at a time, soonest end on top', async () => {
+		const get = serve({
+			'/api/v1/crm/inbound/enquiries': NO_ENQUIRIES,
+			'/api/v1/crm/renewal-leads': {
+				...renewalLeads([
+					{ lead: lease({ lead_id: 'ends-3', days_to_expiry: 3 }), owner: null },
+					{ lead: lease({ lead_id: 'ends-60', days_to_expiry: 60 }), owner: null }
+				]),
+				kind: 'upcoming',
+				total: 3657,
+				limit: 100,
+				counts: { all: 4452, upcoming: 3657, expired: 795, vacant: 300 }
+			}
+		})
+		const { crm } = await import('$lib/crm/api')
+		const res = await crm.leads.list({ vitevue: true })
+		const url = String(get.mock.calls.find(([u]) => String(u).includes('renewal-leads'))?.[0])
+		expect(url).toContain('kind=upcoming')
+		expect(url).toContain('limit=100')
+		expect(url).toContain('offset=0')
+		expect(res.items.map((r) => r.lease?.id)).toEqual(['ends-3', 'ends-60'])
+		expect(res.lease_page).toEqual({
+			window: 'upcoming',
+			offset: 0,
+			limit: 100,
+			total: 3657,
+			counts: { upcoming: 3657, expired: 795, vacant: 300 }
+		})
+		// The pager covers the lease leads, so loaded rows are not "limited".
+		expect(res.limited).toBe(false)
+	})
+
+	it('lists expired leases separately, vacant units first, and pages through them', async () => {
+		const get = serve({
+			'/api/v1/crm/inbound/enquiries': NO_ENQUIRIES,
+			'/api/v1/crm/renewal-leads': {
+				...renewalLeads([
+					{
+						lead: lease({
+							lead_id: 'ended',
+							days_to_expiry: -2,
+							lease_evidence_state: 'unit_unresolved'
+						}),
+						owner: null
+					},
+					{
+						lead: lease({
+							lead_id: 'vacant',
+							days_to_expiry: -5,
+							lease_evidence_state: 'unlet_signal'
+						}),
+						owner: null
+					}
+				]),
+				kind: 'expired',
+				total: 795,
+				offset: 100,
+				limit: 100,
+				counts: { all: 4452, upcoming: 3657, expired: 795, vacant: 300 }
+			}
+		})
+		const { crm } = await import('$lib/crm/api')
+		const res = await crm.leads.list({ vitevue: true, lease_window: 'expired', lease_offset: 100 })
+		const url = String(get.mock.calls.find(([u]) => String(u).includes('renewal-leads'))?.[0])
+		expect(url).toContain('kind=expired')
+		expect(url).toContain('offset=100')
+		expect(res.items.map((r) => r.lease?.id)).toEqual(['vacant', 'ended'])
+		expect(res.lease_page?.total).toBe(795)
+	})
+
+	it('never shows the 1970 placeholder as a purchase date', async () => {
 		serve({
 			'/api/v1/crm/inbound/enquiries': NO_ENQUIRIES,
 			'/api/v1/crm/renewal-leads': renewalLeads([
-				{ lead: lease({ lead_id: 'ends-60', days_to_expiry: 60 }), owner: null },
-				{
-					lead: lease({
-						lead_id: 'vacant',
-						days_to_expiry: -5,
-						lease_evidence_state: 'unlet_signal'
-					}),
-					owner: null
-				},
-				{ lead: lease({ lead_id: 'ends-3', days_to_expiry: 3 }), owner: null },
-				{
-					lead: lease({
-						lead_id: 'ended-unconfirmed',
-						days_to_expiry: -5,
-						lease_evidence_state: 'unit_unresolved'
-					}),
-					owner: null
-				}
+				{ lead: lease({ last_purchase_date: '1970-01-01' }), owner: null }
 			])
 		})
 		const { crm } = await import('$lib/crm/api')
-		const { items } = await crm.leads.list({ vitevue: true })
-		expect(items.map((r) => r.lease?.id)).toEqual([
-			'vacant',
-			'ended-unconfirmed',
-			'ends-3',
-			'ends-60'
-		])
+		const [row] = (await crm.leads.list({ vitevue: true })).items
+		expect(row.lease?.last_purchase).toBeNull()
 	})
 
 	it('shows a unit once: an opened unit is its stored lead, not a second row', async () => {
@@ -633,14 +776,23 @@ describe('Vitevue lease leads in Leads (/api/v1/crm/renewal-leads)', () => {
 	})
 
 	it('reports the saved areas and windows in the Leads feed strip', async () => {
-		serve({ '/api/v1/crm/renewal-leads': renewalLeads([{ lead: lease(), owner: null }]) })
+		serve({
+			'/api/v1/crm/renewal-leads': {
+				...renewalLeads([{ lead: lease(), owner: null }]),
+				counts: { all: 4452, upcoming: 3657, expired: 795, vacant: 300 }
+			}
+		})
 		const { crm } = await import('$lib/crm/api')
 		expect(await crm.feed.summary()).toEqual({
 			areas: ['Jumeirah Village Circle'],
 			forward_days: 60,
 			lookback_days: 30,
-			window_total: 1,
+			// Every unit in the window, not the loaded page.
+			window_total: 4452,
+			upcoming: 3657,
+			expired: 795,
 			on_file: 0,
+			loaded: 1,
 			entered_today: 1
 		})
 	})
@@ -857,8 +1009,127 @@ describe('Inbox from /api/v1/crm/inbound/enquiries', () => {
 		expect(post).not.toHaveBeenCalled()
 	})
 
-	// Client call (3 Nov): a tenant's matches are held to the move-in date; the tab says how many
-	// were left out because they only free up later.
+	it('lists recent sellers newest sale first', async () => {
+		serveInbox({
+			inbox: [],
+			unqualified: [soldOwner(1, '2026-08-20', 1), soldOwner(2, '2026-10-07', 1)],
+			disqualified: []
+		})
+		const { crm } = await import('$lib/crm/api')
+		expect((await crm.inbox.list('all')).items.map((x) => x.id)).toEqual(['2', '1'])
+	})
+
+	it('offers no Ask, Release or Dismiss: the handout system is not on the backend yet', async () => {
+		serveInbox({
+			inbox: [enquiry({ id: 1, assigned_user_id: null })],
+			unqualified: [],
+			disqualified: []
+		})
+		const { crm } = await import('$lib/crm/api')
+		const [item] = (await crm.inbox.list('waiting')).items
+		expect(item.state).toBe('waiting')
+		expect(Object.values(item.can).some(Boolean)).toBe(false)
+	})
+})
+
+describe('Assets › Renewals (/api/v1/crm/renewals)', () => {
+	const params = {
+		area: '',
+		window: '' as const,
+		property_type: '',
+		project: '',
+		building: '',
+		limit: 50
+	}
+	const renewalsResponse = { leads: [lease()], total: 1, property_types: ['Apartment'] }
+
+	it('opens on vacant units: the vacant window is the default the tab asks for', async () => {
+		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
+		const { crm } = await import('$lib/crm/api')
+		const { ui } = await import('$lib/crm/stores/ui.svelte')
+		await crm.renewals.list({ ...params, window: ui.renewalWindow })
+		const url = String(get.mock.calls[0][0])
+		expect(ui.renewalWindow).toBe('vacant')
+		expect(url).toContain('window=vacant')
+	})
+
+	it("asks for every area unless one is picked: the full dataset, not the agent's areas", async () => {
+		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
+		const { crm } = await import('$lib/crm/api')
+		const res = await crm.renewals.list(params)
+		expect(String(get.mock.calls[0][0])).not.toContain('area=')
+		expect(res.items[0]).toMatchObject({ id: 'lease-1', unit: 'Bloom Towers', owner: null })
+		expect(res.property_types).toEqual(['Apartment'])
+	})
+
+	it('passes the abort signal so a filter change drops the previous request', async () => {
+		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
+		const { crm } = await import('$lib/crm/api')
+		const controller = new AbortController()
+		await crm.renewals.list(params, controller.signal)
+		expect(get.mock.calls[0][1]).toMatchObject({ signal: controller.signal })
+	})
+})
+
+describe('CRM areas with no backend yet', () => {
+	it('read as empty instead of showing records nobody stored', async () => {
+		const { crm } = await import('$lib/crm/api')
+		const get = vi.spyOn(client, 'get')
+		expect((await crm.deals.list('pipeline')).items).toEqual([])
+		expect(await crm.events.list('2026-10-01', '2026-10-31')).toEqual([])
+		expect((await crm.listings.list('mine')).items).toEqual([])
+		expect(await crm.notifications.list()).toEqual([])
+		expect(get).not.toHaveBeenCalled()
+	})
+
+	it('refuse writes with a 501 so no screen reports a save that did not happen', async () => {
+		const { crm } = await import('$lib/crm/api')
+		await expect(
+			crm.deals.create({
+				lead_id: 1,
+				listing_id: null,
+				value_aed: 1,
+				due_date: '2026-11-01'
+			} as never)
+		).rejects.toMatchObject({ status: 501 })
+		await expect(
+			crm.events.create({ title: 'Call', date: '2026-10-08', time: null, kind: 'call' })
+		).rejects.toMatchObject({ status: 501 })
+	})
+
+	it("fill Home's new leads and the sidebar count from real leads", async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries': {
+				enquiries: [enquiry({ id: 1 }), enquiry({ id: 2, status: 'contacted' })],
+				total: 2,
+				summary: {}
+			}
+		})
+		const { crm } = await import('$lib/crm/api')
+		const home = await crm.home('2026-10-07')
+		expect(home.new_leads.map((l) => l.id)).toEqual([1])
+		expect(home.week.map((d) => d.date)).toEqual([
+			'2026-10-05',
+			'2026-10-06',
+			'2026-10-07',
+			'2026-10-08',
+			'2026-10-09',
+			'2026-10-10',
+			'2026-10-11'
+		])
+		expect((await crm.counts()).new_leads).toBe(1)
+	})
+})
+
+describe('CRM company listing source', () => {
+	it('stops buyer matching against a company by clearing the source', async () => {
+		const del = vi.spyOn(client, 'delete').mockResolvedValue(undefined as never)
+		await backend.clearCompanyListingSource()
+		expect(del).toHaveBeenCalledWith('/api/v1/crm/company-listings/source')
+	})
+})
+
+describe('Tenant matches respect the saved move-in date', () => {
 	const tenant = (criteria: Record<string, unknown>) =>
 		enquiry({
 			id: 11,
@@ -926,317 +1197,46 @@ describe('Inbox from /api/v1/crm/inbound/enquiries', () => {
 		const res = await backend.leadMatches(11)
 		expect(res.brief).toContainEqual({ k: 'Move-in', v: 'ASAP' })
 	})
+})
 
-	it('lists recent sellers newest sale first', async () => {
-		serveInbox({
-			inbox: [],
-			unqualified: [soldOwner(1, '2026-08-20', 1), soldOwner(2, '2026-10-07', 1)],
-			disqualified: []
-		})
-		const { crm } = await import('$lib/crm/api')
-		expect((await crm.inbox.list('all')).items.map((x) => x.id)).toEqual(['2', '1'])
+it('preserves renewal paging and resolves the owner by unit identity rather than event identity', async () => {
+	const get = serve({
+		'/api/v1/crm/renewals': {
+			leads: [lease({ lead_id: 'event-id', unit_candidate_key: 'unit-key' })],
+			owners: {
+				'unit-key': { name: 'Resolved Owner', phone: '+971500000001', source: 'owner_import' }
+			},
+			total: 1
+		}
 	})
-
-	it('offers no Ask, Release or Dismiss: the handout system is not on the backend yet', async () => {
-		serveInbox({
-			inbox: [enquiry({ id: 1, assigned_user_id: null })],
-			unqualified: [],
-			disqualified: []
-		})
-		const { crm } = await import('$lib/crm/api')
-		const [item] = (await crm.inbox.list('waiting')).items
-		expect(item.state).toBe('waiting')
-		expect(Object.values(item.can).some(Boolean)).toBe(false)
+	const result = await backend.listRenewals({
+		area: '',
+		window: '',
+		property_type: '',
+		project: '',
+		building: '',
+		limit: 50,
+		offset: 50,
+		owner: 'known'
+	})
+	expect(get.mock.calls[0][0]).toContain('offset=50')
+	expect(get.mock.calls[0][0]).toContain('owner=known')
+	expect(result.items[0]).toMatchObject({
+		id: 'event-id',
+		owner: { name: 'Resolved Owner', phone: '+971500000001' }
 	})
 })
 
-describe('Assets › Renewals (/api/v1/crm/renewals)', () => {
-	const params = {
+it('does not claim known-owner filtering when an older API omits its owners map', async () => {
+	serve({ '/api/v1/crm/renewals': { leads: [lease()], total: 1 } })
+	const result = await backend.listRenewals({
 		area: '',
-		window: '' as const,
+		window: '',
 		property_type: '',
 		project: '',
 		building: '',
 		limit: 50
-	}
-	const renewalsResponse = { leads: [lease()], total: 1, property_types: ['Apartment'] }
-
-	it('opens on vacant units: the vacant window is the default the tab asks for', async () => {
-		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
-		const { crm } = await import('$lib/crm/api')
-		const { ui } = await import('$lib/crm/stores/ui.svelte')
-		await crm.renewals.list({ ...params, window: ui.renewalWindow })
-		const url = String(get.mock.calls[0][0])
-		expect(ui.renewalWindow).toBe('vacant')
-		expect(url).toContain('window=vacant')
 	})
-
-	it("asks for every area unless one is picked: the full dataset, not the agent's areas", async () => {
-		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
-		const { crm } = await import('$lib/crm/api')
-		const res = await crm.renewals.list(params)
-		expect(String(get.mock.calls[0][0])).not.toContain('area=')
-		expect(res.items[0]).toMatchObject({ id: 'lease-1', unit: 'Bloom Towers', owner: null })
-		expect(res.property_types).toEqual(['Apartment'])
-	})
-
-	it('passes the abort signal so a filter change drops the previous request', async () => {
-		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
-		const { crm } = await import('$lib/crm/api')
-		const controller = new AbortController()
-		await crm.renewals.list(params, controller.signal)
-		expect(get.mock.calls[0][1]).toMatchObject({ signal: controller.signal })
-	})
-
-	// Client (3 Nov): Assets › Renewals lists only units with a current owner in the owner
-	// imports, each with the owner's contact, so the agent can call them as the lease ends.
-	it('asks for owner units when told to and shows each owner', async () => {
-		const get = serve({
-			'/api/v1/crm/renewals': {
-				...renewalsResponse,
-				owners: {
-					'unit-1': {
-						name: 'Maya Example',
-						phone: '+971500000002',
-						email: null,
-						source: 'owner_import'
-					}
-				}
-			}
-		})
-		const { crm } = await import('$lib/crm/api')
-		const res = await crm.renewals.list({ ...params, owner: 'known' })
-		expect(String(get.mock.calls[0][0])).toContain('owner=known')
-		expect(res.items[0].owner).toEqual({
-			name: 'Maya Example',
-			phone: '+971500000002',
-			email: null,
-			source: 'Owner import'
-		})
-	})
-
-	it('asks for every lease unless owner units are asked for', async () => {
-		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
-		const { crm } = await import('$lib/crm/api')
-		await crm.renewals.list(params)
-		expect(String(get.mock.calls[0][0])).not.toContain('owner=')
-	})
-
-	// Client (3 Nov): a toggle between leases whose owner is on file and those still to find.
-	it('asks for the leases whose owner is unknown, which carry no owner', async () => {
-		const get = serve({ '/api/v1/crm/renewals': renewalsResponse })
-		const { crm } = await import('$lib/crm/api')
-		const res = await crm.renewals.list({ ...params, owner: 'unknown' })
-		expect(String(get.mock.calls[0][0])).toContain('owner=unknown')
-		expect(res.items[0].owner).toBeNull()
-	})
-
-	it('opens the Renewals toggle on owner known', async () => {
-		const { ui } = await import('$lib/crm/stores/ui.svelte')
-		expect(ui.renewalOwner).toBe('known')
-	})
-})
-
-describe('CRM areas with no backend yet', () => {
-	it('read as empty instead of showing records nobody stored', async () => {
-		const { crm } = await import('$lib/crm/api')
-		const get = vi.spyOn(client, 'get')
-		expect((await crm.deals.list('pipeline')).items).toEqual([])
-		expect((await crm.listings.list('mine')).items).toEqual([])
-		expect(await crm.notifications.list()).toEqual([])
-		expect(get).not.toHaveBeenCalled()
-	})
-
-	it('refuse writes with a 501 so no screen reports a save that did not happen', async () => {
-		const { crm } = await import('$lib/crm/api')
-		await expect(
-			crm.deals.create({
-				lead_id: 1,
-				listing_id: null,
-				value_aed: 1,
-				due_date: '2026-11-01'
-			} as never)
-		).rejects.toMatchObject({ status: 501 })
-	})
-
-	it("fill Home's new leads and the sidebar count from real leads", async () => {
-		serve({
-			'/api/v1/crm/inbound/enquiries': {
-				enquiries: [enquiry({ id: 1 }), enquiry({ id: 2, status: 'contacted' })],
-				total: 2,
-				summary: {}
-			}
-		})
-		const { crm } = await import('$lib/crm/api')
-		const home = await crm.home('2026-10-07')
-		expect(home.new_leads.map((l) => l.id)).toEqual([1])
-		expect(home.week.map((d) => d.date)).toEqual([
-			'2026-10-05',
-			'2026-10-06',
-			'2026-10-07',
-			'2026-10-08',
-			'2026-10-09',
-			'2026-10-10',
-			'2026-10-11'
-		])
-		expect((await crm.counts()).new_leads).toBe(1)
-	})
-})
-
-describe('CRM company listing source', () => {
-	it('stops buyer matching against a company by clearing the source', async () => {
-		const del = vi.spyOn(client, 'delete').mockResolvedValue(undefined as never)
-		await backend.clearCompanyListingSource()
-		expect(del).toHaveBeenCalledWith('/api/v1/crm/company-listings/source')
-	})
-})
-
-describe('CRM WhatsApp chats from /api/v1/crm/whatsapp', () => {
-	it('shows each chat with its lead’s own stage, score and source, and leaves numbers off a lead for review', async () => {
-		serve({
-			'/api/v1/crm/whatsapp/chats': [
-				{
-					wa_id: '971500000000',
-					contact_name: 'Omar',
-					lead_id: 7,
-					lead_name: 'Omar Khan',
-					last_body: 'Can we view it Saturday?',
-					last_direction: 'in',
-					last_at: '2026-11-02T10:00:00Z',
-					window_ends_at: '2026-11-03T10:00:00Z',
-					unread: 1
-				},
-				{
-					wa_id: '971559999999',
-					contact_name: 'Unknown',
-					lead_id: null,
-					lead_name: null,
-					last_body: 'Hello',
-					last_direction: 'in',
-					last_at: '2026-11-02T09:00:00Z',
-					window_ends_at: null,
-					unread: 1
-				}
-			],
-			'/api/v1/crm/inbound/enquiries/7': enquiry()
-		})
-		const lead = await backend.getLead(7)
-
-		const [onLead, offLead] = await backend.whatsappChats()
-
-		// The chat list must agree with Leads, so it reads the lead rather than a copy of it.
-		expect(onLead).toMatchObject({
-			lead_id: 7,
-			lead_stage: lead.stage,
-			lead_score: lead.score,
-			lead_source: lead.source,
-			lead_source_short: lead.source_short
-		})
-		expect(offLead).toMatchObject({
-			lead_id: null,
-			lead_stage: null,
-			lead_score: null,
-			lead_source: null
-		})
-	})
-
-	it('sends an opening message with every value the agent filled in, from their own number', async () => {
-		const post = vi.spyOn(client, 'post').mockResolvedValue({ ok: true })
-		await backend.whatsappLeadTemplate(7, {
-			name: 'agent_enquiry_follow_up',
-			language: 'en',
-			params: ['Omar', 'Sara', 'the 2-bed in Marina Gate']
-		})
-		expect(post).toHaveBeenCalledWith('/api/v1/crm/whatsapp/leads/7/template', {
-			name: 'agent_enquiry_follow_up',
-			language: 'en',
-			params: ['Omar', 'Sara', 'the 2-bed in Marina Gate']
-		})
-	})
-})
-
-describe('CRM WhatsApp campaigns from /api/v1/crm/whatsapp/campaigns', () => {
-	it('asks the backend for the consented audience with the manager’s filters', async () => {
-		const get = serve({
-			'/api/v1/crm/whatsapp/campaign/audience': {
-				items: [],
-				no_consent: 3,
-				opted_out: 1,
-				no_number: 0
-			}
-		})
-		const out = await backend.whatsappAudience({ search: ' Marina ', intent: 'buy' })
-		expect(String(get.mock.calls.at(-1)?.[0])).toBe(
-			'/api/v1/crm/whatsapp/campaign/audience?search=Marina&intent=buy'
-		)
-		expect(out.no_consent).toBe(3)
-	})
-
-	it('starts a campaign with the chosen leads and the first-name value left for the backend', async () => {
-		const post = vi.spyOn(client, 'post').mockResolvedValue({ id: 1 })
-		await backend.createWhatsappCampaign({
-			name: 'Dubai Marina',
-			template_name: 'new_listing_alert',
-			language: 'en',
-			params: ['{first_name}', 'Dubai Marina'],
-			enquiry_ids: [7, 8]
-		})
-		// {first_name} is filled per person on the server, where each recipient's name is known.
-		expect(post).toHaveBeenCalledWith('/api/v1/crm/whatsapp/campaigns', {
-			name: 'Dubai Marina',
-			template_name: 'new_listing_alert',
-			language: 'en',
-			params: ['{first_name}', 'Dubai Marina'],
-			enquiry_ids: [7, 8]
-		})
-	})
-})
-
-describe('CRM marketing consent on a lead', () => {
-	it('shows the saved consent and stores a change as the backend consent_status', async () => {
-		serve({
-			'/api/v1/crm/inbound/enquiries/7': enquiry({
-				contact: { ...enquiry().contact, consent_status: 'unknown' }
-			})
-		})
-		expect((await backend.getLead(7)).consent).toBe('unknown')
-
-		// WhatsApp campaigns only reach leads whose consent_status is "provided".
-		const patch = vi
-			.spyOn(client, 'patch')
-			.mockResolvedValue(enquiry({ contact: { ...enquiry().contact, consent_status: 'provided' } }))
-		const saved = await backend.patchLead(7, { consent: 'provided' })
-		expect(patch).toHaveBeenCalledWith('/api/v1/crm/inbound/enquiries/7', {
-			consent_status: 'provided'
-		})
-		expect(saved.data.consent).toBe('provided')
-	})
-
-	it('reads any value the backend does not know as not asked, never as agreed', async () => {
-		serve({
-			'/api/v1/crm/inbound/enquiries/7': enquiry({
-				contact: { ...enquiry().contact, consent_status: 'Yes' }
-			})
-		})
-		expect((await backend.getLead(7)).consent).toBe('unknown')
-	})
-})
-
-describe('CRM calendar persists events through the backend', () => {
-	it('reads the visible interval and sends the full event instead of returning an empty local result', async () => {
-		const get = serve({ '/api/v1/crm/calendar/events': [{ id: 7, title: 'Viewing' }] })
-		const { crm } = await import('$lib/crm/api')
-		expect(await crm.events.list('2026-11-01', '2026-11-30')).toEqual([{ id: 7, title: 'Viewing' }])
-		expect(get).toHaveBeenCalledWith('/api/v1/crm/calendar/events?start=2026-11-01&end=2026-11-30')
-		const draft = {
-			title: 'Call',
-			date: '2026-11-17',
-			end_date: '2026-11-20',
-			time: null,
-			kind: 'call' as const
-		}
-		const post = vi.spyOn(client, 'post').mockResolvedValue({ id: 8, ...draft })
-		expect((await crm.events.create(draft)).data).toMatchObject({ id: 8, ...draft })
-		expect(post).toHaveBeenCalledWith('/api/v1/crm/calendar/events', draft)
-	})
+	expect(result.owner_filter_supported).toBe(false)
+	expect(result.items).toHaveLength(1)
 })

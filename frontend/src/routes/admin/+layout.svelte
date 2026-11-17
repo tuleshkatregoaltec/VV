@@ -6,7 +6,10 @@ import PageContainer from '$lib/components/layout/PageContainer.svelte'
 
 let { children }: { children: Snippet } = $props()
 
-const navItems = [{ href: '/admin/organizations', label: 'Organizations' }]
+const navItems = [
+	{ href: '/admin/organizations', label: 'Organizations' },
+	{ href: '/admin/whatsapp', label: 'WhatsApp' }
+]
 </script>
 
 <AppFrame stableScrollGutter>

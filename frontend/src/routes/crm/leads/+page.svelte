@@ -3,7 +3,15 @@ import { createQuery } from '@tanstack/svelte-query'
 import Search from 'lucide-svelte/icons/search'
 import Upload from 'lucide-svelte/icons/upload'
 import { crm } from '$lib/crm/api'
-import type { LeadListParams, LeadRow, LeadStage, LeadType, Source } from '$lib/crm/api/types'
+import { LEASE_PAGE_SIZE } from '$lib/crm/api/backend'
+import type {
+	LeadListParams,
+	LeadRow,
+	LeadStage,
+	LeadType,
+	LeaseWindow,
+	Source
+} from '$lib/crm/api/types'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
@@ -51,6 +59,14 @@ const tabType = $derived(
 /** On the board, a type tab picks its own group; otherwise the group switch does. */
 const group = $derived<LeadGroup>(tabType ? groupOf(tabType) : ui.leadGroup)
 
+// Lease leads come one server page at a time: leases still running (soonest end first) or ended.
+let leaseWindow = $state<LeaseWindow>('upcoming')
+let leaseOffset = $state(0)
+function pickLeaseWindow(w: LeaseWindow) {
+	leaseWindow = w
+	leaseOffset = 0
+}
+
 const params = $derived<LeadListParams>({
 	lead_type: tabType ?? '',
 	lost: ui.leadTab === 'lost' ? true : undefined,
@@ -62,11 +78,15 @@ const params = $derived<LeadListParams>({
 	budget: ui.budget,
 	q,
 	// Vitevue lease leads from My areas join the agency's own leads here.
-	vitevue: true
+	vitevue: true,
+	lease_window: leaseWindow,
+	lease_offset: leaseOffset
 })
 const leads = createQuery(() => crmQueries.leads(params))
-/** Areas named on the lease strip; the rest open under My areas. */
-const AREA_PREVIEW = 4
+const leasePage = $derived(leads.data?.lease_page)
+const leaseEnd = $derived(
+	leasePage ? Math.min(leasePage.offset + leasePage.limit, leasePage.total) : 0
+)
 const counts = $derived(leads.data?.counts)
 const more = $derived((ui.beds ? 1 : 0) + (ui.ptype ? 1 : 0) + (ui.budget ? 1 : 0))
 const filtered = $derived(Boolean(ui.q || ui.source || ui.stage || ui.area || more))
@@ -109,6 +129,7 @@ async function open(l: LeadRow) {
 	if (!l.lease) return
 	const leaseId = l.lease.id
 	const r = await write({
+		domain: 'leads',
 		call: () => crm.leads.openVitevue(leaseId),
 		success: `${l.lease.unit} is now a lead`
 	})
@@ -128,7 +149,9 @@ const typeLine = (l: LeadRow) =>
 		.join(' · ')
 </script>
 
-<svelte:head><title>Leads · CRM Beta</title></svelte:head>
+<svelte:head><title>Leads · CRM</title></svelte:head>
+
+{#if leads.data?.limited}<p class="small muted">Showing the first 500 stored leads. Filters and counts apply to loaded rows.</p>{/if}
 
 <PageHeader
 	title="Leads"
@@ -152,38 +175,51 @@ const typeLine = (l: LeadRow) =>
 	{/snippet}
 </PageHeader>
 
-<section class="card lease" aria-label="Lease-end leads">
-	<div class="lease-head">
-		<span class="srcdot lease-title" style:--c="var(--l-vv)">Lease ends</span>
-		{#if feed.data}
-			<span class="lease-window">
-				Next {feed.data.forward_days} days · last {feed.data.lookback_days} days
-			</span>
-		{/if}
-	</div>
+<div class="card feedstrip">
+	<span class="srcdot" style:--c="var(--l-vv)">
+		{feed.data
+			? `Lease ends · next ${feed.data.forward_days} days, last ${feed.data.lookback_days} days`
+			: 'Lease ends'}
+	</span>
 	{#if feed.data && !feed.data.areas.length}
-		<p class="lease-areas">Pick your areas to get renewal leads in the Inbox.</p>
+		<span class="sep">·</span>
+		<span class="muted">No areas selected</span>
 	{:else if feed.data}
-		{@const areas = feed.data.areas}
-		<dl class="lease-stats">
-			<div><dt>Units</dt><dd>{fmt(feed.data.window_total)}</dd></div>
-			<div><dt>Known owner</dt><dd>{fmt(feed.data.on_file)}</dd></div>
-			<div><dt>Entered today</dt><dd>{fmt(feed.data.entered_today)}</dd></div>
-		</dl>
-		<p class="lease-areas" title={areas.join(', ')}>
-			<span class="lease-count">{areas.length} {areas.length === 1 ? 'area' : 'areas'}</span>
-			{areas.slice(0, AREA_PREVIEW).join(', ')}{#if areas.length > AREA_PREVIEW}
-				<button type="button" class="linkbtn" onclick={() => panel.open({ kind: 'areas' })}>
-					+{areas.length - AREA_PREVIEW} more
-				</button>{/if}
-		</p>
+		<span class="sep">·</span>
+		<b>{feed.data.areas.join(', ')}</b>
+		<span class="sep">·</span>
+		<span><b class="num">{fmt(feed.data.window_total)}</b> units</span>
+		<span class="sep">·</span>
+		<span><b class="num">{fmt(feed.data.upcoming ?? 0)}</b> upcoming</span>
+		<span class="sep">·</span>
+		<span><b class="num">{fmt(feed.data.expired ?? 0)}</b> ended</span>
+		<span class="sep">·</span>
+		<span
+			><b class="num">{fmt(feed.data.on_file)}</b> of the first {fmt(feed.data.loaded ?? 0)} upcoming have a known
+			owner</span
+		>
+		<span class="sep">·</span>
+		<span><b class="num">{fmt(feed.data.entered_today)}</b> entered the inbox today</span>
 	{:else if feed.isError}
-		<p class="lease-areas">
+		<span class="muted">
 			Could not load. <button type="button" class="linkbtn" onclick={() => feed.refetch()}>Retry</button>
-		</p>
+		</span>
 	{/if}
-	<button type="button" class="btn ghost sm lease-btn" onclick={() => panel.open({ kind: 'areas' })}>My areas</button>
-</section>
+	<button type="button" class="btn ghost sm" onclick={() => panel.open({ kind: 'areas' })}>My areas</button>
+</div>
+
+{#if feed.data && !feed.data.areas.length}
+	<div class="card noareas" role="status">
+		<b>No areas chosen, so no lease leads are listed.</b>
+		<span class="muted">
+			Lease leads follow the areas you pick. This is not an empty market: choose your areas to see
+			the leases ending in them.
+		</span>
+		<button type="button" class="btn sm" onclick={() => panel.open({ kind: 'areas' })}>
+			Choose your areas
+		</button>
+	</div>
+{/if}
 
 <Tabs label="Lead type" items={tabs} value={ui.leadTab} onselect={selectTab} />
 
@@ -264,22 +300,44 @@ const typeLine = (l: LeadRow) =>
 			value={group}
 			onselect={pickGroup}
 		/>
-		<span class="muted small">
-			{boardStages.map((s) => s.label).join(' → ')}
-			{#if LEAD_GROUPS[group].proposal}
-				<span
-					class="chip outline"
-					title="Seller and landlord stages were not named on the 6 Oct call. This is a proposal."
-				>
-					Proposal
-				</span>
-			{/if}
+	</div>
+{/if}
+
+{#if leasePage}
+	<div class="leasepager">
+		<Seg
+			label="Lease leads"
+			items={[
+				{ id: 'upcoming' as LeaseWindow, label: `Upcoming renewals · ${fmt(leasePage.counts.upcoming)}` },
+				{ id: 'expired' as LeaseWindow, label: `Ended · ${fmt(leasePage.counts.expired)}` }
+			]}
+			value={leaseWindow}
+			onselect={pickLeaseWindow}
+		/>
+		<span class="small muted" aria-live="polite">
+			{leasePage.total
+				? `Lease leads ${fmt(leasePage.offset + 1)}–${fmt(leaseEnd)} of ${fmt(leasePage.total)}`
+				: 'No lease leads in this window'}{leasePage.total > leasePage.limit
+				? ' · filters and counts cover this page'
+				: ''}
 		</span>
+		<button
+			type="button"
+			class="btn ghost sm"
+			disabled={leasePage.offset === 0}
+			onclick={() => (leaseOffset = Math.max(0, leaseOffset - LEASE_PAGE_SIZE))}>Previous</button
+		>
+		<button
+			type="button"
+			class="btn ghost sm"
+			disabled={leaseEnd >= leasePage.total}
+			onclick={() => (leaseOffset += LEASE_PAGE_SIZE)}>Next</button
+		>
 	</div>
 {/if}
 
 {#if leads.data?.vitevue_unavailable}
-	<ErrorLine bar message="Vitevue lease leads could not load. Your agency's own leads are listed." onretry={() => leads.refetch()} />
+	<ErrorLine bar message="Lease leads could not load." onretry={() => leads.refetch()} />
 {/if}
 {#if leads.isError && leads.data}
 	<ErrorLine bar message={errorText(leads.error)} onretry={() => leads.refetch()} />
@@ -377,7 +435,7 @@ const typeLine = (l: LeadRow) =>
 											>
 										</Empty>
 									{:else}
-										<Empty text="No leads yet. Enquiries land in the Inbox first.">
+										<Empty text="No leads yet.">
 											<button type="button" class="btn sm" onclick={() => panel.open({ kind: 'new-lead' })}>
 												New lead
 											</button>
@@ -396,84 +454,3 @@ const typeLine = (l: LeadRow) =>
 {:else}
 	<div class="card"><Skeleton rows={6} /></div>
 {/if}
-
-<style>
-	.lease {
-		display: grid;
-		grid-template-columns: auto auto minmax(0, 1fr) auto;
-		align-items: center;
-		gap: 12px 24px;
-		padding: 12px 16px;
-	}
-	.lease-head {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.lease-title {
-		font-size: 14px;
-		font-weight: 600;
-		color: var(--text);
-	}
-	.lease-window {
-		font-size: 12px;
-		color: var(--text2);
-		padding-left: 13px;
-	}
-	.lease-stats {
-		display: flex;
-		gap: 24px;
-		margin: 0;
-		padding-left: 24px;
-		border-left: 1px solid var(--sep);
-	}
-	.lease-stats div {
-		display: flex;
-		flex-direction: column-reverse;
-		gap: 1px;
-	}
-	.lease-stats dt {
-		font-size: 12px;
-		color: var(--text2);
-	}
-	.lease-stats dd {
-		margin: 0;
-		font-size: 17px;
-		font-weight: 600;
-		color: var(--text);
-		font-variant-numeric: tabular-nums;
-	}
-	.lease-areas {
-		margin: 0;
-		min-width: 0;
-		font-size: 13px;
-		color: var(--text2);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.lease-count {
-		font-weight: 600;
-		color: var(--text);
-		margin-right: 6px;
-	}
-	@media (max-width: 900px) {
-		.lease {
-			grid-template-columns: minmax(0, 1fr) auto;
-		}
-		.lease-stats {
-			grid-column: 1 / -1;
-			grid-row: 2;
-			padding-left: 0;
-			border-left: 0;
-		}
-		.lease-areas {
-			grid-column: 1 / -1;
-			white-space: normal;
-		}
-		.lease-btn {
-			grid-row: 1;
-			grid-column: 2;
-		}
-	}
-</style>

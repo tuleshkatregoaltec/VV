@@ -6,6 +6,7 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 from app.crm import owner_queries as crm_owner_queries
+from app.crm import owner_rows
 from app.crm import owners as crm_owners
 from app.crm.import_models import CrmOwnerProfile, CrmOwnerProperty
 
@@ -120,7 +121,7 @@ def test_role_from_the_file_is_kept_on_the_owner_property():
         "source_lists": ["JVT JAN 2025"],
         "source_rows": ["Old:7"],
     }
-    assert crm_owners._sql_owner_property(row).imported_party_role == "Seller"
+    assert owner_rows.sql_owner_property(row).imported_party_role == "Seller"
 
     claim = MagicMock(
         party_role="Buyer",

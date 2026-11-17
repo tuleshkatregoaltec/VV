@@ -2,7 +2,9 @@
 import { createInfiniteQuery } from '@tanstack/svelte-query'
 import { onMount } from 'svelte'
 import { newsQueries } from '$lib/queries/news'
+import { newestDate } from '$lib/utils/dataFreshness'
 import NewsCard from './NewsCard.svelte'
+import NewsFreshnessNote from './NewsFreshnessNote.svelte'
 
 const LIMIT = 20
 
@@ -22,14 +24,16 @@ onMount(() => {
 })
 
 const allArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? [])
+const newestArticleAt = $derived(newestDate(allArticles.map((article) => article.publish_date)))
 </script>
 
 <div class="flex flex-col gap-4">
 	{#if newsQuery.isPending}
-		<div class="text-fg-4">Loading news...</div>
+		<div class="text-fg-4">Loading…</div>
 	{:else if newsQuery.isError}
 		<div class="text-error">Error loading news</div>
 	{:else}
+		<NewsFreshnessNote newestPublishedAt={newestArticleAt} />
 		{#each allArticles as article (article.id)}
 			<NewsCard {article} />
 		{/each}
@@ -37,7 +41,7 @@ const allArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articl
 		<div bind:this={sentinel}></div>
 
 		{#if newsQuery.isFetchingNextPage}
-			<div class="py-4 text-center text-fg-4">Loading more...</div>
+			<div class="py-4 text-center text-fg-4">Loading…</div>
 		{/if}
 	{/if}
 </div>

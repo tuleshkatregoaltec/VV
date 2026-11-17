@@ -78,6 +78,17 @@ body {
 	--color-info-bg: var(--color-navy-50);
 	--color-info-border: var(--color-navy-100);
 	--color-overlay: rgba(5, 13, 24, 0.48);
+	/* Charts (utils/chartTheme.ts reads these; they were missing, so dark mode drew navy on navy). */
+	--color-chart-line: #0b1b2b;
+	--color-chart-line-alt: #3a8fad;
+	--color-chart-line-tertiary: #a55a13;
+	--color-chart-fill: rgba(11, 27, 43, 0.1);
+	--color-chart-soft-fill: rgba(42, 70, 96, 0.18);
+	--color-chart-grid: #e2e8f0;
+	--color-chart-axis: #cbd5e1;
+	--color-chart-muted: #64748b;
+	/* Accent text: the teal at a shade that reads on light cards (4.5:1). */
+	--color-accent-text: #1f6f8b;
 
 	/* Main call-to-action: navy in light mode, bone in dark mode so it stays visible on dark cards. */
 	--color-action: var(--color-navy-900);
@@ -97,14 +108,6 @@ body {
 	--shadow-xl: 0 24px 60px rgba(15, 23, 42, 0.18);
 	--duration-fast: 150ms;
 	--ease-out: cubic-bezier(0.33, 1, 0.68, 1);
-	--color-chart-line: var(--color-navy-900);
-	--color-chart-line-alt: #3a8fad;
-	--color-chart-line-tertiary: var(--color-warning);
-	--color-chart-fill: rgba(11, 27, 43, 0.1);
-	--color-chart-soft-fill: rgba(42, 70, 96, 0.18);
-	--color-chart-grid: #e2e8f0;
-	--color-chart-axis: #cbd5e1;
-	--color-chart-muted: #94a3b8;
 }
 
 :root[data-theme="dark"] {
@@ -140,13 +143,14 @@ body {
 	--color-bg-marketing: var(--color-bg-app);
 	--color-border-warm: var(--color-border);
 	--color-chart-line: #d9e1ea;
-	--color-chart-line-alt: #6f89a6;
-	--color-chart-line-tertiary: var(--color-warning);
+	--color-chart-line-alt: #5fb3cf;
+	--color-chart-line-tertiary: #d3a15f;
 	--color-chart-fill: rgba(217, 225, 234, 0.12);
-	--color-chart-soft-fill: rgba(217, 225, 234, 0.14);
+	--color-chart-soft-fill: rgba(217, 225, 234, 0.18);
 	--color-chart-grid: rgba(148, 163, 184, 0.17);
 	--color-chart-axis: rgba(148, 163, 184, 0.32);
 	--color-chart-muted: #94a3b8;
+	--color-accent-text: #5fb3cf;
 }
 
 @layer components {
@@ -235,10 +239,154 @@ body {
 		opacity: 0.55;
 	}
 
+	/* An input or a dropdown trigger: a bordered field on the card colour, in both themes. */
+	.ui-field {
+		border: 1px solid var(--color-border-strong);
+		border-radius: var(--radius-md);
+		background: var(--color-bg-card);
+		color: var(--color-fg-1);
+		transition:
+			border-color var(--duration-fast) var(--ease-out),
+			box-shadow var(--duration-fast) var(--ease-out);
+	}
+
+	.ui-field:hover {
+		border-color: var(--color-fg-5);
+	}
+
+	.ui-field:focus,
+	.ui-field:focus-visible {
+		border-color: var(--color-fg-4);
+		box-shadow: 0 0 0 3px var(--color-border-focus);
+		outline: none;
+	}
+
+	.ui-field::placeholder {
+		color: var(--color-fg-5);
+	}
+
+	/* A recessed block inside a card. */
 	.ui-panel {
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
 		background: var(--color-bg-panel);
+		color: var(--color-fg-1);
+	}
+
+	.ui-badge {
+		display: inline-flex;
+		align-items: center;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-panel);
+		color: var(--color-fg-2);
+		white-space: nowrap;
+	}
+
+	.ui-selection-badge {
+		border: 1px solid var(--color-info-border);
+		border-radius: var(--radius-md);
+		background: var(--color-info-bg);
+		color: var(--color-info);
+	}
+
+	.ui-table-head {
+		border-bottom: 1px solid var(--color-border);
+		background: var(--color-bg-panel);
+	}
+
+	.ui-table-row {
+		transition: background-color var(--duration-fast) var(--ease-out);
+	}
+
+	.ui-table-row:hover {
+		background: var(--color-bg-panel);
+	}
+
+	/* A checkbox visible in both themes: a strong border unchecked, the primary fill checked. */
+	.ui-checkbox {
+		appearance: none;
+		display: inline-grid;
+		place-content: center;
+		width: 18px;
+		height: 18px;
+		flex: none;
+		border: 1.5px solid var(--color-fg-4);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-card);
+		cursor: pointer;
+	}
+
+	.ui-checkbox:checked,
+	.ui-checkbox:indeterminate {
+		border-color: var(--color-navy-900);
+		background-color: var(--color-navy-900);
+		background-position: center;
+		background-repeat: no-repeat;
+		background-size: 12px;
+	}
+
+	.ui-checkbox:checked {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23f6f1e7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2 5 8.5l4.5-5'/%3E%3C/svg%3E");
+	}
+
+	.ui-checkbox:indeterminate {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23f6f1e7' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 6h6'/%3E%3C/svg%3E");
+	}
+
+	:root[data-theme="dark"] .ui-checkbox:checked,
+	:root[data-theme="dark"] .ui-checkbox:indeterminate {
+		border-color: var(--color-bone-50);
+		background-color: var(--color-bone-50);
+	}
+
+	:root[data-theme="dark"] .ui-checkbox:checked {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%230b1b2b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2 5 8.5l4.5-5'/%3E%3C/svg%3E");
+	}
+
+	:root[data-theme="dark"] .ui-checkbox:indeterminate {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%230b1b2b' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 6h6'/%3E%3C/svg%3E");
+	}
+
+	.ui-checkbox:focus-visible {
+		outline: 2px solid var(--color-border-focus);
+		outline-offset: 2px;
+	}
+
+	.ui-checkbox:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
+	}
+
+	/* Horizontal scroll hint: a shadow on each edge with more content beyond it. The covers
+	   scroll with the content and hide the shadows at either end. */
+	.ui-scroll-shadow {
+		background:
+			linear-gradient(to right, var(--color-bg-card) 40%, transparent) left / 48px 100% no-repeat
+			local,
+			linear-gradient(to left, var(--color-bg-card) 40%, transparent) right / 48px 100% no-repeat
+			local,
+			linear-gradient(to right, rgba(15, 23, 42, 0.18), transparent) left / 16px 100% no-repeat
+			scroll,
+			linear-gradient(to left, rgba(15, 23, 42, 0.18), transparent) right / 16px 100% no-repeat
+			scroll;
+	}
+
+	:root[data-theme="dark"] .ui-scroll-shadow {
+		background:
+			linear-gradient(to right, var(--color-bg-card) 40%, transparent) left / 48px 100% no-repeat
+			local,
+			linear-gradient(to left, var(--color-bg-card) 40%, transparent) right / 48px 100% no-repeat
+			local,
+			linear-gradient(to right, rgba(0, 0, 0, 0.55), transparent) left / 16px 100% no-repeat scroll,
+			linear-gradient(to left, rgba(0, 0, 0, 0.55), transparent) right / 16px 100% no-repeat scroll;
+	}
+
+	.ui-menu {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-card);
+		box-shadow: var(--shadow-lg);
 		color: var(--color-fg-1);
 	}
 
@@ -254,48 +402,6 @@ body {
 		gap: 0;
 	}
 
-	.ui-field {
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		background: var(--color-bg-card);
-		color: var(--color-fg-1);
-		transition:
-			border-color var(--duration-fast) var(--ease-out),
-			box-shadow var(--duration-fast) var(--ease-out);
-	}
-
-	.ui-field::placeholder {
-		color: var(--color-fg-5);
-	}
-
-	.ui-field:focus,
-	.ui-field:focus-visible {
-		border-color: var(--color-border-focus);
-		box-shadow: 0 0 0 2px rgba(11, 27, 43, 0.12);
-		outline: none;
-	}
-
-	:root[data-theme="dark"] .ui-field:focus,
-	:root[data-theme="dark"] .ui-field:focus-visible {
-		box-shadow: 0 0 0 2px rgba(217, 225, 234, 0.16);
-	}
-
-	.ui-table-head {
-		border-bottom: 1px solid var(--color-border);
-		background: var(--color-bg-panel);
-	}
-
-	.ui-table-row {
-		background: var(--color-bg-card);
-		transition:
-			background-color var(--duration-fast) var(--ease-out),
-			color var(--duration-fast) var(--ease-out);
-	}
-
-	.ui-table-row:hover {
-		background: var(--color-bg-elevated);
-	}
-
 	.ui-table-row[data-selected="true"],
 	.ui-table-row[aria-selected="true"] {
 		background: var(--color-info-bg);
@@ -304,27 +410,6 @@ body {
 	.ui-table-row[data-selected="true"]:hover,
 	.ui-table-row[aria-selected="true"]:hover {
 		background: var(--color-info-bg);
-	}
-
-	.ui-badge {
-		display: inline-flex;
-		align-items: center;
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-panel);
-		color: var(--color-fg-2);
-	}
-
-	.ui-selection-badge {
-		border: 1px solid var(--color-navy-100);
-		border-radius: var(--radius-md);
-		background: var(--color-navy-50);
-		color: var(--color-navy-900);
-	}
-
-	:root[data-theme="dark"] .ui-selection-badge {
-		border-color: rgba(217, 225, 234, 0.22);
-		background: rgba(217, 225, 234, 0.1);
-		color: var(--color-fg-1);
 	}
 
 	.ui-segmented {
@@ -446,6 +531,7 @@ body {
 	--color-primary-hover: var(--color-navy-800);
 	--color-marketing: var(--color-bg-marketing);
 	--color-warm: var(--color-border-warm);
+	--color-accent-text: var(--color-accent-text);
 }
 
 :root[data-theme="dark"] .theme-app .brand-logo-light {

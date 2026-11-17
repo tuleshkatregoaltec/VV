@@ -6,7 +6,6 @@ import {
 	BarChart3,
 	Building2,
 	Check,
-	Clock3,
 	Columns3,
 	GripVertical,
 	Home,
@@ -21,8 +20,9 @@ import { browser } from '$app/environment'
 import { analytics } from '$lib/api/analytics'
 import { supply } from '$lib/api/supply'
 import { transactions } from '$lib/api/transactions'
+import { DASHBOARD_KPI_STORAGE_KEY } from '$lib/auth/user-browser-state'
 import { analyticsQueries } from '$lib/queries/analytics'
-import { SQM_TO_SQFT } from '$lib/utils/units'
+import { grossYieldPct as medianGrossYieldPct } from '$lib/utils/analyticsNotes'
 
 type CardId =
 	| 'mtd-transactions'
@@ -64,7 +64,7 @@ type DropTarget = {
 	position: 'before' | 'after'
 }
 
-const STORAGE_KEY = 'vitevue-dashboard-kpi-cards'
+const STORAGE_KEY = DASHBOARD_KPI_STORAGE_KEY
 
 const DEFAULT_CARD_IDS: CardId[] = [
 	'mtd-transactions',
@@ -78,12 +78,12 @@ const CARD_CATALOG: CardDefinition[] = [
 	{
 		id: 'mtd-transactions',
 		title: 'Latest month transactions',
-		description: 'Count and AED value for the latest month available in DLD data.',
+		description: 'Count and AED value for the latest month available.',
 		isDefault: true
 	},
 	{
 		id: 'avg-price-sqft',
-		title: 'Avg price/sqft',
+		title: 'Avg price/sq ft',
 		description: 'Dubai-wide residential sale price converted to square feet.',
 		isDefault: true
 	},
@@ -259,10 +259,8 @@ function pipelineForwardUnits() {
 }
 
 function grossYieldPct() {
-	const medianRent = annualRentQuery.data?.summary.min_annual_rent ?? 0
-	const medianPrice = annualSalesQuery.data?.summary.min_price ?? 0
-	if (medianRent <= 0 || medianPrice <= 0) return null
-	return (medianRent / medianPrice) * 100
+	// Median rent over median price (it divided the cheapest rent by the cheapest price).
+	return medianGrossYieldPct(annualRentQuery.data?.summary, annualSalesQuery.data?.summary)
 }
 
 function trendFromPct(value: number | null | undefined): KpiCard['trend'] {
@@ -277,7 +275,9 @@ let selectedCardIds = $state<CardId[]>(loadCardIds())
 const marketTrendQuery = createQuery(() => analyticsQueries.marketTrend(365))
 const latestSalesTransactionQuery = createQuery(() => ({
 	queryKey: ['dashboard', 'latest-sales-transaction', 'Residential'] as const,
-	queryFn: () => transactions.sales({ property_usage: 'Residential', limit: 1 }),
+	// The last 90 days: an unbounded request de-duplicates the full history for one date.
+	queryFn: () =>
+		transactions.sales({ property_usage: 'Residential', limit: 1, timeframe_days: 90 }),
 	staleTime: 30 * 60 * 1000
 }))
 const marketTrendLastPoint = $derived(
@@ -286,7 +286,7 @@ const marketTrendLastPoint = $derived(
 		: null
 )
 const latestSalesDate = $derived(
-	latestSalesTransactionQuery.data?.transactions[0]?.instance_date ??
+	latestSalesTransactionQuery.data?.transactions[0]?.transaction_date ??
 		marketTrendLastPoint?.date ??
 		null
 )
@@ -379,14 +379,15 @@ function buildCard(id: CardId): KpiCard {
 	}
 
 	if (id === 'avg-price-sqft') {
+		// The API returns AED per sq ft already (dividing again showed a value 10.76x too low).
 		const priceSqft = monthlySalesQuery.data?.summary.avg_price_sqft
-			? monthlySalesQuery.data.summary.avg_price_sqft / SQM_TO_SQFT
+			? monthlySalesQuery.data.summary.avg_price_sqft
 			: null
 		return {
 			...base,
 			value: priceSqft ? `AED ${formatWhole(priceSqft)}` : '—',
 			subtitle: 'per sq.ft',
-			trend: trendFromPct(marketTrendQuery.data?.avg_price_sqm_change_pct),
+			trend: trendFromPct(marketTrendQuery.data?.avg_price_sqft_change_pct),
 			loading:
 				latestSalesTransactionQuery.isPending ||
 				(Boolean(latestSalesMonthRange) && monthlySalesQuery.isPending)
@@ -397,7 +398,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatWhole(pipelineCompletedUnitsYtd()),
-			subtitle: 'Market delivery curve · YTD',
+			subtitle: 'Year to date',
 			loading: latestSalesTransactionQuery.isPending || pipelineQuery.isPending
 		}
 	}
@@ -406,7 +407,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatWhole(activeProjectsQuery.data?.total),
-			subtitle: 'Active and upcoming projects',
+			subtitle: '',
 			loading: activeProjectsQuery.isPending
 		}
 	}
@@ -415,7 +416,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatPct(grossYieldPct()) ?? '—',
-			subtitle: 'Latest 12m rent/sale evidence',
+			subtitle: 'Trailing 12 months',
 			loading:
 				latestSalesTransactionQuery.isPending ||
 				(Boolean(rentalTrailingYearRange) && annualRentQuery.isPending) ||
@@ -427,7 +428,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatCurrencyCompact(monthlySalesQuery.data?.summary.avg_price),
-			subtitle: 'Residential average sale ticket',
+			subtitle: '',
 			trend: trendFromPct(marketTrendQuery.data?.avg_price_change_pct),
 			loading:
 				latestSalesTransactionQuery.isPending ||
@@ -450,7 +451,7 @@ function buildCard(id: CardId): KpiCard {
 		return {
 			...base,
 			value: formatWhole(pipelineForwardUnits()),
-			subtitle: 'Forward delivery pipeline',
+			subtitle: '',
 			loading: activeProjectsQuery.isPending
 		}
 	}
@@ -458,7 +459,7 @@ function buildCard(id: CardId): KpiCard {
 	return {
 		...base,
 		value: formatCurrencyCompact(annualRentQuery.data?.summary.avg_annual_rent),
-		subtitle: 'Registered residential contracts · trailing 12 months',
+		subtitle: 'Trailing 12 months',
 		loading:
 			latestSalesTransactionQuery.isPending ||
 			(Boolean(rentalTrailingYearRange) && annualRentQuery.isPending)
@@ -621,8 +622,7 @@ function resetCards() {
 <section class="mb-3">
 	<div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
-			<p class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Market KPIs</p>
-			<h2 class="mt-1 text-base font-semibold text-fg-1">Default DLD dashboard</h2>
+			<h2 class="mt-1 text-base font-semibold text-fg-1">Key metrics</h2>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<button
@@ -642,7 +642,7 @@ function resetCards() {
 					onclick={resetCards}
 				>
 					<RotateCcw size={15} strokeWidth={1.8} />
-					Reset DLD defaults
+					Reset defaults
 				</button>
 			{/if}
 		</div>
@@ -664,7 +664,7 @@ function resetCards() {
 							Card library
 						</p>
 						<h3 class="mt-1 text-sm font-semibold text-fg-1">
-							{paletteDropActive ? 'Release to remove' : 'Drag cards into the dashboard'}
+							{paletteDropActive ? 'Release to remove' : 'Drag cards to add'}
 						</h3>
 					</div>
 					<span class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
@@ -700,7 +700,7 @@ function resetCards() {
 										<span
 											class="rounded-sm border border-border bg-card px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-fg-4"
 										>
-											DLD
+											Default
 										</span>
 									{/if}
 								</div>
@@ -748,13 +748,6 @@ function resetCards() {
 							<span class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">
 								{card.title}
 							</span>
-							{#if card.isDefault}
-								<span
-									class="mt-1 block w-fit rounded-sm border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-fg-4"
-								>
-									DLD default
-								</span>
-							{/if}
 						</div>
 						<div class="flex items-center gap-2 text-fg-4">
 							{#if editMode}
@@ -816,8 +809,4 @@ function resetCards() {
 		</div>
 	</div>
 
-	<div class="mt-2 flex items-center gap-1.5 text-xs text-fg-4">
-		<Clock3 size={13} strokeWidth={1.8} />
-		<span>Card selection is saved on this device.</span>
-	</div>
 </section>

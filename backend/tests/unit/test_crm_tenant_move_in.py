@@ -108,6 +108,7 @@ def world(monkeypatch):
         "descriptions": {},
         "move_by": "unset",
         "hidden_written": None,
+        "anchor_written": None,
     }
 
     async def get_enquiry(db, key):
@@ -115,11 +116,16 @@ def world(monkeypatch):
         enquiry = state["enquiry"]
         if state["hidden_written"] is None:
             return enquiry
-        stored = {**enquiry.criteria, "_match_hidden_after": state["hidden_written"]}
+        stored = {
+            **enquiry.criteria,
+            "_match_hidden_after": state["hidden_written"],
+            "_match_move_in": state["anchor_written"],
+        }
         return enquiry.model_copy(update={"criteria": stored})
 
-    async def write_hidden(db, enquiry_id, hidden):
+    async def write_hidden(db, enquiry_id, hidden, *, move_in=None):
         state["hidden_written"] = hidden
+        state["anchor_written"] = move_in.isoformat() if move_in else None
 
     async def noop(*args, **kwargs):
         return None
@@ -285,7 +291,7 @@ async def test_hidden_count_survives_a_plain_load_without_rerunning(world, monke
 
 def test_stored_matches_rerun_after_the_unit_number_fix():
     # Stored titles from v8 still read "Unit unresolved"; v9 makes every lead re-match once.
-    assert matching._ALGORITHM_VERSION == "inbound-v10"
+    assert matching._ALGORITHM_VERSION == "inbound-v11"
 
 
 async def test_listing_age_is_counted_to_today_not_to_the_last_scrape(world, monkeypatch):
@@ -326,3 +332,26 @@ async def test_buyer_unit_titles_are_unchanged(world):
     world["units"] = [row]
     res = await _refresh(world, _enquiry("buy", budget_max_aed=1_100_000))
     assert res.lanes["units"][0].title == "Binghatti Gate · Unit unresolved"
+
+
+async def test_same_owner_keeps_the_eligible_lower_confidence_property(world):
+    late = _owner(date(2027, 3, 1))
+    eligible = late.model_copy(
+        update={"confidence_score": 95, "lease_end": date(2027, 1, 1), "unit_number": "1205"}
+    )
+    world["owners"] = [late, eligible]
+    result = await _refresh(world, _enquiry(budget_max_aed=120_000, move_in="2027-02-01"))
+    assert len(result.lanes["owners"]) == 1
+    assert result.lanes["owners"][0].snapshot["unit_number"] == "1205"
+
+
+async def test_relative_asap_matches_refresh_when_the_resolved_date_changes(world, monkeypatch):
+    world["units"] = [_unit("A", date(2026, 11, 2)), _unit("B", date(2026, 11, 4))]
+    await _refresh(world, _enquiry(budget_max_aed=120_000, move_in="ASAP"))
+    assert world["anchor_written"] == "2026-11-03"
+    monkeypatch.setattr(matching, "_utcnow", lambda: NOW + timedelta(days=1))
+    result = await matching.get_inbound_matches(_Db(), 7, "org")
+    assert {match.target_key for match in result.lanes["units"]} == {"A", "B"}
+    assert result.move_in == date(2026, 11, 4)
+    assert result.hidden_after == {}
+    assert world["anchor_written"] == "2026-11-04"

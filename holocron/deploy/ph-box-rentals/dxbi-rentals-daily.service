@@ -1,0 +1,14 @@
+[Unit]
+Description=ViteVue daily DXBI rental report refresh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/repos/vitevue-platform
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/local/sbin/dxbi-rentals-daily
+# The wrapper's own timeout is 3h; leave room for it to stop the scraper cleanly.
+TimeoutStartSec=190min
+Nice=5

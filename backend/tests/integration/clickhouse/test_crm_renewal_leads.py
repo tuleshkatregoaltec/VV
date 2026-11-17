@@ -102,7 +102,7 @@ async def test_jvc_agent_sees_only_jvc_leases_inside_both_windows(install_servin
     )
 
     # Both window edges are inclusive; day 61 ahead and day 31 back are outside.
-    assert [row["event_key"] for row in rows] == ["jvc-ended-day-30", "jvc-ends-day-60"]
+    assert [row["event_key"] for row in rows] == ["jvc-ends-day-60", "jvc-ended-day-30"]
     assert counts[0]["total"] == 2
     # The day-60 lease crossed into the forward window today.
     assert counts[0]["entered_today"] == 1

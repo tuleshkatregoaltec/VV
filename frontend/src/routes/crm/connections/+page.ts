@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit'
 
-/** v2 (7 Oct) dropped the Connections page; Manager › Connectors (28 Oct) replaces it. */
+/** v2 (7 Oct): the Connections page is gone; the Inbox's Sources card shows the same status. */
 export function load() {
-	redirect(307, '/crm/connectors')
+	redirect(307, '/crm/inbox')
 }

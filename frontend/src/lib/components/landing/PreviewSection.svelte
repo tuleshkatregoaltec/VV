@@ -12,7 +12,7 @@ const highlights = [
 	},
 	{
 		title: 'Planning radar',
-		copy: 'Business Bay DDA parcels, pipeline projects, and area-level supply signals in one map view.',
+		copy: 'Business Bay planning parcels, pipeline projects, and area-level supply signals in one map view.',
 		icon: MapPinned
 	},
 	{
@@ -24,7 +24,7 @@ const highlights = [
 
 const bullets = [
 	'Dashboard view for the daily market picture',
-	'Business Bay radar with DDA planning parcels enabled',
+	'Business Bay radar with planning parcels enabled',
 	'Feasibility worksheet moments where AI suggestions remain under team control'
 ]
 
@@ -47,7 +47,7 @@ const workflowCards = [
 ]
 
 const signalRows = [
-	{ label: 'Business Bay', metric: 'DDA parcels', value: '42' },
+	{ label: 'Business Bay', metric: 'planning parcels', value: '42' },
 	{ label: 'JVC residential', metric: 'Comparable deals', value: '312' },
 	{ label: 'Downtown', metric: 'Supply watch', value: '+8.4%' }
 ]

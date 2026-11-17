@@ -1,814 +1,807 @@
-from typing import Optional
+"""DXBI sales and rental records for the Transactions pages.
+
+Transactions and Analytics use Holocron's DXBI tables and DXBI reference catalogues.
+DLD enrichment patches are not applied to these records; DLD remains available only
+through the separate upcoming-supply queries.
+
+Every record DXBI lists is shown, with its unit as DXBI shows it, so rows and totals match DXBI
+(decision 2026-10-09). DXBI lists a day's sales before their units and fills them in about a day
+later; the morning re-scrape of the last three days (``dxbi-sales-morning``) reads them.
+
+One de-duplicated, normalised DXBI source defines the records (``_sales_source`` /
+``_rentals_source``, over all dates). It is built into a page table after each DXBI release
+(``app.transaction.page_tables``), and each request filters that table with its date window (Dubai
+dates) and one WHERE clause built from the filters (``_sales_where`` / ``_rentals_where``), so the
+list, its total, the filter options and the export use the same record definitions. Facets
+exclude their own selection to offer alternatives.
+"""
+
+import logging
+from typing import AsyncIterator, Callable, Optional
+
+from clickhouse_connect.driver.exceptions import DatabaseError
 
 from app.clickhouse.client import query
-from app.market.scope import project_filter_clause as _project_filter
+from app.market.location_search import location_keyword_clause
+from app.market.periods import business_today
+from app.transaction.models import RentalFilters, SalesFilters
+
+logger = logging.getLogger(__name__)
+
+# The de-duplicated, placed records of ``_sales_source`` / ``_rentals_source`` over all dates,
+# built after each DXBI release (app.transaction.page_tables). Each page load filters them
+# instead of rebuilding the source three times (count, page, filter options).
+SALES_PAGE_TABLE = "dxbi_sales_page"
+LEASES_PAGE_TABLE = "dxbi_leases_page"
+_SOURCE = "__TRANSACTIONS_SOURCE__"
+
+# DXBI names a property type but no usage; the page's Residential / Commercial switch groups the
+# types. Plots and rows DXBI gives no type appear under "All" only.
+RESIDENTIAL_TYPES = ("Apartment", "Villa", "Townhouse", "Hotel Apartment")
+COMMERCIAL_TYPES = (
+    "Office",
+    "Shop",
+    "Show Rooms",
+    "Warehouse",
+    "Workshop",
+    "Clinic",
+    "Gymnasium",
+    "Hotel",
+    "Sized Partition",
+    "Building",
+    "Commercial",
+)
 
 
-async def fetch_sales_transactions_rows(
-    area,
-    area_max,
-    area_min,
-    building,
-    filter_type,
-    limit,
-    offset,
-    price_max,
-    price_min,
-    price_per_sqm_max,
-    price_per_sqm_min,
-    project,
-    property_sub_type,
-    property_type,
-    property_usage,
-    registration_type,
-    rooms,
-    timeframe_days,
-):
-    where_clauses = ["trans_group_en = 'Sales'"]
-    params: dict = {}
-
-    if property_usage:
-        where_clauses.append("property_usage_en = {property_usage:String}")
-        params["property_usage"] = property_usage
-
-    if property_type:
-        where_clauses.append("property_type = {property_type:String}")
-        params["property_type"] = property_type
-
-    if property_sub_type:
-        where_clauses.append("property_sub_type_en = {property_sub_type:String}")
-        params["property_sub_type"] = property_sub_type
-
-    if rooms:
-        where_clauses.append("rooms_en = {rooms:String}")
-        params["rooms"] = rooms
-
-    if registration_type:
-        where_clauses.append("reg_type_en = {registration_type:String}")
-        params["registration_type"] = registration_type
-
-    if area:
-        where_clauses.append("location_name = {area:String}")
-        params["area"] = area
-
-    if project:
-        where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
-
-    if building:
-        where_clauses.append("building_name_en = {building:String}")
-        params["building"] = building
-
-    if timeframe_days is not None:
-        where_clauses.append("instance_date BETWEEN today() - {timeframe_days:Int32} AND today()")
-        params["timeframe_days"] = timeframe_days
-
-    if area_min is not None:
-        where_clauses.append("size_sqm >= {area_min:Decimal64(2)}")
-        params["area_min"] = area_min
-
-    if area_max is not None:
-        where_clauses.append("size_sqm <= {area_max:Decimal64(2)}")
-        params["area_max"] = area_max
-
-    if price_min is not None:
-        where_clauses.append("actual_worth >= {price_min:Decimal64(2)}")
-        params["price_min"] = price_min
-
-    if price_max is not None:
-        where_clauses.append("actual_worth <= {price_max:Decimal64(2)}")
-        params["price_max"] = price_max
-
-    if price_per_sqm_min is not None:
-        where_clauses.append("meter_sale_price >= {price_per_sqm_min:Decimal64(2)}")
-        params["price_per_sqm_min"] = price_per_sqm_min
-
-    if price_per_sqm_max is not None:
-        where_clauses.append("meter_sale_price <= {price_per_sqm_max:Decimal64(2)}")
-        params["price_per_sqm_max"] = price_per_sqm_max
-
-    where_clause = " AND ".join(where_clauses)
-
-    # Count total matching transactions
-    count_sql = f"""
-        SELECT count() as total
-        FROM ch_transactions
-        WHERE {where_clause}
-    """
-    count_result = await query(count_sql, params)
-    total = count_result[0]["total"] if count_result else 0
-
-    # Fetch transactions
-    params["limit"] = limit
-    params["offset"] = offset
-
-    transactions_sql = f"""
-        SELECT
-            transaction_id,
-            instance_date,
-            property_usage_en,
-            trans_group_en,
-            procedure_name_en,
-            property_type AS property_type_en,
-            property_sub_type_en,
-            rooms_en,
-            procedure_area,
-            actual_worth,
-            meter_sale_price,
-            reg_type_en,
-            location_name AS area_name_en,
-            project_name_en,
-            building_name_en,
-            nearest_landmark_en,
-            nearest_metro_en,
-            nearest_mall_en
-        FROM ch_transactions
-        WHERE {where_clause}
-        ORDER BY instance_date DESC, transaction_id
-        LIMIT {{limit:Int32}}
-        OFFSET {{offset:Int32}}
-    """
-    transactions_result = await query(transactions_sql, params)
-    return transactions_result, total
+def _sql_list(values: tuple[str, ...]) -> str:
+    return "(" + ", ".join(f"'{value}'" for value in values) + ")"
 
 
-async def fetch_rental_contracts_rows(
-    area,
-    area_max,
-    area_min,
-    contract_reg_type,
-    filter_type,
-    limit,
-    offset,
-    project,
-    property_sub_type,
-    property_type,
-    property_usage,
-    rent_max,
-    rent_min,
-    tenant_type,
-    timeframe_days,
-):
-    where_clauses = []
-    params = {}
+_USAGE = (
+    f"multiIf(property_type IN {_sql_list(RESIDENTIAL_TYPES)}, 'Residential', "
+    f"property_type IN {_sql_list(COMMERCIAL_TYPES)}, 'Commercial', '')"
+)
 
-    if property_usage:
-        where_clauses.append("property_usage_en = {property_usage:String}")
-        params["property_usage"] = property_usage
+# DXBI writes '1 Bed', '2 Bed' and '2 Beds' for the same counts: one label per count.
+_BEDROOMS = r"""multiIf(
+    bedrooms = 'Studio', 'Studio',
+    match(bedrooms, '^[0-9]+ Beds?$'),
+    concat(extract(bedrooms, '^([0-9]+)'), if(extract(bedrooms, '^([0-9]+)') = '1', ' Bed', ' Beds')),
+    '')"""
 
-    if property_type:
-        where_clauses.append("property_type = {property_type:String}")
-        params["property_type"] = property_type
-
-    if property_sub_type:
-        where_clauses.append("ejari_property_sub_type_en = {property_sub_type:String}")
-        params["property_sub_type"] = property_sub_type
-
-    if tenant_type:
-        where_clauses.append("tenant_type_en = {tenant_type:String}")
-        params["tenant_type"] = tenant_type
-
-    if contract_reg_type:
-        where_clauses.append("contract_reg_type_en = {contract_reg_type:String}")
-        params["contract_reg_type"] = contract_reg_type
-
-    if area:
-        where_clauses.append("location_name = {area:String}")
-        params["area"] = area
-
-    if project:
-        where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
-
-    if timeframe_days is not None:
-        where_clauses.append(
-            "contract_start_date BETWEEN today() - {timeframe_days:Int32} AND today()"
+# DXBI spells a few places two ways ('City of Arabia' / 'City Of Arabia', 'Dubai Land' /
+# 'Dubailand', 'Jumeirah Village Circle Dubai'). Each place shows DXBI's commonest spelling of the
+# same letters and digits, and a trailing ' Dubai' is dropped when DXBI also names the place
+# without it. An area that is a unit marker ('No. 630', a 2026 plot format the loader misreads)
+# is not a location.
+_LOCATION_SPELLING = r"""(
+        SELECT (groupArray(k), groupArray(name)) FROM (
+            SELECT k, argMax(name, n) AS name FROM (
+                SELECT replaceRegexpAll(lowerUTF8(area_name), '[^a-z0-9]', '') AS k,
+                       area_name AS name, count() AS n
+                FROM (SELECT area_name FROM dxbi_sales_unit_events
+                      UNION ALL SELECT area_name FROM dxbi_rental_events)
+                WHERE area_name != ''
+                GROUP BY k, name
+            )
+            GROUP BY k
         )
-        params["timeframe_days"] = timeframe_days
+    ) AS location_spelling"""
+_LOCATION = r"""multiIf(
+    area_name = '' OR match(area_name, '^No\\.'), '',
+    transform(
+        if(match(area_name, '\\sDubai$')
+           AND has(location_spelling.1,
+                   replaceRegexpAll(lowerUTF8(replaceRegexpOne(area_name, '\\s+Dubai$', '')),
+                                    '[^a-z0-9]', '')),
+           replaceRegexpAll(lowerUTF8(replaceRegexpOne(area_name, '\\s+Dubai$', '')),
+                            '[^a-z0-9]', ''),
+           replaceRegexpAll(lowerUTF8(area_name), '[^a-z0-9]', '')),
+        location_spelling.1, location_spelling.2, area_name))"""
 
-    if area_min is not None:
-        where_clauses.append("size_sqm >= {area_min:Decimal64(2)}")
-        params["area_min"] = area_min
 
-    if area_max is not None:
-        where_clauses.append("size_sqm <= {area_max:Decimal64(2)}")
-        params["area_max"] = area_max
+# DXBI's Location choices are its own areas, sub-areas and master communities, and a record
+# belongs to them as DXBI's area pages count it (decision 2026-10-07: totals match the website).
+# Those pages can count a record under a different place than the area printed on it: JVC's page
+# counts buildings printed "Al Barsha South 4", and Dubai Marina's leaves out 27 of 181 sales
+# printed "Dubai Marina" (August 2026). dxbi_location_members holds the sales each location's
+# search returned over the last sweep (holocron/scripts/dxbi_location_sweep.py), and
+# dxbi_location_lease_members the leases. A record takes, in order: the locations that returned
+# it; else those that returned other sales in its building; else the location named like its
+# printed area, with the areas above it.
+_SEARCH_KEY = r"""replaceRegexpAll(replaceAll(replaceAll(replaceAll(lowerUTF8({value}),
+    'jumeriah', 'jumeirah'), 'residences', 'residence'), 'apartments', 'apartment'),
+    '[^a-z0-9]+', '')"""
+_BUILDING_LOCATIONS = """(
+        SELECT building_key AS swept_building_key, area_key AS swept_area_key,
+               groupUniqArray(location_name) AS building_locations
+        FROM dxbi_location_members
+        WHERE building_key != ''
+        GROUP BY building_key, area_key
+    )"""
+_PRINTED_LOCATIONS = """(
+        SELECT name_key AS printed_key,
+               arrayDistinct(arrayFlatten(groupArray(lineage))) AS printed_locations
+        FROM dxbi_locations
+        GROUP BY name_key
+    )"""
+# Building and Project as DXBI's location list gives them (dxbi_places, loaded with each sweep):
+# DXBI prints a record's location as one place's path, and the first part is a building (B), a
+# project (P) or an area. A sale keys its path by its first and last parts, a lease by the whole
+# path. A record whose path is not in the list keeps the parsed names. A single-name place DXBI
+# lists as an area or community is the record's area, not its building.
+# A repeated tower name is not an identity. Use the report's middle address segments
+# when present; otherwise all equally specific catalogue candidates must agree. Keep
+# DXBI's established narrower-place precedence (B/T before P before M/U/A).
+_PLACE_PROJECT_KEY = _SEARCH_KEY.format(
+    value="arrayStringConcat(arraySlice(splitByChar(',', path), 2, "
+    "greatest(toInt64(length(splitByChar(',', path))) - 2, 0)), ',')"
+)
+_SALE_PLACES = f"""(
+        SELECT building_key AS place_building_key, area_key AS place_area_key,
+               project_context AS place_project_key,
+               count() AS place_candidates,
+               uniqExact(flag) = 1 AS place_flag_consistent,
+               uniqExact({_SEARCH_KEY.format(value="building_label")}) = 1 AS place_building_consistent,
+               uniqExact({_SEARCH_KEY.format(value="project_label")}) = 1 AS place_project_consistent,
+               uniqExact({_SEARCH_KEY.format(value="area_label")}) = 1 AS place_area_consistent,
+               place_flag_consistent AND place_building_consistent AND place_project_consistent
+                   AND place_area_consistent AS place_consistent,
+               if(place_flag_consistent, any(flag), '') AS place_flag,
+               if(place_building_consistent, argMin(building_label, location_id), '') AS place_building,
+               if(place_project_consistent, argMin(project_label, location_id), '') AS place_project,
+               if(place_area_consistent, argMin(area_label, location_id), '') AS place_area,
+               arraySort(groupUniqArray(tuple(location_id, source_run_id, path, reference_source))) AS place_evidence
+        FROM (
+            SELECT *, min(match_rank) OVER
+                (PARTITION BY building_key, area_key, project_context) AS best_rank
+            FROM (
+                SELECT *, arrayJoin(arrayDistinct(['', {_PLACE_PROJECT_KEY}])) AS project_context
+                FROM (
+                    SELECT location_id, flag, path, building_key, area_key, match_rank,
+                           building_label, project_label, area_label, source_run_id,
+                           'dxbi_places' AS reference_source
+                    FROM dxbi_places
+                    UNION ALL
+                    -- Some area-only report paths exist only in the location catalogue.
+                    -- Exact provider name plus an empty area; never a building-name-only
+                    -- lookup across different areas. Existing typed places take precedence.
+                    SELECT location_id, flag, name AS path,
+                           {_SEARCH_KEY.format(value="name")} AS building_key, '' AS area_key,
+                           toUInt8(10) AS match_rank, '' AS building_label, '' AS project_label,
+                           name AS area_label, source_run_id, 'dxbi_locations' AS reference_source
+                    FROM dxbi_locations FINAL WHERE flag IN ('A', 'M', 'U')
+                )
+            )
+        )
+        WHERE match_rank = best_rank
+        GROUP BY building_key, area_key, project_context
+    )"""
+_SALE_PLACE_COLUMNS = (
+    "place_flag",
+    "place_building",
+    "place_project",
+    "place_area",
+    "place_project_key",
+    "place_candidates",
+    "place_consistent",
+    "place_building_consistent",
+    "place_project_consistent",
+    "place_evidence",
+)
+_SALE_PLACE_SELECTION = ", ".join(
+    f"if(exact_place.place_candidates > 0, exact_place.{column}, fallback_place.{column}) AS {column}"
+    for column in _SALE_PLACE_COLUMNS
+)
+_SALE_PLACE_LABELS = """if(place_flag != '' AND place_building_consistent,
+                    place_building, building_name) AS building_name,
+                if(place_flag != '' AND place_project_consistent,
+                    place_project, project_name) AS project_name"""
 
-    if rent_min is not None:
-        where_clauses.append("annual_amount >= {rent_min:Decimal64(2)}")
-        params["rent_min"] = rent_min
+_LEASE_PLACES = """(
+        SELECT path_key AS place_path_key, flag AS place_flag,
+               building_label AS place_building, project_label AS place_project
+        FROM dxbi_places
+        ORDER BY path_key, match_rank, location_id
+        LIMIT 1 BY path_key
+    )"""
+_PLACE_LABELS = """if(place_flag != '', place_building, building_name) AS building_name,
+                if(place_flag != '', place_project, project_name) AS project_name"""
+_DXBI_LOCATIONS = """multiIf(
+            notEmpty(building_locations), building_locations,
+            notEmpty(printed_locations), printed_locations,
+            location_name != '', [location_name], [])"""
 
-    if rent_max is not None:
-        where_clauses.append("annual_amount <= {rent_max:Decimal64(2)}")
-        params["rent_max"] = rent_max
+# The unit has its own column, so the location text is the place alone. Profiles built before
+# holocron stopped writing it still start with "Unit <number>, ".
+_PLACE_ONLY = (
+    "if(startsWith(location, concat('Unit ', unit_number, ', ')), "
+    "substring(location, length(concat('Unit ', unit_number, ', ')) + 1), location)"
+)
 
-    where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+# The DXBI record's profile (holocron.market.dxbi_profile, rebuilt after each market release):
+# DLD's official area and master project, and the DLD or same-unit value for a project,
+# building, bedroom count or completion status DXBI left empty. DXBI's own values always win, and
+# the profile's copies of DXBI's raw path parts are not used: the place labels above decide
+# those (a lease path whose first part is a project has no building).
+_SALE_PROFILE = f"""(
+        SELECT sale_key AS profile_sale_key,
+               if(project_source != 'dxbi', project_name, '') AS profile_project,
+               master_project AS profile_master, area_name AS profile_area,
+               bedrooms AS profile_bedrooms, completion_status AS profile_status,
+               {_PLACE_ONLY} AS profile_location, map_url AS profile_map_url,
+               size_sqft AS profile_size
+        FROM dxbi_sale_profile
+    )"""
+_LEASE_PROFILE = f"""(
+        SELECT contract_key AS profile_contract_key,
+               -- DLD's plot reference stays in the location text: it is not a building name
+               -- to filter by.
+               if(building_source = 'dxbi_sale', building_name, '') AS profile_building,
+               if(project_source != 'dxbi', project_name, '') AS profile_project,
+               master_project AS profile_master,
+               area_name AS profile_area, bedrooms AS profile_bedrooms,
+               {_PLACE_ONLY} AS profile_location, map_url AS profile_map_url,
+               size_sqft AS profile_size
+        FROM dxbi_rental_profile
+    )"""
+_PROFILE_BEDROOMS = _BEDROOMS.replace("bedrooms", "profile_bedrooms")
 
-    # Count total matching contracts
-    count_sql = f"""
-        SELECT count() as total
-        FROM ch_rent_contracts
-        WHERE {where_clause}
+
+def _sales_source(date_clause: str) -> str:
+    """One row per DXBI sale, in DXBI's own units: sizes in sq ft, prices in AED.
+
+    De-duplication: the source table keeps a second version of a sale whose address was
+    re-normalised (latest load wins). DXBI itself lists some sales twice in one scrape with
+    conflicting details (an agent's name glued to the building, a missing bedroom count): the
+    more complete listing wins (location, bedrooms and status present, then the shorter building
+    name). A sale loaded both from a CSV export (no DXBI link) and from a scrape has two keys; one
+    candidate CSV/scrape pair collapses only when source identities and property facts agree.
+    Different DXBI links or registration numbers remain separate even with equal terms.
+
+    Size and price per sq ft are DXBI's own figures, as DXBInteract shows them (decision
+    2026-10-07). For some villas DXBI divides the price by the built-up area rather than the size
+    it shows; only a sale without DXBI's figure gets price / size.
     """
-    count_result = await query(count_sql, params)
-    total = count_result[0]["total"] if count_result else 0
-
-    # Fetch rental contracts
-    params["limit"] = limit
-    params["offset"] = offset
-
-    contracts_sql = f"""
+    area_identity = f"if(area_key != '', area_key, {_SEARCH_KEY.format(value='area_name')})"
+    same_sale = (
+        f"if(match(unit_number, '[0-9]') AND building_key != '' AND {area_identity} != '', "
+        f"concat({area_identity}, '|', building_key, '|', unit_number, '|', "
+        "toString(transaction_date), '|', toString(sale_amount_aed)), sale_key)"
+    )
+    return rf"""
+        WITH {_LOCATION_SPELLING}
         SELECT
-            contract_id,
-            contract_start_date,
-            contract_end_date,
-            property_usage_en,
-            contract_reg_type_en,
-            property_type AS ejari_property_type_en,
-            ejari_property_sub_type_en,
-            tenant_type_en,
-            actual_area,
-            annual_amount,
-            contract_amount,
-            location_name AS area_name_en,
-            project_name_en,
-            nearest_landmark_en,
-            nearest_metro_en,
-            nearest_mall_en,
-            no_of_prop,
-            is_free_hold
-        FROM ch_rent_contracts
-        WHERE {where_clause}
-        ORDER BY contract_start_date DESC, contract_id
-        LIMIT {{limit:Int32}}
-        OFFSET {{offset:Int32}}
+            sale_key AS transaction_id,
+            transaction_date,
+            unit_number,
+            building_name,
+            if(project_name != '', project_name, profile_project) AS project_name,
+            profile_master AS master_project,
+            profile_area AS dld_area,
+            profile_location AS location,
+            profile_map_url AS map_url,
+            {_LOCATION} AS location_name,
+            property_type,
+            {_USAGE} AS property_usage,
+            if(bedrooms != '', {_BEDROOMS}, {_PROFILE_BEDROOMS}) AS bedrooms,
+            multiIf(market_status = 'Offplan', 'Off-Plan', market_status = 'Ready', 'Ready',
+                    profile_status) AS status,
+            multiIf(size_sqft > 0, size_sqft, profile_size > 0, profile_size, NULL) AS size_sqft,
+            sale_amount_aed AS price_aed,
+            multiIf(price_per_sqft_aed > 0, toInt64(round(price_per_sqft_aed)),
+                    size_sqft > 0, toInt64(round(sale_amount_aed / size_sqft)), NULL)
+                AS price_per_sqft,
+            if(notEmpty(sale_locations), sale_locations, {_DXBI_LOCATIONS}) AS dxbi_locations,
+            multiIf(place_candidates = 0, 'unresolved', place_consistent,
+                    'dxbi_catalogue', 'ambiguous') AS location_resolution,
+            if(place_flag != '', if(place_project_key != '', 'project_context',
+                                    'building_area_consensus'), '') AS location_match_method,
+            place_candidates AS location_candidate_count,
+            place_evidence AS location_evidence,
+            multiIf(place_candidates = 0, 'unverified_parsed', place_consistent,
+                    'catalogue_agreement', 'partial_or_conflicting') AS location_confidence,
+            source_file AS dxbi_source_file,
+            loaded_at AS dxbi_loaded_at,
+            multiIf(building_name != '', 'present', property_type = 'Plot', 'not_applicable',
+                    place_flag IN ('P', 'M', 'U', 'A', 'C'), 'address_has_no_building',
+                    'unknown') AS building_resolution
+        FROM (
+            SELECT located.*
+            FROM (
+            SELECT * REPLACE (
+                {_SALE_PLACE_LABELS},
+                if(area_name = '', place_area, area_name) AS area_name
+            )
+            FROM (
+            SELECT deduped.*, {_SALE_PLACE_SELECTION}
+            FROM (
+                SELECT *, if(
+                    uniqExactIf(detail_url, detail_url != '') OVER (PARTITION BY sale_terms) != 1
+                    OR uniqExactIf(dld_transaction_number, dld_transaction_number != '')
+                        OVER (PARTITION BY sale_terms) > 1
+                    OR uniqExact(tuple(project_name, property_type, size_sqft, bedrooms,
+                                       market_status)) OVER (PARTITION BY sale_terms) > 1,
+                    sale_key, sale_terms) AS same_sale
+                FROM (
+                    SELECT *, {same_sale} AS sale_terms
+                    FROM (
+                        SELECT * FROM dxbi_sales_unit_events FINAL
+                        WHERE {date_clause}
+                        ORDER BY sale_key, loaded_at DESC, area_name = '', bedrooms = '',
+                                 market_status = '', length(building_name), building_key, bedrooms,
+                                 size_key
+                        LIMIT 1 BY sale_key
+                    )
+                )
+                ORDER BY same_sale, detail_url = '', loaded_at DESC, sale_key
+                LIMIT 1 BY same_sale
+            ) AS deduped
+            LEFT JOIN {_SALE_PLACES} AS exact_place
+                ON exact_place.place_building_key = deduped.building_key
+                AND exact_place.place_area_key = deduped.area_key
+                AND exact_place.place_project_key = {_SEARCH_KEY.format(value="deduped.project_name")}
+            LEFT JOIN {_SALE_PLACES} AS fallback_place
+                ON fallback_place.place_building_key = deduped.building_key
+                AND fallback_place.place_area_key = deduped.area_key
+                AND fallback_place.place_project_key = ''
+            )
+            ) AS located
+        ) AS sale
+        LEFT JOIN (
+            SELECT sale_key AS swept_sale_key, groupUniqArray(location_name) AS sale_locations
+            FROM dxbi_location_members
+            GROUP BY sale_key
+        ) AS swept_sale ON swept_sale.swept_sale_key = sale.sale_key
+        LEFT JOIN {_BUILDING_LOCATIONS} AS swept_building
+            ON swept_building.swept_building_key = sale.building_key
+            AND swept_building.swept_area_key = sale.area_key
+        LEFT JOIN {_PRINTED_LOCATIONS} AS printed ON printed.printed_key = sale.area_key
+        LEFT JOIN {_SALE_PROFILE} AS profile ON profile.profile_sale_key = sale.sale_key
     """
-    contracts_result = await query(contracts_sql, params)
-    return contracts_result, total
 
 
-async def export_sales_transactions_rows(
-    export_limit,
-    area,
-    area_max,
-    area_min,
-    building,
-    filter_type,
-    price_max,
-    price_min,
-    price_per_sqm_max,
-    price_per_sqm_min,
-    project,
-    property_sub_type,
-    property_type,
-    property_usage,
-    registration_type,
-    rooms,
-    timeframe_days,
-    transaction_ids,
-):
-    params = {}
-    if transaction_ids:
-        ids_list = [tid.strip() for tid in transaction_ids.split(",")]
-        # Build IN clause with parameter binding
-        placeholders = ", ".join([f"{{id_{i}:String}}" for i in range(len(ids_list))])
-        where_clause = f"transaction_id IN ({placeholders})"
-        for i, tid in enumerate(ids_list):
-            params[f"id_{i}"] = tid
-    else:
-        # Build WHERE clause from filters — always enforce Sales only
-        where_clauses = ["trans_group_en = 'Sales'"]
+def _rentals_source(date_clause: str) -> str:
+    """One row per DXBI lease of one unit, in DXBI's own units: sizes in sq ft, amounts in AED.
 
-        if property_usage:
-            where_clauses.append("property_usage_en = {property_usage:String}")
-            params["property_usage"] = property_usage
-
-        if property_type:
-            where_clauses.append("property_type = {property_type:String}")
-            params["property_type"] = property_type
-
-        if property_sub_type:
-            where_clauses.append("property_sub_type_en = {property_sub_type:String}")
-            params["property_sub_type"] = property_sub_type
-
-        if rooms:
-            where_clauses.append("rooms_en = {rooms:String}")
-            params["rooms"] = rooms
-
-        if registration_type:
-            where_clauses.append("reg_type_en = {registration_type:String}")
-            params["registration_type"] = registration_type
-
-        if area:
-            where_clauses.append("location_name = {area:String}")
-            params["area"] = area
-
-        if project:
-            where_clauses.append(_project_filter(filter_type))
-            params["project_name"] = (
-                project + " - %" if filter_type == "virtual_master" else project
-            )
-
-        if building:
-            where_clauses.append("building_name_en = {building:String}")
-            params["building"] = building
-
-        if timeframe_days is not None:
-            where_clauses.append(
-                "instance_date BETWEEN today() - {timeframe_days:Int32} AND today()"
-            )
-            params["timeframe_days"] = timeframe_days
-
-        if area_min is not None:
-            where_clauses.append("size_sqm >= {area_min:Decimal64(2)}")
-            params["area_min"] = area_min
-
-        if area_max is not None:
-            where_clauses.append("size_sqm <= {area_max:Decimal64(2)}")
-            params["area_max"] = area_max
-
-        if price_min is not None:
-            where_clauses.append("actual_worth >= {price_min:Decimal64(2)}")
-            params["price_min"] = price_min
-
-        if price_max is not None:
-            where_clauses.append("actual_worth <= {price_max:Decimal64(2)}")
-            params["price_max"] = price_max
-
-        if price_per_sqm_min is not None:
-            where_clauses.append("meter_sale_price >= {price_per_sqm_min:Decimal64(2)}")
-            params["price_per_sqm_min"] = price_per_sqm_min
-
-        if price_per_sqm_max is not None:
-            where_clauses.append("meter_sale_price <= {price_per_sqm_max:Decimal64(2)}")
-            params["price_per_sqm_max"] = price_per_sqm_max
-
-        where_clause = " AND ".join(where_clauses)
-
-    # Fetch transactions (limit 50,000 if using filters)
-    if transaction_ids:
-        limit_clause = ""
-    else:
-        params["export_limit"] = export_limit
-        limit_clause = "LIMIT {export_limit:Int32}"
-
-    export_sql = f"""
+    DXBI lists a multi-unit lease once per unit. Its report can also repeat one row (identical
+    unit, dates, amount and state, same raw fingerprint) when paging shifts during a scrape: a
+    numbered unit cannot hold two identical leases, so those collapse to one. DXBI also lists
+    some leases both with their unit number and without it (two report views): a lease without
+    a unit whose building path, area and commercial terms equal a numbered lease's is
+    that lease (2026-10-07: 90 of Business Bay's 2,121 leases in June 2026). Other identical
+    rows without a unit number cannot be told apart and are all kept.
+    """
+    lease_terms = (
+        "cityHash64(location_name, building_name, area_name, property_type, bedrooms, "
+        "size_sqft, lease_start, lease_end, "
+        "contract_amount_aed, contract_state)"
+    )
+    same_lease = (
+        "if(unit_number != '', cityHash64(unit_number, location_name, property_type, bedrooms, "
+        "size_sqft, lease_start, lease_end, contract_amount_aed, contract_state), "
+        "cityHash64(contract_key))"
+    )
+    # A lease's building and area keyed as the sales loader keys them (sales_units.location_key).
+    building_key = _SEARCH_KEY.format(value="building_name")
+    area_key = _SEARCH_KEY.format(value="area_name")
+    path_key = _SEARCH_KEY.format(value="location_name")
+    return rf"""
+        WITH {_LOCATION_SPELLING}
         SELECT
-            transaction_id,
-            instance_date,
-            property_usage_en,
-            trans_group_en,
-            procedure_name_en,
-            property_type AS property_type_en,
-            property_sub_type_en,
-            rooms_en,
-            procedure_area,
-            actual_worth,
-            meter_sale_price,
-            reg_type_en,
-            location_name AS area_name_en,
-            project_name_en,
-            building_name_en,
-            nearest_landmark_en,
-            nearest_metro_en,
-            nearest_mall_en
-        FROM ch_transactions
-        WHERE {where_clause}
-        ORDER BY instance_date DESC, transaction_id
-        {limit_clause}
+            contract_key AS contract_id,
+            lease_start,
+            lease_end,
+            unit_number,
+            if(building_name != '', building_name, profile_building) AS building_name,
+            if(project_name != '', project_name, profile_project) AS project_name,
+            profile_master AS master_project,
+            profile_area AS dld_area,
+            profile_location AS location,
+            profile_map_url AS map_url,
+            {_LOCATION} AS location_name,
+            property_type,
+            {_USAGE} AS property_usage,
+            if(bedrooms != '', {_BEDROOMS}, {_PROFILE_BEDROOMS}) AS bedrooms,
+            multiIf(size_sqft > 0, size_sqft, profile_size > 0, profile_size, NULL) AS size_sqft,
+            if(annual_rent_aed > 0, annual_rent_aed, NULL) AS annual_rent_aed,
+            if(contract_amount_aed > 0, contract_amount_aed, NULL) AS contract_amount_aed,
+            contract_term_months AS term_months,
+            contract_state AS contract_type,
+            if(notEmpty(lease_locations), lease_locations, {_DXBI_LOCATIONS}) AS dxbi_locations
+        FROM (
+            SELECT * REPLACE ({_PLACE_LABELS})
+            FROM (
+                SELECT *, {same_lease} AS same_lease,
+                       {building_key} AS lease_building_key, {area_key} AS lease_area_key,
+                       {path_key} AS lease_path_key
+                FROM dxbi_rental_events FINAL
+                WHERE {date_clause}
+                  AND (unit_number != '' OR building_name = '' OR area_name = ''
+                       OR {lease_terms} NOT IN (
+                      SELECT {lease_terms} FROM dxbi_rental_events FINAL
+                      WHERE {date_clause} AND unit_number != ''))
+                ORDER BY same_lease, occurrence_index, contract_key
+                LIMIT 1 BY same_lease
+            ) AS deduped
+            LEFT JOIN {_LEASE_PLACES} AS place ON place.place_path_key = deduped.lease_path_key
+        ) AS lease
+        LEFT JOIN (
+            SELECT contract_key AS swept_contract_key,
+                   groupUniqArray(location_name) AS lease_locations
+            FROM dxbi_location_lease_members
+            GROUP BY contract_key
+        ) AS swept_lease ON swept_lease.swept_contract_key = lease.contract_key
+        LEFT JOIN {_BUILDING_LOCATIONS} AS swept_building
+            ON swept_building.swept_building_key = lease.lease_building_key
+            AND swept_building.swept_area_key = lease.lease_area_key
+        LEFT JOIN {_PRINTED_LOCATIONS} AS printed ON printed.printed_key = lease.lease_area_key
+        LEFT JOIN {_LEASE_PROFILE} AS profile ON profile.profile_contract_key = lease.contract_key
     """
-    results = await query(export_sql, params)
-    return results
 
 
-async def export_rental_contracts_rows(
-    export_limit,
-    area,
-    area_max,
-    area_min,
-    contract_ids,
-    contract_reg_type,
-    filter_type,
-    project,
-    property_sub_type,
-    property_type,
-    property_usage,
-    rent_max,
-    rent_min,
-    tenant_type,
-    timeframe_days,
-):
-    params = {}
-    if contract_ids:
-        ids_list = [cid.strip() for cid in contract_ids.split(",")]
-        # Build IN clause with parameter binding
-        placeholders = ", ".join([f"{{id_{i}:String}}" for i in range(len(ids_list))])
-        where_clause = f"contract_id IN ({placeholders})"
-        for i, cid in enumerate(ids_list):
-            params[f"id_{i}"] = cid
-    else:
-        # Build WHERE clause from filters
-        where_clauses = []
+def _date_window(column: str, timeframe_days: Optional[int], params: dict) -> str:
+    """The last ``timeframe_days`` calendar days up to and including today in Dubai (the
+    warehouse clock is UTC, a day behind between 00:00 and 04:00 in Dubai)."""
+    if timeframe_days is None:
+        return "1 = 1"
+    params["today"] = business_today()
+    params["timeframe_days"] = timeframe_days
+    return f"{column} > {{today:Date}} - {{timeframe_days:Int32}} AND {column} <= {{today:Date}}"
 
-        if property_usage:
-            where_clauses.append("property_usage_en = {property_usage:String}")
-            params["property_usage"] = property_usage
 
-        if property_type:
-            where_clauses.append("property_type = {property_type:String}")
-            params["property_type"] = property_type
+async def _from_page_table(
+    sql: str, params: dict, table: str, live_source: Callable[[str], str]
+) -> list[dict]:
+    """Run ``sql`` over the page table; before its first build, over the live source."""
+    try:
+        return await query(sql.replace(_SOURCE, table), params)
+    except DatabaseError as error:
+        if "UNKNOWN_TABLE" not in str(error):
+            raise
+        logger.warning("%s is not built yet; reading the live DXBI source", table)
+        return await query(sql.replace(_SOURCE, f"({live_source('1 = 1')})"), params)
 
-        if property_sub_type:
-            where_clauses.append("ejari_property_sub_type_en = {property_sub_type:String}")
-            params["property_sub_type"] = property_sub_type
 
-        if tenant_type:
-            where_clauses.append("tenant_type_en = {tenant_type:String}")
-            params["tenant_type"] = tenant_type
+def _sales_page(sql: str, params: dict):
+    return _from_page_table(sql, params, SALES_PAGE_TABLE, _sales_source)
 
-        if contract_reg_type:
-            where_clauses.append("contract_reg_type_en = {contract_reg_type:String}")
-            params["contract_reg_type"] = contract_reg_type
 
-        if area:
-            where_clauses.append("location_name = {area:String}")
-            params["area"] = area
+def _leases_page(sql: str, params: dict):
+    return _from_page_table(sql, params, LEASES_PAGE_TABLE, _rentals_source)
 
-        if project:
-            where_clauses.append(_project_filter(filter_type))
-            params["project_name"] = (
-                project + " - %" if filter_type == "virtual_master" else project
+
+def _and(*clauses: str) -> str:
+    return " AND ".join(clause for clause in clauses if clause != "1 = 1") or "1 = 1"
+
+
+def _equals(clauses: list[str], params: dict, column: str, name: str, value) -> None:
+    if value:
+        clauses.append(f"{column} = {{{name}:String}}")
+        params[name] = value
+
+
+def _location(clauses: list[str], params: dict, value) -> None:
+    """A DXBI location holds every record its area page counts (``dxbi_locations``)."""
+    if value:
+        clauses.append("has(dxbi_locations, {location:String})")
+        params["location"] = value
+
+
+def _band(clauses: list[str], params: dict, column: str, name: str, low, high) -> None:
+    """Range filters are half-open, [low, high): a boundary value belongs to one band only."""
+    if low is not None:
+        clauses.append(f"{column} >= {{{name}_min:Float64}}")
+        params[f"{name}_min"] = low
+    if high is not None:
+        clauses.append(f"{column} < {{{name}_max:Float64}}")
+        params[f"{name}_max"] = high
+
+
+def _sales_where(filters: SalesFilters, params: dict) -> str:
+    clauses: list[str] = []
+    _equals(clauses, params, "property_usage", "property_usage", filters.property_usage)
+    _equals(clauses, params, "property_type", "property_type", filters.property_type)
+    _equals(clauses, params, "bedrooms", "bedrooms", filters.bedrooms)
+    _equals(clauses, params, "status", "status", filters.status)
+    _location(clauses, params, filters.location)
+    if filters.location_search:
+        clauses.append(
+            location_keyword_clause(
+                "concat(building_name, ' ', project_name, ' ', location_name, ' ', arrayStringConcat(dxbi_locations, ' '))",
+                filters.location_search,
+                params,
             )
+        )
+    _equals(clauses, params, "building_name", "building", filters.building)
+    _equals(clauses, params, "project_name", "project", filters.project)
+    _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
+    _band(clauses, params, "price_aed", "price", filters.price_min, filters.price_max)
+    _band(
+        clauses,
+        params,
+        "price_per_sqft",
+        "price_per_sqft",
+        filters.price_per_sqft_min,
+        filters.price_per_sqft_max,
+    )
+    return " AND ".join(clauses) or "1 = 1"
 
-        if timeframe_days is not None:
-            where_clauses.append(
-                "contract_start_date BETWEEN today() - {timeframe_days:Int32} AND today()"
+
+def _rentals_where(filters: RentalFilters, params: dict) -> str:
+    clauses: list[str] = []
+    _equals(clauses, params, "property_usage", "property_usage", filters.property_usage)
+    _equals(clauses, params, "property_type", "property_type", filters.property_type)
+    _equals(clauses, params, "bedrooms", "bedrooms", filters.bedrooms)
+    _equals(clauses, params, "contract_type", "contract_type", filters.contract_type)
+    _location(clauses, params, filters.location)
+    if filters.location_search:
+        clauses.append(
+            location_keyword_clause(
+                "concat(building_name, ' ', project_name, ' ', location_name, ' ', arrayStringConcat(dxbi_locations, ' '))",
+                filters.location_search,
+                params,
             )
-            params["timeframe_days"] = timeframe_days
-
-        if area_min is not None:
-            where_clauses.append("size_sqm >= {area_min:Decimal64(2)}")
-            params["area_min"] = area_min
-
-        if area_max is not None:
-            where_clauses.append("size_sqm <= {area_max:Decimal64(2)}")
-            params["area_max"] = area_max
-
-        if rent_min is not None:
-            where_clauses.append("annual_amount >= {rent_min:Decimal64(2)}")
-            params["rent_min"] = rent_min
-
-        if rent_max is not None:
-            where_clauses.append("annual_amount <= {rent_max:Decimal64(2)}")
-            params["rent_max"] = rent_max
-
-        where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
-
-    # Fetch contracts (limit 50,000 if using filters)
-    if contract_ids:
-        limit_clause = ""
-    else:
-        params["export_limit"] = export_limit
-        limit_clause = "LIMIT {export_limit:Int32}"
-
-    export_sql = f"""
-        SELECT
-            contract_id,
-            contract_start_date,
-            contract_end_date,
-            property_usage_en,
-            contract_reg_type_en,
-            property_type AS ejari_property_type_en,
-            ejari_property_sub_type_en,
-            tenant_type_en,
-            actual_area,
-            annual_amount,
-            contract_amount,
-            location_name AS area_name_en,
-            project_name_en,
-            nearest_landmark_en,
-            nearest_metro_en,
-            nearest_mall_en,
-            no_of_prop,
-            is_free_hold
-        FROM ch_rent_contracts
-        WHERE {where_clause}
-        ORDER BY contract_start_date DESC, contract_id
-        {limit_clause}
-    """
-    results = await query(export_sql, params)
-    return results
+        )
+    _equals(clauses, params, "building_name", "building", filters.building)
+    _equals(clauses, params, "project_name", "project", filters.project)
+    _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
+    _band(clauses, params, "annual_rent_aed", "rent", filters.rent_min, filters.rent_max)
+    return " AND ".join(clauses) or "1 = 1"
 
 
-def _append_common_transaction_filters(
-    where_clauses: list[str],
+_SALE_COLUMNS = """transaction_id, transaction_date, unit_number, building_name, project_name,
+            master_project, dld_area, location, map_url, location_name, property_type, property_usage, bedrooms, status, size_sqft,
+            price_aed, price_per_sqft"""
+_RENTAL_COLUMNS = """contract_id, lease_start, lease_end, unit_number, building_name,
+            project_name, master_project, dld_area, location, map_url, location_name, property_type, property_usage, bedrooms, size_sqft,
+            annual_rent_aed, contract_amount_aed, term_months, contract_type"""
+
+
+async def fetch_sales_rows(
+    filters: SalesFilters, limit: int, offset: int
+) -> tuple[list[dict], int]:
+    """One page of sales, newest first (then by id, both descending: the page table's order
+    read backwards), and the total matching the filters."""
+    params: dict = {"limit": limit, "offset": offset}
+    where = _and(
+        _date_window("transaction_date", filters.timeframe_days, params),
+        _sales_where(filters, params),
+    )
+    total = await _sales_page(f"SELECT count() AS total FROM {_SOURCE} WHERE {where}", params)
+    rows = await _sales_page(
+        f"""
+        SELECT {_SALE_COLUMNS}
+        FROM {_SOURCE}
+        WHERE {where}
+        ORDER BY transaction_date DESC, transaction_id DESC
+        LIMIT {{limit:Int32}} OFFSET {{offset:Int32}}
+        """,
+        params,
+    )
+    return rows, int(total[0]["total"]) if total else 0
+
+
+async def fetch_rental_rows(
+    filters: RentalFilters, limit: int, offset: int
+) -> tuple[list[dict], int]:
+    """One page of leases, latest start first, and the total matching the filters."""
+    params: dict = {"limit": limit, "offset": offset}
+    where = _and(
+        _date_window("lease_start", filters.timeframe_days, params),
+        _rentals_where(filters, params),
+    )
+    total = await _leases_page(f"SELECT count() AS total FROM {_SOURCE} WHERE {where}", params)
+    rows = await _leases_page(
+        f"""
+        SELECT {_RENTAL_COLUMNS}
+        FROM {_SOURCE}
+        WHERE {where}
+        ORDER BY lease_start DESC, contract_id DESC
+        LIMIT {{limit:Int32}} OFFSET {{offset:Int32}}
+        """,
+        params,
+    )
+    return rows, int(total[0]["total"]) if total else 0
+
+
+def _ids(value: Optional[str]) -> list[str]:
+    return [item.strip() for item in (value or "").split(",") if item.strip()]
+
+
+def _sales_export(filters: SalesFilters, transaction_ids: Optional[str], params: dict) -> str:
+    ids = _ids(transaction_ids)
+    if ids:
+        params["ids"] = ids
+        return "transaction_id IN {ids:Array(String)}"
+    return _and(
+        _date_window("transaction_date", filters.timeframe_days, params),
+        _sales_where(filters, params),
+    )
+
+
+def _rentals_export(filters: RentalFilters, contract_ids: Optional[str], params: dict) -> str:
+    ids = _ids(contract_ids)
+    if ids:
+        params["ids"] = ids
+        return "contract_id IN {ids:Array(String)}"
+    return _and(
+        _date_window("lease_start", filters.timeframe_days, params),
+        _rentals_where(filters, params),
+    )
+
+
+async def count_sales_export(filters: SalesFilters, transaction_ids: Optional[str]) -> int:
+    """How many sales an export selects before its row cap."""
+    params: dict = {}
+    where = _sales_export(filters, transaction_ids, params)
+    rows = await _sales_page(f"SELECT count() AS total FROM {_SOURCE} WHERE {where}", params)
+    return int(rows[0]["total"]) if rows else 0
+
+
+async def count_rental_export(filters: RentalFilters, contract_ids: Optional[str]) -> int:
+    """How many leases an export selects before its row cap."""
+    params: dict = {}
+    where = _rentals_export(filters, contract_ids, params)
+    rows = await _leases_page(f"SELECT count() AS total FROM {_SOURCE} WHERE {where}", params)
+    return int(rows[0]["total"]) if rows else 0
+
+
+async def _export_chunks(
+    page,
+    columns: str,
+    where: str,
     params: dict,
-    *,
-    property_usage: Optional[str] = None,
-    project: Optional[str] = None,
-    filter_type: str = "project",
-    property_type_field: str,
-    property_type: Optional[str] = None,
-    property_sub_type_field: str,
-    property_sub_type: Optional[str] = None,
-    area: Optional[str] = None,
-    timeframe_field: str,
-    timeframe_days: Optional[int] = None,
-    area_field: str,
-    area_min: Optional[float] = None,
-    area_max: Optional[float] = None,
-) -> None:
-    if property_usage:
-        where_clauses.append("property_usage_en = {property_usage:String}")
-        params["property_usage"] = property_usage
-
-    if project:
-        where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
-
-    if property_type:
-        where_clauses.append(f"{property_type_field} = {{property_type:String}}")
-        params["property_type"] = property_type
-
-    if property_sub_type:
-        where_clauses.append(f"{property_sub_type_field} = {{property_sub_type:String}}")
-        params["property_sub_type"] = property_sub_type
-
-    if area:
-        where_clauses.append("location_name = {area:String}")
-        params["area"] = area
-
-    if timeframe_days is not None:
-        where_clauses.append(
-            f"{timeframe_field} BETWEEN today() - {{timeframe_days:Int32}} AND today()"
+    date_column: str,
+    id_column: str,
+    max_rows: int,
+    chunk_rows: int,
+) -> AsyncIterator[list[dict]]:
+    """The export's rows newest first, ``chunk_rows`` at a time (keyset paging on the page
+    table's order), so no more than one chunk is held in memory."""
+    sent = 0
+    after = ""
+    while sent < max_rows:
+        params = {**params, "chunk_rows": min(chunk_rows, max_rows - sent)}
+        rows = await page(
+            f"""
+            SELECT {columns}
+            FROM {_SOURCE}
+            WHERE {where}{after}
+            ORDER BY {date_column} DESC, {id_column} DESC
+            LIMIT {{chunk_rows:Int32}}
+            """,
+            params,
         )
-        params["timeframe_days"] = timeframe_days
+        if not rows:
+            return
+        yield rows
+        sent += len(rows)
+        last = rows[-1]
+        params |= {"after_date": last[date_column], "after_id": last[id_column]}
+        # Rows after the last one in (date, id) descending order, the page table's own order
+        # read backwards; the first condition is a primary-key range.
+        after = (
+            f" AND {date_column} <= {{after_date:Date}}"
+            f" AND ({date_column} < {{after_date:Date}} OR {id_column} < {{after_id:String}})"
+        )
+        if len(rows) < params["chunk_rows"]:
+            return
 
-    if area_min is not None:
-        where_clauses.append(f"{area_field} >= {{area_min:Decimal64(2)}}")
-        params["area_min"] = area_min
 
-    if area_max is not None:
-        where_clauses.append(f"{area_field} <= {{area_max:Decimal64(2)}}")
-        params["area_max"] = area_max
-
-
-async def fetch_sales_facets(
-    area,
-    area_max,
-    area_min,
-    building,
-    filter_type,
-    price_max,
-    price_min,
-    price_per_sqm_max,
-    price_per_sqm_min,
-    project,
-    property_sub_type,
-    property_type,
-    property_usage,
-    registration_type,
-    rooms,
-    timeframe_days,
-):
-    where_clauses = ["trans_group_en = 'Sales'"]
+def export_sales_chunks(
+    filters: SalesFilters, transaction_ids: Optional[str], max_rows: int, chunk_rows: int
+) -> AsyncIterator[list[dict]]:
+    """Sales for an export: the selected rows when ids are given, else the filtered rows."""
     params: dict = {}
-
-    _append_common_transaction_filters(
-        where_clauses,
+    where = _sales_export(filters, transaction_ids, params)
+    return _export_chunks(
+        _sales_page,
+        _SALE_COLUMNS,
+        where,
         params,
-        property_usage=property_usage,
-        project=project,
-        filter_type=filter_type,
-        property_type_field="property_type",
-        property_type=property_type,
-        property_sub_type_field="property_sub_type_en",
-        property_sub_type=property_sub_type,
-        area=area,
-        timeframe_field="instance_date",
-        timeframe_days=timeframe_days,
-        area_field="size_sqm",
-        area_min=area_min,
-        area_max=area_max,
-    )
-
-    if rooms:
-        where_clauses.append("rooms_en = {rooms:String}")
-        params["rooms"] = rooms
-
-    if registration_type:
-        where_clauses.append("reg_type_en = {registration_type:String}")
-        params["registration_type"] = registration_type
-
-    if building:
-        where_clauses.append("building_name_en = {building:String}")
-        params["building"] = building
-
-    if price_min is not None:
-        where_clauses.append("actual_worth >= {price_min:Decimal64(2)}")
-        params["price_min"] = price_min
-
-    if price_max is not None:
-        where_clauses.append("actual_worth <= {price_max:Decimal64(2)}")
-        params["price_max"] = price_max
-
-    if price_per_sqm_min is not None:
-        where_clauses.append("meter_sale_price >= {price_per_sqm_min:Decimal64(2)}")
-        params["price_per_sqm_min"] = price_per_sqm_min
-
-    if price_per_sqm_max is not None:
-        where_clauses.append("meter_sale_price <= {price_per_sqm_max:Decimal64(2)}")
-        params["price_per_sqm_max"] = price_per_sqm_max
-
-    where_clause = " AND ".join(where_clauses)
-
-    property_types_result = await query(
-        f"""
-        SELECT DISTINCT property_type AS property_type_en
-        FROM ch_transactions
-        WHERE {where_clause} AND property_type != ''
-        ORDER BY property_type_en
-        """,
-        params,
-    )
-    property_sub_types_result = await query(
-        f"""
-        SELECT DISTINCT property_sub_type_en
-        FROM ch_transactions
-        WHERE {where_clause} AND property_sub_type_en != ''
-        ORDER BY property_sub_type_en
-        """,
-        params,
-    )
-    rooms_result = await query(
-        f"""
-        SELECT DISTINCT rooms_en
-        FROM ch_transactions
-        WHERE {where_clause} AND rooms_en != ''
-        """,
-        params,
-    )
-    reg_types_result = await query(
-        f"""
-        SELECT DISTINCT reg_type_en
-        FROM ch_transactions
-        WHERE {where_clause} AND reg_type_en != ''
-        ORDER BY reg_type_en
-        """,
-        params,
-    )
-    areas_result = await query(
-        f"""
-        SELECT DISTINCT location_name AS area_name_en
-        FROM ch_transactions
-        WHERE {where_clause} AND location_name != ''
-        ORDER BY area_name_en
-        """,
-        params,
-    )
-    projects_result = await query(
-        f"""
-        SELECT DISTINCT project_name_en
-        FROM ch_transactions
-        WHERE {where_clause} AND project_name_en != ''
-        ORDER BY project_name_en
-        """,
-        params,
-    )
-    buildings_result = await query(
-        f"""
-        SELECT DISTINCT building_name_en
-        FROM ch_transactions
-        WHERE {where_clause} AND building_name_en != ''
-        ORDER BY building_name_en
-        LIMIT 1000
-        """,
-        params,
-    )
-    return (
-        property_types_result,
-        property_sub_types_result,
-        rooms_result,
-        reg_types_result,
-        areas_result,
-        projects_result,
-        buildings_result,
+        "transaction_date",
+        "transaction_id",
+        max_rows,
+        chunk_rows,
     )
 
 
-async def fetch_rental_facets(
-    area,
-    area_max,
-    area_min,
-    contract_reg_type,
-    filter_type,
-    project,
-    property_sub_type,
-    property_type,
-    property_usage,
-    rent_max,
-    rent_min,
-    tenant_type,
-    timeframe_days,
-):
-    where_clauses: list[str] = []
+def export_rental_chunks(
+    filters: RentalFilters, contract_ids: Optional[str], max_rows: int, chunk_rows: int
+) -> AsyncIterator[list[dict]]:
+    """Leases for an export: the selected rows when ids are given, else the filtered rows."""
     params: dict = {}
-
-    _append_common_transaction_filters(
-        where_clauses,
+    where = _rentals_export(filters, contract_ids, params)
+    return _export_chunks(
+        _leases_page,
+        _RENTAL_COLUMNS,
+        where,
         params,
-        property_usage=property_usage,
-        project=project,
-        filter_type=filter_type,
-        property_type_field="property_type",
-        property_type=property_type,
-        property_sub_type_field="ejari_property_sub_type_en",
-        property_sub_type=property_sub_type,
-        area=area,
-        timeframe_field="contract_start_date",
-        timeframe_days=timeframe_days,
-        area_field="size_sqm",
-        area_min=area_min,
-        area_max=area_max,
+        "lease_start",
+        "contract_id",
+        max_rows,
+        chunk_rows,
     )
 
-    if tenant_type:
-        where_clauses.append("tenant_type_en = {tenant_type:String}")
-        params["tenant_type"] = tenant_type
 
-    if contract_reg_type:
-        where_clauses.append("contract_reg_type_en = {contract_reg_type:String}")
-        params["contract_reg_type"] = contract_reg_type
+async def export_sales_rows(
+    filters: SalesFilters, transaction_ids: Optional[str], max_rows: int
+) -> list[dict]:
+    return [
+        row
+        async for chunk in export_sales_chunks(filters, transaction_ids, max_rows, max_rows)
+        for row in chunk
+    ]
 
-    if rent_min is not None:
-        where_clauses.append("annual_amount >= {rent_min:Decimal64(2)}")
-        params["rent_min"] = rent_min
 
-    if rent_max is not None:
-        where_clauses.append("annual_amount <= {rent_max:Decimal64(2)}")
-        params["rent_max"] = rent_max
+async def export_rental_rows(
+    filters: RentalFilters, contract_ids: Optional[str], max_rows: int
+) -> list[dict]:
+    return [
+        row
+        async for chunk in export_rental_chunks(filters, contract_ids, max_rows, max_rows)
+        for row in chunk
+    ]
 
-    where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
 
-    property_types_result = await query(
-        f"""
-        SELECT DISTINCT property_type AS ejari_property_type_en
-        FROM ch_rent_contracts
-        WHERE {where_clause} AND property_type != ''
-        ORDER BY ejari_property_type_en
-        """,
+def _facet_columns(filters, params: dict, where_builder, fields: dict[str, tuple[str, str]]) -> str:
+    """Each facet ignores its own selection, so a user can switch to another valid value.
+
+    Keep every other constraint, including dates and numeric bands. Conditional aggregates
+    share one source scan rather than querying the warehouse once per dropdown.
+    """
+    columns = []
+    for field, (column, alias) in fields.items():
+        cleared = {field: None}
+        if field in {"location", "building", "project"}:
+            # These labels all suggest alternatives for the single location search.
+            cleared["location_search"] = None
+        scope = where_builder(filters.model_copy(update=cleared), params)
+        if field == "location":
+            columns.append(f"groupUniqArrayArray(if({scope}, dxbi_locations, [])) AS {alias}")
+        else:
+            columns.append(f"groupUniqArrayIf({column}, ({scope}) AND {column} != '') AS {alias}")
+    return ", ".join(columns)
+
+
+async def fetch_sales_facets(filters: SalesFilters) -> dict:
+    """Available alternatives for each sales filter, respecting all other selections."""
+    params: dict = {}
+    window = _date_window("transaction_date", filters.timeframe_days, params)
+    columns = _facet_columns(
+        filters,
         params,
+        _sales_where,
+        {
+            "property_type": ("property_type", "property_type_options"),
+            "bedrooms": ("bedrooms", "bedroom_options"),
+            "status": ("status", "status_options"),
+            "location": ("dxbi_locations", "location_options"),
+            "building": ("building_name", "building_options"),
+            "project": ("project_name", "project_options"),
+        },
     )
-    property_sub_types_result = await query(
-        f"""
-        SELECT DISTINCT ejari_property_sub_type_en
-        FROM ch_rent_contracts
-        WHERE {where_clause} AND ejari_property_sub_type_en != ''
-        ORDER BY ejari_property_sub_type_en
-        """,
+    rows = await _sales_page(f"SELECT {columns} FROM {_SOURCE} WHERE {window}", params)
+    return rows[0] if rows else {}
+
+
+async def fetch_rental_facets(filters: RentalFilters) -> dict:
+    """Available alternatives for each rental filter, respecting all other selections."""
+    params: dict = {}
+    window = _date_window("lease_start", filters.timeframe_days, params)
+    columns = _facet_columns(
+        filters,
         params,
+        _rentals_where,
+        {
+            "property_type": ("property_type", "property_type_options"),
+            "bedrooms": ("bedrooms", "bedroom_options"),
+            "contract_type": ("contract_type", "contract_type_options"),
+            "location": ("dxbi_locations", "location_options"),
+            "building": ("building_name", "building_options"),
+            "project": ("project_name", "project_options"),
+        },
     )
-    tenant_types_result = await query(
-        f"""
-        SELECT DISTINCT tenant_type_en
-        FROM ch_rent_contracts
-        WHERE {where_clause} AND tenant_type_en != ''
-        ORDER BY tenant_type_en
-        """,
-        params,
-    )
-    contract_reg_types_result = await query(
-        f"""
-        SELECT DISTINCT contract_reg_type_en
-        FROM ch_rent_contracts
-        WHERE {where_clause} AND contract_reg_type_en != ''
-        ORDER BY contract_reg_type_en
-        """,
-        params,
-    )
-    areas_result = await query(
-        f"""
-        SELECT DISTINCT location_name AS area_name_en
-        FROM ch_rent_contracts
-        WHERE {where_clause} AND location_name != ''
-        ORDER BY area_name_en
-        """,
-        params,
-    )
-    projects_result = await query(
-        f"""
-        SELECT DISTINCT project_name_en
-        FROM ch_rent_contracts
-        WHERE {where_clause} AND project_name_en != ''
-        ORDER BY project_name_en
-        """,
-        params,
-    )
-    return (
-        property_types_result,
-        property_sub_types_result,
-        tenant_types_result,
-        contract_reg_types_result,
-        areas_result,
-        projects_result,
-    )
+    rows = await _leases_page(f"SELECT {columns} FROM {_SOURCE} WHERE {window}", params)
+    return rows[0] if rows else {}

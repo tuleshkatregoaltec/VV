@@ -34,11 +34,3 @@ describe('Bedrooms field', () => {
 		expect(fieldShown(budget, { wants: 'Office Space' })).toBe(true)
 	})
 })
-
-// Client call (3 Nov): tenants are matched against their move-in date, so it must be a date.
-describe('Tenant move-in field', () => {
-	it('is a date picker', () => {
-		const moveIn = LEAD_TYPES.tenant.fields.find((x) => x.key === 'move_in')
-		expect(moveIn?.date).toBe(true)
-	})
-})

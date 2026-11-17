@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Download, X } from 'lucide-svelte'
 import ColumnSettingsDropdown from '$lib/components/dropdowns/ColumnSettingsDropdown.svelte'
+import { safeExternalHref } from '$lib/utils/safeUrl'
 
 type ExportAction = {
 	label: string
@@ -11,7 +12,7 @@ type ExportAction = {
 
 let {
 	title = 'Dataset',
-	description = 'Visible columns and selected rows update this view.',
+	description = '',
 	columns = [],
 	data = [],
 	emptyMessage = 'No data available',
@@ -35,6 +36,8 @@ let {
 		format?: (value: any, row: any) => string
 		badge?: boolean
 		highlighted?: boolean
+		wrap?: boolean
+		href?: (row: any) => string | null
 		defaultVisible?: boolean
 	}>
 	data?: Array<Record<string, any>>
@@ -99,6 +102,10 @@ let selectAllLabel = $derived(
 		? `Deselect all ${data.length} rows on this page`
 		: `Select all ${data.length} rows on this page`
 )
+
+function rowHref(column: { href?: (row: any) => string | null }, row: any): string | null {
+	return safeExternalHref(column.href?.(row))
+}
 
 function handleRowClick(row: any) {
 	if (onrowclick) {
@@ -172,7 +179,7 @@ function getRenderKey(row: any, index: number): string {
 			<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">
 				{title}
 			</p>
-			<p class="mt-1 text-sm text-fg-3">{description}</p>
+			{#if description}<p class="mt-1 text-sm text-fg-3">{description}</p>{/if}
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			{#if selectable && selectedIds.size > 0}
@@ -227,12 +234,13 @@ function getRenderKey(row: any, index: number): string {
 		</div>
 	</div>
 
-	<div class="overflow-x-auto rounded-b-lg">
+	<!-- Edge shadows show when the table scrolls sideways (narrow windows, many columns). -->
+	<div class="ui-scroll-shadow hidden overflow-x-auto rounded-b-lg sm:block">
 		<table class="w-full">
 			<thead class="ui-table-head">
 				<tr>
 					{#if selectable}
-						<th class="w-14 px-4 py-3">
+						<th class="w-12 px-3 py-3">
 							<div class="flex items-center justify-center">
 								<input
 									type="checkbox"
@@ -240,7 +248,7 @@ function getRenderKey(row: any, index: number): string {
 									indeterminate={someSelected}
 									disabled={loading || data.length === 0}
 									onchange={toggleSelectAll}
-									class="h-[18px] w-[18px] cursor-pointer rounded-sm border-strong accent-navy text-navy focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-40"
+									class="ui-checkbox"
 									aria-label={selectAllLabel}
 								/>
 							</div>
@@ -248,15 +256,17 @@ function getRenderKey(row: any, index: number): string {
 					{/if}
 					{#each visibleColumns as column (column.id)}
 						<th
-							class="whitespace-nowrap px-4 py-3 text-{column.align ||
-								'left'} text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-4"
+							class="px-3 py-3 text-{column.align ||
+								'left'} text-[11px] font-semibold uppercase leading-4 tracking-[0.08em] text-fg-4 {column.wrap
+								? 'min-w-[7.5rem]'
+								: ''}"
 						>
 							{column.label}
 						</th>
 					{/each}
 				</tr>
 			</thead>
-			<tbody class="divide-y divide-slate-100">
+			<tbody class="divide-y divide-border">
 				{#if loading}
 					<tr>
 						<td
@@ -287,14 +297,14 @@ function getRenderKey(row: any, index: number): string {
 							class="ui-table-row {onrowclick || selectable ? 'cursor-pointer' : ''}"
 						>
 							{#if selectable}
-								<td class="w-14 px-4 py-3.5">
+								<td class="w-12 px-3 py-3">
 									<div class="flex items-center justify-center">
 										<input
 											type="checkbox"
 											checked={isRowSelected(row)}
 											onchange={() => toggleRowSelection(row)}
 											onclick={(event) => event.stopPropagation()}
-											class="h-[18px] w-[18px] cursor-pointer rounded-sm border-strong accent-navy text-navy focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+											class="ui-checkbox"
 											aria-label="Select row"
 										/>
 									</div>
@@ -302,17 +312,33 @@ function getRenderKey(row: any, index: number): string {
 							{/if}
 							{#each visibleColumns as column (column.id)}
 								<td
-									class="whitespace-nowrap px-4 py-3.5 text-{column.align ||
+									class="px-3 py-3 text-{column.align ||
 										'left'} text-[13px] tabular-nums {column.highlighted
 										? 'font-semibold text-info'
-										: 'text-fg-1'}"
+										: 'text-fg-1'} {column.wrap
+										? column.href
+											? 'min-w-[14rem] max-w-[26rem]'
+											: 'min-w-[7.5rem] max-w-[15rem]'
+										: 'whitespace-nowrap'}"
 								>
-									{#if column.badge}
+									{#if column.badge && row[column.id] !== '-'}
 										<span
-											class="ui-badge px-2.5 py-1 font-mono text-[11px] font-medium tracking-[0.02em]"
+											class="ui-badge px-2 py-0.5 text-xs font-medium"
 										>
 											{column.format ? column.format(row[column.id], row) : row[column.id]}
 										</span>
+									{:else if rowHref(column, row)}
+										<!-- The row opens its details on click; the link opens the map instead. -->
+										<a
+											href={rowHref(column, row)}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="text-info underline decoration-dotted underline-offset-2 hover:decoration-solid"
+											title="Open in Google Maps"
+											onclick={(event) => event.stopPropagation()}
+										>
+											{column.format ? column.format(row[column.id], row) : row[column.id]}
+										</a>
 									{:else}
 										{column.format ? column.format(row[column.id], row) : row[column.id]}
 									{/if}
@@ -324,4 +350,47 @@ function getRenderKey(row: any, index: number): string {
 			</tbody>
 		</table>
 	</div>
+
+	<!-- Phones: one card per record with every visible column, instead of a clipped table. -->
+	<ul class="divide-y divide-border sm:hidden">
+		{#if loading}
+			<li class="px-4 py-12 text-center text-sm text-fg-4">Loading...</li>
+		{:else if data.length === 0}
+			<li class="px-4 py-12 text-center text-sm text-fg-4">{emptyMessage}</li>
+		{:else}
+			{#each data as row, index (getRenderKey(row, index))}
+				<li class="flex gap-3 px-4 py-3">
+					{#if selectable}
+						<input
+							type="checkbox"
+							checked={isRowSelected(row)}
+							onchange={() => toggleRowSelection(row)}
+							class="ui-checkbox mt-0.5"
+							aria-label="Select row"
+						/>
+					{/if}
+					<button
+						type="button"
+						onclick={() => handleRowClick(row)}
+						class="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-2 text-left"
+					>
+						{#each visibleColumns as column (column.id)}
+							<span class="min-w-0">
+								<span class="block text-[10px] font-semibold uppercase tracking-[0.08em] text-fg-4">
+									{column.label}
+								</span>
+								<span
+									class="block break-words text-[13px] tabular-nums {column.highlighted
+										? 'font-semibold text-info'
+										: 'text-fg-1'}"
+								>
+									{column.format ? column.format(row[column.id], row) : row[column.id]}
+								</span>
+							</span>
+						{/each}
+					</button>
+				</li>
+			{/each}
+		{/if}
+	</ul>
 </div>

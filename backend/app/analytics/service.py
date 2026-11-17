@@ -2,30 +2,32 @@
 
 import asyncio
 import logging
-from datetime import date, timedelta
+import math
+import re
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
+
+from fastapi import HTTPException
 
 from app.analytics import queries
 from app.analytics.metrics import (
     _add_months,
-    _coalesce_delivery_date,
     _normalize_label,
-    _positive_float,
     _quarter_start,
     _room_sort_key,
     _trend_interval_for_days,
-    _unique_normalized_labels,
     build_configuration_rows,
 )
 from app.analytics.models import (
     AnalyticsResponse,
     AnalyticsSummary,
     AnalyticsUnitComposition,
+    BuildingStock,
+    DimensionBreakdown,
     MarketTrendPoint,
     MarketTrendResponse,
     PriceDistributionBucket,
     ProjectAnalyticsResponse,
-    ProjectForecastPoint,
     ProjectForecastResponse,
     ProjectMeta,
     ProjectPipelinePoint,
@@ -40,13 +42,18 @@ from app.analytics.models import (
     PropertyTypeBreakdown,
     RegTypeBreakdown,
     RentalAnalyticsResponse,
+    RentalDimensionBreakdown,
     RentalSummary,
     RoomAnalytics,
     SubProjectItem,
     SubProjectsResponse,
+    TrendPoint,
+    UsageCount,
 )
 from app.analytics.queries import MARKET_FILTERS, ProjectFilterType, ProjectScopeType
 from app.core.observability import operation
+from app.market.periods import business_today
+from app.market.reference import AREA_ALIASES
 
 # Room sort order: Studio first, then numeric bedrooms, then anything else
 
@@ -70,13 +77,144 @@ async def _latest_sales_anchor_date() -> date:
     return date.today()
 
 
+def _as_date(value: object) -> Optional[date]:
+    """A completion recorded as a date-time is its date."""
+    if isinstance(value, datetime):
+        return value.date()
+    return value or None  # type: ignore[return-value]
+
+
+async def _fill_project_meta(
+    registered: Optional[ProjectMeta], project_name: str
+) -> Optional[ProjectMeta]:
+    """A project's or building's developer, handover and completion from DXBInteract's building
+    list, each named as its source (the DXBI transactions hold none of them). Units and buildings
+    come from Holocron's unit stock (``_apply_stock``).
+    """
+    project = registered or ProjectMeta(project_name=project_name)
+    sources = project.field_sources
+    rows = await queries.fetch_project_meta_from_dxbi({"project_name": project_name})
+    row = rows[0] if rows else {}
+    found = {
+        "developer_name": _normalize_label(row.get("developer_name_en")),
+        "completion_date": _as_date(row.get("completion_date")),
+        "percent_completed": float(row["percent_completed"])
+        if row.get("percent_completed") is not None
+        else None,
+        "area_name": row.get("area_name_en") or None,
+    }
+    for name, value in found.items():
+        if getattr(project, name) is None and value is not None:
+            setattr(project, name, value)
+            sources[name] = "dxbi_buildings"
+    return project if registered is not None or sources else None
+
+
+def _apply_stock(project: ProjectMeta, row: dict) -> None:
+    """A project's or building's registered units and buildings from Holocron's unit stock."""
+    if row.get("units"):
+        project.no_of_units = int(row["units"])
+        project.units_source = row.get("units_source") or None
+        project.units_at_least = bool(row.get("units_at_least"))
+        project.field_sources["no_of_units"] = project.units_source or ""
+    if row.get("units_traded"):
+        project.units_traded = int(row["units_traded"])
+    if project.scope_level == "project" and row.get("stock_buildings"):
+        project.no_of_buildings = int(row["stock_buildings"])
+        project.field_sources["no_of_buildings"] = "dxbi_records"
+
+
+def _apply_master_rollup(project: ProjectMeta, row: dict) -> None:
+    """A master: its projects' registered units added up, and how many projects have them."""
+    if not row:
+        return
+    project.no_of_projects = int(row.get("projects") or 0) or None
+    project.projects_with_units = int(row.get("projects_with_units") or 0)
+    if row.get("units"):
+        project.no_of_units = int(row["units"])
+        project.units_source = "projects_rollup"
+        project.field_sources["no_of_units"] = "projects_rollup"
+    if row.get("buildings"):
+        project.no_of_buildings = int(row["buildings"])
+    if row.get("units_traded"):
+        project.units_traded = int(row["units_traded"])
+
+
+def _unit_mix_rows(row: dict) -> list[dict]:
+    """The stock's unit mix as unit-composition rows (rooms, units, median size)."""
+    return [
+        {"rooms_en": rooms, "unit_count": int(units), "median_unit_size_sqft": float(sqft or 0)}
+        for rooms, units, sqft in zip(
+            row.get("mix_rooms") or [],
+            row.get("mix_units") or [],
+            row.get("mix_median_sqft") or [],
+            strict=False,
+        )
+        if rooms != "Other"
+    ]
+
+
+# Short forms people type for places whose names do not start with them.
+_ABBREVIATIONS = {
+    short: name
+    for short, name in AREA_ALIASES.items()
+    if " " not in short and not name.lower().startswith(short)
+}
+
+
+def _expand_abbreviations(search: str) -> str:
+    return " ".join(_ABBREVIATIONS.get(word.lower(), word) for word in search.split())
+
+
 async def get_project_search(search: str, limit: int = 50) -> ProjectSearchResponse:
-    """Return matching projects for the dropdown selector."""
-    pattern = f"%{search.lower()}%" if search.strip() else "%"
-    rows = await queries.fetch_search_projects({"search_pattern": pattern, "limit": limit})
-    return ProjectSearchResponse(
-        projects=[ProjectSearchItem(name=r["name"], filter_type=r["filter_type"]) for r in rows]
+    """Matching projects and master projects for the selector, then matching buildings.
+
+    A building is its own scope (``filter_type`` "building") and names its project and master.
+    Buildings keep up to half of the list, so a search that matches many project names still
+    shows its buildings.
+    """
+    terms = [search]
+    expanded = _expand_abbreviations(search)
+    if expanded.lower() != search.strip().lower():
+        # "JVC" is DLD's Jumeirah Village Circle; DLD also writes some masters with the short
+        # form ("Jumeriah Beach Residence - JBR"), so both spellings are searched.
+        terms = [expanded, search]
+    results = await asyncio.gather(
+        *(
+            queries.fetch_search_projects(
+                {
+                    "search_pattern": f"%{term.lower()}%" if term.strip() else "%",
+                    "search": term,
+                    "limit": limit,
+                }
+            )
+            for term in terms
+        )
     )
+    seen: set[tuple[str, str, str]] = set()
+    rows = []
+    for row in (row for result in results for row in result):
+        key = (row["name"], row["filter_type"], row.get("building_id") or "")
+        if key not in seen:
+            seen.add(key)
+            rows.append(row)
+    items = [
+        ProjectSearchItem(
+            name=r["name"],
+            filter_type=r["filter_type"],
+            scope_kind=r.get("scope_kind") or "Location",
+            building=r.get("building") or "",
+            building_id=r.get("building_id") or "",
+            project=r.get("project") or "",
+            master=r.get("master") or "",
+        )
+        for r in rows
+    ]
+    # An empty search lists scopes only.
+    buildings = [item for item in items if item.filter_type == "building"] if search.strip() else []
+    scopes = [item for item in items if item.filter_type != "building"]
+    shown = max(limit - len(buildings), limit - limit // 2)
+    return ProjectSearchResponse(projects=(scopes[:shown] + buildings)[:limit])
 
 
 async def get_sub_project_list(
@@ -93,102 +231,89 @@ async def get_sub_project_list(
     )
 
 
-async def _get_market_summary(project_name: str) -> ProjectAnalyticsResponse:
-    """Return a quick citywide summary from the local materialized fact table.
+USAGES = ("Residential", "Commercial")
 
-    The detailed analytics queries intentionally retain their raw, unit-level
-    paths for a selected project.  Running all of those citywide at once is
-    prohibitively expensive on a local ClickHouse instance, so the landing
-    scope uses the already materialized 12-month project aggregates instead.
+
+async def _resolve_usage(
+    scope: dict, filter_type: ProjectScopeType, requested: str
+) -> tuple[str, dict[str, UsageCount]]:
+    """The usage to show and the scope's records per usage.
+
+    'auto' shows Residential where the scope has residential records, else Commercial where it
+    has commercial ones (an office tower shows its offices, not zeros). Every project endpoint
+    resolves the same way, so parallel requests of one page agree.
     """
-    rows = await queries.fetch_get_market_summary_rows({})
-    row = rows[0] if rows else {}
-    sales_count = int(row.get("sales_count") or 0)
-    rental_count = int(row.get("rental_count") or 0)
-    median_sale_price = float(row.get("median_sale_price") or 0)
-    median_annual_rent = float(row.get("median_annual_rent") or 0)
-    yield_pct = _positive_float(row.get("gross_yield_pct"))
-    if yield_pct is not None:
-        yield_pct = round(yield_pct, 2)
-
-    return ProjectAnalyticsResponse(
-        project=ProjectMeta(
-            project_name=project_name,
-            area_name="Dubai",
-            developer_name="All developers",
-            no_of_units=int(row.get("unit_count") or 0) or None,
-        ),
-        sales=ProjectSalesSummary(
-            transaction_count=sales_count,
-            total_volume=float(row.get("sales_volume") or 0),
-            avg_price=float(row.get("avg_sale_price") or 0),
-            avg_price_sqm=float(row.get("avg_sale_price_sqm") or 0),
-            median_price=median_sale_price,
-        ),
-        rentals=ProjectRentalSummary(
-            contract_count=rental_count,
-            total_annual_value=float(row.get("rental_value") or 0),
-            median_annual_rent=median_annual_rent,
-            median_rent_sqm=float(row.get("median_rent_sqm") or 0),
-        ),
-        overall_gross_yield_pct=yield_pct,
-        by_rooms=[],
-        by_property_type=[],
-        by_reg_type=[],
-        unit_composition=[],
-        configuration_analysis=[],
-    )
+    rows = await queries.fetch_project_usage_counts(scope, filter_type)
+    counts = {usage: UsageCount() for usage in USAGES}
+    for row in rows:
+        counts[row["usage"]] = UsageCount(sales=int(row["sales"]), leases=int(row["leases"]))
+    if requested in USAGES:
+        return requested, counts
+    # Auto usage describes the scope, even when the selected window has no recent records.
+    totals = {
+        row["usage"]: int(row.get("all_sales", row["sales"]))
+        + int(row.get("all_leases", row["leases"]))
+        for row in rows
+    }
+    if totals.get("Residential", 0) == 0 and totals.get("Commercial", 0) > 0:
+        return "Commercial", counts
+    return "Residential", counts
 
 
 async def get_project_summary(
     project_name: str,
     filter_type: ProjectScopeType = "project",
     master_project: Optional[str] = None,
+    usage: str = "auto",
+    summary_days: Optional[int] = None,
 ) -> ProjectAnalyticsResponse:
     """
     Run ClickHouse queries in parallel and merge into a single response.
     filter_type controls the WHERE clause: 'master', 'virtual_master', 'project', or 'market'.
     For virtual_master, project_name is used as a LIKE prefix (suffix ' - %' appended here).
+
+    The whole Dubai market ('market') runs the same queries as any community, breakdowns
+    included (off-plan / secondary configurations, rooms, types, unit mix). It used to answer
+    from a shortcut without them, so its off-plan and secondary tables showed nothing; every
+    query takes under half a second citywide, and the response is cached.
     """
-    if filter_type == "market":
-        return await _get_market_summary(project_name)
 
     # For LIKE queries the param needs the wildcard appended
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
     params = {} if filter_type == "market" else {"project_name": like_name}
+    if summary_days is not None:
+        params["summary_days"] = summary_days
+    usage, usage_counts = await _resolve_usage(params, filter_type, usage)
+    params = {**params, "usage": usage}
 
-    # Unit composition: master/project use master_project_en equality;
-    # virtual_master uses project_name_en LIKE (ch_units also lacks master_project_en for orphans)
-    if filter_type == "market":
-        units_params = {}
-    elif filter_type == "virtual_master":
-        units_params = {"project_name": like_name}
-    elif filter_type == "master":
-        units_params = {"project_name": project_name}
-    else:
-        units_params = {"project_name": master_project or project_name}
+    # The scope's place in the hierarchy and its registered units (Holocron's unit stock).
+    scope_params = {} if filter_type == "market" else {"project_name": like_name}
+    meta_task = queries.fetch_scope_hierarchy(scope_params, filter_type)
+    buildings_task = (
+        queries.fetch_project_buildings(scope_params)
+        if filter_type == "project"
+        else asyncio.sleep(0, result=[])
+    )
 
-    if filter_type == "market":
-        meta_task = asyncio.sleep(0, result=[])
-    else:
-        # meta for master/virtual_master uses the like_name for virtual (LIKE) or plain name
-        meta_params = (
-            {"project_name": like_name}
-            if filter_type == "virtual_master"
-            else {"project_name": project_name}
-        )
-        meta_task = queries.fetch_project_meta(meta_params, filter_type)
-
-    if filter_type in ("master", "virtual_master"):
-        developer_task = queries.fetch_project_developers_by_scope(meta_params, filter_type)
-    else:
-        developer_task = asyncio.sleep(0, result=[])
-
-    existing_params = {**params, "reg_type_en": "Existing Properties"}
-    offplan_params = {**params, "reg_type_en": "Off-Plan Properties"}
-
-    # project_rentals_by_rooms uses {project_name} for both rent and units filters
     rent_rooms_params = params
+
+    (
+        sales_bundle,
+        sales_type_rows,
+        sales_reg_rows,
+        rent_sum_rows,
+        rent_rooms_rows,
+        meta_rows,
+        building_rows,
+    ) = await asyncio.gather(
+        queries.fetch_project_sales_bundle(params, filter_type),
+        queries.fetch_project_sales_by_property_type(params, filter_type),
+        queries.fetch_project_sales_by_reg_type(params, filter_type),
+        queries.fetch_project_rentals_summary(params, filter_type),
+        queries.fetch_project_rentals_by_rooms(rent_rooms_params, filter_type),
+        meta_task,
+        buildings_task,
+    )
 
     (
         sales_sum_rows,
@@ -198,106 +323,63 @@ async def get_project_summary(
         config_all_rows,
         config_offplan_rows,
         config_secondary_rows,
-        sales_type_rows,
-        sales_reg_rows,
-        rent_sum_rows,
-        rent_rooms_rows,
-        units_rows,
-        meta_rows,
-        developer_rows,
-    ) = await asyncio.gather(
-        queries.fetch_project_sales_summary(params, filter_type),
-        queries.fetch_project_sales_summary(
-            existing_params, filter_type, reg_type="Existing Properties"
-        ),
-        queries.fetch_project_sales_by_rooms(params, filter_type),
-        queries.fetch_project_sales_by_rooms(
-            existing_params, filter_type, reg_type="Existing Properties"
-        ),
-        queries.fetch_project_configuration_sales(params, filter_type),
-        queries.fetch_project_configuration_sales(
-            offplan_params, filter_type, reg_type="Off-Plan Properties"
-        ),
-        queries.fetch_project_configuration_sales(
-            existing_params, filter_type, reg_type="Existing Properties"
-        ),
-        queries.fetch_project_sales_by_property_type(params, filter_type),
-        queries.fetch_project_sales_by_reg_type(params, filter_type),
-        queries.fetch_project_rentals_summary(params, filter_type),
-        queries.fetch_project_rentals_by_rooms(rent_rooms_params, filter_type),
-        queries.fetch_project_units_composition(units_params, filter_type),
-        meta_task,
-        developer_task,
-    )
+    ) = sales_bundle
 
-    # --- Project metadata ---
-    project: Optional[ProjectMeta] = None
+    # --- Scope metadata ---
+    m = meta_rows[0] if meta_rows else {}
+    project: Optional[ProjectMeta]
     if filter_type == "market":
         project = ProjectMeta(
             project_name=project_name,
+            scope_level="market",
             area_name="Dubai",
             developer_name="All developers",
         )
-    elif meta_rows:
-        m = meta_rows[0]
-        if filter_type in ("master", "virtual_master"):
-            raw_devs = m.get("developer_names") or []
-            developer_names = _unique_normalized_labels(
-                [row.get("developer_name_en") for row in developer_rows]
-            )
-            if not developer_names:
-                developer_names = _unique_normalized_labels(raw_devs) if raw_devs else []
-            top_developer = _normalize_label(m.get("developer_name_en"))
-            if not developer_names and top_developer:
-                developer_names = [top_developer, *developer_names]
-            project = ProjectMeta(
-                project_name=project_name,
-                area_name=m.get("area_name_en") or None,
-                developer_name=developer_names[0] if developer_names else top_developer,
-                developer_names=developer_names,
-                project_status=m.get("project_status") or None,
-                completion_date=m.get("completion_date") or None,
-                percent_completed=float(m["percent_completed"])
-                if m.get("percent_completed") is not None
-                else None,
-                no_of_units=int(m["no_of_units"]) if m.get("no_of_units") is not None else None,
-                no_of_buildings=int(m["no_of_buildings"])
-                if m.get("no_of_buildings") is not None
-                else None,
-            )
-        else:
-            project = ProjectMeta(
-                project_name=m.get("project_name_en", project_name),
-                area_name=m.get("area_name_en") or None,
-                developer_name=_normalize_label(m.get("developer_name_en")),
-                project_status=m.get("project_status") or None,
-                completion_date=m.get("completion_date") or None,
-                percent_completed=float(m["percent_completed"])
-                if m.get("percent_completed") is not None
-                else None,
-                no_of_units=int(m["no_of_units"]) if m.get("no_of_units") is not None else None,
-                no_of_buildings=int(m["no_of_buildings"])
-                if m.get("no_of_buildings") is not None
-                else None,
-            )
+    elif filter_type in ("master", "virtual_master"):
+        project = ProjectMeta(project_name=m.get("name") or project_name, scope_level="master")
+        _apply_master_rollup(project, m)
+    elif filter_type == "building" and m:
+        project = ProjectMeta(
+            project_name=m["name"],
+            scope_level="building",
+            building_id=m.get("building_id") or None,
+            parent_project=m.get("project_name") or None,
+            master_name=m.get("master_name") or None,
+            area_name=m.get("area_name") or None,
+        )
+        project = await _fill_project_meta(project, m["name"])
+        _apply_stock(project, m)
+    elif filter_type == "project":
+        project = ProjectMeta(
+            project_name=m.get("name") or project_name,
+            scope_level="project",
+            master_name=m.get("master_name") or None,
+            area_name=m.get("area_name") or None,
+        )
+        project = await _fill_project_meta(project, project_name)
+        _apply_stock(project, m)
+    else:
+        project = None
 
     # --- Sales summary ---
-    s = sales_sum_rows[0] if sales_sum_rows else {}
+    # An aggregate over no sales is one row with a zero count and NaN averages (not JSON): a
+    # project with no sales yet (off-plan launches in Compare) has no figures.
+    s = sales_sum_rows[0] if sales_sum_rows and sales_sum_rows[0].get("transaction_count") else {}
     sales = ProjectSalesSummary(
         transaction_count=int(s.get("transaction_count", 0)),
         total_volume=float(s.get("total_volume", 0) or 0),
         avg_price=float(s.get("avg_price", 0) or 0),
-        avg_price_sqm=float(s.get("avg_price_sqm", 0) or 0),
+        avg_price_sqft=float(s.get("avg_price_sqft", 0) or 0),
         median_price=float(s.get("median_price", 0) or 0),
     )
 
     # --- Rental summary ---
-    r = rent_sum_rows[0] if rent_sum_rows else {}
+    r = rent_sum_rows[0] if rent_sum_rows and rent_sum_rows[0].get("contract_count") else {}
     rentals = ProjectRentalSummary(
         contract_count=int(r.get("contract_count", 0)),
         total_annual_value=float(r.get("total_annual_value", 0) or 0),
         median_annual_rent=float(r.get("median_annual_rent", 0) or 0),
-        median_rent_sqm=float(r.get("median_rent_sqm", 0) or 0),
+        median_rent_sqft=float(r.get("median_rent_sqft", 0) or 0),
     )
 
     # --- Overall gross yield ---
@@ -305,7 +387,9 @@ async def get_project_summary(
     # and would produce artificially inflated yields (e.g. JVC showing ~25%).
     # Median/median: both sides use the same central tendency measure for a consistent yield.
     existing_median_price = float(
-        (sales_sum_existing_rows[0].get("median_price") or 0) if sales_sum_existing_rows else 0
+        (sales_sum_existing_rows[0].get("median_price") or 0)
+        if sales_sum_existing_rows and sales_sum_existing_rows[0].get("transaction_count")
+        else 0
     )
     overall_yield: Optional[float] = None
     if existing_median_price > 0 and rentals.median_annual_rent > 0:
@@ -334,10 +418,10 @@ async def get_project_summary(
                 rooms=rooms,
                 sale_count=int(s_row.get("sale_count", 0)),
                 avg_sale_price=avg_sale,
-                avg_sale_price_sqm=float(s_row.get("avg_sale_price_sqm", 0) or 0),
+                avg_sale_price_sqft=float(s_row.get("avg_sale_price_sqft", 0) or 0),
                 rental_count=int(r_row.get("rental_count", 0)),
                 median_annual_rent=median_rent,
-                median_rent_sqm=float(r_row.get("median_rent_sqm", 0) or 0),
+                median_rent_sqft=float(r_row.get("median_rent_sqft", 0) or 0),
                 gross_yield_pct=yield_pct,
             )
         )
@@ -367,18 +451,15 @@ async def get_project_summary(
         for row in sales_reg_rows
     ]
 
-    # --- Unit composition ---
-    unit_count_total = sum(int(row["unit_count"]) for row in units_rows)
-    if filter_type == "market" and project is not None:
-        project.no_of_units = unit_count_total if unit_count_total > 0 else None
-
-    total_units = unit_count_total or 1
+    # --- Unit composition: the registered units by bedrooms (DLD's unit register) ---
+    units_rows = _unit_mix_rows(m) if filter_type in ("project", "building") else []
+    total_units = sum(int(row["unit_count"]) for row in units_rows) or 1
     unit_composition = [
         AnalyticsUnitComposition(
             rooms=room,
             count=int(row["unit_count"]),
             pct_of_total=round(int(row["unit_count"]) / total_units * 100, 1),
-            avg_unit_size_sqm=float(row.get("avg_unit_size_sqm", 0) or 0),
+            avg_unit_size_sqft=float(row.get("median_unit_size_sqft", 0) or 0),
         )
         for row in units_rows
         if (room := _normalize_label(row.get("rooms_en"))) is not None
@@ -392,14 +473,18 @@ async def get_project_summary(
     }
 
     configuration_analysis = [
-        *build_configuration_rows("all", config_all_rows, unit_rows_by_room, rent_by_room),
-        *build_configuration_rows("off_plan", config_offplan_rows, unit_rows_by_room, rent_by_room),
+        *build_configuration_rows("all", config_all_rows, unit_rows_by_room, rent_by_room, usage),
         *build_configuration_rows(
-            "secondary", config_secondary_rows, unit_rows_by_room, rent_by_room
+            "off_plan", config_offplan_rows, unit_rows_by_room, rent_by_room, usage
+        ),
+        *build_configuration_rows(
+            "secondary", config_secondary_rows, unit_rows_by_room, rent_by_room, usage
         ),
     ]
 
     return ProjectAnalyticsResponse(
+        usage=usage,
+        usage_counts=usage_counts,
         project=project,
         sales=sales,
         rentals=rentals,
@@ -409,14 +494,30 @@ async def get_project_summary(
         by_reg_type=by_reg_type,
         unit_composition=unit_composition,
         configuration_analysis=configuration_analysis,
+        buildings=[
+            BuildingStock(
+                building_id=row["building_id"],
+                name=row["name"],
+                sales=int(row.get("sales") or 0),
+                leases=int(row.get("leases") or 0),
+                units=int(row["units"]) if row.get("units") else None,
+                units_source=row.get("units_source") or None,
+                units_at_least=bool(row.get("units_at_least")),
+            )
+            for row in building_rows
+        ],
+        recent_periods_end=next(
+            (row["recent_period_end"] for row in sales_sum_rows if row.get("recent_period_end")),
+            None,
+        ),
     )
 
 
 async def get_project_trends(
-    project_name: str, days: int, filter_type: ProjectScopeType = "project"
+    project_name: str, days: int, filter_type: ProjectScopeType = "project", usage: str = "auto"
 ) -> ProjectTrendsResponse:
     """Price trend time series for a project over the given number of days."""
-    end_dt = date.today()
+    end_dt = business_today()
     start_dt = end_dt - timedelta(days=days)
     interval = _trend_interval_for_days(days)
 
@@ -427,6 +528,8 @@ async def get_project_trends(
     }
     if filter_type != "market":
         params["project_name"] = like_name
+    scope = {"project_name": like_name} if filter_type != "market" else {}
+    params["usage"] = (await _resolve_usage(scope, filter_type, usage))[0]
 
     rows = await queries.fetch_project_price_trends(params, interval, filter_type)
 
@@ -435,7 +538,7 @@ async def get_project_trends(
             date=row["period"],
             transaction_count=int(row["transaction_count"]),
             avg_price=float(row["avg_price"] or 0),
-            avg_price_sqm=float(row["avg_price_sqm"] or 0),
+            avg_price_sqft=float(row["avg_price_sqft"] or 0),
         )
         for row in rows
     ]
@@ -445,171 +548,109 @@ async def get_project_trends(
 async def get_project_forecast(
     project_name: str, days: int, filter_type: ProjectScopeType = "project"
 ) -> ProjectForecastResponse:
-    """Build a project-level forward price path from historical trend and off-plan curve data."""
-    if filter_type == "market":
-        return ProjectForecastResponse(
-            data=[],
-            methodology="Citywide Dubai forecasts are not generated from project delivery curves.",
-        )
-
-    end_dt = date.today()
-    start_dt = end_dt - timedelta(days=days)
-    interval = _trend_interval_for_days(days)
-
-    like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
-    params = {
-        "project_name": like_name,
-        "start_date": start_dt.isoformat(),
-        "end_date": end_dt.isoformat(),
-    }
-    trend_rows, offplan_rows = await asyncio.gather(
-        queries.fetch_project_price_trends(params, interval, filter_type),
-        queries.fetch_project_offplan_price_curve(params, interval, filter_type),
-    )
-
-    historical = [
-        ProjectForecastPoint(
-            date=row["period"],
-            avg_price=float(row["avg_price"] or 0),
-            avg_price_sqm=float(row["avg_price_sqm"] or 0),
-            series="historical",
-        )
-        for row in trend_rows
-        if float(row.get("avg_price") or 0) > 0
-    ]
-
-    summary = await get_project_summary(project_name=project_name, filter_type=filter_type)
-    delivery_date = summary.project.completion_date if summary.project else None
-
-    if not historical:
-        historical = [
-            ProjectForecastPoint(
-                date=row["period"],
-                avg_price=float(row["avg_price"] or 0),
-                avg_price_sqm=float(row["avg_price_sqm"] or 0),
-                series="historical",
-            )
-            for row in offplan_rows
-            if float(row.get("avg_price") or 0) > 0
-        ]
-
-    if not historical:
-        return ProjectForecastResponse(
-            data=[],
-            delivery_date=delivery_date,
-            methodology="No residential sales history was available to construct a project-level forecast.",
-        )
-
-    monthly_growth_rates: list[float] = []
-    for prev, curr in zip(historical, historical[1:]):
-        prev_price = float(prev.avg_price_sqm or 0)
-        curr_price = float(curr.avg_price_sqm or 0)
-        if prev_price > 0 and curr_price > 0:
-            monthly_growth_rates.append((curr_price / prev_price) - 1)
-
-    delivery_curve_rates: list[float] = []
-    for prev, curr in zip(offplan_rows, offplan_rows[1:]):
-        prev_price = float(prev.get("avg_price_sqm") or 0)
-        curr_price = float(curr.get("avg_price_sqm") or 0)
-        prev_months = float(prev.get("avg_months_to_delivery") or 0)
-        curr_months = float(curr.get("avg_months_to_delivery") or 0)
-        delivery_step = prev_months - curr_months
-        if prev_price > 0 and curr_price > 0 and delivery_step > 0:
-            delivery_curve_rates.append(((curr_price / prev_price) - 1) / delivery_step)
-
-    recent_growth = (
-        sum(monthly_growth_rates[-3:]) / len(monthly_growth_rates[-3:])
-        if monthly_growth_rates[-3:]
-        else 0.0
-    )
-    delivery_curve = (
-        sum(delivery_curve_rates[-4:]) / len(delivery_curve_rates[-4:])
-        if delivery_curve_rates[-4:]
-        else 0.0
-    )
-    monthly_growth = max(-0.01, min(0.018, recent_growth * 0.7 + delivery_curve * 0.3))
-
-    last_point = historical[-1]
-    forecast_points: list[ProjectForecastPoint] = []
-    if delivery_date and delivery_date > last_point.date:
-        horizon_months = max(
-            1,
-            min(
-                12,
-                (delivery_date.year - last_point.date.year) * 12
-                + (delivery_date.month - last_point.date.month),
-            ),
-        )
-    else:
-        horizon_months = 6
-
-    next_date = _add_months(last_point.date, 1)
-    next_price = last_point.avg_price
-    next_price_sqm = last_point.avg_price_sqm
-
-    for _ in range(horizon_months):
-        next_price *= 1 + monthly_growth
-        next_price_sqm *= 1 + monthly_growth
-        forecast_points.append(
-            ProjectForecastPoint(
-                date=next_date,
-                avg_price=round(next_price, 2),
-                avg_price_sqm=round(next_price_sqm, 2),
-                series="forecast",
-            )
-        )
-        next_date = _add_months(next_date, 1)
-
+    # Decision 2026-11-15: no forecast. The forecast anchored DLD's off-plan price curve on a
+    # project's delivery date; DXBI's records carry no delivery schedule and the DLD curve is
+    # frozen (2026-10-13), so any curve drawn now would be invented. Delivery timing is shown by
+    # the pipeline instead.
     return ProjectForecastResponse(
-        data=[*historical, *forecast_points],
-        delivery_date=delivery_date,
-        methodology=(
-            "Forecast extends the recorded residential project trend, then blends recent "
-            "price/sqm movement with the off-plan delivery curve where delivery-dated launches exist."
+        available=False,
+        unavailable_reason=(
+            "A price forecast is not available: the DXBI records hold no delivery schedule to "
+            "anchor one on. See the delivery pipeline for expected completions."
         ),
+        data=[],
+        methodology="Delivery-based forecasts are unavailable from DXBI transaction data.",
     )
+
+
+# A master's DLD area holds at least this share of its records.
+MASTER_AREA_SHARE = 0.1
 
 
 async def get_project_pipeline(
     project_name: str, filter_type: ProjectScopeType = "project"
 ) -> ProjectPipelineResponse:
     """Area-level delivery pipeline grouped by quarter around the selected project."""
+    if filter_type == "building":
+        # A building's delivery pipeline is its project's area.
+        building = await queries.fetch_scope_hierarchy({"project_name": project_name}, "building")
+        if not building:
+            return ProjectPipelineResponse(area_name=None, developer_name=None, data=[])
+        project_name, filter_type = building[0]["project_name"], "project"
     if filter_type == "market":
         area_name = "Dubai"
         developer_name = None
+        basis = "DLD project register: every project in Dubai."
         rows = await queries.fetch_area_supply_projects({}, filter_by_area=False)
     else:
-        summary = await get_project_summary(project_name=project_name, filter_type=filter_type)
-        area_name = summary.project.area_name if summary.project else None
-        developer_name = summary.project.developer_name if summary.project else None
+        like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
+        meta = await queries.fetch_pipeline_meta({"project_name": like_name}, filter_type)
+        meta_row = meta[0] if meta else {}
+        if filter_type == "project":
+            area_name = meta_row.get("area_name_en")
+            developer_name = meta_row.get("developer_name_en")
+            areas = [area_name] if area_name else []
+        else:
+            # A master spans its projects' DLD areas: those holding a tenth of its records or
+            # more (Dubai Marina's are Marsa Dubai's), never one picked at random.
+            found = await queries.fetch_scope_areas({"project_name": like_name}, filter_type)
+            total = sum(int(row["records"]) for row in found)
+            areas = [
+                row["area_name_en"]
+                for row in found
+                if total and int(row["records"]) / total >= MASTER_AREA_SHARE
+            ]
+            area_name = ", ".join(areas) or None
+            # Several developers build a master: none of them is the master's developer.
+            names = meta_row.get("developer_names") or []
+            developer_name = names[0] if len(set(names)) == 1 else None
 
-        if not area_name:
+        if not areas:
+            dxbi_meta = await queries.fetch_project_meta({"project_name": like_name}, filter_type)
+            area_name = dxbi_meta[0].get("area_name_en") if dxbi_meta else None
+            areas = [area_name] if area_name else []
+        if not areas:
             return ProjectPipelineResponse(area_name=None, developer_name=developer_name, data=[])
 
-        rows = await queries.fetch_area_supply_projects({"area_name": area_name})
+        basis = (
+            f"DLD project register: every project in {', '.join(areas)}, the DLD area of the "
+            "selected scope, not only the scope's own projects."
+        )
+        rows = await queries.fetch_area_supply_projects({"areas": [area.lower() for area in areas]})
 
     if not rows:
-        return ProjectPipelineResponse(area_name=area_name, developer_name=developer_name, data=[])
+        return ProjectPipelineResponse(
+            area_name=area_name, developer_name=developer_name, basis=basis, data=[]
+        )
 
-    today = await _latest_sales_anchor_date()
+    today = business_today()
     start_quarter = _quarter_start(date(today.year - 1, 1, 1))
     periods = [_add_months(start_quarter, quarter_index * 3) for quarter_index in range(16)]
 
     completed_by_quarter: dict[date, int] = {}
     pipeline_by_quarter: dict[date, int] = {}
+    overdue_units = 0
+    undated_units = 0
 
     for row in rows:
         units = int(row.get("no_of_units") or 0)
         if units <= 0:
             continue
 
-        completion_dt = _coalesce_delivery_date(row)
-        if completion_dt:
-            quarter = _quarter_start(completion_dt)
-            if completion_dt <= today:
-                completed_by_quarter[quarter] = completed_by_quarter.get(quarter, 0) + units
+        actual_completion = row.get("completion_date")
+        planned_delivery = row.get("project_end_date")
+        if actual_completion and actual_completion <= today:
+            quarter = _quarter_start(actual_completion)
+            completed_by_quarter[quarter] = completed_by_quarter.get(quarter, 0) + units
+        elif actual_completion or planned_delivery:
+            delivery = actual_completion or planned_delivery
+            if delivery < today:
+                overdue_units += units
             else:
+                quarter = _quarter_start(delivery)
                 pipeline_by_quarter[quarter] = pipeline_by_quarter.get(quarter, 0) + units
+        else:
+            undated_units += units
 
     cumulative_existing = sum(units for q, units in completed_by_quarter.items() if q < periods[0])
     cumulative_future = 0
@@ -620,6 +661,8 @@ async def get_project_pipeline(
         new_pipeline_units = pipeline_by_quarter.get(period, 0)
         if period <= today_quarter:
             cumulative_existing += completed_by_quarter.get(period, 0)
+            # Deliveries due later this quarter must remain in subsequent projected stock.
+            cumulative_future += new_pipeline_units
             data.append(
                 ProjectPipelinePoint(
                     period=period,
@@ -642,8 +685,12 @@ async def get_project_pipeline(
         )
 
     return ProjectPipelineResponse(
+        reference_date=today,
+        overdue_units=overdue_units,
+        undated_units=undated_units,
         area_name=area_name,
         developer_name=developer_name,
+        basis=basis,
         data=data,
     )
 
@@ -652,10 +699,12 @@ async def get_project_price_distribution(
     project_name: str,
     filter_type: ProjectScopeType = "project",
     reg_type: Optional[str] = None,
+    usage: str = "auto",
 ) -> ProjectPriceDistributionResponse:
     """Price distribution statistics per bedroom type for bell-curve style visualisation."""
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
     params: dict = {} if filter_type == "market" else {"project_name": like_name}
+    params["usage"] = (await _resolve_usage(dict(params), filter_type, usage))[0]
     if reg_type:
         params["reg_type_en"] = reg_type
 
@@ -665,6 +714,9 @@ async def get_project_price_distribution(
     by_rooms: list[PriceDistributionBucket] = []
 
     for row in rows:
+        # The all-rooms row is one row even over no sales, with NaN statistics: no distribution.
+        if not int(row["sale_count"]):
+            continue
         bucket = PriceDistributionBucket(
             rooms=row["rooms_en"],
             sale_count=int(row["sale_count"]),
@@ -673,12 +725,14 @@ async def get_project_price_distribution(
             log_mean_price=float(row["log_mean_price"] or 0),
             log_std_price=float(row["log_std_price"] or 0),
             p05_price=float(row["p05_price"] or 0),
+            p16_price=float(row["p16_price"] or 0),
             p25_price=float(row["p25_price"] or 0),
             p50_price=float(row["p50_price"] or 0),
             p75_price=float(row["p75_price"] or 0),
+            p84_price=float(row["p84_price"] or 0),
             p95_price=float(row["p95_price"] or 0),
-            mean_price_sqm=float(row["mean_price_sqm"] or 0),
-            std_price_sqm=float(row["std_price_sqm"] or 0),
+            mean_price_sqft=float(row["mean_price_sqft"] or 0),
+            std_price_sqft=float(row["std_price_sqft"] or 0),
         )
         if row["rooms_en"] == "__all__":
             all_bucket = bucket
@@ -694,12 +748,138 @@ def _resolve_project_scope(
     master_project: Optional[str],
     project: Optional[str],
     filter_type: ProjectFilterType,
+    building_id: Optional[str] = None,
 ) -> tuple[str, ProjectScopeType]:
+    """The scope a request names: a building (by id), a project, a master, else the market."""
+    if building_id:
+        return building_id, "building"
     if project:
         return project, "project"
     if master_project:
         return master_project, filter_type
     return "Dubai", "market"
+
+
+_BUCKET = re.compile(
+    r"^\s*(?:(?P<low>\d+(?:\.\d+)?)(?P<low_unit>[KM]?)\s*-\s*(?P<high>\d+(?:\.\d+)?)(?P<high_unit>[KM]?)"
+    r"|<\s*(?P<below>\d+(?:\.\d+)?)(?P<below_unit>[KM]?)"
+    r"|(?P<from>\d+(?:\.\d+)?)(?P<from_unit>[KM]?)\s*\+)\s*$",
+    re.IGNORECASE,
+)
+_SCALE = {"": 1, "K": 1_000, "M": 1_000_000}
+
+
+def _bucket_bounds(
+    name: str, label: Optional[str]
+) -> Optional[tuple[Optional[float], Optional[float]]]:
+    """A bucket label as half-open bounds: '1M-2M' is 1,000,000 up to (not including) 2,000,000,
+    '<500K' below 500,000 and '5M+' from 5,000,000. Areas are in sq ft ('1K-2K')."""
+    if not label:
+        return None
+    match = _BUCKET.match(label)
+    if not match:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid {name}: {label!r}. Use e.g. '1M-2M', '<500K' or '5M+'.",
+        )
+
+    def amount(group: str) -> Optional[float]:
+        value = match.group(group)
+        if value is None:
+            return None
+        return float(value) * _SCALE[(match.group(f"{group}_unit") or "").upper()]
+
+    if match.group("low") is not None:
+        return amount("low"), amount("high")
+    if match.group("below") is not None:
+        return None, amount("below")
+    return amount("from"), None
+
+
+def _bind_bounds(parameters: dict, name: str, bounds) -> None:
+    if bounds is None:
+        return
+    low, high = bounds
+    if low is not None:
+        parameters[f"{name}_min"] = low
+    if high is not None:
+        parameters[f"{name}_max"] = high
+
+
+# The usage a market type's records are of (DXBI types each: villas and townhouses are homes, a
+# whole building is commercial, a plot is land), echoed instead of the ignored property_usage.
+MARKET_TYPE_USAGE = {
+    "residential_units": "Residential",
+    "villas": "Residential",
+    "commercial_units": "Commercial",
+    "bulk_building": "Commercial",
+    "land": "Land",
+}
+
+
+def _market_interval(days: int) -> str:
+    """Daily points up to 30 days, Sunday weeks up to 180, months beyond."""
+    if days <= 30:
+        return "day"
+    if days <= 180:
+        return "week"
+    return "month"
+
+
+def _period_last_day(start: date, interval: str) -> date:
+    if interval == "day":
+        return start
+    if interval == "week":
+        return start + timedelta(days=6)
+    return _add_months(start.replace(day=1), 1) - timedelta(days=1)
+
+
+def _is_partial(period: date, interval: str, start_date: date, end_date: date) -> bool:
+    """A point whose day, week or month the requested period cuts: not a whole one."""
+    return period < start_date or _period_last_day(period, interval) > end_date
+
+
+def _figure(value: Any) -> Optional[float]:
+    """A period or group with no records (or none with a size) has no average: NULL or NaN."""
+    if value is None:
+        return None
+    number = float(value)
+    return None if math.isnan(number) else number
+
+
+def _pct_change(current: Optional[float], previous: Optional[float]) -> Optional[float]:
+    if current is None or not previous:
+        return None
+    return round((current - previous) / previous * 100, 1)
+
+
+def _resolve_period(
+    timeframe_days: Optional[int], start_date: Optional[date], end_date: Optional[date]
+) -> tuple[date, date]:
+    if timeframe_days:
+        end_date = business_today()
+        return end_date - timedelta(days=timeframe_days), end_date
+    today = business_today()
+    return start_date or today - timedelta(days=180), end_date or today  # default 6 months
+
+
+def _previous_period(start_date: date, end_date: date) -> tuple[date, date]:
+    """The equal period just before: as many whole days, sharing none."""
+    previous_end = start_date - timedelta(days=1)
+    return previous_end - (end_date - start_date), previous_end
+
+
+def _unavailable(what: str, error: Exception) -> HTTPException:
+    """A failed query is an error the page shows, never a 200 with zeros that reads as no sales."""
+    logger.error("Error executing %s query: %s", what, error)
+    return HTTPException(status_code=503, detail=f"The {what} figures could not be loaded.")
+
+
+def _shares(rows: list[dict], count_field: str, total: int) -> dict[str, float]:
+    """Each group's share of the summary's records (the busiest masters do not add up to all)."""
+    return {row["dimension_value"]: round(int(row[count_field]) / total * 100, 1) for row in rows}
 
 
 async def get_sales_analytics(
@@ -715,109 +895,100 @@ async def get_sales_analytics(
     price_bucket: Optional[str] = None,
     area_bucket: Optional[str] = None,
 ):
-    """Get sales analytics with flexible filtering and custom date ranges.
+    """Sales summary, trend and breakdowns for a period, with the change on the equal period
+    before it.
 
-    Supports:
-    - Custom date ranges (use start_date/end_date or timeframe_days)
-    - market_type for taxonomy-correct filtering (recommended)
-    - Manual filtering via property_usage + property_type (legacy)
-
-    Examples:
-    - Last 30 days: ?timeframe_days=30
-    - By market: ?market_type=residential_units&timeframe_days=90
-    - Custom range: ?start_date=2024-01-01&end_date=2024-12-31
+    ``market_type`` replaces property_usage / property_type with its own group and predicate.
+    A period is ``timeframe_days`` up to today, or start_date to end_date (default: 180 days).
+    The trend is daily up to 30 days, by Sunday week up to 180 and monthly beyond; a point the
+    period cuts is flagged ``partial``. Breakdowns split the summary's records (records without
+    a value are their own "Not recorded" group; masters are the 20 busiest).
     """
-    from fastapi import HTTPException
-
-    # Resolve market_type into property_usage / property_type / property_usage_in
-    resolved_property_usage = property_usage
-    resolved_property_type = property_type
-    resolved_property_usage_in = None
-
+    market = None
+    resolved_usage = property_usage
+    resolved_type = property_type
     if market_type is not None:
         if market_type not in MARKET_FILTERS:
             raise HTTPException(
                 status_code=422,
                 detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}",
             )
-        mf = MARKET_FILTERS[market_type]
-        resolved_property_usage = mf.get("property_usage_en")
-        resolved_property_usage_in = mf.get("property_usage_en__in")
-        resolved_property_type = mf.get("property_type_en", property_type)
+        market = MARKET_FILTERS[market_type]
+        resolved_usage = None
+        resolved_type = None
 
-    # Calculate date range
-    if timeframe_days:
-        from datetime import timedelta
+    start_date, end_date = _resolve_period(timeframe_days, start_date, end_date)
+    previous_start, previous_end = _previous_period(start_date, end_date)
+    price_range = _bucket_bounds("price_bucket", price_bucket)
+    area_range = _bucket_bounds("area_bucket", area_bucket)
 
-        end_date = date.today()
-        start_date = end_date - timedelta(days=timeframe_days)
-    else:
-        if not start_date:
-            from datetime import timedelta
-
-            start_date = date.today() - timedelta(days=180)  # Default 6 months
-        if not end_date:
-            end_date = date.today()
-
-    # Execute ClickHouse query
-    try:
-        parameters = {
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-        }
-
-        # Add optional parameters
-        if resolved_property_usage is not None:
-            parameters["property_usage"] = resolved_property_usage
+    def parameters(start: date, end: date) -> dict:
+        bound: dict = {"start_date": start.isoformat(), "end_date": end.isoformat()}
+        if resolved_usage is not None:
+            bound["property_usage"] = resolved_usage
         if master_project:
-            parameters["master_project"] = master_project
-        if resolved_property_type:
-            parameters["property_type"] = resolved_property_type
+            bound["master_project"] = master_project
+        if resolved_type:
+            bound["property_type"] = resolved_type
         if rooms:
-            parameters["rooms"] = rooms
+            bound["rooms"] = rooms
         if reg_type:
-            parameters["reg_type"] = reg_type
-        if price_bucket:
-            parameters["price_bucket"] = price_bucket
-        if area_bucket:
-            parameters["area_bucket"] = area_bucket
+            bound["reg_type"] = reg_type
+        _bind_bounds(bound, "price", price_range)
+        _bind_bounds(bound, "area_sqft", area_range)
+        return bound
 
-        result = await queries.fetch_sales_summary(
-            parameters,
-            property_usage=resolved_property_usage,
-            property_usage_in=resolved_property_usage_in,
-            start_date=start_date.isoformat(),
-            end_date=end_date.isoformat(),
-            master_project=master_project,
-            property_type=resolved_property_type,
-            rooms=rooms,
-            reg_type=reg_type,
-            price_bucket=price_bucket,
-            area_bucket=area_bucket,
+    filters = dict(
+        property_usage=resolved_usage,
+        market=market,
+        master_project=master_project,
+        property_type=resolved_type,
+        rooms=rooms,
+        reg_type=reg_type,
+        price_range=price_range,
+        area_range=area_range,
+    )
+    current = parameters(start_date, end_date)
+    period = {"start_date": current["start_date"], "end_date": current["end_date"]}
+    interval = _market_interval((end_date - start_date).days)
+    dimensions = ("property_type", "rooms", "reg_type", "master_project")
+    try:
+        result, previous, trend_rows, *breakdown_rows = await asyncio.gather(
+            queries.fetch_sales_summary(current, **period, **filters),
+            queries.fetch_sales_summary(
+                parameters(previous_start, previous_end),
+                start_date=previous_start.isoformat(),
+                end_date=previous_end.isoformat(),
+                **filters,
+            ),
+            queries.fetch_sales_trends(current, interval=interval, **period, **filters),
+            *(
+                queries.fetch_sales_breakdown(current, dimension, **period, **filters)
+                for dimension in dimensions
+            ),
         )
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise _unavailable("sales analytics", error) from error
 
-    except Exception as e:
-        # Log error and return empty response instead of crashing
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error executing sales analytics query: {str(e)}")
-        result = []
-
-    if not result:
-        # Return empty analytics response
-        summary = AnalyticsSummary(
-            transaction_count=0,
-            total_volume=0.0,
-            avg_price=0.0,
-            avg_price_sqft=0.0,
-            min_price=0.0,
-            max_price=0.0,
-        )
+    response = {
+        "timeframe_days": timeframe_days or (end_date - start_date).days,
+        "property_usage": MARKET_TYPE_USAGE[market_type] if market_type else property_usage,
+        "market_type": market_type,
+    }
+    # An aggregate over no sales is one row with a zero count and NaN averages (not JSON).
+    if not result or not result[0].get("transaction_count"):
         return AnalyticsResponse(
-            timeframe_days=timeframe_days or (end_date - start_date).days,
-            property_usage=property_usage,
-            summary=summary,
+            **response,
+            summary=AnalyticsSummary(
+                transaction_count=0,
+                total_volume=0.0,
+                avg_price=0.0,
+                avg_price_sqft=0.0,
+                min_price=0.0,
+                max_price=0.0,
+            ),
             trends=[],
             by_property_type=[],
             by_rooms=[],
@@ -825,29 +996,63 @@ async def get_sales_analytics(
             by_master_project=[],
         )
 
-    # Convert result to summary
     row = result[0]
+    before = previous[0] if previous and previous[0].get("transaction_count") else {}
     summary = AnalyticsSummary(
         transaction_count=row["transaction_count"],
         total_volume=float(row["total_volume"]),
         avg_price=float(row["avg_price"]),
-        avg_price_sqft=float(row.get("avg_price_sqft") or 0),
+        avg_price_sqft=_figure(row.get("avg_price_sqft")) or 0.0,
         min_price=float(row.get("min_price") or 0),
         max_price=float(row.get("max_price") or 0),
+        median_price=_figure(row.get("median_price")),
+        volume_change_pct=_pct_change(
+            float(row["total_volume"]), _figure(before.get("total_volume"))
+        ),
+        count_change_pct=_pct_change(
+            float(row["transaction_count"]), _figure(before.get("transaction_count"))
+        ),
     )
 
-    # For now, return basic response with just summary
-    # TODO: Add trends and breakdowns queries
+    def breakdown(rows: list[dict]) -> list[DimensionBreakdown]:
+        shares = _shares(rows, "transaction_count", int(row["transaction_count"]))
+        return [
+            DimensionBreakdown(
+                dimension_value=item["dimension_value"],
+                transaction_count=int(item["transaction_count"]),
+                total_volume=float(item["total_volume"]),
+                avg_price_sqft=_figure(item.get("avg_price_sqft")) or 0.0,
+                pct_of_total=shares[item["dimension_value"]],
+            )
+            for item in rows
+        ]
+
+    by = dict(zip(dimensions, breakdown_rows, strict=True))
     return AnalyticsResponse(
-        timeframe_days=timeframe_days or (end_date - start_date).days,
-        property_usage=property_usage,
+        **response,
         summary=summary,
-        trends=[],  # TODO: Implement trends query
-        by_property_type=[],  # TODO: Implement breakdowns
-        by_rooms=[],
-        by_reg_type=[],
-        by_master_project=[],
+        trends=_trend_points(trend_rows, interval, start_date, end_date),
+        by_property_type=breakdown(by["property_type"]),
+        by_rooms=breakdown(by["rooms"]),
+        by_reg_type=breakdown(by["reg_type"]),
+        by_master_project=breakdown(by["master_project"]),
     )
+
+
+def _trend_points(
+    rows: list[dict], interval: str, start_date: date, end_date: date
+) -> list[TrendPoint]:
+    return [
+        TrendPoint(
+            date=item["period"],
+            count=int(item["count"]),
+            total_value=float(item["total_value"]),
+            avg_value=float(item["avg_value"]),
+            avg_sqft=_figure(item.get("avg_sqft")) or 0.0,
+            partial=_is_partial(item["period"], interval, start_date, end_date),
+        )
+        for item in rows
+    ]
 
 
 async def get_rental_analytics(
@@ -860,94 +1065,113 @@ async def get_rental_analytics(
     rent_bucket: Optional[str] = None,
     area_bucket: Optional[str] = None,
 ):
-    """Get rental analytics with flexible filtering and custom date ranges.
+    """Lease summary, trend (by lease start) and breakdowns for a period, with the change on the
+    equal period before it. Periods, trend intervals and partial points as for sales."""
+    start_date, end_date = _resolve_period(timeframe_days, start_date, end_date)
+    previous_start, previous_end = _previous_period(start_date, end_date)
+    rent_range = _bucket_bounds("rent_bucket", rent_bucket)
+    area_range = _bucket_bounds("area_bucket", area_bucket)
 
-    Supports:
-    - Custom date ranges (use start_date/end_date or timeframe_days)
-    - Multi-dimensional filtering (combine property_type, location, rent ranges)
-    - Bucketed filtering (rent ranges, area ranges)
+    def parameters(start: date, end: date) -> dict:
+        bound: dict = {
+            "property_usage": property_usage,
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+        }
+        if master_project:
+            bound["master_project"] = master_project
+        if property_type:
+            bound["property_type"] = property_type
+        _bind_bounds(bound, "rent", rent_range)
+        _bind_bounds(bound, "area_sqft", area_range)
+        return bound
 
-    Examples:
-    - Last 90 days: ?timeframe_days=90
-    - Custom range: ?start_date=2024-06-01&end_date=2024-08-31
-    - Filtered: ?property_usage=Commercial&rent_bucket=200K-500K
-    """
-    # Calculate date range
-    if timeframe_days:
-        from datetime import timedelta
-
-        end_date = date.today()
-        start_date = end_date - timedelta(days=timeframe_days)
-    else:
-        if not start_date:
-            from datetime import timedelta
-
-            start_date = date.today() - timedelta(days=180)  # Default 6 months
-        if not end_date:
-            end_date = date.today()
-
-    # Execute ClickHouse query
-
-    parameters = {
-        "property_usage": property_usage,
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat(),
-    }
-
-    # Add optional parameters
-    if master_project:
-        parameters["master_project"] = master_project
-    if property_type:
-        parameters["property_type"] = property_type
-
-    result = await queries.fetch_rentals_summary(
-        parameters,
+    filters = dict(
         property_usage=property_usage,
-        start_date=start_date.isoformat(),
-        end_date=end_date.isoformat(),
         master_project=master_project,
         property_type=property_type,
+        rent_range=rent_range,
+        area_range=area_range,
     )
-
-    if not result:
-        # Return empty rental analytics response
-        summary = RentalSummary(
-            contract_count=0,
-            total_annual_value=0.0,
-            avg_annual_rent=0.0,
-            avg_rent_sqft=0.0,
-            min_annual_rent=0.0,
-            max_annual_rent=0.0,
+    current = parameters(start_date, end_date)
+    period = {"start_date": current["start_date"], "end_date": current["end_date"]}
+    interval = _market_interval((end_date - start_date).days)
+    try:
+        result, previous, trend_rows, by_type, by_master = await asyncio.gather(
+            queries.fetch_rentals_summary(current, **period, **filters),
+            queries.fetch_rentals_summary(
+                parameters(previous_start, previous_end),
+                start_date=previous_start.isoformat(),
+                end_date=previous_end.isoformat(),
+                **filters,
+            ),
+            queries.fetch_rentals_trends(current, interval=interval, **period, **filters),
+            queries.fetch_rentals_breakdown(current, "property_type", **period, **filters),
+            queries.fetch_rentals_breakdown(current, "master_project", **period, **filters),
         )
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise _unavailable("rental analytics", error) from error
+
+    response = {
+        "timeframe_days": timeframe_days or (end_date - start_date).days,
+        "property_usage": property_usage,
+    }
+    # An aggregate over no leases is one row with a zero count and NaN averages (not JSON).
+    if not result or not result[0].get("contract_count"):
         return RentalAnalyticsResponse(
-            timeframe_days=timeframe_days or (end_date - start_date).days,
-            property_usage=property_usage,
-            summary=summary,
+            **response,
+            summary=RentalSummary(
+                contract_count=0,
+                total_annual_value=0.0,
+                avg_annual_rent=0.0,
+                avg_rent_sqft=0.0,
+                min_annual_rent=0.0,
+                max_annual_rent=0.0,
+            ),
             trends=[],
             by_property_type=[],
             by_master_project=[],
         )
 
-    # Convert result to summary
     row = result[0]
+    before = previous[0] if previous and previous[0].get("contract_count") else {}
     summary = RentalSummary(
         contract_count=row["contract_count"],
         total_annual_value=float(row["total_annual_value"]),
         avg_annual_rent=float(row["avg_rent"]),
-        avg_rent_sqft=float(row.get("avg_rent_sqft") or 0),
+        avg_rent_sqft=_figure(row.get("avg_rent_sqft")) or 0.0,
         min_annual_rent=float(row.get("min_rent") or 0),
         max_annual_rent=float(row.get("max_rent") or 0),
+        median_annual_rent=_figure(row.get("median_rent")),
+        value_change_pct=_pct_change(
+            float(row["total_annual_value"]), _figure(before.get("total_annual_value"))
+        ),
+        count_change_pct=_pct_change(
+            float(row["contract_count"]), _figure(before.get("contract_count"))
+        ),
     )
 
-    # For now, return basic response with just summary
-    # TODO: Add trends and breakdowns queries
+    def breakdown(rows: list[dict]) -> list[RentalDimensionBreakdown]:
+        shares = _shares(rows, "contract_count", int(row["contract_count"]))
+        return [
+            RentalDimensionBreakdown(
+                dimension_value=item["dimension_value"],
+                contract_count=int(item["contract_count"]),
+                total_annual_value=float(item["total_annual_value"]),
+                avg_rent_sqft=_figure(item.get("avg_rent_sqft")) or 0.0,
+                pct_of_total=shares[item["dimension_value"]],
+            )
+            for item in rows
+        ]
+
     return RentalAnalyticsResponse(
-        timeframe_days=timeframe_days or (end_date - start_date).days,
-        property_usage=property_usage,
+        **response,
         summary=summary,
-        trends=[],  # TODO: Implement trends query
-        by_property_type=[],  # TODO: Implement breakdowns
-        by_master_project=[],
+        trends=_trend_points(trend_rows, interval, start_date, end_date),
+        by_property_type=breakdown(by_type),
+        by_master_project=breakdown(by_master),
     )
 
 
@@ -958,14 +1182,13 @@ async def get_market_trend(
 ):
     """Get aggregated price trend data for the market trend chart.
 
-    Returns trend points plus period-over-period change vs the equivalent prior period.
+    Returns trend points plus period-over-period change vs the equivalent prior period. The
+    first and last points are flagged ``partial`` when the period cuts their week or month.
     """
-    from fastapi import HTTPException
-
-    # Resolve market_type
+    # A market type replaces property_usage with its own group and predicate.
     resolved_property_usage = property_usage
-    resolved_property_usage_in = None
     resolved_property_type = None
+    market = None
 
     if market_type is not None:
         if market_type not in MARKET_FILTERS:
@@ -973,22 +1196,15 @@ async def get_market_trend(
                 status_code=422,
                 detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}",
             )
-        mf = MARKET_FILTERS[market_type]
-        resolved_property_usage = mf.get("property_usage_en")
-        resolved_property_usage_in = mf.get("property_usage_en__in")
-        resolved_property_type = mf.get("property_type_en")
+        market = MARKET_FILTERS[market_type]
+        resolved_property_usage = None
 
-    end_date = date.today()
+    end_date = business_today()
     start_date = end_date - timedelta(days=days)
-    prev_end = start_date
+    # The equal period just before: both cover whole days and share none.
+    prev_end = start_date - timedelta(days=1)
     prev_start = prev_end - timedelta(days=days)
-
-    if days <= 30:
-        interval = "day"
-    elif days <= 180:
-        interval = "week"
-    else:
-        interval = "month"
+    interval = _market_interval(days)
 
     def _trend_params(s: str, e: str) -> dict:
         p: dict = {"start_date": s, "end_date": e}
@@ -1003,7 +1219,7 @@ async def get_market_trend(
             queries.fetch_price_trends(
                 _trend_params(start_date.isoformat(), end_date.isoformat()),
                 property_usage=resolved_property_usage,
-                property_usage_in=resolved_property_usage_in,
+                market=market,
                 property_type=resolved_property_type,
                 start_date=start_date.isoformat(),
                 end_date=end_date.isoformat(),
@@ -1012,7 +1228,7 @@ async def get_market_trend(
             queries.fetch_sales_summary(
                 _trend_params(start_date.isoformat(), end_date.isoformat()),
                 property_usage=resolved_property_usage,
-                property_usage_in=resolved_property_usage_in,
+                market=market,
                 property_type=resolved_property_type,
                 start_date=start_date.isoformat(),
                 end_date=end_date.isoformat(),
@@ -1020,48 +1236,41 @@ async def get_market_trend(
             queries.fetch_sales_summary(
                 _trend_params(prev_start.isoformat(), prev_end.isoformat()),
                 property_usage=resolved_property_usage,
-                property_usage_in=resolved_property_usage_in,
+                market=market,
                 property_type=resolved_property_type,
                 start_date=prev_start.isoformat(),
                 end_date=prev_end.isoformat(),
             ),
         )
-    except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).error(f"Error executing market trend query: {e}")
-        return MarketTrendResponse(data=[], total_transactions=0)
+    except Exception as error:
+        raise _unavailable("market trend", error) from error
 
     data = [
         MarketTrendPoint(
             date=row["period"],
             transaction_count=int(row["transaction_count"]),
             avg_price=float(row["avg_price"]),
-            avg_price_sqm=float(row["avg_price_sqm"]),
+            avg_price_sqft=_figure(row["avg_price_sqft"]),
+            partial=_is_partial(row["period"], interval, start_date, end_date),
         )
         for row in trend_result
     ]
 
-    def pct_change(current: float, previous: float) -> Optional[float]:
-        if not previous:
-            return None
-        return round((current - previous) / previous * 100, 1)
-
     avg_price_change_pct = None
-    avg_price_sqm_change_pct = None
+    avg_price_sqft_change_pct = None
     if current_result and prev_result:
         curr = current_result[0]
         prev = prev_result[0]
-        avg_price_change_pct = pct_change(float(curr["avg_price"]), float(prev["avg_price"]))
-        avg_price_sqm_change_pct = pct_change(
-            float(curr["median_price_per_sqm"]), float(prev["median_price_per_sqm"])
+        avg_price_change_pct = _pct_change(_figure(curr["avg_price"]), _figure(prev["avg_price"]))
+        avg_price_sqft_change_pct = _pct_change(
+            _figure(curr["median_price_per_sqft"]), _figure(prev["median_price_per_sqft"])
         )
 
     return MarketTrendResponse(
         data=data,
         total_transactions=sum(p.transaction_count for p in data),
         avg_price_change_pct=avg_price_change_pct,
-        avg_price_sqm_change_pct=avg_price_sqm_change_pct,
+        avg_price_sqft_change_pct=avg_price_sqft_change_pct,
     )
 
 

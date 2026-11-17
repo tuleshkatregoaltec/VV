@@ -9,7 +9,7 @@ import { fmt } from '../../format'
 /**
  * A picker button for long lists (Property Finder companies, a company's agents): an in-page menu
  * like FilterMenu (native selects do not show in a screen share) with a search box on top.
- * Typing filters by label and meta; ↓ moves into the list, ↑ ↓ Home End move, Enter picks, Escape closes.
+ * Typing filters by label; ↓ moves into the list, ↑ ↓ Home End move, Enter picks, Escape closes.
  */
 let {
 	label,
@@ -20,8 +20,7 @@ let {
 	allLabel,
 	allMeta,
 	noun,
-	disabled = false,
-	block = false
+	disabled = false
 }: {
 	/** Small line above the value ("Property Finder company"). */
 	label: string
@@ -36,8 +35,6 @@ let {
 	/** Plural for the search box ("companies"). */
 	noun: string
 	disabled?: boolean
-	/** Fill the row, e.g. as a form field. */
-	block?: boolean
 } = $props()
 
 /** Rows drawn at once; typing narrows the rest. */
@@ -52,9 +49,7 @@ let input: HTMLInputElement | undefined = $state()
 const current = $derived(options.find((o) => o.id === value))
 const matches = $derived.by(() => {
 	const q = query.trim().toLocaleLowerCase()
-	return q
-		? options.filter((o) => `${o.label} ${o.meta ?? ''}`.toLocaleLowerCase().includes(q))
-		: options
+	return q ? options.filter((o) => o.label.toLocaleLowerCase().includes(q)) : options
 })
 const shown = $derived(matches.slice(0, SHOWN))
 
@@ -122,7 +117,7 @@ function onwindowclick(e: MouseEvent) {
 
 <svelte:window onclick={onwindowclick} />
 
-<span class={['spick', block && 'block']}>
+<span class="spick">
 	<button
 		bind:this={btn}
 		type="button"
@@ -196,15 +191,6 @@ function onwindowclick(e: MouseEvent) {
 		position: relative;
 		display: inline-flex;
 		min-width: 0;
-	}
-	.spick.block,
-	.spick.block .spick-btn,
-	.spick.block .spick-menu {
-		display: flex;
-		width: 100%;
-	}
-	.spick.block .spick-menu {
-		display: block;
 	}
 	.spick-btn {
 		display: inline-flex;

@@ -1,4 +1,9 @@
-"""Catch up imported owner lists after a published rental candidate/match refresh."""
+"""Catch up imported owner lists after a published rental candidate/match refresh.
+
+Run by the DXBI warehouse sync after every load: imported claims get the current lease link
+(lead, lease end, rent) and each organization's stored owner assessment is republished from
+them, so the Owners page never serves the lease state of an import's day.
+"""
 
 import argparse
 import asyncio
@@ -13,7 +18,14 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.clickhouse.client import close_clickhouse, query
-from app.crm import identity, import_repository, owner_queries, owner_repository, owners
+from app.crm import (
+    identity,
+    import_repository,
+    owner_queries,
+    owner_repository,
+    owner_store,
+    owners,
+)
 from app.crm import ownership as import_service
 from app.postgres.client import close_postgres, get_postgres_engine
 
@@ -125,6 +137,41 @@ async def refresh(state_dir: Path, *, dry_run: bool = False) -> dict:
     return report
 
 
+async def publish_assessments() -> list[dict]:
+    """Republish every organization's owner assessment whose inputs changed."""
+    engine = get_postgres_engine()
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as db:
+        organizations = (
+            (
+                await db.execute(
+                    text(
+                        "SELECT DISTINCT organization_id FROM crm_property_contact_claims ORDER BY 1"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    published = []
+    for organization in organizations:
+        state = await owner_store.publish_if_stale(engine, organization)
+        published.append(
+            {
+                "generation": state.generation if state else None,
+                "built_at": state.built_at.isoformat() if state else None,
+            }
+        )
+    return published
+
+
+async def run(state_dir: Path, *, dry_run: bool = False) -> dict:
+    report = await refresh(state_dir, dry_run=dry_run)
+    if not dry_run:
+        report["assessments"] = await publish_assessments()
+    return report
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state-dir", type=Path, required=True)
@@ -134,7 +181,7 @@ async def main() -> None:
     with (args.state_dir / "import-rental-matches.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         try:
-            print(json.dumps(await refresh(args.state_dir, dry_run=args.dry_run)), flush=True)
+            print(json.dumps(await run(args.state_dir, dry_run=args.dry_run)), flush=True)
         finally:
             await close_clickhouse()
             await close_postgres()

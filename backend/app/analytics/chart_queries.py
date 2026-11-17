@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from typing import Any
 
+from app.analytics.dxbi import RENTALS_SOURCE, SALES_SOURCE
 from app.analytics.metrics import (
     _chart_area_inputs,
     _chart_days,
@@ -17,15 +18,30 @@ from app.analytics.queries import price_trends
 from app.clickhouse.client import query as ch_query
 from app.market.reference import SQM_TO_SQFT, area_search_text
 
+# Every area-based figure is per square foot. A request for a per-square-metre metric (the
+# model or an old saved chart) gets its per-square-foot counterpart, not a different metric.
+_SQM_METRICS = {
+    "avg_price_sqm": "avg_price_sqft",
+    "median_price_sqm": "median_price_sqft",
+    "median_rent_sqm": "median_rent_sqft",
+}
+
+
+def _per_sqft(metric: str) -> str:
+    return _SQM_METRICS.get(metric, metric)
+
 
 async def _resolve_transaction_area(area: str | None) -> str | None:
     if not area:
         return None
 
     search_text = area_search_text(area)
-    sql = """
+    sql = (
+        """
     SELECT location_name
-    FROM ch_transactions
+    FROM """
+        + SALES_SOURCE
+        + """
     WHERE location_name != ''
       AND (
         lower(location_name) = lower({area:String})
@@ -44,6 +60,7 @@ async def _resolve_transaction_area(area: str | None) -> str | None:
         count() DESC
     LIMIT 1
     """
+    )
     rows = await ch_query(
         sql, {"area": area, "search_text": search_text, "pattern": f"%{search_text}%"}
     )
@@ -76,7 +93,7 @@ async def _latest_transaction_date(
     rows = await ch_query(
         f"""
         SELECT max(instance_date) AS max_date
-        FROM ch_transactions
+        FROM {SALES_SOURCE}
         WHERE {" AND ".join(where_clauses)}
         """,
         params,
@@ -125,7 +142,7 @@ async def _latest_rental_contract_date(
     rows = await ch_query(
         f"""
         SELECT max(contract_start_date) AS max_date
-        FROM ch_rent_contracts
+        FROM {RENTALS_SOURCE}
         WHERE {" AND ".join(where_clauses)}
         """,
         params,
@@ -152,7 +169,9 @@ async def _resolve_transaction_scope(area: str | None) -> dict[str, str | None]:
     master_rows = await ch_query(
         """
         SELECT master_project_en
-        FROM ch_transactions
+        FROM """
+        + SALES_SOURCE
+        + """
         WHERE master_project_en != ''
           AND lower(master_project_en) = lower({search_text:String})
           AND trans_group_en = 'Sales'
@@ -274,7 +293,7 @@ async def _latest_transaction_date_for_scopes(
     rows = await ch_query(
         f"""
         SELECT max(instance_date) AS max_date
-        FROM ch_transactions
+        FROM {SALES_SOURCE}
         WHERE {" AND ".join(where_clauses)}
         """,
         params,
@@ -320,7 +339,7 @@ async def _latest_rental_contract_date_for_scopes(
     rows = await ch_query(
         f"""
         SELECT max(contract_start_date) AS max_date
-        FROM ch_rent_contracts
+        FROM {RENTALS_SOURCE}
         WHERE {" AND ".join(where_clauses)}
         """,
         params,
@@ -394,7 +413,7 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
     days = _chart_days(args.get("days"))
     limit = clamp_int(args.get("limit"), default=8, min_value=1, max_value=20)
     group_by = str(args.get("group_by") or "area").lower()
-    metric = str(args.get("metric") or "transaction_count").lower()
+    metric = _per_sqft(str(args.get("metric") or "transaction_count").lower())
     sort_direction = _chart_sort_direction(args.get("sort_direction"))
     property_usage = _optional_chart_filter(args.get("property_usage")) or "Residential"
     property_type = _sales_property_type(args.get("property_type"))
@@ -426,11 +445,9 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
         "transaction_count": "count()",
         "total_volume": "round(sum(actual_worth), 0)",
         "avg_price": "round(avg(actual_worth), 0)",
-        "median_price": "round(median(actual_worth), 0)",
-        "avg_price_sqm": "round(avg(meter_sale_price), 0)",
-        "median_price_sqm": "round(median(meter_sale_price), 0)",
+        "median_price": "round(medianExact(actual_worth), 0)",
         "avg_price_sqft": f"round(avg(meter_sale_price) / {SQM_TO_SQFT}, 0)",
-        "median_price_sqft": f"round(median(meter_sale_price) / {SQM_TO_SQFT}, 0)",
+        "median_price_sqft": f"round(medianExact(meter_sale_price) / {SQM_TO_SQFT}, 0)",
     }
     if metric not in metric_exprs:
         metric = "transaction_count"
@@ -484,7 +501,7 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
     where = [
         "trans_group_en = 'Sales'",
         "actual_worth > 0",
-        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage:
         where.append("property_usage_en = {property_usage:String}")
@@ -516,7 +533,7 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
                 {label_expr} AS label,
                 {metric_exprs[metric]} AS value,
                 count() AS record_count
-            FROM ch_transactions
+            FROM {SALES_SOURCE}
             WHERE {" AND ".join(where)}
             GROUP BY series_label, label
             HAVING value > 0 AND record_count >= {{min_records:Int32}}
@@ -537,7 +554,7 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
                 {label_expr} AS label,
                 {metric_exprs[metric]} AS value,
                 count() AS record_count
-            FROM ch_transactions
+            FROM {SALES_SOURCE}
             WHERE {" AND ".join(where)}
             GROUP BY label
             HAVING value > 0 AND record_count >= {{min_records:Int32}}
@@ -572,7 +589,7 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
     days = _chart_days(args.get("days"))
     limit = clamp_int(args.get("limit"), default=8, min_value=1, max_value=20)
     group_by = str(args.get("group_by") or "area").lower()
-    metric = str(args.get("metric") or "contract_count").lower()
+    metric = _per_sqft(str(args.get("metric") or "contract_count").lower())
     sort_direction = _chart_sort_direction(args.get("sort_direction"))
     property_usage = _optional_chart_filter(args.get("property_usage")) or "Residential"
     property_type = _rental_property_type(args.get("property_type"))
@@ -603,9 +620,8 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
         "contract_count": "count()",
         "total_annual_value": "round(sum(annual_amount), 0)",
         "avg_rent": "round(avg(annual_amount), 0)",
-        "median_rent": "round(median(annual_amount), 0)",
-        "median_rent_sqm": "round(median(annual_amount / nullIf(size_sqm, 0)), 0)",
-        "median_rent_sqft": f"round(median(annual_amount / nullIf(size_sqm, 0)) / {SQM_TO_SQFT}, 0)",
+        "median_rent": "round(medianExact(annual_amount), 0)",
+        "median_rent_sqft": f"round(medianExact(annual_amount / nullIf(size_sqm, 0)) / {SQM_TO_SQFT}, 0)",
     }
     if metric not in metric_exprs:
         metric = "contract_count"
@@ -659,7 +675,7 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
     where = [
         "annual_amount > 0",
         "contract_start_date <= today()",
-        "contract_start_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(contract_start_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage:
         where.append("property_usage_en = {property_usage:String}")
@@ -691,7 +707,7 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
                 {label_expr} AS label,
                 {metric_exprs[metric]} AS value,
                 count() AS record_count
-            FROM ch_rent_contracts
+            FROM {RENTALS_SOURCE}
             WHERE {" AND ".join(where)}
             GROUP BY series_label, label
             HAVING value > 0 AND record_count >= {{min_records:Int32}}
@@ -712,7 +728,7 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
                 {label_expr} AS label,
                 {metric_exprs[metric]} AS value,
                 count() AS record_count
-            FROM ch_rent_contracts
+            FROM {RENTALS_SOURCE}
             WHERE {" AND ".join(where)}
             GROUP BY label
             HAVING value > 0 AND record_count >= {{min_records:Int32}}
@@ -883,14 +899,14 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
         "actual_worth > 0",
         "location_name != ''",
         "lower(location_name) != 'unknown'",
-        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     rental_where = [
         "annual_amount > 0",
         "location_name != ''",
         "lower(location_name) != 'unknown'",
         "contract_start_date <= today()",
-        "contract_start_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(contract_start_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     params: dict[str, Any] = {
         "start_date": start_date.isoformat(),
@@ -915,9 +931,9 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
             sales AS (
                 SELECT
                     location_name AS area,
-                    median(actual_worth) AS median_sale_price,
+                    medianExact(actual_worth) AS median_sale_price,
                     count() AS sales_count
-                FROM ch_transactions
+                FROM {SALES_SOURCE}
                 WHERE {" AND ".join(sales_where)}
                 GROUP BY area
                 HAVING sales_count >= {{min_records:Int32}}
@@ -925,9 +941,9 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
             rentals AS (
                 SELECT
                     location_name AS area,
-                    median(annual_amount) AS median_annual_rent,
+                    medianExact(annual_amount) AS median_annual_rent,
                     count() AS rental_count
-                FROM ch_rent_contracts
+                FROM {RENTALS_SOURCE}
                 WHERE {" AND ".join(rental_where)}
                 GROUP BY area
                 HAVING rental_count >= {{min_records:Int32}}

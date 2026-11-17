@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Put owners whose unit recently resold into the CRM Lead Inbox (one item per owner).
 
-Imports and re-matches run this automatically; run it by hand after new sales data lands.
+Run this explicit maintenance operation after reviewed owner or sales data changes.
+It is not run inside HTTP uploads or the fenced import publication transaction.
 
     uv run python scripts/crm/sync_recently_sold_inbox.py --organization-id <org>
     uv run python scripts/crm/sync_recently_sold_inbox.py --organization-id <org> --days 60

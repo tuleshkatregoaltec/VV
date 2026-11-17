@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { NewsArticleResponse } from '$lib/api/news'
+import { safeExternalUrl } from '$lib/utils/safeExternalUrl'
 
 let { article }: { article: NewsArticleResponse } = $props()
 
@@ -30,6 +31,7 @@ function formatRelativeTime(dateString: string | null): string {
 	}
 }
 
+const href = $derived(safeExternalUrl(article.url))
 const relativeTime = $derived(formatRelativeTime(article.publish_date))
 const sourceLabel = $derived.by(() => {
 	try {
@@ -40,10 +42,11 @@ const sourceLabel = $derived.by(() => {
 })
 </script>
 
-<a
-	href={article.url}
-	target="_blank"
-	rel="noopener noreferrer"
+<svelte:element
+	this={href ? 'a' : 'div'}
+	href={href ?? undefined}
+	target={href ? '_blank' : undefined}
+	rel={href ? 'noopener noreferrer' : undefined}
 	class="group flex gap-4 p-5 bg-card border border-border rounded-lg no-underline text-inherit hover:border-strong transition-colors duration-200"
 >
 	{#if showImage}
@@ -60,9 +63,9 @@ const sourceLabel = $derived.by(() => {
 	{:else}
 		<div
 			aria-hidden="true"
-			class="w-36 h-24 rounded border border-border bg-panel flex-shrink-0 flex items-center justify-center text-xs font-semibold text-fg-4"
+			class="w-36 h-24 rounded border border-border bg-app flex-shrink-0 flex items-center justify-center px-2 text-xs font-semibold text-fg-4"
 		>
-			{sourceLabel ?? 'News'}
+			<span class="truncate">{sourceLabel ?? 'News'}</span>
 		</div>
 	{/if}
 	<div class="flex flex-col gap-2 flex-1">
@@ -84,4 +87,4 @@ const sourceLabel = $derived.by(() => {
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
 		</svg>
 	</div>
-</a>
+</svelte:element>

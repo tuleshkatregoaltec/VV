@@ -6,9 +6,7 @@ import {
 	ChevronRight,
 	Clock3,
 	ExternalLink,
-	Mail,
 	Minus,
-	Phone,
 	RefreshCw,
 	Search,
 	TrendingDown,
@@ -25,8 +23,11 @@ import type {
 } from '$lib/api/listings'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
-import { basisText, dataAgeText, valueLabel, valueTone } from '$lib/listings/valuation'
+import ListingSnapshotNotice from '$lib/components/listings/ListingSnapshotNotice.svelte'
+import { basisText, valueLabel, valueTone } from '$lib/listings/valuation'
 import { listingQueries } from '$lib/queries/listings'
+import { formatDataDate, newestDate, newListingsLabel } from '$lib/utils/dataFreshness'
+import { safeExternalUrl } from '$lib/utils/safeExternalUrl'
 
 const PAGE_SIZE = 40
 const FILTER_DEBOUNCE_MS = 250
@@ -46,6 +47,7 @@ let debouncedPriceMax = $state('')
 let sentinel = $state<HTMLDivElement | undefined>()
 // Sale residential only: "bargains" lists listings below their DLD-sales value, biggest gap first.
 let view = $state<'all' | 'bargains'>('all')
+let valuationSupported = $state(false)
 
 const listingFilters = $derived({
 	mode,
@@ -59,7 +61,9 @@ const listingFilters = $derived({
 })
 
 // Sale residential listings are valued from DLD sales of the same bedroom count, same building.
-const valuedFromSales = $derived(mode === 'sale' && assetClass === 'residential')
+const valuedFromSales = $derived(
+	valuationSupported && mode === 'sale' && assetClass === 'residential'
+)
 const showBargains = $derived(valuedFromSales && view === 'bargains')
 const listFilters = $derived(
 	showBargains
@@ -72,10 +76,19 @@ const analyticsQuery = createQuery(() => listingQueries.analytics(listingFilters
 const detailQuery = createQuery(() => listingQueries.detail(selectedListingId))
 
 const listingSummary = $derived(listingsQuery.data?.pages[0])
-const dataAge = $derived(dataAgeText(listingSummary?.data_as_of ?? analyticsQuery.data?.data_as_of))
 const listings = $derived(listingsQuery.data?.pages.flatMap((page) => page.listings) ?? [])
+// Old APIs ignore unknown filters but reject the new sort; expose it only after observing the contract.
+$effect(() => {
+	if (listings.some((listing) => 'valuation_method' in listing)) valuationSupported = true
+})
 const filters = $derived(filtersQuery.data)
 const analytics = $derived(analyticsQuery.data)
+// Capture date of the data on screen: the analytics snapshot, else the newest card's capture.
+const snapshotAt = $derived(
+	analytics?.snapshot_at ?? newestDate(listings.map((listing) => listing.captured_at))
+)
+const snapshotDate = $derived(formatDataDate(snapshotAt))
+
 const trend = $derived(analytics?.trend ?? [])
 const trendChangeValue = $derived(trendChange(trend))
 const chartScale = $derived(buildChartScale(trend))
@@ -90,6 +103,7 @@ const selectedCard = $derived(
 	listings.find((listing) => listing.listing_id === selectedListingId) ?? null
 )
 const selectedRecord = $derived(mergeListingRecord(selectedListing, selectedCard))
+const sourceUrl = $derived(safeExternalUrl(selectedListing?.share_url))
 const hasFilters = $derived(
 	Boolean(
 		search.trim() ||
@@ -322,9 +336,12 @@ function trendChange(points: ListingTrendPoint[]): number | null {
 }
 
 function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse): string {
-	if (listing.is_available === false) return 'Unavailable'
-	if (listing.is_verified) return 'Available · verified'
-	return 'Available'
+	// is_available is the portal's flag on the capture date, not a current availability check.
+	const asOf = formatDataDate(listing.captured_at)
+	const at = asOf ? `on ${asOf}` : 'at capture'
+	if (listing.is_available === false) return `Unavailable ${at}`
+	if (listing.is_verified) return `Active ${at} · verified`
+	return `Active ${at}`
 }
 </script>
 
@@ -338,7 +355,7 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 			<div>
 				<p class="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-4">Inventory intelligence</p>
 				<h1 class="mt-1 text-2xl font-semibold tracking-tight text-fg-1">Listings</h1>
-				<p class="mt-1 text-sm text-fg-3">Structured supply, value against DLD sales, and listing velocity.</p>
+				<p class="mt-1 text-sm text-fg-3">Structured supply, value against recorded sales, and listing velocity.</p>
 			</div>
 			<div class="w-full rounded-xl border border-border bg-panel p-1.5 sm:w-auto sm:min-w-[430px]">
 				<nav class="grid grid-cols-2 gap-1" aria-label="Asset class">
@@ -375,21 +392,21 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 			</div>
 		</header>
 
-		{#if dataAge}<p class="flex items-center gap-2 rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-xs text-warning"><Clock3 size={13} /> <span><strong>{dataAge}.</strong> Prices and availability may have changed since; check the source listing before acting.</span></p>{/if}
+		<ListingSnapshotNotice {snapshotAt} />
 
 		<section class="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Available inventory</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.total?.toLocaleString() ?? '—'}</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Median asking price</p><p class="mt-2 text-2xl font-semibold tabular-nums">{formatMetricMoney(analytics?.median_price_aed)}</p><p class="mt-1 text-xs text-fg-4">{mode === 'rent' ? 'Annualized' : 'Current asking'}</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Median AED / sqft</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.median_price_per_sqft_aed ? `AED ${Math.round(analytics.median_price_per_sqft_aed).toLocaleString()}` : '—'}</p><p class="mt-1 text-xs text-fg-4">{mode === 'rent' ? 'Per year' : 'Sale basis'}</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Average age at capture</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.average_listing_age_days != null ? `${Math.round(analytics.average_listing_age_days)} days` : '—'}</p><p class="mt-1 text-xs text-fg-4">Listed date → scrape date · median {analytics?.median_listing_age_days != null ? `${Math.round(analytics.median_listing_age_days)} days` : '—'}</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">New in 30 days</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.newly_listed_30d?.toLocaleString() ?? '—'}</p><p class="mt-1 text-xs text-fg-4">At the inventory snapshot</p></div>
-			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">{valuedFromSales ? 'Below estimated value' : 'Below-market signals'}</p><p class="mt-2 text-2xl font-semibold tabular-nums text-success">{analytics?.below_market_count?.toLocaleString() ?? '—'}</p><p class="mt-1 text-xs text-fg-4">{valuedFromSales ? 'Asking under recent DLD sales, same building' : 'More than 10% below benchmark'}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Active at capture</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.total?.toLocaleString() ?? '—'}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Median asking price</p><p class="mt-2 text-2xl font-semibold tabular-nums">{formatMetricMoney(analytics?.median_price_aed)}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Median AED / sqft</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.median_price_per_sqft_aed ? `AED ${Math.round(analytics.median_price_per_sqft_aed).toLocaleString()}` : '—'}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Average age at capture</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.average_listing_age_days != null ? `${Math.round(analytics.average_listing_age_days)} days` : '—'}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">{newListingsLabel(snapshotAt)}</p><p class="mt-2 text-2xl font-semibold tabular-nums">{analytics?.newly_listed_30d?.toLocaleString() ?? '—'}</p></div>
+			<div class="ui-surface p-4"><p class="font-mono text-[10px] uppercase text-fg-4">Below-market signals</p><p class="mt-2 text-2xl font-semibold tabular-nums text-success">{analytics?.below_market_count?.toLocaleString() ?? '—'}</p></div>
 		</section>
 
 		<section class="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.75fr)]">
 			<div class="ui-surface p-5">
 				<div class="flex flex-wrap items-start justify-between gap-3">
-					<div><p class="font-mono text-[10px] uppercase tracking-[0.1em] text-fg-4">Asking versus achieved</p><h2 class="mt-1 text-sm font-semibold">Median AED / sqft by month</h2><p class="mt-1 text-xs text-fg-4">Current listing cohorts compared with registered {mode === 'rent' ? 'lease' : 'sale'} transactions in the same period.</p></div>
+					<div><p class="font-mono text-[10px] uppercase tracking-[0.1em] text-fg-4">Asking versus achieved</p><h2 class="mt-1 text-sm font-semibold">Median AED / sqft by month</h2><p class="mt-1 text-xs text-fg-4">Listing cohorts compared with registered {mode === 'rent' ? 'lease' : 'sale'} transactions in the same period.</p></div>
 					{#if trendChangeValue != null}<span class="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-semibold {trendChangeValue < 0 ? 'text-error' : 'text-success'}">{#if trendChangeValue < 0}<TrendingDown size={13} />{:else}<TrendingUp size={13} />{/if}{Math.abs(trendChangeValue * 100).toFixed(1)}% AED/sqft</span>{/if}
 				</div>
 				{#if analyticsQuery.isPending}
@@ -416,7 +433,7 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 			</div>
 
 			<div class="ui-surface p-5">
-				<p class="font-mono text-[10px] uppercase tracking-[0.1em] text-fg-4">Market positioning</p>{#if valuedFromSales}<h2 class="mt-1 text-sm font-semibold">Value from DLD sales</h2><p class="mt-1 text-xs text-fg-4">Ready sales of the same bedroom count in the same building, last 12 months.</p>{:else}<h2 class="mt-1 text-sm font-semibold">Exact peer asking benchmark</h2><p class="mt-1 text-xs text-fg-4">Same building or landed project, property type, bedrooms, and approximate size.</p>{/if}
+				<p class="font-mono text-[10px] uppercase tracking-[0.1em] text-fg-4">Market positioning</p>{#if valuedFromSales}<h2 class="mt-1 text-sm font-semibold">Value from recorded sales</h2><p class="mt-1 text-xs text-fg-4">Ready sales of the same bedroom count in the same building, last 12 months.</p>{:else}<h2 class="mt-1 text-sm font-semibold">Exact peer asking benchmark</h2><p class="mt-1 text-xs text-fg-4">Same building or landed project, property type, bedrooms, and approximate size.</p>{/if}
 				<div class="mt-5 space-y-4">
 					<div><div class="flex items-center justify-between text-xs"><span class="inline-flex items-center gap-2 font-medium"><TrendingDown size={14} class="text-success" /> {valuedFromSales ? 'Below value' : 'Below market'}</span><strong class="tabular-nums">{analytics?.below_market_count?.toLocaleString() ?? '—'}</strong></div><div class="mt-2 h-1.5 overflow-hidden rounded-full bg-panel"><div class="h-full bg-success" style={`width: ${analytics?.benchmarked_count ? Math.min(100, (analytics.below_market_count / analytics.benchmarked_count) * 100) : 0}%`}></div></div></div>
 					<div><div class="flex items-center justify-between text-xs"><span class="inline-flex items-center gap-2 font-medium"><Minus size={14} class="text-info" /> {valuedFromSales ? 'At value' : 'Within ±10%'}</span><strong class="tabular-nums">{analytics?.near_market_count?.toLocaleString() ?? '—'}</strong></div><div class="mt-2 h-1.5 overflow-hidden rounded-full bg-panel"><div class="h-full bg-info" style={`width: ${analytics?.benchmarked_count ? Math.min(100, (analytics.near_market_count / analytics.benchmarked_count) * 100) : 0}%`}></div></div></div>
@@ -430,7 +447,7 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 			<div class="grid gap-2 lg:grid-cols-4 xl:grid-cols-7">
 				<label class="relative block">
 					<Search size={15} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-4" />
-					<input bind:value={search} type="search" placeholder="Building, project, reference, agent" class="ui-field h-10 w-full pl-9 pr-3 text-sm" />
+					<input bind:value={search} type="search" placeholder="Building, project, reference, broker" class="ui-field h-10 w-full pl-9 pr-3 text-sm" />
 				</label>
 				<select bind:value={selectedArea} class="ui-field h-10 px-3 text-sm" aria-label="Area or master project"><option value="">All areas / masters</option>{#each filters?.areas ?? [] as area (area)}<option value={area}>{area}</option>{/each}</select>
 				<select bind:value={selectedPropertyType} class="ui-field h-10 px-3 text-sm" aria-label="Property type"><option value="">All property types</option>{#each filters?.property_types ?? [] as propertyType (propertyType)}<option value={propertyType}>{propertyType}</option>{/each}</select>
@@ -454,7 +471,7 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 				{:else}
 					<div class="overflow-x-auto">
 						<table class="w-full min-w-[1380px] border-collapse text-left">
-							<thead class="sticky top-0 z-10 bg-panel"><tr class="border-b border-border font-mono text-[9px] uppercase tracking-[0.08em] text-fg-4"><th class="px-4 py-3 font-medium">Price</th><th class="px-3 py-3 font-medium">{valuedFromSales ? 'Value vs DLD sales' : 'Market position'}</th><th class="px-3 py-3 font-medium">Area / master project</th><th class="px-3 py-3 font-medium">Project / phase</th><th class="px-3 py-3 font-medium">Building</th><th class="px-3 py-3 font-medium">Type</th><th class="px-3 py-3 text-right font-medium">Beds</th><th class="px-3 py-3 text-right font-medium">Baths</th><th class="px-3 py-3 text-right font-medium">Size</th><th class="px-3 py-3 text-right font-medium">AED / sqft</th><th class="px-3 py-3 text-right font-medium">Age at capture</th><th class="w-10 px-3 py-3"><span class="sr-only">Open</span></th></tr></thead>
+							<thead class="sticky top-0 z-10 bg-panel"><tr class="border-b border-border font-mono text-[9px] uppercase tracking-[0.08em] text-fg-4"><th class="px-4 py-3 font-medium">Price</th><th class="px-3 py-3 font-medium">{valuedFromSales ? 'Value vs recorded sales' : 'Market position'}</th><th class="px-3 py-3 font-medium">Area / master project</th><th class="px-3 py-3 font-medium">Project / phase</th><th class="px-3 py-3 font-medium">Building</th><th class="px-3 py-3 font-medium">Type</th><th class="px-3 py-3 text-right font-medium">Beds</th><th class="px-3 py-3 text-right font-medium">Baths</th><th class="px-3 py-3 text-right font-medium">Size</th><th class="px-3 py-3 text-right font-medium">AED / sqft</th><th class="px-3 py-3 text-right font-medium">Age at capture</th><th class="w-10 px-3 py-3"><span class="sr-only">Open</span></th></tr></thead>
 							<tbody class="divide-y divide-border">
 								{#each listings as listing (listing.listing_id)}
 									<tr class="transition-colors {selectedListingId === listing.listing_id ? 'bg-info-bg' : 'bg-card hover:bg-panel'}">
@@ -492,14 +509,14 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 
 						{#if selectedRecord.valuation_method === 'dld_sales' || (mode === 'sale' && selectedRecord.is_off_plan)}
 							<section class="rounded-lg border p-4 {valueTone(selectedRecord)}">
-								<div class="flex items-start justify-between gap-3"><div><p class="font-mono text-[9px] uppercase tracking-[0.1em] opacity-70">Value from DLD sales</p><p class="mt-1 text-base font-semibold">{valueLabel(selectedRecord)}</p></div>{#if selectedRecord.market_position === 'below_market'}<TrendingDown size={20} />{:else if selectedRecord.market_position === 'above_market'}<TrendingUp size={20} />{:else}<Minus size={20} />{/if}</div>
+								<div class="flex items-start justify-between gap-3"><div><p class="font-mono text-[9px] uppercase tracking-[0.1em] opacity-70">Value from recorded sales</p><p class="mt-1 text-base font-semibold">{valueLabel(selectedRecord)}</p></div>{#if selectedRecord.market_position === 'below_market'}<TrendingDown size={20} />{:else if selectedRecord.market_position === 'above_market'}<TrendingUp size={20} />{:else}<Minus size={20} />{/if}</div>
 								{#if selectedRecord.estimated_value_aed}
 									<div class="mt-3 grid grid-cols-2 gap-3 border-t border-current/10 pt-3 text-xs"><div><p class="opacity-65">Estimated value</p><p class="mt-1 font-semibold tabular-nums">{formatMetricMoney(selectedRecord.estimated_value_aed)}</p></div><div><p class="opacity-65">Range</p><p class="mt-1 font-semibold tabular-nums">{formatMetricMoney(selectedRecord.estimated_value_low_aed)} – {formatMetricMoney(selectedRecord.estimated_value_high_aed)}</p></div></div>
 								{/if}
 								<p class="mt-3 text-[10px] opacity-65">{basisText(selectedRecord)}{selectedRecord.valued_at ? ` · valued ${formatDate(selectedRecord.valued_at)}` : ''}</p>
 							</section>
 							{#if selectedListing?.valuation_comparables?.length}
-								<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Sales behind the estimate</h3><div class="mt-2 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-[11px]"><thead class="bg-panel font-mono text-[9px] uppercase tracking-[0.06em] text-fg-4"><tr><th class="px-2.5 py-2 font-medium">DLD sale</th><th class="px-2.5 py-2 font-medium">Unit</th><th class="px-2.5 py-2 text-right font-medium">Size</th><th class="px-2.5 py-2 text-right font-medium">Price</th></tr></thead><tbody class="divide-y divide-border">{#each selectedListing.valuation_comparables as sale, index (index)}<tr><td class="whitespace-nowrap px-2.5 py-2">{formatDate(sale.date)}</td><td class="px-2.5 py-2 text-fg-3">{sale.unit ?? '—'}</td><td class="whitespace-nowrap px-2.5 py-2 text-right tabular-nums">{Math.round(sale.size_sqft).toLocaleString()} sqft</td><td class="whitespace-nowrap px-2.5 py-2 text-right font-semibold tabular-nums">{formatMetricMoney(sale.price_aed)}</td></tr>{/each}</tbody></table></div><p class="mt-2 text-[10px] leading-4 text-fg-4">Ready sales of the same bedroom count in this building over the 12 months before valuation{selectedRecord.property_type?.toLowerCase().match(/villa|townhouse/) ? ' (latest sales; villas are valued by bedroom price)' : ', closest in size'}.</p></section>
+								<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Sales behind the estimate</h3><div class="mt-2 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-[11px]"><thead class="bg-panel font-mono text-[9px] uppercase tracking-[0.06em] text-fg-4"><tr><th class="px-2.5 py-2 font-medium">Recorded sale</th><th class="px-2.5 py-2 font-medium">Unit</th><th class="px-2.5 py-2 text-right font-medium">Size</th><th class="px-2.5 py-2 text-right font-medium">Price</th></tr></thead><tbody class="divide-y divide-border">{#each selectedListing.valuation_comparables as sale, index (index)}<tr><td class="whitespace-nowrap px-2.5 py-2">{formatDate(sale.date)}</td><td class="px-2.5 py-2 text-fg-3">{sale.unit ?? '—'}</td><td class="whitespace-nowrap px-2.5 py-2 text-right tabular-nums">{Math.round(sale.size_sqft).toLocaleString()} sqft</td><td class="whitespace-nowrap px-2.5 py-2 text-right font-semibold tabular-nums">{formatMetricMoney(sale.price_aed)}</td></tr>{/each}</tbody></table></div><p class="mt-2 text-[10px] leading-4 text-fg-4">Ready sales of the same bedroom count in this building over the 12 months before valuation{selectedRecord.property_type?.toLowerCase().match(/villa|townhouse/) ? ' (latest sales; villas are valued by bedroom price)' : ', closest in size'}.</p></section>
 							{/if}
 						{:else}
 						<section class="rounded-lg border p-4 {valueTone(selectedRecord)}">
@@ -514,10 +531,10 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 
 						<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Property data</h3><dl class="mt-2 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border text-xs"><div class="bg-panel p-3"><dt class="text-fg-4">Property type</dt><dd class="mt-1 font-semibold">{text(selectedRecord.property_type)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Size</dt><dd class="mt-1 font-semibold tabular-nums">{formatSize(selectedRecord.size_value, selectedRecord.size_unit)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Bedrooms</dt><dd class="mt-1 font-semibold tabular-nums">{text(selectedRecord.bedrooms)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Bathrooms</dt><dd class="mt-1 font-semibold tabular-nums">{text(selectedRecord.bathrooms)}</dd></div>{#if selectedListing}<div class="bg-panel p-3"><dt class="text-fg-4">Furnished</dt><dd class="mt-1 font-semibold">{text(selectedListing.furnished)}</dd></div><div class="bg-panel p-3"><dt class="text-fg-4">Completion</dt><dd class="mt-1 font-semibold">{text(selectedListing.completion_status)}</dd></div>{/if}</dl></section>
 
-						<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing data</h3><dl class="mt-2 divide-y divide-border rounded-lg border border-border text-xs"><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Status</dt><dd class="font-semibold">{availabilityLabel(selectedRecord)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Listed date</dt><dd class="font-semibold">{formatDate(selectedRecord.listed_date)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Age when captured</dt><dd class="font-semibold">{listingAge(selectedRecord.listing_age_days)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Reference</dt><dd class="max-w-52 truncate font-mono text-[10px] font-semibold">{text(selectedRecord.reference)}</dd></div>{#if selectedListing}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">RERA</dt><dd class="max-w-52 truncate font-semibold">{text(selectedListing.rera)}</dd></div>{#if mode === 'rent'}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Cheques</dt><dd class="font-semibold">{selectedListing.number_of_cheques ?? '—'}</dd></div>{/if}{/if}</dl><p class="mt-2 text-[10px] leading-4 text-fg-4">Age is measured from the source-listed date to the date this record was scraped. It is not a live count to today.</p></section>
+						<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing data</h3><dl class="mt-2 divide-y divide-border rounded-lg border border-border text-xs"><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Status at capture</dt><dd class="font-semibold">{availabilityLabel(selectedRecord)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Captured</dt><dd class="font-semibold">{formatDate(selectedRecord.captured_at)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Listed date</dt><dd class="font-semibold">{formatDate(selectedRecord.listed_date)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Age when captured</dt><dd class="font-semibold">{listingAge(selectedRecord.listing_age_days)}</dd></div><div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Reference</dt><dd class="max-w-52 truncate font-mono text-[10px] font-semibold">{text(selectedRecord.reference)}</dd></div>{#if selectedListing}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">RERA</dt><dd class="max-w-52 truncate font-semibold">{text(selectedListing.rera)}</dd></div>{#if mode === 'rent'}<div class="flex items-center justify-between gap-3 px-3 py-2.5"><dt class="text-fg-4">Cheques</dt><dd class="font-semibold">{selectedListing.number_of_cheques ?? '—'}</dd></div>{/if}{/if}</dl></section>
 
 						{#if selectedListing}
-							<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing contact</h3><div class="mt-2 rounded-lg border border-border p-3"><p class="text-sm font-semibold">{selectedListing.agent?.name ?? selectedListing.broker?.name ?? 'Contact not stated'}</p><p class="mt-1 text-xs text-fg-4">{selectedListing.broker?.name ?? 'Broker not stated'}</p><div class="mt-3 flex flex-wrap gap-2">{#if selectedListing.share_url}<a href={selectedListing.share_url} target="_blank" rel="noreferrer" class="ui-button" data-variant="primary" data-size="sm"><ExternalLink size={13} /> Source record</a>{/if}{#if selectedListing.agent?.phone}<a href={`tel:${selectedListing.agent.phone}`} class="ui-button" data-variant="secondary" data-size="sm"><Phone size={13} /> Call</a>{/if}{#if selectedListing.agent?.email}<a href={`mailto:${selectedListing.agent.email}`} class="ui-button" data-variant="secondary" data-size="sm"><Mail size={13} /> Email</a>{/if}</div></div></section>
+							<section><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">Listing source</h3><div class="mt-2 rounded-lg border border-border p-3"><p class="text-sm font-semibold">{selectedListing.broker_name ?? 'Broker not stated'}</p>{#if sourceUrl}<div class="mt-3 flex flex-wrap gap-2"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" class="ui-button" data-variant="primary" data-size="sm"><ExternalLink size={13} /> Source record</a></div>{/if}</div></section>
 						{/if}
 
 						{#if detailQuery.isFetching}<p class="text-center text-xs text-fg-4">Loading complete record…</p>{/if}

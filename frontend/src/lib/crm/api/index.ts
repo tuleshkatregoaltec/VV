@@ -1,19 +1,10 @@
-/**
- * CRM API. Every screen reads and writes through these functions only, and every value shown
- * comes from the Vitevue backend (./backend): leads, owners, imports, portal listings, the
- * agent's name, and what is built from them (Search, Matches, Home's new leads, the counts).
- *
- * Lease renewals come from the lease-expiry dataset (/api/v1/crm/renewals). Leads and its feed
- * strip also hold the Vitevue lease leads for the agent's areas (/renewal-leads).
- *
- * Areas with no backend endpoint yet (deals, calendar, the inbox's handout, the agency's
- * listings, portfolio, notifications, settings) read as empty, and their writes fail with a 501
- * so no screen reports a change that was not stored.
+/** CRM contracts use the backend by default. The isolated pilot can explicitly select
+ * fictional, read-only presentation fixtures; no fixture operation writes to the backend.
  */
-import { ApiError } from '$lib/api/client'
+import { env } from '$env/dynamic/public'
 import { addDays } from '../format'
-import type { WhatsAppTemplateSend } from './backend'
 import * as backend from './backend'
+import { createPresentationCrm } from './presentation'
 import type {
 	CalendarEvent,
 	CalendarSide,
@@ -21,7 +12,6 @@ import type {
 	CommissionPatch,
 	CompanyListingFilter,
 	Connection,
-	Connector,
 	ConversationMessage,
 	DealCreate,
 	DealDetail,
@@ -30,9 +20,6 @@ import type {
 	DealTab,
 	DealType,
 	DocumentUploadResult,
-	EmailLeadParams,
-	EmailSendStatus,
-	EmailTemplateInput,
 	EventCreate,
 	FeedArea,
 	FeedPreferences,
@@ -53,7 +40,6 @@ import type {
 	LeadListResponse,
 	LeadMatches,
 	LeadPatch,
-	LeadRow,
 	LeadStageMove,
 	ListingCreate,
 	ListingCreateResult,
@@ -72,6 +58,9 @@ import type {
 	OwnerDroppedRows,
 	OwnerDroppedRowsParams,
 	OwnerFilePreview,
+	OwnerHistory,
+	OwnerHistoryParams,
+	OwnerHistorySummary,
 	OwnerImport,
 	OwnerImportDetail,
 	OwnerImportResult,
@@ -91,77 +80,12 @@ import type {
 	RenewalListParams,
 	RenewalListResponse,
 	SearchResults,
-	WhatsAppChat,
-	WhatsAppStatus,
-	WhatsAppTemplate,
-	WhatsAppThread,
 	Written
 } from './types'
-import {
-	demoChatFor,
-	demoStatus,
-	demoTemplates,
-	demoThreadFor,
-	demoUnmatchedChat,
-	demoUnmatchedThread,
-	demoWaId,
-	WHATSAPP_DEMO
-} from './whatsappDemo'
 
 type Ok = { ok: boolean }
 
-const done = <T>(data: T): Written<T> => ({ data, undo_token: null })
 const notOnBackend = backend.notOnBackend
-
-/** Sample data: these real leads get a chat written from their own details. */
-const DEMO_NAMED = ['Ashwin Vyas']
-const demoLeads = async () => {
-	const [first, named] = await Promise.all([
-		backend.listLeads({}).catch(() => null),
-		Promise.all(DEMO_NAMED.map((q) => backend.listLeads({ q }).catch(() => null)))
-	])
-	// Named leads first (top of Chats), then the first two leads on the list.
-	const picked: LeadRow[] = []
-	for (const r of named) {
-		const l = r?.items.find((x) => x.id && !picked.some((p) => p.id === x.id))
-		if (l) picked.push(l)
-	}
-	for (const l of (first?.items ?? [])
-		.filter((x) => x.id && !picked.some((p) => p.id === x.id))
-		.slice(0, 2))
-		picked.push(l)
-	return picked
-}
-
-const noThread = (waNumber: string | null): WhatsAppThread => ({
-	wa_number: waNumber,
-	opted_out: false,
-	window_ends_at: null,
-	messages: []
-})
-
-const whatsappStatus = async (): Promise<WhatsAppStatus> =>
-	WHATSAPP_DEMO ? demoStatus : backend.whatsappStatus()
-
-/** Connectors shown on the page, in build order. Calendar is left off until its spec is done. */
-const CONNECTORS: Connector[] = [
-	{
-		kind: 'email',
-		name: 'Email',
-		provider: 'Brevo',
-		line: 'Email your leads: marketing, reports and updates, with delivery, opens and clicks tracked.',
-		status: 'available',
-		href: '/crm/connectors/email'
-	},
-	{
-		kind: 'whatsapp',
-		name: 'WhatsApp',
-		provider: 'WhatsApp Business',
-		line: 'Chat with your leads on WhatsApp, right from the lead.',
-		status: 'available',
-		href: '/crm/connectors/whatsapp'
-	}
-]
 
 /** Conveyancing steps of a Dubai sale and a let: the process, not stored records. */
 const DEAL_STAGES: DealStages = {
@@ -189,6 +113,7 @@ async function home(day: string): Promise<HomeResponse> {
 	const leads = await backend.listLeads({ stage: 'new' })
 	const fresh = [...leads.items].sort((a, b) => b.score - a.score)
 	return {
+		limited: leads.limited,
 		date,
 		facts: { events_today: 0, conveyancing: 0, permits_under_14: 0 },
 		counters: {
@@ -212,6 +137,7 @@ async function home(day: string): Promise<HomeResponse> {
 async function counts(): Promise<NavCounts> {
 	const leads = await backend.listLeads({})
 	return {
+		limited: leads.limited,
 		new_leads: leads.new_count,
 		inbox: 0,
 		open_deals: 0,
@@ -221,7 +147,7 @@ async function counts(): Promise<NavCounts> {
 	}
 }
 
-export const crm = {
+const liveCrm = {
 	me: (): Promise<Me> => backend.me(),
 	counts,
 	home,
@@ -244,12 +170,13 @@ export const crm = {
 			notOnBackend<{ data: LeadDetail; undone: string }>('Undo'),
 		addNote: (id: number, text: string) => backend.addLeadNote(id, text),
 		logCall: (id: number, outcome?: string) => backend.logLeadCall(id, outcome),
-		bookViewing: async (
-			id: number,
-			body: { date: string; time: string; listing_id: string | null; note: string }
-		) => done(await backend.bookCalendarViewing(id, body)),
+		bookViewing: (
+			_id: number,
+			_body: { date: string; time: string; listing_id: string | null; note: string }
+		) => notOnBackend<Written<CalendarEvent>>('Booking a viewing'),
 		/** The backend has no over-budget or after-move options; both are ignored. */
 		matches: (id: number, _o: MatchOptions = {}): Promise<LeadMatches> => backend.leadMatches(id),
+		refreshMatches: (id: number) => backend.refreshLeadMatches(id),
 		/** Pursue a match (again to stop): "Match pursued" on both records + the next action. */
 		pursue: (_id: number, _key: string) => notOnBackend<Written<PursueResult>>('Pursue'),
 		shortlist: (id: number, key: string) => backend.shortlistMatch(id, key),
@@ -283,94 +210,6 @@ export const crm = {
 		release: (_id: string) => notOnBackend<Written<InboxItem>>('Releasing an enquiry'),
 		dismiss: (_id: string) => notOnBackend<Written<InboxItem>>('Dismissing an enquiry'),
 		restore: (_id: string) => notOnBackend<Written<InboxItem>>('Restoring an enquiry')
-	},
-
-	/** Manager › Connectors: each is ready once it is configured on the server. */
-	connectors: {
-		list: async (): Promise<Connector[]> => {
-			const [email, whatsapp] = await Promise.all([backend.emailStatus(), whatsappStatus()])
-			const configured = { email: email.configured, whatsapp: whatsapp.configured, calendar: false }
-			return CONNECTORS.map((c) => (configured[c.kind] ? { ...c, status: 'ready' } : c))
-		}
-	},
-
-	/** Connectors › Email: the Brevo pipeline (Leads, Tracking, Templates). */
-	email: {
-		status: backend.emailStatus,
-		leads: (p: EmailLeadParams = {}) => backend.emailLeads(p),
-		send: (body: { enquiry_ids: number[]; subject: string; body: string }) =>
-			backend.sendEmails(body),
-		sends: (status: EmailSendStatus | '' = '') => backend.emailSends(status),
-		sync: backend.syncEmailEvents,
-		removeSend: (id: number) => backend.deleteEmailSend(id),
-		templates: backend.emailTemplates,
-		inbound: backend.emailInbound,
-		thread: (enquiryId: number) => backend.emailThread(enquiryId),
-		createTemplate: (body: EmailTemplateInput) => backend.createEmailTemplate(body),
-		updateTemplate: (id: number, body: EmailTemplateInput) => backend.updateEmailTemplate(id, body),
-		removeTemplate: (id: number) => backend.deleteEmailTemplate(id)
-	},
-
-	/**
-	 * Connectors › WhatsApp (Meta WhatsApp Cloud API), backend /api/v1/crm/whatsapp. Everything is
-	 * the signed-in agent's own number. Sample data instead with VITE_WHATSAPP_DEMO=1 (dev only),
-	 * where sending still fails.
-	 */
-	whatsapp: {
-		status: whatsappStatus,
-		chats: async (): Promise<WhatsAppChat[]> =>
-			WHATSAPP_DEMO
-				? [...(await demoLeads()).map(demoChatFor), demoUnmatchedChat]
-				: backend.whatsappChats(),
-		templates: async (): Promise<WhatsAppTemplate[]> =>
-			WHATSAPP_DEMO ? demoTemplates : backend.whatsappTemplates(),
-		thread: async (enquiryId: number): Promise<WhatsAppThread> =>
-			WHATSAPP_DEMO
-				? backend
-						.getLead(enquiryId)
-						.then(demoThreadFor)
-						.catch(() => noThread(null))
-				: backend.whatsappLeadThread(enquiryId),
-		sendTemplate: (enquiryId: number, template: WhatsAppTemplateSend) =>
-			WHATSAPP_DEMO
-				? notOnBackend<Ok>('Sending WhatsApp messages')
-				: backend.whatsappLeadTemplate(enquiryId, template),
-		reply: (enquiryId: number, body: string) =>
-			WHATSAPP_DEMO
-				? notOnBackend<Ok>('Replying on WhatsApp')
-				: backend.whatsappLeadReply(enquiryId, body),
-		/** A chat by WhatsApp number (Connectors › WhatsApp), on a lead or not yet. */
-		chat: async (waId: string): Promise<WhatsAppThread> => {
-			if (!WHATSAPP_DEMO) return backend.whatsappChat(waId)
-			if (waId === demoUnmatchedChat.wa_id) return demoUnmatchedThread
-			const lead = (await demoLeads()).find((l) => demoWaId(l) === waId)
-			return lead ? demoThreadFor(lead) : noThread(`+${waId}`)
-		},
-		chatSendTemplate: (waId: string, template: WhatsAppTemplateSend) =>
-			WHATSAPP_DEMO
-				? notOnBackend<Ok>('Sending WhatsApp messages')
-				: backend.whatsappChatTemplate(waId, template),
-		chatReply: (waId: string, body: string) =>
-			WHATSAPP_DEMO
-				? notOnBackend<Ok>('Replying on WhatsApp')
-				: backend.whatsappChatReply(waId, body),
-		/** Which agent sends from which number, and the campaign number (organization owners). */
-		numbers: {
-			list: backend.whatsappNumbers,
-			meta: backend.whatsappMetaNumbers,
-			save: backend.saveWhatsappNumber
-		},
-		/** Campaigns from the campaign number, and replies to it (organization owners only). */
-		campaigns: {
-			audience: backend.whatsappAudience,
-			list: backend.whatsappCampaigns,
-			get: backend.whatsappCampaign,
-			create: backend.createWhatsappCampaign,
-			resume: backend.resumeWhatsappCampaign,
-			chats: backend.whatsappCampaignChats,
-			chat: backend.whatsappCampaignChat,
-			reply: backend.whatsappCampaignReply
-		}
 	},
 
 	settings: {
@@ -494,6 +333,10 @@ export const crm = {
 	owners: {
 		list: (p: OwnerListParams): Promise<OwnerListResponse> => backend.listOwners(p),
 		get: (id: string): Promise<OwnerDetail> => backend.getOwner(id),
+		history: (id: string, p: OwnerHistoryParams = {}): Promise<OwnerHistory> =>
+			backend.getOwnerHistory(id, p),
+		historySummary: (importId?: number): Promise<OwnerHistorySummary> =>
+			backend.getOwnerHistorySummary(importId),
 		createLead: (_id: string, _body: OwnerLeadCreate) =>
 			notOnBackend<Written<LeadDetail>>('A lead from an owner'),
 		create: (_body: { name: string; units: string[] }) =>
@@ -514,7 +357,7 @@ export const crm = {
 		preview: (file: File): Promise<ImportPreview> => backend.previewImport(file),
 		/** The import endpoints take no areas, so `areas` is not sent. */
 		create: (file: File, _areas: string) => backend.createImport(file),
-		/** An owners file is read in the browser first; nothing is sent until it is imported. */
+		/** An owners file is read in the browser; the backend only says which field each column feeds. */
 		previewOwners: (file: File): Promise<OwnerFilePreview> => backend.previewOwnerFile(file),
 		/** Upload, match against DLD and save an owners file (/contact-imports). */
 		importOwners: (file: File, name: string): Promise<Written<OwnerImportResult>> =>
@@ -540,32 +383,15 @@ export const crm = {
 	},
 
 	events: {
-		list: backend.listCalendarEvents,
-		get: backend.getCalendarEvent,
-		create: async (body: EventCreate) => done(await backend.createCalendarEvent(body)),
-		/** Full edit; pushed to Google Calendar when connected. */
-		update: async (id: number, body: EventCreate) =>
-			done(await backend.updateCalendarEvent(id, body)),
-		done: async (id: number) => done(await backend.completeCalendarEvent(id)),
+		list: async (_from: string, _to: string): Promise<CalendarEvent[]> => [],
+		get: (_id: number) => notOnBackend<CalendarEvent>('Calendar events'),
+		create: (_body: EventCreate) => notOnBackend<Written<CalendarEvent>>('Calendar events'),
+		done: (_id: number) => notOnBackend<Written<CalendarEvent>>('Calendar events'),
 		/** Reschedule: a lead's event is logged on the lead and becomes its next action. */
-		reschedule: async (id: number, date: string, time: string | null) =>
-			done(await backend.moveCalendarEvent(id, date, time)),
-		/** Already gone (deleted in another tab or by another user) counts as deleted. */
-		remove: async (id: number) => {
-			try {
-				await backend.deleteCalendarEvent(id)
-			} catch (e) {
-				if (!(e instanceof ApiError && e.status === 404)) throw e
-			}
-			return done({ deleted: String(id) })
-		},
-		side: backend.calendarSide
-	},
-
-	googleCalendar: {
-		status: backend.googleCalendarStatus,
-		connect: backend.connectGoogleCalendar,
-		disconnect: backend.disconnectGoogleCalendar
+		reschedule: (_id: number, _date: string, _time: string | null) =>
+			notOnBackend<Written<CalendarEvent>>('Calendar events'),
+		remove: (_id: number) => notOnBackend<Written<{ deleted: string }>>('Calendar events'),
+		side: async (): Promise<CalendarSide> => ({ overdue: [], deadlines: [] })
 	},
 
 	search: (q: string): Promise<SearchResults> => backend.search(q),
@@ -580,3 +406,11 @@ export const crm = {
 
 	connections: async (): Promise<Connection[]> => []
 }
+
+export type CrmApi = typeof liveCrm
+
+// Explicit opt-in for the isolated pilot; the normal API remains the default.
+export const crmPresentationMode = env.PUBLIC_CRM_PRESENTATION_MODE === 'true'
+export const crm: CrmApi = crmPresentationMode
+	? createPresentationCrm(liveCrm, backend.localToday())
+	: liveCrm

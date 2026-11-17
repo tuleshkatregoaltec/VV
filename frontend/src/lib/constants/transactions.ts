@@ -1,8 +1,20 @@
-// Property usage types
+import { safeExternalHref } from '$lib/utils/safeUrl'
+import { formatSqft } from '$lib/utils/units'
+
+// Property usage. DXBI records carry a property type but no usage: the backend groups the types
+// (apartments, villas, townhouses, hotel apartments are Residential; offices, shops, warehouses
+// and other business premises are Commercial). Plots and untyped records appear under All only.
 export const PROPERTY_USAGE = {
 	RESIDENTIAL: 'Residential',
-	COMMERCIAL: 'Commercial'
+	COMMERCIAL: 'Commercial',
+	ALL: 'All'
 } as const
+
+export const PROPERTY_USAGE_OPTIONS = [
+	PROPERTY_USAGE.RESIDENTIAL,
+	PROPERTY_USAGE.COMMERCIAL,
+	PROPERTY_USAGE.ALL
+]
 
 // Column type definition
 export type ColumnDefinition = {
@@ -12,85 +24,103 @@ export type ColumnDefinition = {
 	format?: (value: any, row?: any) => string
 	badge?: boolean
 	highlighted?: boolean
+	wrap?: boolean // Long names wrap to a second line instead of widening the table
 	defaultVisible?: boolean // If false, column is hidden by default but can be toggled on
+	href?: (row: any) => string | null // The cell links here (opens in a new tab)
 }
 
-// Column definitions for sales transactions table
-export const RESIDENTIAL_COLUMNS: ColumnDefinition[] = [
+// Numbers are formatted the same way in every browser. Sizes are DXBI's square feet shown in
+// whole sq ft; amounts and AED per sq ft are whole dirhams.
+const aedFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+const monthsFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
+
+export function formatAed(value: number | null | undefined): string {
+	return value == null ? '-' : aedFormat.format(value)
+}
+
+export function formatCount(value: number): string {
+	return aedFormat.format(value)
+}
+
+function formatMonths(value: number | null | undefined): string {
+	return value == null ? '-' : monthsFormat.format(value)
+}
+
+function mapLink(row: { mapUrl?: string | null }): string | null {
+	return safeExternalHref(row.mapUrl)
+}
+
+// DXBI sales (dxbi_sales_unit_events): one row per sale of one unit.
+export const SALES_COLUMNS: ColumnDefinition[] = [
 	{ id: 'date', label: 'Date', align: 'left', defaultVisible: true },
-	{ id: 'area_name', label: 'Area', align: 'left', defaultVisible: false },
-	{ id: 'project', label: 'Project', align: 'left', defaultVisible: true },
-	{ id: 'building', label: 'Building', align: 'left', defaultVisible: true },
+	{ id: 'unit', label: 'Unit', align: 'left', defaultVisible: true },
+	// Building, project, master project and DLD area in one line, linked to Google Maps.
+	{
+		id: 'location',
+		label: 'Location',
+		align: 'left',
+		wrap: true,
+		defaultVisible: true,
+		href: mapLink
+	},
 	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
 	{ id: 'bedrooms', label: 'Bedrooms', align: 'left', badge: true, defaultVisible: true },
+	{ id: 'size', label: 'Size (sq ft)', align: 'right', format: formatSqft, defaultVisible: true },
+	{ id: 'price', label: 'Price (AED)', align: 'right', format: formatAed, defaultVisible: true },
 	{
-		id: 'area',
-		label: 'Area (sq.m)',
-		align: 'right',
-		format: (val: number) => val.toLocaleString(),
-		defaultVisible: true
-	},
-	{
-		id: 'price',
-		label: 'Price (AED)',
-		align: 'right',
-		format: (val: number) => val.toLocaleString(),
-		defaultVisible: true
-	},
-	{
-		id: 'pricePerSqM',
-		label: 'Price/sq.m',
+		id: 'pricePerSqFt',
+		label: 'Price/sq ft (AED)',
 		align: 'right',
 		highlighted: true,
-		format: (val: number) => val.toLocaleString(),
+		format: formatAed,
 		defaultVisible: true
 	},
-	{ id: 'registration', label: 'Registration', align: 'left', defaultVisible: false },
-	{ id: 'trans_group', label: 'Group', align: 'left', defaultVisible: false },
-	{ id: 'procedure_name', label: 'Procedure', align: 'left', defaultVisible: false },
-	{ id: 'landmark', label: 'Landmark', align: 'left', defaultVisible: false },
-	{ id: 'metro', label: 'Nearest Metro', align: 'left', defaultVisible: false },
-	{ id: 'mall', label: 'Nearest Mall', align: 'left', defaultVisible: false }
+	{ id: 'status', label: 'Status', align: 'left', defaultVisible: true }
 ]
 
-export const COMMERCIAL_COLUMNS: ColumnDefinition[] = [
-	{ id: 'date', label: 'Date', align: 'left', defaultVisible: true },
-	{ id: 'area_name', label: 'Area', align: 'left', defaultVisible: false },
-	{ id: 'project', label: 'Project', align: 'left', defaultVisible: true },
-	{ id: 'building', label: 'Building', align: 'left', defaultVisible: true },
+// DXBI leases (dxbi_rental_events): one row per lease of one unit.
+export const RENTAL_COLUMNS: ColumnDefinition[] = [
+	{ id: 'startDate', label: 'Start Date', align: 'left', defaultVisible: true },
+	{ id: 'endDate', label: 'End Date', align: 'left', defaultVisible: true },
+	{ id: 'unit', label: 'Unit', align: 'left', defaultVisible: true },
+	// Building, project, master project and DLD area in one line, linked to Google Maps.
+	{
+		id: 'location',
+		label: 'Location',
+		align: 'left',
+		wrap: true,
+		defaultVisible: true,
+		href: mapLink
+	},
 	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
-	{ id: 'propertySubType', label: 'Sub Type', align: 'left', defaultVisible: true },
+	{ id: 'bedrooms', label: 'Bedrooms', align: 'left', badge: true, defaultVisible: true },
+	{ id: 'size', label: 'Size (sq ft)', align: 'right', format: formatSqft, defaultVisible: true },
 	{
-		id: 'area',
-		label: 'Area (sq.m)',
-		align: 'right',
-		format: (val: number) => val.toLocaleString(),
-		defaultVisible: true
-	},
-	{
-		id: 'price',
-		label: 'Price (AED)',
-		align: 'right',
-		format: (val: number) => val.toLocaleString(),
-		defaultVisible: true
-	},
-	{
-		id: 'pricePerSqM',
-		label: 'Price/sq.m',
+		id: 'annualRent',
+		label: 'Annual Rent (AED)',
 		align: 'right',
 		highlighted: true,
-		format: (val: number) => val.toLocaleString(),
+		format: formatAed,
 		defaultVisible: true
 	},
-	{ id: 'registration', label: 'Registration', align: 'left', defaultVisible: false },
-	{ id: 'trans_group', label: 'Group', align: 'left', defaultVisible: false },
-	{ id: 'procedure_name', label: 'Procedure', align: 'left', defaultVisible: false },
-	{ id: 'landmark', label: 'Landmark', align: 'left', defaultVisible: false },
-	{ id: 'metro', label: 'Nearest Metro', align: 'left', defaultVisible: false },
-	{ id: 'mall', label: 'Nearest Mall', align: 'left', defaultVisible: false }
+	{
+		id: 'contractAmount',
+		label: 'Contract Amount (AED)',
+		align: 'right',
+		format: formatAed,
+		defaultVisible: false
+	},
+	{
+		id: 'termMonths',
+		label: 'Term (months)',
+		align: 'right',
+		format: formatMonths,
+		defaultVisible: false
+	},
+	{ id: 'contractType', label: 'Contract Type', align: 'left', defaultVisible: true }
 ]
 
-// Timeframe to days conversion
+// Timeframe to days conversion: the last N calendar days, today included.
 export const TIMEFRAME_MAPPING: Record<string, number> = {
 	'Last Week': 7,
 	'Last Month': 30,
@@ -100,5 +130,5 @@ export const TIMEFRAME_MAPPING: Record<string, number> = {
 }
 
 // Pagination
-export const DEFAULT_ITEMS_PER_PAGE = 30
+export const DEFAULT_ITEMS_PER_PAGE = 10
 export const MAX_VISIBLE_PAGES = 7

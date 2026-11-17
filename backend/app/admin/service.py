@@ -253,8 +253,9 @@ async def create_user(request: CreateUserRequest, db: AsyncSession):
         created_user = await create_user_admin(
             request.email, request.password, request.first_name, request.last_name
         )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to create user: {e}")
+    except Exception:
+        logger.exception("Failed to create user %s", request.email)
+        raise HTTPException(status_code=400, detail="Failed to create user")
 
     user_id = created_user.id
 
@@ -366,8 +367,9 @@ async def delete_user(user_id: str, db: AsyncSession):
 
     try:
         await delete_user_admin(user_id)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to delete user: {e}")
+    except Exception:
+        logger.exception("Failed to delete user %s", user_id)
+        raise HTTPException(status_code=400, detail="Failed to delete user")
 
 
 async def list_organization_members(organization_id: str, db: AsyncSession):

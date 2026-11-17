@@ -170,10 +170,16 @@ async def plot_details_endpoint(
 async def generate_hbu_endpoint(
     plot_number: str,
     usage_override: Usage | None = Query(default=None),
-    _: AuthContext = Depends(require_active_subscription),
+    auth: AuthContext = Depends(require_active_subscription),
 ):
     """Generate an agent-authored initial HBU study for the selected GIS plot."""
-    return await generate_hbu_for_plot(plot_number, usage_override=usage_override)
+    user_id, organization_id = _auth_ids(auth)
+    return await generate_hbu_for_plot(
+        plot_number,
+        usage_override=usage_override,
+        user_id=user_id,
+        organization_id=organization_id,
+    )
 
 
 @router.get("/plots/{plot_number}/land-sales", response_model=list[LandSaleEvidence])
@@ -224,10 +230,11 @@ async def comparable_endpoint(
 @router.post("/generate-study", response_model=GenerateStudyResponse)
 async def generate_study_endpoint(
     request: GenerateStudyRequest,
-    _: AuthContext = Depends(require_active_subscription),
+    auth: AuthContext = Depends(require_active_subscription),
 ):
     """Generate an initial feasibility study for the selected GIS plot."""
-    return await generate_seeded_study(request)
+    user_id, organization_id = _auth_ids(auth)
+    return await generate_seeded_study(request, user_id=user_id, organization_id=organization_id)
 
 
 @router.post(
@@ -236,11 +243,12 @@ async def generate_study_endpoint(
 )
 async def chat_stream_endpoint(
     request: FeasibilityChatRequest,
-    _: AuthContext = Depends(require_active_subscription),
+    auth: AuthContext = Depends(require_active_subscription),
 ):
     """Stream LLM feasibility assistant response via SSE."""
+    user_id, organization_id = _auth_ids(auth)
     return StreamingResponse(
-        stream_chat_events(request),
+        stream_chat_events(request, user_id=user_id, organization_id=organization_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

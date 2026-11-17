@@ -4,7 +4,9 @@ from app.analytics import charts, service
 from app.project.service import get_similar_projects
 
 
-async def test_chat_capabilities_execute_real_queries_with_existing_scope(warehouse):
+async def test_chat_capabilities_execute_real_queries_with_existing_scope(
+    warehouse, analytics_projection_tables
+):
     await warehouse.command("""
         CREATE TABLE ch_transactions (
             instance_date Date, area_name_en String, master_project_en String,
@@ -15,7 +17,8 @@ async def test_chat_capabilities_execute_real_queries_with_existing_scope(wareho
             -- Uniform layer columns the chat capabilities read, as Holocron derives them.
             location_name String MATERIALIZED area_name_en,
             property_type String MATERIALIZED if(property_type_en = 'Unit', 'Apartment', ''),
-            size_sqm Float64 MATERIALIZED procedure_area
+            size_sqm Float64 MATERIALIZED procedure_area,
+            master_key_en String ALIAS lowerUTF8(replaceRegexpAll(master_project_en, '[^A-Za-z0-9]', ''))
         ) ENGINE = MergeTree ORDER BY (area_name_en, instance_date)
     """)
     today = date.today()

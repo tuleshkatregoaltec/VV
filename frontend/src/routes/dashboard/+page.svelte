@@ -10,10 +10,12 @@ import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import NewsCard from '$lib/components/news/NewsCard.svelte'
+import NewsFreshnessNote from '$lib/components/news/NewsFreshnessNote.svelte'
 import { chatKeys } from '$lib/queries/chat'
 import { getQueryClient } from '$lib/queries/client'
 import { newsQueries } from '$lib/queries/news'
 import { currentUser } from '$lib/stores/user.svelte'
+import { newestDate } from '$lib/utils/dataFreshness'
 
 const queryClient = getQueryClient()
 
@@ -27,6 +29,7 @@ const LIMIT = 10
 const newsQuery = createInfiniteQuery(() => newsQueries.listInfinite('dashboard', LIMIT))
 const newsSummaryQuery = createQuery(() => newsQueries.summary())
 const newsArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? [])
+const newestArticleAt = $derived(newestDate(newsArticles.map((article) => article.publish_date)))
 
 async function handleChatSubmit(message: string) {
 	try {
@@ -92,9 +95,6 @@ const SUGGESTIONS = [
 				<h1 class="text-2xl font-semibold tracking-normal text-fg-1">
 					{username ? `${username}'s workspace` : 'Market overview'}
 				</h1>
-				<p class="mt-1.5 text-sm text-fg-3">
-					DLD market data · ask anything below or browse the latest transactions.
-				</p>
 			</div>
 
 			<CustomizableKpiGrid />
@@ -129,7 +129,7 @@ const SUGGESTIONS = [
 								onclick={() => handleChatSubmit(s)}
 								class="w-full rounded-md border border-border bg-card px-3 py-2 text-left text-xs text-fg-2 transition-colors hover:border-strong hover:bg-elevated"
 							>
-								→ {s}
+								{s}
 							</button>
 						{/each}
 					</div>
@@ -142,6 +142,7 @@ const SUGGESTIONS = [
 					<div>
 						<p class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Latest news</p>
 						<h2 class="mt-1 text-2xl font-semibold text-fg-1">Dubai real estate</h2>
+						<div class="mt-1"><NewsFreshnessNote newestPublishedAt={newestArticleAt} /></div>
 					</div>
 				</div>
 
@@ -156,7 +157,6 @@ const SUGGESTIONS = [
 								</div>
 								<div>
 									<p class="text-sm font-semibold text-fg-1">Market brief</p>
-									<p class="text-xs text-fg-4">AI-filtered signal</p>
 								</div>
 							</div>
 							{#if newsSummaryQuery.data}
@@ -206,7 +206,6 @@ const SUGGESTIONS = [
 										<h3 class="text-sm font-semibold leading-none text-fg-1">
 											{summary.macro.title}
 										</h3>
-										<p class="mt-1 text-[11px] text-fg-4">Rates, oil, policy, capital flows</p>
 									</div>
 								</div>
 								<ul class="space-y-2">
@@ -229,7 +228,6 @@ const SUGGESTIONS = [
 										<h3 class="text-sm font-semibold leading-none text-fg-1">
 											{summary.real_estate.title}
 										</h3>
-										<p class="mt-1 text-[11px] text-fg-4">Projects, sales, infrastructure</p>
 									</div>
 								</div>
 								<ul class="space-y-2">

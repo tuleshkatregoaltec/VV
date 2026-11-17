@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
-from datetime import date, datetime
+from datetime import UTC, date, datetime
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -193,6 +194,21 @@ def coerce_int(value: Any) -> int:
         return int(float(parsed))
 
 
+def coerce_money(value: Any) -> int:
+    """A whole-dirham amount, rounded half up.
+
+    DLD sends some prices with fils (723,726.89). Truncating stored 723,726 while DXBI shows the
+    rounded 723,727, so the two sources disagreed by a dirham and the sale went unmatched.
+    """
+    parsed = string_value(value).replace(",", "")
+    if not parsed:
+        return 0
+    try:
+        return int(Decimal(parsed).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    except InvalidOperation:
+        return 0
+
+
 def coerce_nullable_int(value: Any) -> int | None:
     parsed = string_value(value)
     if not parsed:
@@ -233,7 +249,16 @@ def iso_date_or_none(value: Any) -> date | None:
     return date.fromisoformat(parsed)
 
 
-_EPOCH = datetime(1970, 1, 1)
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def _as_written(value: datetime) -> datetime:
+    """A time without an offset is stored as written, whatever the loading machine's timezone.
+
+    The ClickHouse client reads a naive datetime in the machine's local timezone: a DLD load run
+    on a machine in London summer time stored every midnight as 23:00 the day before.
+    """
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
 def iso_datetime_or_default(value: Any) -> datetime:
@@ -241,7 +266,7 @@ def iso_datetime_or_default(value: Any) -> datetime:
     if not parsed:
         return _EPOCH
     try:
-        return datetime.fromisoformat(parsed)
+        return _as_written(datetime.fromisoformat(parsed))
     except (ValueError, TypeError):
         return _EPOCH
 
@@ -251,6 +276,6 @@ def iso_datetime_or_none(value: Any) -> datetime | None:
     if not parsed:
         return None
     try:
-        return datetime.fromisoformat(parsed)
+        return _as_written(datetime.fromisoformat(parsed))
     except (ValueError, TypeError):
         return None

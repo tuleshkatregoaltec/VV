@@ -17,7 +17,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.crm import owner_queries, owner_repository, valuation_queries
 from app.crm.identity import _normalize_unit
 from app.crm.import_models import CrmPropertyContactClaim
+from app.crm.owner_assessment import restore_row
 from app.crm.owner_repository import CURRENT_OWNER_STATUSES
+from app.crm.owner_store import open_store
 from app.crm.valuation import (
     RESIDENTIAL_TYPES,
     VALUATION_VERSION,
@@ -220,17 +222,48 @@ async def value_owner_claims(
     """
     valued_at = valued_at or date.today()
     summary = ValuationRunSummary()
-    claims = list(await owner_repository.list_claims_for_valuation(db, organization_id, import_id))
-    current = [c for c in claims if c.ownership_status in CURRENT_OWNER_STATUSES]
-    for claim in claims:
-        if claim.ownership_status not in CURRENT_OWNER_STATUSES:
+    store = await open_store(db, organization_id)
+    candidates = await owner_repository.list_claims_for_valuation(
+        db, organization_id, import_id, generation=store.state.generation
+    )
+    stored = {claim.id: claim for claim, _ in candidates}
+    current = []
+    for claim, assessed in candidates:
+        assessed = restore_row(assessed)
+        status = assessed.get("assessed_status")
+        if (
+            status not in CURRENT_OWNER_STATUSES
+            or assessed.get("event_assessed_status", status) not in CURRENT_OWNER_STATUSES
+        ):
             _clear(claim, "not_current_owner")
             db.add(claim)
+            continue
+        # Assessments resolve identity and ownership without rewriting the imported source row.
+        current.append(
+            claim.model_copy(
+                update={
+                    name: assessed.get(name)
+                    for name in (
+                        "latest_sale_date",
+                        "latest_sale_price_aed",
+                        "unit_number",
+                    )
+                }
+            )
+        )
     summary.considered = len(current)
     for start in range(0, len(current), _CHUNK):
         chunk = current[start : start + _CHUNK]
         await _value_chunk(chunk, valued_at, summary)
-        for claim in chunk:
+        for valued in chunk:
+            claim = stored[valued.id]
+            for name in (
+                "estimated_value_aed",
+                "estimated_value_low_aed",
+                "estimated_value_high_aed",
+                "valuation",
+            ):
+                setattr(claim, name, getattr(valued, name))
             db.add(claim)
         if commit:
             await db.commit()

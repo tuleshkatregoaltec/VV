@@ -60,6 +60,7 @@ class ListingSubject:
     subject: ListingHome
     building_candidates: list[str]
     area_key: str
+    location_names: list[str]
 
 
 def _bedrooms(value: Any) -> str:
@@ -103,6 +104,7 @@ def listing_subject(row: dict[str, Any], valued_at: date) -> ListingSubject | No
         ),
         building_candidates=candidates,
         area_key=area_key,
+        location_names=names,
     )
 
 

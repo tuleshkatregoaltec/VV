@@ -56,3 +56,16 @@ def test_buyer_and_seller_rows_of_one_unit_list_as_one_property():
     assert unit.latest_price_aed == 2_000_000
     assert [r.row for r in unit.records] == [4, 3, 2]
     assert properties[0].current_owner is None
+
+
+def test_unresolved_legacy_rows_are_not_one_property():
+    properties = _group_properties([_claim(2, property_key=""), _claim(3, property_key="")])
+    assert len(properties) == 2
+    assert {item.property_key for item in properties} == {"source:fp-2", "source:fp-3"}
+
+
+def test_long_history_discloses_truncated_records():
+    properties = _group_properties([_claim(row) for row in range(60)])
+    assert properties[0].rows == 60
+    assert len(properties[0].records) == 50
+    assert properties[0].records_truncated is True

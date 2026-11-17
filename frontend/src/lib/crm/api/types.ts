@@ -3,7 +3,22 @@
  * anything computed (chips, summaries, commission amounts, counts) is produced by the backend
  * so no business rule lives in Svelte. Money is whole AED; dates are YYYY-MM-DD (Dubai).
  */
-import type { ClaimStatus, DropReason, ImportCounts, SheetCheck } from '../ownerImportReport'
+import type {
+	CrmContactImportResponse,
+	CrmMatchedSale,
+	CrmOwnerHistoryResponse,
+	CrmOwnerHistorySummary,
+	CrmOwnerMatchSummary,
+	CrmOwnerProperty,
+	CrmSourceAuditSummary
+} from '$lib/api/generated/hey-api/types.gen'
+import type {
+	ClaimStatus,
+	DropReason,
+	ImportCounts,
+	OwnerMatchView,
+	SheetCheck
+} from '../ownerImportReport'
 
 /** `owner`: a Vitevue lease lead not yet classified as seller or landlord. */
 export type LeadType = 'buyer' | 'seller' | 'tenant' | 'landlord' | 'owner'
@@ -63,6 +78,7 @@ export interface Me {
 }
 
 export interface NavCounts {
+	limited?: boolean
 	new_leads: number
 	/** Inbox items assigned to me and not yet a lead, or waiting with my request on them. */
 	inbox: number
@@ -199,13 +215,9 @@ export interface PursuedMatch {
 	at: string
 }
 
-/** Whether the contact agreed to promotions; WhatsApp campaigns go to `provided` only. */
-export type MarketingConsent = 'unknown' | 'provided' | 'withdrawn'
-
 export interface LeadDetail extends LeadRow {
 	/** The contact's email ('' when unknown). */
 	email: string
-	consent: MarketingConsent
 	/** "On your agency's file": what the phone matches on the agency's owner file. */
 	owner_match: { summary: string; records: OwnerMatchRecord[] }
 	/** Matches the agent pursued for this lead (Pursue in Matches). */
@@ -247,9 +259,27 @@ export interface LeadListParams {
 	budget?: BudgetBand | ''
 	/** Leads page: add Vitevue lease leads from My areas (not Home, counts or Matches). */
 	vitevue?: boolean
+	/** Which lease leads: still running (default, soonest end first) or ended. */
+	lease_window?: LeaseWindow
+	/** First lease lead of the page (server pagination, LEASE_PAGE_SIZE per page). */
+	lease_offset?: number
+}
+
+export type LeaseWindow = 'upcoming' | 'expired'
+
+/** One server page of Vitevue lease leads and the window's real totals. */
+export interface LeasePage {
+	window: LeaseWindow
+	offset: number
+	limit: number
+	/** Lease leads of this window across every page. */
+	total: number
+	counts: { upcoming: number; expired: number; vacant: number }
 }
 
 export interface LeadListResponse {
+	/** Filters and counts cover the loaded rows when the server has more. */
+	limited?: boolean
 	items: LeadRow[]
 	total: number
 	/** All and the type counts leave lost leads out; `lost` counts them. */
@@ -258,6 +288,8 @@ export interface LeadListResponse {
 	areas: string[]
 	/** The Vitevue lease leads could not load; the agency's own leads are still listed. */
 	vitevue_unavailable?: boolean
+	/** Present when lease leads were asked for and loaded. */
+	lease_page?: LeasePage
 }
 
 export interface LeadEvent {
@@ -271,8 +303,6 @@ export interface LeadEvent {
 export interface LeadCreate {
 	name: string
 	phone: string
-	/** Optional; a lead with an email can be reached from Connectors › Email. */
-	email?: string
 	source: Source
 	source_detail: string
 	lead_type: LeadType
@@ -293,7 +323,6 @@ export interface LeadPatch {
 	email?: string
 	/** Buyers only: matched to Launch desk projects (Matches › Off-plan buyers). */
 	off_plan?: boolean
-	consent?: MarketingConsent
 }
 
 /** A stage move with what that stage needs (business-rules.md, Lead stages). */
@@ -347,6 +376,7 @@ export interface MatchClient {
 }
 
 export interface MatchClients {
+	limited?: boolean
 	ready: MatchClient[]
 	offplan: MatchClient[]
 	sell: MatchClient[]
@@ -756,7 +786,6 @@ export type RenewalWindow =
 	| 'expiring_60'
 	| 'expiring_90'
 
-/** Renewals: leases whose owner is on file, or those whose owner is still to be found. */
 export type RenewalOwnerFilter = 'known' | 'unknown'
 
 export interface RenewalListParams {
@@ -768,14 +797,13 @@ export interface RenewalListParams {
 	/** Picked after a project. */
 	building: string
 	limit: number
-	/**
-	 * Assets › Renewals toggle: known = units with a current owner in the agency's owner imports;
-	 * unknown = every other lease. Not set: every lease.
-	 */
+	offset?: number
 	owner?: RenewalOwnerFilter
 }
 
 export interface RenewalListResponse {
+	owner_filter_supported?: boolean
+	offset: number
 	items: Renewal[]
 	total: number
 	/** Options for the filters, from the leases in the current filter (areas come from My areas' list). */
@@ -797,6 +825,14 @@ export interface RenewalHistoryEvent {
 }
 
 export interface RenewalDetail extends Renewal {
+	/** Imported assessments for review, separate from the resolved owner fields. */
+	owner_evidence: {
+		id: number
+		name: string
+		status: ClaimStatus
+		reason: string
+		source: string
+	}[]
 	reason: string
 	action: string
 	last_purchase: { date: string; price_aed: number | null } | null
@@ -827,10 +863,24 @@ export interface MarketListingDetail extends MarketListing {
 
 /* ── owners ── */
 
-export type OwnerTab = 'mine' | 'all' | 'multi' | 'event' | 'sold' | 'update'
+export type OwnerHistorySummary = CrmOwnerHistorySummary
+export type OwnerHistory = CrmOwnerHistoryResponse
+export type SourceAuditSummary = CrmSourceAuditSummary
+
+export interface OwnerHistoryParams {
+	import_id?: number
+	limit?: number
+	offset?: number
+}
+
+export type OwnerTab = 'mine' | 'all' | 'multi' | 'event' | 'sold' | 'update' | 'review'
 
 export interface OwnerListParams {
 	tab: OwnerTab
+	ownership?: 'current' | 'former'
+	transaction_match_status?: 'matched' | 'unmatched' | 'ambiguous' | 'excluded' | ''
+	/** Limit the view to people recorded in this saved import list. */
+	list_id?: number
 	/** Owner name, unit number or building ("Oxford Residence"). */
 	q?: string
 	source?: OwnerSource | ''
@@ -846,12 +896,21 @@ export interface OwnerListParams {
 }
 
 export interface OwnerRow {
+	/** Observational role only; never a confirmed profession. */
+	relationship_role?: 'unknown' | 'possible_intermediary' | 'organization'
+	role_signals?: string[]
 	id: string
 	name: string
 	sources: OwnerSource[]
 	source_label: string
 	/** Unit numbers, not sentences: "Marina Gate 2 #2304". */
 	units: string[]
+	/** Every associated property; `units` may hold only those in the list's view. */
+	units_total: number
+	/** Properties held now (verified or probable current owner). */
+	units_current: number
+	/** A developer, or a person selling for one; kept out of former owners. */
+	developer_side_seller: boolean
 	next_event: string
 	next_event_date: string
 	/** "in 41 days · 9 Nov" */
@@ -875,9 +934,13 @@ export interface OwnerNote {
 	origin: Origin
 }
 
-/** Every unit an owner holds, the same fields for every owner. */
+/** Properties associated with an imported person; status carries the ownership assessment. */
 export interface OwnerUnit {
+	source_reference?: CrmOwnerProperty['source_reference']
+	/** The property; the same one can appear on two source rows of one owner. */
 	key: string
+	/** Unique within the owner's rows: the key, then `key#2`, `key#3` for repeats. */
+	id: string
 	number: string
 	building: string
 	area: string
@@ -893,7 +956,6 @@ export interface OwnerUnit {
 	status: string
 	status_chip: Chip
 	rent: { aed: number; from: string; to: string } | null
-	/** Today's estimated value: sale range, the estimate and its confidence. Rent is not estimated yet. */
 	market: {
 		sale: [number, number]
 		rent: [number, number] | null
@@ -901,7 +963,6 @@ export interface OwnerUnit {
 		confidence: 'high' | 'medium' | 'low'
 		valued_at: string
 	} | null
-	/** Why there is no estimate, shown under an empty Market range: "Not estimated · land or commercial". */
 	market_note?: string
 	rent_history: { year: number; aed: number }[]
 	transactions: { when: string; what: string; aed: number | null }[]
@@ -957,6 +1018,8 @@ export interface OwnerImportSource {
 }
 
 export interface OwnerDetail extends OwnerRow {
+	/** All source phone numbers, retained independently of ownership or contact permission. */
+	phone_numbers?: string[]
 	unit_rows: OwnerUnit[]
 	/** The uploaded files this owner came from, oldest first. */
 	imported_from: OwnerImportSource[]
@@ -982,21 +1045,15 @@ export interface OwnerRecordCreate {
 }
 
 export interface OwnerListResponse {
+	source_audit?: SourceAuditSummary | null
 	items: OwnerRow[]
-	counts: Record<OwnerTab, number>
-	total: number
-	unit_total: number
-	with_event_90: number
-	/** Owners on the agency's own file. */
-	on_file: number
+	/** Additional filters apply to the loaded page, not the complete registry. */
+	pageFiltered: boolean
 	areas: string[]
 	/**
-	 * This page within the whole file (search included). The tab counts and the source, area,
-	 * bedrooms and type filters only see the owners on this page.
+	 * Server page and total before optional page-only filters (search included).
 	 */
 	page: { offset: number; limit: number; total: number; loaded: number }
-	/** Tabs whose counts cover only this page (the backend can't filter them yet). */
-	pageOnlyTabs: OwnerTab[]
 }
 
 export interface OwnerLeadCreate {
@@ -1012,10 +1069,13 @@ export interface OwnerReport {
 	next_event: string
 }
 
+export type ImportStatus = CrmContactImportResponse['status']
+
 export interface ImportRequest {
 	id: string
 	who: string
 	kind: 'Owners' | 'Leads'
+	jobStatus: ImportStatus
 	file: string
 	rows: number
 	areas: string
@@ -1045,6 +1105,10 @@ export interface OwnerFilePreview {
 	rows: number
 	headers: string[]
 	sample: string[][]
+	/** The field each header feeds (null: not read); null when the backend could not say. */
+	fields: (string | null)[] | null
+	/** Some columns get their field from the model when the file is imported. */
+	readAtImport: boolean
 	problem: string | null
 }
 
@@ -1053,7 +1117,7 @@ export interface OwnerImport {
 	id: number
 	name: string
 	file: string
-	status: 'processing' | 'completed' | 'failed'
+	status: ImportStatus
 	/** Owner–property claims kept after duplicates were merged. */
 	claims: number
 	rentalLeads: number
@@ -1066,7 +1130,7 @@ export interface ImportSheet {
 	rows: number
 	/** 'transaction_party' (a DLD export with dates) or 'contact_list'. */
 	family: string
-	source: 'heuristic' | 'llm' | 'heuristic_fallback'
+	source: 'heuristic' | 'llm' | 'heuristic_fallback' | 'reused' | 'override'
 	confidence: number
 	fields: { field: string; column: string }[]
 	warnings: string[]
@@ -1075,10 +1139,11 @@ export interface ImportSheet {
 
 /** An owner file with its counts and sheets, for the import dashboard and report. */
 export interface OwnerImportDetail {
+	source_audit?: SourceAuditSummary | null
 	id: number
 	name: string
 	file: string
-	status: 'processing' | 'completed' | 'failed'
+	status: ImportStatus
 	at: string
 	createdAt: string
 	/** The saved list holding its owner rows; null when none was saved. */
@@ -1088,8 +1153,21 @@ export interface OwnerImportDetail {
 	flagged: boolean
 }
 
+/** Colour of a match outcome, as the backend names it. */
+export type MatchColour = 'green' | 'amber' | 'blue' | 'red' | 'grey'
+
+/** The property-first matcher's totals for one import (summary.owner_match); absent on older imports. */
+export type OwnerMatchSummary = CrmOwnerMatchSummary
+
+/** The sale the matcher tied a row to; every field may be missing. */
+export type MatchedSale = CrmMatchedSale
+
 export interface OwnerImportRowsParams {
 	status: ClaimStatus | null
+	/** Only rows of these match colours; empty or missing means all. */
+	matchColour?: MatchColour[]
+	/** Only rows with one of these match outcomes (for example 'lender'). */
+	matchOutcome?: string[]
 	search: string
 	offset: number
 }
@@ -1116,6 +1194,12 @@ export interface OwnerImportRow {
 	reason: string
 	sheet: string
 	rowNumber: number
+	/** The property-first matcher's verdict; absent until the import is re-matched. */
+	matchOutcome?: string | null
+	matchColour?: MatchColour | null
+	matchReasons?: string[]
+	matchWarnings?: string[]
+	matchedSale?: MatchedSale | null
 }
 
 export interface OwnerPropertyParams {
@@ -1149,11 +1233,12 @@ export interface OwnerProperty {
 	rows: number
 	buyers: number
 	sellers: number
-	/** Name on the strongest verified/probable owner row; null when there is none. */
+	/** Unambiguous verified owner; null when the assessment is provisional or conflicting. */
 	currentOwner: string | null
 	latestDate: string | null
 	latestPrice: number | null
 	records: OwnerPropertyRecord[]
+	recordsTruncated: boolean
 }
 
 export interface OwnerProperties {
@@ -1204,10 +1289,12 @@ export interface OwnerImportRows {
 export interface OwnerImportResult {
 	id: number
 	name: string
-	status: 'processing' | 'completed' | 'failed'
-	/** The same file was uploaded before; the backend returned that import. */
+	status: ImportStatus
+	/** The same file was uploaded before; this may be an active job or a completed import. */
 	alreadyImported: boolean
 	createdAt: string
+	/** Distinct units confirmed with a sale; null when the file was not matched unit by unit. */
+	match: OwnerMatchView | null
 	summary: {
 		totalRows: number
 		candidateRows: number
@@ -1232,21 +1319,6 @@ export interface CalendarEvent {
 	id: number
 	date: string
 	time: string | null
-	end_date: string
-	end_time: string | null
-	all_day: boolean
-	repeat: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
-	meet: boolean
-	meet_link: string | null
-	location: string
-	reminders: number[]
-	reminders_use_default: boolean
-	guests: string[]
-	guests_can_modify: boolean
-	guests_can_invite_others: boolean
-	guests_can_see_other_guests: boolean
-	show_as: 'busy' | 'free'
-	visibility: 'default' | 'public' | 'private' | 'confidential'
 	kind: EventKind
 	title: string
 	detail: string
@@ -1261,33 +1333,13 @@ export interface CalendarEvent {
 	record: { kind: RefKind; id: string; label: string } | null
 	/** Viewing outcome; "No outcome logged" for a past viewing without one. */
 	outcome: string | null
-	/** Earlier slots this event was rescheduled from, oldest first; shown struck through. */
-	rescheduled_from: { date: string; time: string | null }[]
-	google_sync_status: 'local' | 'pending' | 'synced' | 'error'
 }
 
 export interface EventCreate {
 	title: string
 	date: string
 	time: string | null
-	end_date?: string
-	end_time?: string | null
-	all_day?: boolean
-	repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
-	meet?: boolean
-	location?: string
-	reminders?: number[]
-	reminders_use_default?: boolean
-	guests?: string[]
-	guests_can_modify?: boolean
-	guests_can_invite_others?: boolean
-	guests_can_see_other_guests?: boolean
-	show_as?: 'busy' | 'free'
-	visibility?: 'default' | 'public' | 'private' | 'confidential'
 	kind: EventKind
-	detail?: string
-	lead_id?: number | null
-	listing_id?: string | null
 }
 
 export interface OverdueItem {
@@ -1311,6 +1363,7 @@ export interface Gap {
 }
 
 export interface HomeResponse {
+	limited?: boolean
 	date: string
 	facts: { events_today: number; conveyancing: number; permits_under_14: number }
 	/** 1 Oct (proposal): Viewings this week · Expiring in 14 days · Market · {area} · Commission. */
@@ -1343,10 +1396,14 @@ export interface FeedSummary {
 	/** Lease-end window: leases ending in the next `forward_days` or ended in the last `lookback_days`. */
 	forward_days: number
 	lookback_days: number
-	/** Units in the areas inside the window (DLD/Ejari). */
+	/** Units in the areas inside the window (DLD/Ejari), every page. */
 	window_total: number
-	/** Of the loaded units, those with a known owner (typed in or matched by an owner import). */
+	/** Of those, leases still running and leases that ended inside the look-back window. */
+	upcoming?: number
+	expired?: number
+	/** Of the `loaded` units on the first page, those with a known owner (typed in or import-matched). */
 	on_file: number
+	loaded?: number
 	/** Units whose lease end entered the forward window today. */
 	entered_today: number
 }
@@ -1411,6 +1468,7 @@ export interface InboxItem {
 }
 
 export interface InboxResponse {
+	limited?: boolean
 	items: InboxItem[]
 	/** Every tab's items from the same load: switching tabs needs no new request. */
 	lists: Record<InboxFilter, InboxItem[]>
@@ -1468,326 +1526,4 @@ export interface Connection {
 	status: string
 	tone: Tone
 	kind: 'source' | 'import'
-}
-
-/* ── connectors (Manager › Connectors, spec 2026-10-28) ── */
-
-export type ConnectorKind = 'email' | 'calendar' | 'whatsapp'
-/** `available`: opens, but sending is not live yet (shown without a chip). No connect step. */
-export type ConnectorStatus = 'ready' | 'available' | 'coming_soon'
-
-/** One card on the Connectors page; a card with an href opens that connector's pipeline. */
-export interface Connector {
-	kind: ConnectorKind
-	name: string
-	provider: string
-	/** What the connector does, one line. */
-	line: string
-	status: ConnectorStatus
-	href: string | null
-}
-
-export interface EmailStatus {
-	configured: boolean
-	sender_name: string | null
-	sender_email: string | null
-	webhook_configured: boolean
-}
-
-/** A lead of any type whose contact has an email (Connectors › Email › Leads). */
-export interface EmailLead {
-	/** The lead (enquiry) id, the same id the Leads page opens. */
-	id: number
-	name: string
-	email: string
-	phone: string | null
-	intent: 'unknown' | 'buy' | 'rent' | 'sell' | 'let'
-	/** The backend source name, e.g. "Property Finder" or "Owner file · recently sold". */
-	source: string
-	status: string
-	do_not_contact: boolean
-	last_status: EmailSendStatus | null
-	last_sent_at: string | null
-	sends: number
-}
-
-export interface EmailLeadList {
-	items: EmailLead[]
-	total: number
-	sources: string[]
-}
-
-export interface EmailLeadParams {
-	search?: string
-	intent?: EmailLead['intent'] | ''
-	source?: string
-	ids?: number[]
-}
-
-export interface EmailTemplate {
-	id: number
-	name: string
-	subject: string
-	body: string
-	/** Lead types it suits; empty means every type. */
-	lead_types: EmailLead['intent'][]
-	updated_by_user_id: string
-	updated_at: string
-}
-
-export interface EmailTemplateInput {
-	name: string
-	subject: string
-	body: string
-	lead_types: EmailLead['intent'][]
-}
-
-export type EmailSendStatus =
-	| 'queued'
-	| 'sent'
-	| 'deferred'
-	| 'delivered'
-	| 'opened'
-	| 'clicked'
-	| 'bounced'
-	| 'spam'
-	| 'unsubscribed'
-	| 'failed'
-	| 'replied'
-
-export interface EmailEvent {
-	event: string
-	at: string
-	link: string | null
-}
-
-export interface EmailSend {
-	id: number
-	enquiry_id: number | null
-	to_email: string
-	to_name: string | null
-	subject: string
-	body: string
-	status: EmailSendStatus
-	error: string | null
-	sent_at: string | null
-	delivered_at: string | null
-	opened_at: string | null
-	clicked_at: string | null
-	bounced_at: string | null
-	opens: number
-	clicks: number
-	events: EmailEvent[]
-	created_at: string
-}
-
-export interface EmailSendList {
-	items: EmailSend[]
-	counts: Partial<Record<EmailSendStatus, number>>
-}
-
-export interface EmailSendBatch {
-	sent: number
-	failed: number
-	results: { enquiry_id: number; email: string; ok: boolean; error: string | null }[]
-}
-
-/** An email received through Brevo inbound parsing (Email › Inbox). */
-export interface EmailInbound {
-	id: number
-	enquiry_id: number | null
-	lead_name: string | null
-	/** The send it replies to, when known. */
-	send_id: number | null
-	from_email: string
-	from_name: string | null
-	subject: string
-	body: string
-	attachments: string[]
-	/** True when the sender was unknown and this email created the lead. */
-	created_lead: boolean
-	received_at: string
-}
-
-export interface EmailInboundList {
-	items: EmailInbound[]
-	total: number
-}
-
-/** One email on a lead's Conversation tab: `out` sent from Vitevue, `in` received. */
-export interface EmailThreadItem {
-	direction: 'out' | 'in'
-	id: number
-	subject: string
-	body: string
-	at: string
-	status: EmailSendStatus | null
-	counterpart: string
-}
-
-export interface EmailSync {
-	fetched: number
-	applied: number
-	unmatched: number
-}
-
-/* ── Connectors › WhatsApp (Meta WhatsApp Cloud API) ── */
-
-export interface WhatsAppStatus {
-	/** True when this user can message: WhatsApp is connected and they have a number. */
-	configured: boolean
-	/** WhatsApp is set up on the server, whether or not this user has a number yet. */
-	connected: boolean
-	business_name: string | null
-	/** The business number in display form, e.g. "+971 4 123 4567". */
-	display_number: string | null
-}
-
-/** Meta's delivery status for an outgoing message. */
-export type WhatsAppMessageStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed'
-
-/** A message template as Meta reviewed it; only approved ones can start a chat. */
-export interface WhatsAppTemplate {
-	name: string
-	/** Meta language code, e.g. "en_US". */
-	language: string
-	category: 'marketing' | 'utility' | 'authentication'
-	review: 'approved' | 'pending' | 'rejected' | 'paused'
-	/** The body with its {{1}} placeholders; Vitevue fills them from the lead when sending. */
-	body: string
-}
-
-export interface WhatsAppMessage {
-	/** The WhatsApp message id (wamid). */
-	id: string
-	direction: 'in' | 'out'
-	body: string
-	at: string
-	/** Outgoing only. */
-	status: WhatsAppMessageStatus | null
-	/** The template name when the message was sent from one. */
-	template: string | null
-	/** Why Meta refused or failed the message. */
-	error: string | null
-}
-
-/** A lead's WhatsApp conversation (Lead › Conversation), oldest first. */
-export interface WhatsAppThread {
-	/** The lead's WhatsApp number; null when the lead has none. */
-	wa_number: string | null
-	opted_out: boolean
-	/** End of the 24-hour customer-service window (last client message + 24h); null if never opened. */
-	window_ends_at: string | null
-	messages: WhatsAppMessage[]
-}
-
-/** One row on Connectors › WhatsApp › Chats. */
-export interface WhatsAppChat {
-	wa_id: string
-	contact_name: string | null
-	/** The matched lead; null until someone links the number to a lead (Needs review). */
-	lead_id: number | null
-	lead_name: string | null
-	/** The lead's current stage and score (0–100, how likely it is to close); null off a lead. */
-	lead_stage: LeadStage | null
-	lead_score: number | null
-	/** Where the lead came from, as on Leads, e.g. inbound · "Property Finder"; null off a lead. */
-	lead_source: Source | null
-	lead_source_short: string | null
-	last_body: string
-	last_direction: 'in' | 'out'
-	last_at: string
-	window_ends_at: string | null
-	unread: number
-}
-
-/* ── Connectors › WhatsApp › Numbers (organization owner) ── */
-
-/** A sender number registered in the CRM, and who sends from it. */
-export interface WhatsAppNumber {
-	/** Meta's id for the number; every send goes through it. */
-	phone_number_id: string
-	display_number: string
-	label: string
-	purpose: 'agent' | 'campaign'
-	/** The agent who sends from it; null for the campaign number. */
-	user_id: string | null
-	active: boolean
-}
-
-export type WhatsAppNumberWrite = Omit<WhatsAppNumber, 'phone_number_id'>
-
-/** A number as Meta lists it under the business account. */
-export interface WhatsAppMetaNumber {
-	phone_number_id: string
-	display_number: string
-	verified_name: string | null
-	quality_rating: string | null
-}
-
-/* ── Connectors › WhatsApp › Campaigns (campaign number, organization owner) ── */
-
-/** A lead a campaign may go to: consent recorded, not opted out, with a WhatsApp number. */
-export interface WhatsAppAudienceLead {
-	id: number
-	name: string
-	wa_number: string
-	intent: 'unknown' | 'buy' | 'rent' | 'sell' | 'let'
-	source: string
-}
-
-export interface WhatsAppAudience {
-	items: WhatsAppAudienceLead[]
-	/** Left out, and why. */
-	no_consent: number
-	opted_out: number
-	no_number: number
-}
-
-export interface WhatsAppCampaignCounts {
-	total: number
-	pending: number
-	sent: number
-	delivered: number
-	read: number
-	failed: number
-	skipped: number
-	/** Caught mid-send by a restart: may or may not have arrived. */
-	unknown: number
-	replies: number
-}
-
-export interface WhatsAppCampaign {
-	id: number
-	name: string
-	template_name: string
-	template_language: string
-	status: 'sending' | 'completed'
-	created_at: string
-	completed_at: string | null
-	counts: WhatsAppCampaignCounts
-}
-
-export interface WhatsAppCampaignRecipient {
-	enquiry_id: number | null
-	name: string
-	wa_number: string
-	/** pending, sending, skipped, unknown, or what Meta reported once sent. */
-	status: string
-	error: string | null
-}
-
-export interface WhatsAppCampaignDetail extends WhatsAppCampaign {
-	template_body: string
-	params: string[]
-	recipients: WhatsAppCampaignRecipient[]
-}
-
-export interface WhatsAppCampaignCreate {
-	name: string
-	template_name: string
-	language: string
-	/** {{1}}, {{2}}… for everyone; "{first_name}" becomes each person's first name. */
-	params: string[]
-	enquiry_ids: number[]
 }

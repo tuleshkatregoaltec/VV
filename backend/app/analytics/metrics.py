@@ -118,7 +118,10 @@ def build_configuration_rows(
     sales_rows: list[dict],
     unit_rows_by_room: dict,
     rent_by_room: dict,
+    usage: str = "Residential",
 ) -> list[ProjectConfigurationRow]:
+    """One row per configuration: a bedroom count, or for commercial records the property type
+    (Office, Shop), which the Analytics source puts in rooms_en."""
     sales_lookup = {
         room: row
         for row in sales_rows
@@ -127,7 +130,12 @@ def build_configuration_rows(
     room_keys = {
         room
         for room in set(unit_rows_by_room) | set(sales_lookup)
-        if _is_residential_config_room(room)
+        if (
+            _is_residential_config_room(room)
+            if usage != "Commercial"
+            else (label := _normalize_label(room)) is not None
+            and label.upper() not in {"NA", "N/A", "NONE", "NULL"}
+        )
     }
     rows: list[ProjectConfigurationRow] = []
 
@@ -147,16 +155,10 @@ def build_configuration_rows(
 
         if stock_units <= 0 and sale_count <= 0 and int(rent_row.get("rental_count", 0) or 0) <= 0:
             continue
-        if sales_last_12m < _CONFIG_PRICE_MIN_SAMPLE_SIZE:
-            continue
 
         gross_yield_pct: Optional[float] = None
         if segment != "off_plan" and median_sale_price > 0 and median_annual_rent > 0:
             gross_yield_pct = round(median_annual_rent / median_sale_price * 100, 2)
-
-        absorption_rate_pct: Optional[float] = None
-        if stock_units > 0:
-            absorption_rate_pct = round(sales_last_12m / stock_units * 100, 1)
 
         rows.append(
             ProjectConfigurationRow(
@@ -167,21 +169,20 @@ def build_configuration_rows(
                 sales_last_12m=sales_last_12m,
                 avg_sale_price=float(sale_row.get("avg_sale_price", 0) or 0),
                 median_sale_price=median_sale_price,
-                avg_sale_price_sqm=float(sale_row.get("avg_sale_price_sqm", 0) or 0),
-                avg_unit_size_sqm=float(unit_row.get("avg_unit_size_sqm", 0) or 0),
+                avg_sale_price_sqft=float(sale_row.get("avg_sale_price_sqft", 0) or 0),
+                avg_unit_size_sqft=float(sale_row.get("median_sale_size_sqft", 0) or 0),
                 rental_count=int(rent_row.get("rental_count", 0) or 0),
                 median_annual_rent=median_annual_rent,
-                median_rent_sqm=float(rent_row.get("median_rent_sqm", 0) or 0),
+                median_rent_sqft=float(rent_row.get("median_rent_sqft", 0) or 0),
                 gross_yield_pct=gross_yield_pct,
                 price_change_yoy_pct=_pct_change(
-                    sale_row.get("avg_price_sqm_last_12m"),
-                    sale_row.get("avg_price_sqm_prev_12m"),
+                    sale_row.get("avg_price_sqft_last_12m"),
+                    sale_row.get("avg_price_sqft_prev_12m"),
                 )
                 if sales_last_12m >= _CONFIG_PRICE_MIN_SAMPLE_SIZE
                 and sales_prev_12m >= _CONFIG_PRICE_MIN_SAMPLE_SIZE
                 else None,
                 sales_momentum_pct=_sampled_count_pct_change(sales_last_90d, sales_prev_90d),
-                absorption_rate_pct=absorption_rate_pct,
                 price_p25=float(sale_row.get("price_p25", 0) or 0),
                 price_p50=float(sale_row.get("price_p50", 0) or 0),
                 price_p75=float(sale_row.get("price_p75", 0) or 0),
@@ -291,13 +292,10 @@ def _chart_min_records(args: dict[str, Any], *, group_by: str, metric: str) -> i
         in {
             "avg_price",
             "median_price",
-            "avg_price_sqm",
-            "median_price_sqm",
             "avg_price_sqft",
             "median_price_sqft",
             "avg_rent",
             "median_rent",
-            "median_rent_sqm",
             "median_rent_sqft",
         }
         else 1
@@ -317,14 +315,11 @@ def metric_label(metric: str) -> str:
         "total_sales_volume_12m": "12m sales value",
         "avg_price": "Average price",
         "median_price": "Median price",
-        "avg_price_sqm": "Average price / sqm",
-        "median_price_sqm": "Median price / sqm",
-        "avg_price_sqft": "Average price / sqft",
-        "median_price_sqft": "Median price / sqft",
+        "avg_price_sqft": "Average price / sq ft",
+        "median_price_sqft": "Median price / sq ft",
         "avg_rent": "Average rent",
         "median_rent": "Median rent",
-        "median_rent_sqm": "Median rent / sqm",
-        "median_rent_sqft": "Median rent / sqft",
+        "median_rent_sqft": "Median rent / sq ft",
         "pipeline_units": "Pipeline units",
         "units_delivering_next_12_months": "Units delivering next 12m",
         "sales_transaction_count_12m": "12m sales transactions",
@@ -430,8 +425,9 @@ def _rental_property_type(value: Any) -> str | None:
     if not property_type:
         return None
     normalized = property_type.lower()
+    # DXBI's (uniform) type: DLD's "Flat" leases and "Unit" sales are Apartments there.
     if normalized in {"unit", "apartment", "apartments", "flat", "flats"}:
-        return "Flat"
+        return "Apartment"
     if normalized in {"villa", "villas"}:
         return "Villa"
     return property_type
@@ -443,7 +439,7 @@ def _sales_property_type(value: Any) -> str | None:
         return None
     normalized = property_type.lower()
     if normalized in {"unit", "apartment", "apartments", "flat", "flats"}:
-        return "Unit"
+        return "Apartment"
     if normalized in {"villa", "villas"}:
         return "Villa"
     return property_type

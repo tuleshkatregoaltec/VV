@@ -26,7 +26,7 @@ const trend = $derived(getTrend(data.summary.count_change_pct))
 	<div class="rounded-xl border border-navy-pale bg-navy-pale p-6">
 		<div class="flex items-baseline justify-between">
 			<div>
-				<p class="mb-1 text-sm text-fg-4">Total Transactions</p>
+				<p class="mb-1 text-sm text-fg-4">Total transactions</p>
 				<p class="text-4xl font-bold text-fg-1">
 					{formatNumber(data.summary.transaction_count)}
 				</p>
@@ -61,12 +61,12 @@ const trend = $derived(getTrend(data.summary.count_change_pct))
 
 	<!-- Breakdowns -->
 	<div class="space-y-6">
-		<!-- By Property Type -->
+		<!-- By property type -->
 		{#if data.by_property_type.length > 0}
 			<div>
 				<BreakdownChart
 					data={data.by_property_type}
-					title="By Property Type"
+					title="By property type"
 					metric="count"
 					height={300}
 					maxItems={8}
@@ -74,12 +74,12 @@ const trend = $derived(getTrend(data.summary.count_change_pct))
 			</div>
 		{/if}
 
-		<!-- By Registration Type -->
+		<!-- By registration type -->
 		{#if data.by_reg_type.length > 0}
 			<div>
 				<BreakdownChart
 					data={data.by_reg_type}
-					title="By Registration Type"
+					title="By registration type"
 					metric="count"
 					height={200}
 					maxItems={5}
@@ -92,7 +92,7 @@ const trend = $derived(getTrend(data.summary.count_change_pct))
 			<div>
 				<BreakdownChart
 					data={data.by_master_project}
-					title="Top Projects by Transaction Volume"
+					title="Top projects by volume"
 					metric="count"
 					height={400}
 					maxItems={10}

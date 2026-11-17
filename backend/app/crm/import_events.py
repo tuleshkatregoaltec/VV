@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-IMPORT_RESOLVER_VERSION = "owner-context-8"
+IMPORT_RESOLVER_VERSION = "owner-qualified-18"
 
 
 def event_family(procedure: str) -> str:
@@ -14,6 +14,8 @@ def event_family(procedure: str) -> str:
         return "financing"
     if "lease to own" in label:
         return "lease_to_own"
+    if re.search(r"\b(rent|rental|lease|leasing|tenancy|ejari)\b", label):
+        return "rental"
     if "grant" in label or "gift" in label:
         return "gift"
     if "heir" in label or "inherit" in label:
@@ -25,25 +27,6 @@ def event_family(procedure: str) -> str:
     if re.search(r"\b(sale|sell)\b", label):
         return "sale"
     return "unknown" if label else "contact_snapshot"
-
-
-# Report-only category: stored statuses are unchanged; mortgages are shown apart from them.
-MORTGAGE_REPORT_STATUSES = ("unit_linked_unverified", "unmatched")
-
-
-def is_mortgage_review(claim) -> bool:
-    """An unverified or needs-review row whose event is a mortgage or other financing."""
-    if claim.ownership_status not in MORTGAGE_REPORT_STATUSES:
-        return False
-    family = (claim.evidence or {}).get("event_family") or event_family(claim.procedure_type or "")
-    return family == "financing"
-
-
-def matches_report_status(claim, status: str) -> bool:
-    """Whether a row belongs to a report category ("mortgage" or a stored status)."""
-    if status == "mortgage":
-        return is_mortgage_review(claim)
-    return claim.ownership_status == status and not is_mortgage_review(claim)
 
 
 def has_sale_evidence(candidate) -> bool:
@@ -60,16 +43,17 @@ def has_sale_evidence(candidate) -> bool:
     return family == "sale" and candidate.party_role in {"Buyer", "Seller"}
 
 
-def is_owner_list_entry(candidate) -> bool:
-    """An owner-list row: no role or procedure, but a registration date.
-
-    It may count as an acquisition only once a DLD sale confirms that date.
-    """
-    family = candidate.evidence.get("event_family")
-    if family is None:
-        family = event_family(candidate.procedure_type)
-    return (
-        family == "contact_snapshot"
-        and not candidate.party_role
-        and candidate.transaction_date is not None
-    )
+def source_size_unit(field_map: dict[str, str]) -> str | None:
+    """Read declared size units; an auto-mapped generic Size header has none."""
+    unknown = False
+    for field in ("size_sqft", "size_sqm", "size_unknown"):
+        header = field_map.get(field)
+        if not header:
+            continue
+        normalized = re.sub(r"[^a-z0-9]", "", str(header).lower().replace("²", "2"))
+        if any(token in normalized for token in ("sqft", "squarefeet", "squarefoot", "ft2")):
+            return "sqft"
+        if any(token in normalized for token in ("sqm", "squaremeter", "squaremetre", "m2")):
+            return "sqm"
+        unknown = True
+    return "unknown" if unknown else None

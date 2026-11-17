@@ -3,6 +3,7 @@ import { createQuery } from '@tanstack/svelte-query'
 import { Chart, registerables } from 'chart.js'
 import { onMount } from 'svelte'
 import type {
+	AnalyticsUsage,
 	PriceDistributionBucket,
 	ProjectAnalyticsResponse,
 	ProjectConfigurationRow,
@@ -12,16 +13,23 @@ import type {
 	ProjectTrendPoint,
 	SubProjectItem
 } from '$lib/api/analytics'
+import StandardDropdown from '$lib/components/dropdowns/StandardDropdown.svelte'
 import { analyticsQueries } from '$lib/queries/analytics'
+import { forecastNote, pipelineBasisNote } from '$lib/utils/analyticsNotes'
 import { getChartTheme } from '$lib/utils/chartTheme'
+import AnalyticsError from './AnalyticsError.svelte'
+import UsageToggle from './UsageToggle.svelte'
 
 Chart.register(...registerables)
 
-let { selection }: { selection: ProjectSearchItem } = $props()
+let {
+	selection,
+	onSelect
+}: { selection: ProjectSearchItem; onSelect?: (next: ProjectSearchItem) => void } = $props()
 
 type AnalysisMode = 'sales' | 'rentals'
 type ConfigSegment = 'all' | 'off_plan' | 'secondary'
-type TrendChartPoint = Pick<ProjectTrendPoint, 'date' | 'avg_price' | 'avg_price_sqm'>
+type TrendChartPoint = Pick<ProjectTrendPoint, 'date' | 'avg_price' | 'avg_price_sqft'>
 
 let subProject = $state<string | null>(null)
 let mode = $state<AnalysisMode>('sales')
@@ -29,38 +37,54 @@ let configMode = $state<AnalysisMode>('sales')
 let configSegment = $state<ConfigSegment>('all')
 let distroRooms = $state<string>('All')
 let distroOffplan = $state(false)
-let pipelineRooms = $state<string | null>(null)
 let subDropdownOpen = $state(false)
 let subSearch = $state('')
+// Residential or Commercial records; a new selection starts automatic (Commercial for a scope
+// with no residential records), a click pins the choice.
+let usage = $state<AnalyticsUsage>('auto')
+let summaryPeriod = $state('Last Year')
+const summaryPeriods: Record<string, number | undefined> = {
+	'Last Week': 7,
+	'Last Month': 30,
+	'Last 3 Months': 90,
+	'Last 6 Months': 180,
+	'Last Year': 365,
+	'All time': undefined
+}
+const summaryDays = $derived(summaryPeriods[summaryPeriod])
 
 $effect(() => {
 	selection
 	subProject = null
+	usage = 'auto'
 	mode = 'sales'
 	configMode = 'sales'
 	configSegment = 'all'
 	distroRooms = 'All'
 	distroOffplan = false
-	pipelineRooms = null
 	subDropdownOpen = false
 	subSearch = ''
 })
 
 const queryParams = $derived.by(() =>
 	selection.filter_type === 'market'
-		? {}
-		: subProject
-			? { project: subProject, masterProject: selection.name }
-			: selection.filter_type === 'project'
-				? { project: selection.name }
-				: { masterProject: selection.name, filterType: selection.filter_type }
+		? { usage }
+		: selection.filter_type === 'building'
+			? { buildingId: selection.building_id ?? '', usage }
+			: subProject
+				? { project: subProject, masterProject: selection.name, usage }
+				: selection.filter_type === 'project'
+					? { project: selection.name, usage }
+					: { masterProject: selection.name, filterType: selection.filter_type, usage }
 )
 
 const subProjectsQuery = createQuery(() =>
 	analyticsQueries.subProjects(selection.name, selection.filter_type)
 )
 
-const summaryQuery = createQuery(() => analyticsQueries.projectSummary(queryParams))
+const summaryQuery = createQuery(() =>
+	analyticsQueries.projectSummary({ ...queryParams, summary_days: summaryDays })
+)
 
 const trendsQuery = createQuery(() => analyticsQueries.projectTrends(queryParams, 365))
 
@@ -108,24 +132,16 @@ function getConfigurationRows(summary: ProjectAnalyticsResponse | null): Project
 	return (
 		summary?.configuration_analysis
 			.filter((row) => row.market_segment === configSegment)
-			.filter((row) => isReliableConfigRow(row)) ?? []
+			.filter((row) => isReliableConfigRow(row, summary.usage)) ?? []
 	)
 }
 
 function getConfigurationRentalRows(summary: ProjectAnalyticsResponse | null) {
 	return (
-		summary?.by_rooms.filter((row) => isResidentialConfigRoom(row.rooms) && row.rental_count > 0) ??
-		[]
+		summary?.by_rooms.filter(
+			(row) => isConfigRoom(row.rooms, summary.usage) && row.rental_count > 0
+		) ?? []
 	)
-}
-
-function getAvailableRooms(): string[] {
-	const summary = getSummary()
-	if (!summary) return []
-	return summary.unit_composition
-		.filter((c) => c.count > 0)
-		.map((c) => c.rooms)
-		.filter((room) => room === 'Studio' || /^[1-5] B\/R$/.test(room))
 }
 
 function getDistroRooms(): string[] {
@@ -137,21 +153,6 @@ function getDistroBucket(): PriceDistributionBucket | null {
 	if (!distro) return null
 	if (distroRooms === 'All') return distro.all ?? null
 	return distro.by_rooms.find((b) => b.rooms === distroRooms) ?? null
-}
-
-function getFilteredPipelineData(): ProjectPipelinePoint[] {
-	const data = getPipeline()?.data ?? []
-	if (!pipelineRooms) return data
-	const summary = getSummary()
-	const comp = summary?.unit_composition.find((c) => c.rooms === pipelineRooms)
-	if (!comp) return []
-	const ratio = comp.pct_of_total / 100
-	return data.map((p) => ({
-		...p,
-		existing_stock_units: Math.round(p.existing_stock_units * ratio),
-		carried_stock_units: Math.round(p.carried_stock_units * ratio),
-		new_pipeline_units: Math.round(p.new_pipeline_units * ratio)
-	}))
 }
 
 function getMarketSplit(summary: ProjectAnalyticsResponse | null) {
@@ -198,8 +199,11 @@ function closeSubDropdown() {
 }
 
 function handleSubKeydown(e: KeyboardEvent) {
-	if (e.key === 'Escape') closeSubDropdown()
-	if (e.key === 'Enter') {
+	if (e.key === 'Escape') {
+		;(e.currentTarget as HTMLElement).closest('[role="group"]')?.querySelector('button')?.focus()
+		closeSubDropdown()
+	}
+	if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
 		e.preventDefault()
 		const filteredSubProjects = getFilteredSubProjects()
 		if (filteredSubProjects.length > 0) {
@@ -237,6 +241,37 @@ function getDeveloperNames(summary: ProjectAnalyticsResponse): string[] {
 	return uniqueNormalized([...(project?.developer_names ?? []), project?.developer_name])
 }
 
+// Registered units as shown: "at least" when only the units that traded are known.
+function unitsLabel(project: ProjectAnalyticsResponse['project']): string {
+	if (!project?.no_of_units) return '—'
+	return project.units_at_least
+		? `at least ${fmtNumber(project.no_of_units)}`
+		: fmtNumber(project.no_of_units)
+}
+
+// The way back up the hierarchy from a building or project.
+function selectUp(level: 'master' | 'project', name: string | null | undefined) {
+	if (!name || !onSelect) return
+	onSelect(
+		level === 'master'
+			? { name, filter_type: 'master', scope_kind: 'Master' }
+			: { name, filter_type: 'project', scope_kind: 'Project' }
+	)
+}
+
+function selectBuilding(building: { building_id: string; name: string }) {
+	const project = getSummary()?.project
+	onSelect?.({
+		name: building.name,
+		filter_type: 'building',
+		scope_kind: 'Building',
+		building: building.name,
+		building_id: building.building_id,
+		project: project?.project_name ?? '',
+		master: project?.master_name ?? ''
+	})
+}
+
 function getDeveloperLabel(
 	summary: ProjectAnalyticsResponse,
 	isMasterScope: boolean,
@@ -258,18 +293,20 @@ function getDeveloperDisplay(
 	return names[0] ?? '—'
 }
 
-function isResidentialConfigRoom(room: string | null | undefined): boolean {
+// A residential configuration is a bedroom count; a commercial one is the property type (Office,
+// Shop): the backend groups commercial records by type.
+function isConfigRoom(room: string | null | undefined, usage = 'Residential'): boolean {
 	const label = normalizeText(room)
 	if (!label) return false
 	const upper = label.toUpperCase()
 	if (['NA', 'N/A', 'NONE', 'NULL'].includes(upper)) return false
+	if (usage === 'Commercial') return true
 	return upper === 'STUDIO' || /^\d+\s+B\/R$/i.test(label) || upper.includes('PENTHOUSE')
 }
 
-function isReliableConfigRow(row: ProjectConfigurationRow): boolean {
+function isReliableConfigRow(row: ProjectConfigurationRow, usage = 'Residential'): boolean {
 	return (
-		isResidentialConfigRoom(row.rooms) &&
-		row.sales_last_12m >= 3 &&
+		isConfigRoom(row.rooms, usage) &&
 		(row.stock_units > 0 || row.sale_count > 0 || row.sales_last_12m > 0 || row.rental_count > 0)
 	)
 }
@@ -291,10 +328,7 @@ function statusBadgeClass(status: string): string {
 
 function fmtCurrency(n: number | null | undefined): string {
 	if (n == null || !Number.isFinite(n) || n <= 0) return '—'
-	if (n >= 1_000_000_000) return `AED ${(n / 1_000_000_000).toFixed(2)}B`
-	if (n >= 1_000_000) return `AED ${(n / 1_000_000).toFixed(2)}M`
-	if (n >= 1_000) return `AED ${(n / 1_000).toFixed(0)}K`
-	return `AED ${Math.round(n).toLocaleString()}`
+	return `AED ${n.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`
 }
 
 function fmtCompact(n: number | null | undefined): string {
@@ -331,9 +365,9 @@ function fmtSignedPct(n: number | null | undefined, digits = 1): string {
 	return `${n > 0 ? '+' : n < 0 ? '−' : ''}${value}%`
 }
 
-function fmtPsf(pricePerSqm: number | null | undefined): string {
-	if (!pricePerSqm || !Number.isFinite(pricePerSqm)) return ''
-	return `AED ${fmtNumber(pricePerSqm / 10.764, 0)} psf`
+function fmtPsf(pricePerSqft: number | null | undefined): string {
+	if (!pricePerSqft || !Number.isFinite(pricePerSqft)) return ''
+	return `AED ${fmtNumber(pricePerSqft, 2)}/sq ft`
 }
 
 function pctTone(value: number | null | undefined) {
@@ -357,7 +391,7 @@ function fmtQuarterLabel(value: string | Date): string {
 }
 
 function isAggregateSelection(): boolean {
-	return selection.filter_type !== 'project' && !subProject
+	return selection.filter_type !== 'project' && selection.filter_type !== 'building' && !subProject
 }
 
 function isMarketSelection(): boolean {
@@ -369,7 +403,7 @@ function trendDateKey(point: TrendChartPoint | ProjectForecastPoint): string {
 }
 
 function trendMetric(point: TrendChartPoint | ProjectForecastPoint): number {
-	return mode === 'sales' ? point.avg_price : point.avg_price_sqm
+	return mode === 'sales' ? point.avg_price : point.avg_price_sqft
 }
 
 function getRecordedTrendSeries(): TrendChartPoint[] {
@@ -437,7 +471,11 @@ let themeVersion = $state(0)
 function buildTrendChart() {
 	const recordedSeries = getRecordedTrendSeries()
 	const forecastSeries = getFutureForecastSeries(recordedSeries)
-	if (!trendCanvas || recordedSeries.length === 0) return
+	if (!trendCanvas || recordedSeries.length === 0) {
+		trendChart?.destroy()
+		trendChart = null
+		return
+	}
 	trendChart?.destroy()
 	const ctx = trendCanvas.getContext('2d')
 	if (!ctx) return
@@ -530,7 +568,7 @@ function buildTrendChart() {
 						label: (context) =>
 							mode === 'sales'
 								? ` ${fmtCurrency(Number(context.parsed.y ?? 0))}`
-								: ` AED ${fmtNumber(Number(context.parsed.y ?? 0), 0)}/sqm`
+								: ` AED ${fmtNumber(Number(context.parsed.y ?? 0), 0)}/sq ft`
 					}
 				}
 			},
@@ -714,8 +752,12 @@ function buildBellChart() {
 
 // ─── Pipeline chart ───────────────────────────────────────────────────────
 function buildPipelineChart() {
-	const pipelineData = getFilteredPipelineData()
-	if (!pipelineCanvas || pipelineData.length === 0) return
+	const pipelineData = getPipeline()?.data ?? []
+	if (!pipelineCanvas || pipelineData.length === 0) {
+		pipelineChart?.destroy()
+		pipelineChart = null
+		return
+	}
 	pipelineChart?.destroy()
 	const ctx = pipelineCanvas.getContext('2d')
 	if (!ctx) return
@@ -801,12 +843,14 @@ function buildPipelineChart() {
 					border: { display: false },
 					ticks: { color: theme.muted, maxTicksLimit: 12 }
 				},
+				// Each axis is titled in its series' colour: stock (line) left, supply (bars) right.
 				stock: {
 					type: 'linear',
 					position: 'left',
 					beginAtZero: true,
 					grid: { color: theme.grid },
 					border: { display: false },
+					title: { display: true, text: 'Total stock (units)', color: theme.line },
 					ticks: { color: theme.muted, callback: (v) => fmtCompact(Number(v)) }
 				},
 				deliveries: {
@@ -815,6 +859,7 @@ function buildPipelineChart() {
 					beginAtZero: true,
 					grid: { drawOnChartArea: false },
 					border: { display: false },
+					title: { display: true, text: 'Upcoming supply (units)', color: theme.warning },
 					ticks: { color: theme.muted, callback: (v) => fmtCompact(Number(v)) }
 				}
 			}
@@ -889,6 +934,15 @@ function buildMarketSplitChart() {
 	})
 }
 
+$effect(() => {
+	if (
+		distroQuery.data &&
+		distroRooms !== 'All' &&
+		!distroQuery.data.by_rooms.some((row) => row.rooms === distroRooms)
+	)
+		distroRooms = 'All'
+})
+
 // ─── Effects ──────────────────────────────────────────────────────────────
 $effect(() => {
 	mode
@@ -905,7 +959,6 @@ $effect(() => {
 })
 
 $effect(() => {
-	const _r = pipelineRooms
 	themeVersion
 	getPipeline()
 	getSummary()
@@ -934,7 +987,9 @@ onMount(() => {
 })
 </script>
 
-{#if summaryQuery.isLoading}
+{#if summaryQuery.isError}
+	<AnalyticsError message="Failed to load analytics for this project." retry={() => summaryQuery.refetch()} fetching={summaryQuery.isFetching} />
+{:else if summaryQuery.isLoading}
 	<div class="grid gap-6">
 		<div class="h-36 animate-pulse rounded-lg border border-border bg-card"></div>
 		<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -955,35 +1010,81 @@ onMount(() => {
 	{@const rentalConfigRows = getConfigurationRentalRows(summary)}
 	{@const distroBucket = getDistroBucket()}
 	{@const distroRoomList = getDistroRooms()}
-	{@const pipelineRoomList = getAvailableRooms()}
 	{@const marketSplit = getMarketSplit(summary)}
 	{@const isMarketScope = isMarketSelection()}
-	{@const isMasterScope = selection.filter_type !== 'project' && selection.filter_type !== 'market' && !subProject}
+	<!-- A project's developer, units or handover, from a named source (not its area alone). -->
+	{@const hasProjectDetails =
+		!isMarketScope &&
+		Object.keys(summary.project?.field_sources ?? {}).some((field) => field !== 'area_name')}
+	{@const isBuildingScope = selection.filter_type === 'building'}
+	{@const isMasterScope = selection.filter_type !== 'project' && selection.filter_type !== 'market' && !isBuildingScope && !subProject}
 	<div class="space-y-5">
 
+		{#if subProjectsQuery.isError}
+			<AnalyticsError message="Failed to load developments." retry={() => subProjectsQuery.refetch()} fetching={subProjectsQuery.isFetching} />
+		{/if}
 		<!-- ── Project header ────────────────────────────────────────── -->
 		<section class="rounded-lg border border-border bg-card p-5">
 			<div class="flex flex-wrap items-start justify-between gap-4">
 				<div class="min-w-0">
-					<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4">
-						{summary.project?.area_name ?? 'Project analytics'}
-					</p>
+					{#if !isMasterScope && !isMarketScope && summary.project?.master_name}
+						<!-- Master › Project for a building: each level opens its own analytics. -->
+						<nav
+							aria-label="Location"
+							class="flex flex-wrap items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4"
+							data-testid="analytics-breadcrumb"
+						>
+							<button type="button" class="uppercase hover:text-info" onclick={() => selectUp('master', summary.project?.master_name)}>
+								{summary.project.master_name}
+							</button>
+							{#if isBuildingScope && summary.project?.parent_project}
+								<span aria-hidden="true">›</span>
+								<button type="button" class="uppercase hover:text-info" onclick={() => selectUp('project', summary.project?.parent_project)}>
+									{summary.project.parent_project}
+								</button>
+							{/if}
+						</nav>
+					{:else}
+						<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4">
+							{summary.project?.area_name ?? `${selection.scope_kind ?? 'Location'} analytics`}
+						</p>
+					{/if}
 					<h2 class="mt-1.5 truncate text-2xl font-semibold tracking-normal text-fg-1">
 						{subProject
 							? stripPrefix(subProject)
 							: summary.project?.project_name ?? selection.name}
 					</h2>
 					{#if isMarketScope}
-						<p class="mt-1 text-sm text-fg-3">Citywide residential market aggregate</p>
+						<p class="mt-1 text-sm text-fg-3">
+							Citywide {summary.usage === 'Commercial' ? 'commercial' : 'residential'} market aggregate
+						</p>
 					{:else if isMasterScope}
 						<p class="mt-1 text-sm text-fg-3">
 							Master community aggregate{subProjects.length > 0
 								? ` - ${fmtNumber(subProjects.length)} developments`
 								: ''}
 						</p>
+					{:else if isBuildingScope}
+						<p class="mt-1 text-sm text-fg-3">
+							Building{summary.project?.developer_name ? ` · ${summary.project.developer_name}` : ''}
+						</p>
 					{:else if summary.project?.developer_name}
 						<p class="mt-1 text-sm text-fg-3">{summary.project.developer_name}</p>
 					{/if}
+					<UsageToggle
+						counts={summary.usage_counts}
+						resolved={summary.usage === 'Commercial' ? 'Commercial' : 'Residential'}
+						value={usage}
+						scope={`${isMarketScope ? 'Dubai' : isMasterScope ? 'this community' : isBuildingScope ? 'this building' : 'this project'}${summaryDays ? ' in the selected window' : ''}`}
+						onchange={(choice) => (usage = choice)}
+					>
+						<div class="flex items-center gap-2">
+							<label for="analytics-summary-window-button" class="text-xs font-medium text-fg-3">Summary window</label>
+							<div class="w-40">
+								<StandardDropdown id="analytics-summary-window" ariaLabel="Summary window" options={Object.keys(summaryPeriods)} bind:value={summaryPeriod} />
+							</div>
+						</div>
+					</UsageToggle>
 				</div>
 
 				<div class="flex items-center gap-3">
@@ -999,6 +1100,12 @@ onMount(() => {
 						>
 							Master community
 						</span>
+					{:else if isBuildingScope}
+						<span
+							class="inline-flex items-center rounded-sm bg-info-bg px-2.5 py-1 text-xs font-semibold text-info ring-1 ring-border"
+						>
+							Building
+						</span>
 					{:else if summary.project?.project_status}
 						<span
 							class="inline-flex items-center rounded-sm px-2.5 py-1 text-xs font-semibold {statusBadgeClass(summary.project.project_status)}"
@@ -1008,9 +1115,11 @@ onMount(() => {
 					{/if}
 
 					{#if subProjects.length > 1}
-						<div class="relative" use:clickOutside={closeSubDropdown}>
+						<div class="relative" role="group" aria-label="Development selection" use:clickOutside={closeSubDropdown}
+							onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) closeSubDropdown() }}>
 							<button
 								type="button"
+								onkeydown={handleSubKeydown}
 								onclick={() => {
 									subDropdownOpen = !subDropdownOpen;
 									subSearch = '';
@@ -1042,8 +1151,9 @@ onMount(() => {
 									<div class="max-h-64 overflow-y-auto p-2">
 										<button
 											type="button"
+											onkeydown={handleSubKeydown}
 											class="w-full rounded-md px-3 py-2 text-left text-sm transition-colors {subProject === null ? 'bg-info-bg text-info' : 'text-fg-2 hover:bg-panel'}"
-											onmousedown={() => {
+											onclick={() => {
 												subProject = null;
 												closeSubDropdown();
 											}}
@@ -1053,8 +1163,9 @@ onMount(() => {
 										{#each filteredSubProjects as sp (sp.name)}
 											<button
 												type="button"
+												onkeydown={handleSubKeydown}
 												class="mt-0.5 w-full rounded-md px-3 py-2 text-left text-sm transition-colors {subProject === sp.name ? 'bg-info-bg text-info' : 'text-fg-2 hover:bg-panel'}"
-												onmousedown={() => {
+												onclick={() => {
 													subProject = sp.name;
 													closeSubDropdown();
 												}}
@@ -1073,7 +1184,8 @@ onMount(() => {
 				</div>
 			</div>
 
-			<!-- Metadata strip -->
+			<!-- Metadata strip: a project's details where a source holds them -->
+			{#if hasProjectDetails}
 			<div class="mt-4 flex flex-wrap gap-4 border-t border-border pt-4">
 				<div class="min-w-[150px] max-w-[260px]">
 					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">{getDeveloperLabel(summary, isMasterScope, isMarketScope)}</p>
@@ -1083,9 +1195,14 @@ onMount(() => {
 				</div>
 				<div class="min-w-[100px]">
 					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Units</p>
-					<p class="mt-1 text-sm font-medium text-fg-1">
-						{fmtNumber(summary.project?.no_of_units)}
+					<p class="mt-1 text-sm font-medium text-fg-1" data-testid="analytics-units">
+						{unitsLabel(summary.project)}
 					</p>
+					{#if isMasterScope && summary.project?.no_of_projects}
+						<p class="mt-1 text-[11px] text-fg-4">
+							{fmtNumber(summary.project.projects_with_units ?? 0)} of {fmtNumber(summary.project.no_of_projects)} projects counted
+						</p>
+					{/if}
 				</div>
 				<div class="min-w-[160px]">
 					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Handover</p>
@@ -1132,27 +1249,65 @@ onMount(() => {
 					</div>
 				{/if}
 			</div>
+			{/if}
 		</section>
 
+		<!-- ── A project's buildings ─────────────────────────────────── -->
+		{#if !isBuildingScope && !isMasterScope && !isMarketScope && (summary.buildings?.length ?? 0) > 0}
+			<section class="rounded-lg border border-border bg-card p-5" data-testid="analytics-buildings">
+				<div class="flex items-baseline justify-between gap-3">
+					<h3 class="text-sm font-semibold text-fg-1">Buildings</h3>
+				</div>
+				<div class="mt-3 overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="border-b border-border text-left text-[11px] uppercase tracking-[0.12em] text-fg-4">
+								<th class="py-2 pr-4 font-medium">Building</th>
+								<th class="py-2 pr-4 text-right font-medium">Units</th>
+								<th class="py-2 pr-4 text-right font-medium">Sales</th>
+								<th class="py-2 text-right font-medium">Leases</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each summary.buildings ?? [] as building (building.building_id)}
+								<tr class="border-b border-border last:border-0">
+									<td class="py-2 pr-4">
+										<button type="button" class="text-left font-medium text-fg-1 hover:text-info" onclick={() => selectBuilding(building)}>
+											{building.name}
+										</button>
+									</td>
+									<td class="py-2 pr-4 text-right tabular-nums text-fg-2">
+										{building.units ? (building.units_at_least ? `≥ ${fmtNumber(building.units)}` : fmtNumber(building.units)) : '—'}
+									</td>
+									<td class="py-2 pr-4 text-right tabular-nums text-fg-2">{fmtNumber(building.sales)}</td>
+									<td class="py-2 text-right tabular-nums text-fg-2">{fmtNumber(building.leases)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		{/if}
+
 		<!-- ── KPI cards ──────────────────────────────────────────────── -->
-		<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+		<section aria-label="Summary metrics" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Total Sales</p>
-				<p class="mt-2.5 text-3xl font-semibold text-fg-1">
+				<p class="mt-2.5 break-words text-3xl font-semibold text-fg-1">
 					{fmtNumber(summary.sales.transaction_count)}
 				</p>
 				<p class="mt-1.5 text-sm text-fg-4">transactions</p>
 			</div>
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Avg Sale Price</p>
-				<p class="mt-2.5 text-3xl font-semibold text-fg-1">
+				<p class="mt-2.5 break-words text-3xl font-semibold text-fg-1">
 					{fmtCurrency(summary.sales.avg_price)}
 				</p>
-				<p class="mt-1.5 text-sm text-fg-4">{fmtCurrency(summary.sales.avg_price_sqm)}/sqm</p>
+				<p class="mt-1.5 text-sm text-fg-4">{fmtPsf(summary.sales.avg_price_sqft)}</p>
 			</div>
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Median Annual Rent</p>
-				<p class="mt-2.5 text-3xl font-semibold text-fg-1">
+				<p class="mt-2.5 break-words text-3xl font-semibold text-fg-1">
 					{fmtCurrency(summary.rentals.median_annual_rent)}
 				</p>
 				<p class="mt-1.5 text-sm text-fg-4">
@@ -1161,15 +1316,15 @@ onMount(() => {
 			</div>
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-info">Gross Yield</p>
-				<p class="mt-2.5 text-3xl font-semibold text-info">
+				<p class="mt-2.5 break-words text-3xl font-semibold text-info">
 					{fmtPct(summary.overall_gross_yield_pct)}
 				</p>
-				<p class="mt-1.5 text-sm text-info">median rent ÷ median sale</p>
 			</div>
 		</section>
 
 		<section class="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_360px]">
-			<section class="rounded-lg border border-border bg-card p-5">
+			<!-- The chart grows with the Market Split card beside it instead of leaving a gap. -->
+			<section class="flex flex-col rounded-lg border border-border bg-card p-5">
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4">
@@ -1177,8 +1332,8 @@ onMount(() => {
 						</p>
 						<h3 class="mt-1 text-base font-semibold text-fg-1">
 							{shouldShowTrendForecast()
-								? 'Recorded pricing with delivery-aware forecast'
-								: 'Recorded pricing trend'}
+								? 'Pricing trend and forecast'
+								: 'Pricing trend'}
 						</h3>
 					</div>
 					<div class="inline-flex rounded-lg border border-border bg-panel p-0.5">
@@ -1194,12 +1349,17 @@ onMount(() => {
 							class="rounded-lg px-4 py-1.5 text-sm font-medium transition-colors {mode === 'rentals' ? 'bg-card text-fg-1 shadow-sm' : 'text-fg-3 hover:text-fg-2'}"
 							onclick={() => (mode = 'rentals')}
 						>
-							Price / sqm
+							Price / sq ft
 						</button>
 					</div>
 				</div>
-				<div class="mt-4 h-[280px]">
-					{#if trendsQuery.isLoading || (!isAggregateSelection() && forecastQuery.isLoading)}
+				{#if forecastQuery.isError && !isAggregateSelection()}
+					<AnalyticsError message="Failed to load forecast." retry={() => forecastQuery.refetch()} fetching={forecastQuery.isFetching} />
+				{/if}
+				<div class="relative mt-4 h-[280px] xl:h-auto xl:min-h-[280px] xl:flex-1">
+					{#if trendsQuery.isError}
+						<AnalyticsError message="Failed to load price trends." retry={() => trendsQuery.refetch()} fetching={trendsQuery.isFetching} />
+					{:else if trendsQuery.isLoading || (!isAggregateSelection() && forecastQuery.isLoading)}
 						<div class="h-full animate-pulse rounded-lg bg-panel"></div>
 					{:else if hasTrendChartData()}
 						<canvas bind:this={trendCanvas}></canvas>
@@ -1209,6 +1369,9 @@ onMount(() => {
 						</div>
 					{/if}
 				</div>
+				{#if !isAggregateSelection() && forecastNote(forecast)}
+					<p class="mt-3 text-xs text-fg-3">{forecastNote(forecast)}</p>
+				{/if}
 				{#if shouldShowTrendForecast() && forecast?.delivery_date}
 					<div class="mt-3 flex items-center gap-2 text-xs text-fg-3">
 						<span class="inline-block h-1.5 w-1.5 rounded-full bg-primary-light"></span>
@@ -1236,7 +1399,6 @@ onMount(() => {
 							<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Total sales</p>
 							<p class="mt-1 text-3xl font-semibold text-fg-1">{fmtNumber(marketSplit.total)}</p>
 						</div>
-						<p class="text-xs text-fg-4">transaction count</p>
 					</div>
 					<div class="mt-4 h-[220px]">
 						{#if marketSplit.total > 0}
@@ -1304,7 +1466,7 @@ onMount(() => {
 					<div class="inline-flex rounded-lg border border-border bg-panel p-0.5">
 						<button
 							type="button"
-							class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors {configSegment === 'all' ? 'bg-navy text-on-navy shadow-sm' : 'text-fg-3 hover:text-fg-2'}"
+							class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors {configSegment === 'all' ? 'bg-card text-fg-1 shadow-sm' : 'text-fg-3 hover:text-fg-2'}"
 							onclick={() => (configSegment = 'all')}
 						>
 							All
@@ -1327,59 +1489,44 @@ onMount(() => {
 				{/if}
 			</div>
 
-			<div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-fg-4">
-				<span class="inline-flex items-center rounded-sm border border-border bg-panel px-2.5 py-1 font-medium text-fg-3">
-					Listing metrics pending
-				</span>
-				<span class="inline-flex items-center rounded-sm border border-dashed border-border px-2.5 py-1">
-					Days on market
-				</span>
-				<span class="inline-flex items-center rounded-sm border border-dashed border-border px-2.5 py-1">
-					Sale / list ratio
-				</span>
-			</div>
-
 			{#if configMode === 'sales'}
-				<div class="mt-4 overflow-x-auto">
-					<table class="min-w-full border-separate border-spacing-0 text-sm">
+				<div class="ui-scroll-shadow mt-4 overflow-x-auto">
+					<table class="min-w-[640px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
 							<tr class="text-left">
-								<th class="border-b border-border pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
+								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">{summary.usage === 'Commercial' ? 'Type' : 'Config'}</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Sales</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Avg Price</th>
-								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-5">Size sqm</th>
+								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Median sale size sq ft</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
-									Momentum<br /><span class="font-normal normal-case tracking-normal text-fg-5">90d shift</span>
+									Momentum<br /><span class="font-normal normal-case tracking-normal text-fg-4">90d shift</span>
 								</th>
-								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
-									Price Δ YoY<br /><span class="font-normal normal-case tracking-normal text-fg-5">% change</span>
-								</th>
-								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-									Sales / Stock<br /><span class="font-normal normal-case tracking-normal text-info">% / year</span>
+								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
+									Price Δ YoY<br /><span class="font-normal normal-case tracking-normal text-fg-4">% change</span>
 								</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each configRows as row (row.market_segment + row.rooms)}
 								<tr class="group">
-									<td class="border-b border-border py-3 pr-6 font-medium text-fg-1 group-hover:bg-panel">
+									<td class="sticky left-0 z-10 border-b border-border bg-card py-3 pr-6 font-medium text-fg-1 group-hover:bg-panel">
 										{row.rooms}
 									</td>
 									<td class="border-b border-border py-3 pr-6 text-right text-fg-2 group-hover:bg-panel">
-										{fmtNumber(row.sales_last_12m)}
+										{fmtNumber(row.sale_count)}
 									</td>
 									<td class="border-b border-border py-3 pr-6 text-right group-hover:bg-panel">
 										<span class="font-medium text-fg-1">{fmtCurrency(row.avg_sale_price)}</span>
-										{#if row.avg_sale_price_sqm > 0}
-											<br /><span class="text-[11px] text-fg-4">{fmtPsf(row.avg_sale_price_sqm)}</span>
+										{#if row.avg_sale_price_sqft > 0}
+											<br /><span class="text-[11px] text-fg-4">{fmtPsf(row.avg_sale_price_sqft)}</span>
 										{/if}
 									</td>
-									<td class="border-b border-border py-3 pr-6 text-right text-fg-5 group-hover:bg-panel">
-										{row.avg_unit_size_sqm > 0 ? fmtNumber(row.avg_unit_size_sqm, 0) : '—'}
+									<td class="border-b border-border py-3 pr-6 text-right text-fg-2 group-hover:bg-panel">
+										{row.avg_unit_size_sqft > 0 ? fmtNumber(row.avg_unit_size_sqft, 0) : '—'}
 									</td>
 									<td class="border-b border-border py-3 pr-6 text-right group-hover:bg-panel">
 										{#if row.sales_momentum_pct == null || !Number.isFinite(row.sales_momentum_pct)}
-											<span class="text-fg-5">—</span>
+											<span class="text-fg-4">—</span>
 										{:else if Math.abs(row.sales_momentum_pct) < 0.5}
 											<span class="inline-flex items-center gap-0.5 rounded-full bg-panel px-2 py-0.5 text-xs font-medium text-fg-4">
 												— {fmtSignedPct(row.sales_momentum_pct)}
@@ -1394,26 +1541,21 @@ onMount(() => {
 											</span>
 										{/if}
 									</td>
-									<td class="border-b border-border py-3 pr-6 text-right group-hover:bg-panel">
+									<td class="border-b border-border py-3 text-right group-hover:bg-panel">
 										{#if row.price_change_yoy_pct != null && Number.isFinite(row.price_change_yoy_pct)}
 											<span class="font-medium {deltaTone(row.price_change_yoy_pct)}">
 												{row.price_change_yoy_pct > 0 ? '▲' : row.price_change_yoy_pct < 0 ? '▼' : ''}
 												{fmtPct(Math.abs(row.price_change_yoy_pct))}
 											</span>
 										{:else}
-											<span class="text-fg-5">—</span>
+											<span class="text-fg-4">—</span>
 										{/if}
-									</td>
-									<td class="border-b border-border py-3 text-right font-medium group-hover:bg-panel">
-										<span class="{pctTone(row.absorption_rate_pct)}">
-											{fmtPct(row.absorption_rate_pct)}
-										</span>
 									</td>
 								</tr>
 							{/each}
 							{#if configRows.length === 0}
 								<tr>
-									<td colspan="7" class="py-8 text-center text-sm text-fg-4">
+									<td colspan="6" class="py-8 text-center text-sm text-fg-4">
 										No data available for this segment.
 									</td>
 								</tr>
@@ -1423,25 +1565,25 @@ onMount(() => {
 				</div>
 			{:else}
 				<!-- Rental view -->
-				<div class="mt-4 overflow-x-auto">
-					<table class="min-w-full border-separate border-spacing-0 text-sm">
+				<div class="ui-scroll-shadow mt-4 overflow-x-auto">
+					<table class="min-w-[480px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
 							<tr class="text-left">
-								<th class="border-b border-border pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
+								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">{summary.usage === 'Commercial' ? 'Type' : 'Config'}</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Contracts</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Median Rent</th>
-								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Rent / sqm</th>
-								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Gross Yield</th>
+								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Rent / sq ft</th>
+								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Gross Yield</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each rentalConfigRows as row (row.rooms)}
 								<tr class="group">
-									<td class="border-b border-border py-3 pr-6 font-medium text-fg-1 group-hover:bg-panel">{row.rooms}</td>
+									<td class="sticky left-0 z-10 border-b border-border bg-card py-3 pr-6 font-medium text-fg-1 group-hover:bg-panel">{row.rooms}</td>
 									<td class="border-b border-border py-3 pr-6 text-right text-fg-3 group-hover:bg-panel">{fmtNumber(row.rental_count)}</td>
 									<td class="border-b border-border py-3 pr-6 text-right font-medium text-fg-1 group-hover:bg-panel">{fmtCurrency(row.median_annual_rent)}</td>
 									<td class="border-b border-border py-3 pr-6 text-right text-fg-3 group-hover:bg-panel">
-										{row.median_rent_sqm > 0 ? `AED ${fmtNumber(row.median_rent_sqm, 0)}/sqm` : '—'}
+										{row.median_rent_sqft > 0 ? `AED ${fmtNumber(row.median_rent_sqft, 0)}/sq ft` : '—'}
 									</td>
 									<td class="border-b border-border py-3 text-right font-semibold {pctTone(row.gross_yield_pct)} group-hover:bg-panel">
 										{fmtPct(row.gross_yield_pct)}
@@ -1483,11 +1625,12 @@ onMount(() => {
 
 			<!-- Room tabs -->
 			{#if distroRoomList.length > 0}
-				<div class="mt-3 flex flex-wrap gap-1.5">
+				<div class="ui-segmented mt-3">
 					<button
 						type="button"
 						onclick={() => (distroRooms = 'All')}
-						class="rounded-md px-3 py-1 text-xs font-medium transition-colors {distroRooms === 'All' ? 'bg-primary-light text-on-navy' : 'border border-border bg-card text-fg-2 hover:border-strong'}"
+						class="ui-segmented-item px-3 py-1 text-xs"
+						data-active={distroRooms === 'All'}
 					>
 						All
 					</button>
@@ -1495,7 +1638,8 @@ onMount(() => {
 						<button
 							type="button"
 							onclick={() => (distroRooms = room)}
-							class="rounded-md px-3 py-1 text-xs font-medium transition-colors {distroRooms === room ? 'bg-primary-light text-on-navy' : 'border border-border bg-card text-fg-2 hover:border-strong'}"
+							class="ui-segmented-item px-3 py-1 text-xs"
+							data-active={distroRooms === room}
 						>
 							{room}
 						</button>
@@ -1510,7 +1654,7 @@ onMount(() => {
 						<p class="flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-fg-4">
 							<span class="font-serif text-base text-fg-3">μ</span> Mean Price
 						</p>
-						<p class="mt-1 text-lg font-semibold text-primary">{fmtCurrency(distroBucket.mean_price)}</p>
+						<p class="mt-1 text-lg font-semibold text-accent-text">{fmtCurrency(distroBucket.mean_price)}</p>
 					</div>
 					<div>
 						<p class="flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-fg-4">
@@ -1520,10 +1664,12 @@ onMount(() => {
 					</div>
 					<div>
 						<p class="text-[11px] font-medium uppercase tracking-[0.14em] text-fg-4">68% of Sales Between</p>
+						<!-- The 16th to 84th percentile of the sales themselves: mean ± one deviation went
+						     below zero for skewed prices ("— – AED 5.75M"). -->
 						<p class="mt-1 text-sm font-semibold text-fg-1">
-							{fmtCurrency(Math.max(0, distroBucket.mean_price - distroBucket.std_price))}
+							{fmtCurrency(distroBucket.p16_price)}
 							<span class="font-normal text-fg-4">–</span>
-							{fmtCurrency(distroBucket.mean_price + distroBucket.std_price)}
+							{fmtCurrency(distroBucket.p84_price)}
 						</p>
 					</div>
 				</div>
@@ -1531,7 +1677,9 @@ onMount(() => {
 
 			<!-- Bell curve -->
 			<div class="mt-4 h-[220px]">
-				{#if distroQuery.isLoading}
+				{#if distroQuery.isError}
+					<AnalyticsError message="Failed to load price distribution." retry={() => distroQuery.refetch()} fetching={distroQuery.isFetching} />
+				{:else if distroQuery.isLoading}
 					<div class="h-full animate-pulse rounded-lg bg-panel"></div>
 				{:else if distroBucket && distroBucket.std_price > 0}
 					<canvas bind:this={bellCanvas}></canvas>
@@ -1556,31 +1704,24 @@ onMount(() => {
 				</h3>
 			</div>
 
-			<!-- Bedroom filter tabs -->
-			{#if pipelineRoomList.length > 0}
-				<div class="mt-3 flex flex-wrap items-center gap-1.5">
-					<span class="mr-1 text-xs font-medium text-fg-4">Bedrooms</span>
-					<button
-						type="button"
-						onclick={() => (pipelineRooms = null)}
-						class="rounded-md px-3 py-1 text-xs font-medium transition-colors {pipelineRooms === null ? 'bg-primary-light text-on-navy' : 'border border-border bg-card text-fg-2 hover:border-strong'}"
-					>
-						All
-					</button>
-					{#each pipelineRoomList as room (room)}
-						<button
-							type="button"
-							onclick={() => (pipelineRooms = room)}
-							class="rounded-md px-3 py-1 text-xs font-medium transition-colors {pipelineRooms === room ? 'bg-primary-light text-on-navy' : 'border border-border bg-card text-fg-2 hover:border-strong'}"
-						>
-							{room}
-						</button>
-					{/each}
-				</div>
+			{#if pipeline}
+				{#if pipeline.reference_date}
+					<p class="mt-2 text-xs text-fg-3">As of {pipeline.reference_date}</p>
+				{/if}
+				{#if pipelineBasisNote(pipeline)}
+					<p class="mt-1 text-xs text-fg-3">{pipelineBasisNote(pipeline)}</p>
+				{/if}
+				{#if pipeline.overdue_units || pipeline.undated_units}
+					<p class="mt-1 text-xs text-fg-3">
+						Excludes {fmtNumber(pipeline.overdue_units)} overdue and {fmtNumber(pipeline.undated_units)} undated units.
+					</p>
+				{/if}
 			{/if}
 
 			<div class="mt-4 h-[340px]">
-				{#if pipelineQuery.isLoading}
+				{#if pipelineQuery.isError}
+					<AnalyticsError message="Failed to load supply pipeline." retry={() => pipelineQuery.refetch()} fetching={pipelineQuery.isFetching} />
+				{:else if pipelineQuery.isLoading}
 					<div class="h-full animate-pulse rounded-lg bg-panel"></div>
 				{:else if pipeline && pipeline.data.length > 0}
 					<canvas bind:this={pipelineCanvas}></canvas>
@@ -1592,9 +1733,5 @@ onMount(() => {
 			</div>
 		</section>
 
-	</div>
-{:else if summaryQuery.isError}
-	<div class="rounded-lg border border-error bg-error-bg px-8 py-16 text-center text-sm text-error">
-		Failed to load analytics for this project.
 	</div>
 {/if}

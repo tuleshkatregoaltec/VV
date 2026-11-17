@@ -19,7 +19,12 @@ from holocron.contracts import (
     RawManifest,
     RawManifestFile,
 )
-from holocron.platform.bronze import bronze_load_result, stable_json, validate_raw_manifest
+from holocron.platform.bronze import (
+    bronze_load_result,
+    coerce_money,
+    stable_json,
+    validate_raw_manifest,
+)
 from holocron.platform.clickhouse import quote_clickhouse_identifier, sql_string
 from holocron.platform.clickhouse_schema import ensure_schema
 from holocron.platform.manifests import manifest_s3_key
@@ -823,7 +828,7 @@ def _transaction_row(
         _string(row.get("procedure_name_ar")),
         _float(row.get("procedure_area")),
         0.0,
-        _signed_int(row.get("actual_worth")),
+        coerce_money(row.get("actual_worth")),
         0,
         0,
         0,
@@ -911,8 +916,8 @@ def _rent_row(
         "",
         "",
         _float(row.get("actual_area")),
-        _signed_int(row.get("annual_amount")),
-        _signed_int(row.get("contract_amount")),
+        coerce_money(row.get("annual_amount")),
+        coerce_money(row.get("contract_amount")),
         _int(row.get("no_of_prop")),
         _int(row.get("contract_reg_type_id")),
         _string(row.get("contract_reg_type_en")),

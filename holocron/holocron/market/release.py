@@ -24,7 +24,7 @@ data copy) that nothing writes to again. A reader that must give one consistent 
 across several queries (a chat turn, an MCP call, a report) pins the published versions and
 reads only those tables (backend ``app.market.releases``). Pins hold at most
 ``MAX_READER_LEASE``; a superseded version is dropped only ``RELEASE_RETENTION`` after it
-stopped being published, so a version can never disappear under a reader that pinned it
+stopped being published (the one ``__previous`` holds is always kept), so a version can never disappear under a reader that pinned it
 while it was current. Versions of releases that never went live are dropped at once.
 """
 
@@ -35,7 +35,7 @@ import math
 import os
 import re
 import socket
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -76,7 +76,11 @@ _EVENT_DATE = {
 _GOOD_STATES = {"published", "superseded", "rolled_back"}
 # Must equal backend app.market.releases.MAX_LEASE; retention must stay far above it.
 MAX_READER_LEASE = timedelta(minutes=30)
-RELEASE_RETENTION = timedelta(hours=24)
+# Every release builds its own parts (a version shares them with the live table only until the
+# next release), so a retained version costs a full copy of the table (rentals: 1.4 GiB).
+# Retention is therefore the lease plus a wide margin, not a day; the release that
+# ``<table>__previous`` holds is kept at any age as the rollback target.
+RELEASE_RETENTION = timedelta(hours=2)
 # The bronze table and date each dataset's metrics count by; coverage is claimed on that date.
 _COVERAGE_BASIS = {
     "market_sale_events": ("dld_od_transactions_bronze", "instance_date"),
@@ -240,7 +244,12 @@ def _snapshot(clickhouse: ClickHouseClient, source: str, target: str, release_id
 
 
 def cleanup_versions(clickhouse: ClickHouseClient, *, now: datetime | None = None) -> list[str]:
-    """Drop immutable versions no reader can still hold. Caller holds the lock."""
+    """Drop immutable versions no reader can still hold. Caller holds the lock.
+
+    Kept: the published release, the release ``<served>__previous`` holds (the rollback target)
+    and any version superseded less than ``RELEASE_RETENTION`` ago. Everything else is dropped,
+    including versions the ledger does not know.
+    """
     now = now or _now()
     dropped = []
     tables = _market_tables(clickhouse)
@@ -250,7 +259,11 @@ def cleanup_versions(clickhouse: ClickHouseClient, *, now: datetime | None = Non
         for name in [n for n in tables if n.startswith(prefix)]:
             entry = ledger.get(name.removeprefix(prefix))
             state = entry["state"] if entry else ""
-            if state == "published" or tables.get(served) == name.removeprefix(prefix):
+            release_id = name.removeprefix(prefix)
+            if state == "published" or release_id in {
+                tables.get(served),
+                tables.get(f"{served}__previous"),
+            }:
                 continue
             if (
                 entry
@@ -351,6 +364,11 @@ def rollback(clickhouse: ClickHouseClient, served: str, *, owner: str | None = N
         target = tables.get(f"{served}__previous")
         if target is None or any(tables.get(f"{t}__previous") != target for t in group):
             raise RuntimeError(f"{served}: no complete previous release to roll back to")
+        if _built_before_uniform_columns(clickhouse, f"{served}__previous"):
+            raise RuntimeError(
+                f"{served}: the previous release {target} was built before the uniform columns; "
+                "serving it again would blank every property type and location"
+            )
         current = tables.get(served, "")
         for table in group:
             # A table retained from before release ids existed lacks the column readers select.
@@ -369,6 +387,23 @@ def rollback(clickhouse: ClickHouseClient, served: str, *, owner: str | None = N
         if target in ledger:
             _record(clickhouse, ledger[target], state="published", detail="restored by rollback")
         return target
+
+
+def _built_before_uniform_columns(clickhouse: ClickHouseClient, table: str) -> bool:
+    """True when ``table`` serves rows but none names a property type or a location.
+
+    A release built before the uniform transforms carries those columns only as their ALTER
+    defaults, and the app reads them: served again, every type and location would be blank.
+    """
+    for column in ("property_type", "location_name"):
+        clickhouse.command(
+            f"ALTER TABLE `{table}` ADD COLUMN IF NOT EXISTS {column} String DEFAULT ''"
+        )
+    served, uniform = clickhouse.query(
+        f"SELECT count(), countIf(property_type != '' OR location_name != '') "
+        f"FROM `{table}` WHERE is_served = 1"
+    ).result_rows[0]
+    return bool(served) and not uniform
 
 
 # --- validation -----------------------------------------------------------------------------
@@ -485,6 +520,27 @@ def _release_coverage(
 # --- publication ----------------------------------------------------------------------------
 
 
+def accepted_failures(
+    failures: list[str], accept: Mapping[str, str] | None
+) -> tuple[list[str], list[str]]:
+    """Split failures into (still blocking, accepted by an operator with a reason).
+
+    A failure is accepted only by its exact name (the text before '=') and only with a
+    non-empty reason, e.g. after a deliberate correction of source dates moves rows between
+    days. Every other failure still rejects the release; accepted ones are recorded.
+    """
+    reasons = {name: why.strip() for name, why in (accept or {}).items() if why.strip()}
+    blocking: list[str] = []
+    accepted: list[str] = []
+    for failure in failures:
+        name = failure.split("=", 1)[0]
+        if name in reasons:
+            accepted.append(f"accepted {failure}: {reasons[name]}")
+        else:
+            blocking.append(failure)
+    return blocking, accepted
+
+
 def publish_validated(
     *,
     clickhouse: ClickHouseClient,
@@ -493,6 +549,7 @@ def publish_validated(
     checks: tuple[MarketCheck, ...],
     owner: str | None = None,
     depends_on: tuple[str, ...] = (),
+    accept: Mapping[str, str] | None = None,
 ) -> dict[str, int | str]:
     owner = owner or _owner()
     with release_lock(clickhouse, owner=owner):
@@ -538,8 +595,9 @@ def publish_validated(
                 checks=checks,
                 has_dxbi=dxbi_input_rows(clickhouse, served_table) > 0,
             )
+            failures, accepted = accepted_failures(failures, accept)
             if failures:
-                detail = "; ".join(failures)
+                detail = "; ".join(failures + accepted)
                 _record(clickhouse, entry, state="rejected", checks_json=json.dumps(results),
                         served_rows=served_rows, detail=detail)  # fmt: skip
                 raise MarketReleaseRejected(
@@ -548,7 +606,7 @@ def publish_validated(
                 )
 
             _record(clickhouse, entry, state="publishing", checks_json=json.dumps(results),
-                    served_rows=served_rows)  # fmt: skip
+                    served_rows=served_rows, detail="; ".join(accepted))  # fmt: skip
             # The pinnable immutable version exists before the release can be read at all.
             _snapshot(
                 clickhouse,
@@ -588,12 +646,15 @@ def _checks_for(asset: str) -> tuple[MarketCheck, ...]:
 
 
 def materialize_market_sale_events(
-    *, clickhouse: ClickHouseClient, owner: str | None = None
+    *,
+    clickhouse: ClickHouseClient,
+    owner: str | None = None,
+    accept: Mapping[str, str] | None = None,
 ) -> dict[str, int | str]:
     return publish_validated(
         clickhouse=clickhouse,
         builds={
-            "market_sale_matches": (transforms._SALE_MATCHES_SQL,),
+            "market_sale_matches": transforms.SALE_MATCH_STATEMENTS,
             # Rentals read the served crosswalk, so both datasets place rows the same way.
             "market_geo_crosswalk": transforms._GEO_CROSSWALK_STATEMENTS,
             "market_sale_events": (
@@ -604,11 +665,15 @@ def materialize_market_sale_events(
         served_table="market_sale_events",
         checks=_checks_for("market_sale_events"),
         owner=owner,
+        accept=accept,
     )
 
 
 def materialize_market_rental_events(
-    *, clickhouse: ClickHouseClient, owner: str | None = None
+    *,
+    clickhouse: ClickHouseClient,
+    owner: str | None = None,
+    accept: Mapping[str, str] | None = None,
 ) -> dict[str, int | str]:
     return publish_validated(
         clickhouse=clickhouse,
@@ -624,6 +689,7 @@ def materialize_market_rental_events(
         owner=owner,
         # Rental areas are learned from the served sales release; the lock keeps it fixed.
         depends_on=("market_sale_events",),
+        accept=accept,
     )
 
 

@@ -331,8 +331,19 @@ def load_files(
     min_start_date: date,
     batch_size: int,
     quarantine_path: Path | None = None,
+    replace_window: tuple[date, date] | None = None,
 ) -> dict[str, int]:
+    """Load lease shards day by day into the active table.
+
+    By default each loaded day merges the new snapshot with the leases stored for that day
+    (``merge_rental_snapshots``). ``replace_window`` is for a complete re-scrape of those lease
+    start dates: DXBI's latest listing replaces what is stored for them, including leases only an
+    older run held (2026-10-08: 3,943 August leases from a test run kept Business Bay's August
+    count 12% above DXBInteract's), and a day DXBI now lists nothing on is emptied.
+    """
     merge_active = TABLE == "dxbi_rental_events" and not LEGACY_TARGET
+    if replace_window and not merge_active:
+        raise ValueError("--replace-window needs the active rental table")
     target = TABLE + "_history_refresh" if merge_active else TABLE
     grouped = group_files_by_day(files)
     if merge_active:
@@ -361,6 +372,7 @@ def load_files(
         elif merge_active:
             if any(event["lease_start"].isoformat() != day for event in events):
                 raise RuntimeError("Rental source date differs from lease-start date")
+        if merge_active and not _in_window(day, replace_window):
             existing = list(
                 client.query(
                     f"SELECT {', '.join(COLUMNS)} FROM {TABLE} FINAL WHERE lease_start={{day:Date}}",
@@ -374,6 +386,8 @@ def load_files(
                     if isinstance(event[column], bytes):
                         event[column] = event[column].decode("utf-8").rstrip("\x00")
             events = merge_rental_snapshots([*existing, *events])
+        elif merge_active:
+            events = merge_rental_snapshots(events)
         totals["raw_rows"] += raw_lines
         totals["unique_source_rows"] += result.unique_source_rows
         totals["normalized_rows"] += result.normalized_rows
@@ -418,14 +432,26 @@ def load_files(
     if merge_active:
         if totals["quarantined_rows"]:
             raise RuntimeError("Active rental update contains invalid rows; previous data retained")
+        if replace_window and not totals["loaded_contracts"]:
+            raise RuntimeError("--replace-window with nothing loaded would empty the window")
+        first, last = replace_window or (date.max, date.min)
         client.command(
             f"INSERT INTO {target} SELECT * FROM {TABLE} FINAL "
-            "WHERE lease_start NOT IN {days:Array(Date)} SETTINGS max_threads=2",
-            parameters={"days": [date.fromisoformat(day) for day in grouped]},
+            "WHERE lease_start NOT IN {days:Array(Date)} "
+            "AND NOT (lease_start BETWEEN {first:Date} AND {last:Date}) SETTINGS max_threads=2",
+            parameters={
+                "days": [date.fromisoformat(day) for day in grouped],
+                "first": first,
+                "last": last,
+            },
         )
         client.command(f"EXCHANGE TABLES {TABLE} AND {target}")
         client.command(f"DROP TABLE {target}")
     return totals
+
+
+def _in_window(day: str, window: tuple[date, date] | None) -> bool:
+    return window is not None and window[0] <= date.fromisoformat(day) <= window[1]
 
 
 def configure_target(client, target: str) -> None:
@@ -617,6 +643,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reconciliation-output", type=Path)
     parser.add_argument("--allow-quarantine", action="store_true")
     parser.add_argument(
+        "--replace-window",
+        nargs=2,
+        type=date.fromisoformat,
+        metavar=("FIRST", "LAST"),
+        help="The inputs are a complete scrape of these lease start dates: replace them.",
+    )
+    parser.add_argument(
         "--target",
         choices=("auto", "shadow", "active"),
         default="auto",
@@ -655,6 +688,7 @@ def main() -> int:
         min_start_date=args.min_start_date,
         batch_size=args.batch_size,
         quarantine_path=quarantine_output,
+        replace_window=tuple(args.replace_window) if args.replace_window else None,
     )
     refresh_candidate_index(client)
     expected, completed, failed, manifest_hash = _partition_counts(args.inputs)

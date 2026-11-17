@@ -10,6 +10,8 @@ from typing import Any
 from app.crm.import_models import (
     CrmPropertyContactClaim,
 )
+from app.crm.import_normalization import normalize_location
+from app.market.reference import normalize_unit_text
 
 _NON_KEY = re.compile(r"[^a-z0-9]+")
 
@@ -94,12 +96,14 @@ class ParsedContact:
     annual_rent_aed: int | None = None
     evidence: dict[str, Any] = field(default_factory=dict)
 
-    # Used only while parsing/replaying a file; never persisted in claim evidence.
-    owner_identity_tokens: dict[str, str] = field(default_factory=dict, repr=False)
-
     @property
     def has_valid_contact(self) -> bool:
-        return bool(self.phone_primary or self.phone_alternate or self.email_primary)
+        return has_usable_contact(
+            self.phone_primary,
+            self.phone_alternate,
+            self.email_primary,
+            self.evidence.get("broker_contact"),
+        )
 
     @property
     def property_key(self) -> str:
@@ -113,6 +117,7 @@ class ParsedContact:
 
 _OWNERSHIP_PRIORITY = {
     "former_owner": 6,
+    "unverified_former_owner": 2,
     "verified_current_owner": 5,
     "probable_current_owner": 4,
     "unit_linked_unverified": 3,
@@ -366,8 +371,56 @@ def _transaction_location_score(candidate: ParsedContact, row: dict[str, Any]) -
     return area_score
 
 
+def _property_scopes_compatible(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    """Compare geography levels after an exact building/unit lookup.
+
+    Sales may store district/community where rentals store community/subproject.
+    An exact shared community bridges that hierarchy; arbitrary overlapping words
+    and different numbered communities do not.
+    """
+
+    def tokens(value: Any, *, area: bool = False) -> tuple[str, ...]:
+        return _location_tokens(normalize_location(value or "", area=area))
+
+    la, lp = tokens(left.get("area_name"), area=True), tokens(left.get("project_name"))
+    ra, rp = tokens(right.get("area_name"), area=True), tokens(right.get("project_name"))
+    if (lp and lp == ra) or (rp and rp == la):
+        return True
+    if la and ra and la != ra:
+        return False
+
+    # A repeated community prefix is display context, not a different project.
+    if la and lp[: len(la)] == la:
+        lp = lp[len(la) :]
+    if ra and rp[: len(ra)] == ra:
+        rp = rp[len(ra) :]
+    return not lp or not rp or lp == rp
+
+
+def _registry_type_compatible(candidate: ParsedContact, row: dict[str, Any]) -> bool:
+    """Explicit physical types must agree; broad legal categories are not evidence."""
+    source = candidate.evidence.get("source_fields", {})
+    source_type = str(source.get("property_type") or candidate.property_type).casefold().strip()
+    observed_type = str(row.get("property_type") or "").casefold().strip()
+    families = {
+        "apartment": "apartment",
+        "apartments": "apartment",
+        "flat": "apartment",
+        "flats": "apartment",
+        "villa": "villa",
+        "villas": "villa",
+        "townhouse": "villa",
+        "townhouses": "villa",
+    }
+    return not (
+        source_type in families
+        and observed_type in families
+        and families[source_type] != families[observed_type]
+    )
+
+
 def _normalize_unit(value: Any) -> str:
-    unit = _text(value).upper().replace("–", "-")
+    unit = normalize_unit_text(_text(value)).upper()
     unit = re.sub(r"\s+", "", unit)
     if unit.lower() in _UNIT_PLACEHOLDERS:
         return ""
@@ -436,7 +489,7 @@ def _recover_embedded_property_identity(candidate: ParsedContact) -> None:
 
 
 def _normalize_phone(value: Any) -> str | None:
-    raw = _text(value)
+    raw = normalize_unit_text(_text(value))
     if not raw:
         return None
     digits = re.sub(r"\D", "", raw)
@@ -444,6 +497,10 @@ def _normalize_phone(value: Any) -> str | None:
         return None
     if digits.startswith("00"):
         digits = digits[2:]
+    # Reject obvious placeholders and concatenated numbers. Presence alone must
+    # not qualify a person for outreach or merge two imported identities.
+    if not 7 <= len(digits) <= 15 or len(set(digits)) == 1:
+        return None
     if digits.startswith("971") and len(digits) >= 11:
         return f"+{digits}"
     if digits.startswith("05") and len(digits) == 10:
@@ -458,6 +515,36 @@ def _normalize_phone(value: Any) -> str | None:
 def _normalize_email(value: Any) -> str | None:
     email = _text(value).lower()
     return email if email and _EMAIL.match(email) else None
+
+
+def usable_channels(
+    phone_primary: Any,
+    phone_alternate: Any,
+    email_primary: Any,
+    broker_contact: Any = None,
+) -> tuple[list[str], list[str]]:
+    """The (phones, emails) of a row that can reach its owner: valid, normalized, and not marked
+    as a licensed broker's in ``evidence["broker_contact"]`` (a broker's number is not the owner's)."""
+    marked = broker_contact if isinstance(broker_contact, dict) else {}
+    if marked.get("is_broker"):
+        return [], []  # the whole row is a broker's
+    broker_phones = set(marked.get("phones") or ())
+    broker_emails = set(marked.get("emails") or ())
+    phones = [
+        phone
+        for value in (phone_primary, phone_alternate)
+        if (phone := _normalize_phone(value)) and phone not in broker_phones
+    ]
+    email = _normalize_email(email_primary)
+    emails = [email] if email and email not in broker_emails else []
+    return phones, emails
+
+
+def has_usable_contact(
+    phone_primary: Any, phone_alternate: Any, email_primary: Any, broker_contact: Any = None
+) -> bool:
+    phones, emails = usable_channels(phone_primary, phone_alternate, email_primary, broker_contact)
+    return bool(phones or emails)
 
 
 def _claim_property_key(claim: CrmPropertyContactClaim) -> str:
@@ -495,6 +582,24 @@ def _claim_preference(claim: CrmPropertyContactClaim) -> tuple[int, int, int, in
         1 if claim.phone_primary or claim.phone_alternate or claim.email_primary else 0,
         claim.transaction_date.toordinal() if claim.transaction_date else 0,
     )
+
+
+def _current_owner_claim_preference(claim: CrmPropertyContactClaim) -> tuple[int, ...]:
+    """A newer conflict must block a scalar owner even if an older sale was verified.
+
+    Non-sale observations still do not supersede an acquisition or disposal.
+    An undated conflict cannot safely be ordered, so it also requires review.
+    """
+    if claim.ownership_status == "conflicting_claim":
+        return (
+            1,
+            claim.transaction_date.toordinal() if claim.transaction_date else date.max.toordinal(),
+            7,
+            0,
+            0,
+            0,
+        )
+    return _claim_preference(claim)
 
 
 def _dedupe_claims(

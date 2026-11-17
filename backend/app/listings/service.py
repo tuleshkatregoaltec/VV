@@ -9,7 +9,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.listings import queries
 from app.listings.mapping import (
-    LISTINGS_SOURCE_LABEL,
     _as_dict,
     _as_list,
     _card_from_row,
@@ -20,7 +19,6 @@ from app.listings.mapping import (
     _int_or_none,
     _location_names,
     _parse_datetime,
-    _party,
     _row_to_dict,
     _valuation_date,
 )
@@ -43,6 +41,7 @@ from app.listings.policy import (
 from app.listings.queries import (
     _achieved_trend,
 )
+from app.listings.redaction import redact_contacts
 from app.listings.valuation import RESIDENTIAL_SALE_CATEGORY, listing_subject
 
 _SALES_WINDOW_DAYS = 365
@@ -85,11 +84,19 @@ def _apply_dld_valuation(row: dict[str, Any]) -> None:
         row.update(unflagged)
         return
     estimate = _float_or_none(row.get("v_estimate_aed")) or 0
-    if listing_subject(listing, date.today()) is None:
+    subject = listing_subject(listing, date.today())
+    if subject is None:
         return
     row["valuation_method"] = "dld_sales"
     row.update(unflagged)
     if estimate <= 0:
+        return
+    if (
+        _float_or_none(row.get("v_size_sqft")) != subject.subject.size_sqft
+        or row.get("v_bedrooms") != subject.subject.bedrooms
+        or row.get("v_property_type") != subject.subject.property_type
+        or list(row.get("v_location_names") or []) != subject.location_names
+    ):
         return
     position = row.get("v_market_position") or "insufficient_data"
     stored_asking = _int_or_none(row.get("v_asking_aed"))
@@ -119,7 +126,7 @@ async def _comparable_sales(row: dict[str, Any]) -> list[ListingComparableSale]:
     subject = listing_subject(_valuation_input(row), valued_at)
     if not building or subject is None:
         return []
-    from app.crm.valuation_validation import closest_sales
+    from app.market.comparables import closest_sales
 
     sales = await queries.fetch_building_sales(
         {
@@ -211,8 +218,13 @@ async def list_listings_from_clickhouse(
     include_filters: bool = True,
     market_position: str | None = None,
     sort: str = "default",
+    building: str | None = None,
+    min_age_days: int | None = None,
+    max_age_days: int | None = None,
 ) -> ListingListResponse:
-    use_dld = mode == "sale" and await queries.valuations_available()
+    use_dld = (
+        mode == "sale" and asset_class != "commercial" and await queries.valuations_available()
+    )
     if market_position and not use_dld:
         # A market-position view (e.g. possible bargains) needs DLD valuations; without them it
         # is empty rather than every listing.
@@ -230,6 +242,9 @@ async def list_listings_from_clickhouse(
         price_period=price_period,
         price_basis=price_basis,
         market_position=market_position if use_dld else None,
+        building=building,
+        min_age_days=min_age_days,
+        max_age_days=max_age_days,
     )
     count_task = asyncio.create_task(queries.fetch_listing_count(filters))
     filters_task = asyncio.create_task(_filters(mode, asset_class)) if include_filters else None
@@ -411,18 +426,21 @@ async def get_listing_from_clickhouse(listing_id: str) -> ListingDetailResponse:
 
     data = _row_to_dict(rows[0])
     comparables: list[ListingComparableSale] = []
-    if await queries.valuations_available():
+    if (
+        listing_subject(_valuation_input(data), date.today()) is not None
+        and await queries.valuations_available()
+    ):
         valuation = await queries.fetch_listing_valuation({"listing_id": listing_id})
         data = {**data, **(valuation[0] if valuation else {})}
         _apply_dld_valuation(data)
-        if data.get("valuation_method") == "dld_sales":
+        if data.get("estimated_value_aed") is not None:
             comparables = await _comparable_sales(data)
     raw_property = _as_dict(data.get("raw_property_json"))
     card = _card_from_row(data)
     amenities = raw_property.get("amenity_names") or raw_property.get("amenities")
     return ListingDetailResponse(
         **card.model_dump(),
-        description=raw_property.get("description"),
+        description=redact_contacts(raw_property.get("description")),
         amenities=[str(item) for item in _as_list(amenities) if item],
         images=[
             ListingImageResponse.model_validate(item) for item in _images(data.get("images_json"))
@@ -430,9 +448,6 @@ async def get_listing_from_clickhouse(listing_id: str) -> ListingDetailResponse:
         floorplans=[
             ListingFloorPlanResponse.model_validate(item) for item in _floorplans(raw_property)
         ],
-        agent=_party(data.get("agent_json")),
-        broker=_party(data.get("broker_json")),
-        client=_party(data.get("client_json")),
         furnished=raw_property.get("furnished"),
         completion_status=raw_property.get("completion_status"),
         rera=raw_property.get("rera"),
@@ -440,13 +455,6 @@ async def get_listing_from_clickhouse(listing_id: str) -> ListingDetailResponse:
         payment_method=[str(item) for item in _as_list(raw_property.get("payment_method"))],
         video_url=raw_property.get("video_url"),
         view_360_url=raw_property.get("view_360"),
-        source_run_id=data.get("run_id"),
-        source_manifest_key=None,
-        scraped_at=_parse_datetime(data.get("scraped_at")),
-        source_metadata={
-            "source": LISTINGS_SOURCE_LABEL,
-            "run_id": data.get("run_id"),
-        },
         valuation_comparables=comparables,
     )
 

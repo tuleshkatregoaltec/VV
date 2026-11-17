@@ -4,6 +4,7 @@ import { onMount } from 'svelte'
 import type { MarketTrendArtifact } from '$lib/chat/artifacts'
 import { colorTheme } from '$lib/stores/preferences.svelte'
 import { getChartTheme } from '$lib/utils/chartTheme'
+import { perSqft } from '$lib/utils/units'
 
 Chart.register(...registerables)
 
@@ -13,6 +14,19 @@ let canvas = $state<HTMLCanvasElement | undefined>()
 let chart: Chart | null = null
 const resolvedTheme = $derived(colorTheme.resolved)
 const points = $derived(artifact.data?.data ?? [])
+
+// Charts saved in a conversation before the switch to square feet hold per-m² fields.
+type SavedPoint = { avg_price_sqft?: number | null; avg_price_sqm?: number | null }
+function pricePerSqft(point: SavedPoint | undefined): number | null {
+	if (point?.avg_price_sqft != null) return point.avg_price_sqft
+	return point?.avg_price_sqm != null ? perSqft(point.avg_price_sqm) : null
+}
+const changePct = $derived(
+	artifact.data?.avg_price_sqft_change_pct ??
+		(artifact.data as { avg_price_sqm_change_pct?: number | null } | null | undefined)
+			?.avg_price_sqm_change_pct ??
+		null
+)
 
 function formatMoney(value: number | null | undefined): string {
 	const amount = Number(value ?? 0)
@@ -47,8 +61,8 @@ function createChart() {
 			),
 			datasets: [
 				{
-					label: 'Avg AED / sqm',
-					data: points.map((point) => point.avg_price_sqm),
+					label: 'Avg AED / sq ft',
+					data: points.map((point) => pricePerSqft(point)),
 					borderColor: theme.line,
 					backgroundColor: theme.fill,
 					borderWidth: 2,
@@ -74,7 +88,7 @@ function createChart() {
 					titleColor: theme.tooltipText,
 					bodyColor: theme.tooltipText,
 					callbacks: {
-						label: (context) => `Avg AED / sqm: ${formatNumber(Number(context.parsed.y ?? 0))}`
+						label: (context) => `Avg AED / sq ft: ${formatNumber(Number(context.parsed.y ?? 0))}`
 					}
 				}
 			},
@@ -112,8 +126,7 @@ $effect(() => {
 	<div class="grid min-h-[240px] place-items-center rounded-md border border-dashed border-border bg-panel p-5 text-center">
 		<div>
 			<p class="text-sm font-semibold text-fg-1">No trend data</p>
-			<p class="mt-1 text-xs leading-5 text-fg-4">Try a broader area or a longer lookback window.</p>
-		</div>
+					</div>
 	</div>
 {:else}
 	<div class="grid gap-3">
@@ -125,21 +138,19 @@ $effect(() => {
 				</p>
 			</div>
 			<div class="rounded-md border border-border bg-card p-2.5">
-				<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-5">Latest / sqm</p>
+				<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-5">Latest / sq ft</p>
 				<p class="mt-1 text-sm font-semibold text-fg-1">
-					{formatNumber(points[points.length - 1]?.avg_price_sqm)}
+					{formatNumber(pricePerSqft(points[points.length - 1]))}
 				</p>
 			</div>
 			<div class="rounded-md border border-border bg-card p-2.5">
 				<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-5">Change</p>
 				<p
-					class="mt-1 text-sm font-semibold {(artifact.data?.avg_price_sqm_change_pct ?? 0) >= 0
+					class="mt-1 text-sm font-semibold {(changePct ?? 0) >= 0
 						? 'text-success'
 						: 'text-error'}"
 				>
-					{artifact.data?.avg_price_sqm_change_pct == null
-						? '-'
-						: `${artifact.data.avg_price_sqm_change_pct > 0 ? '+' : ''}${artifact.data.avg_price_sqm_change_pct}%`}
+					{changePct == null ? '-' : `${changePct > 0 ? '+' : ''}${changePct}%`}
 				</p>
 			</div>
 		</div>
@@ -149,14 +160,11 @@ $effect(() => {
 		</div>
 
 		<div class="rounded-md border border-border bg-panel p-3 text-xs leading-5 text-fg-3">
-			<span class="font-semibold text-fg-2">Source:</span>
-			DLD sales transactions
 			{#if periodLabel()}
-				<span class="mx-1 text-fg-5">/</span>
 				<span class="font-semibold text-fg-2">Period:</span>
 				{periodLabel()}
+				<span class="mx-1 text-fg-5">/</span>
 			{/if}
-			<span class="mx-1 text-fg-5">/</span>
 			Latest average price:
 			<span class="font-semibold text-fg-1">{formatMoney(points[points.length - 1]?.avg_price)}</span>
 		</div>

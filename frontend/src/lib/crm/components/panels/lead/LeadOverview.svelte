@@ -2,9 +2,9 @@
 import ChevronRight from 'lucide-svelte/icons/chevron-right'
 import { goto } from '$app/navigation'
 import { crm } from '../../../api'
-import type { LeadDetail, LeadStage, LeadType, MarketingConsent } from '../../../api/types'
+import type { LeadDetail, LeadStage, LeadType } from '../../../api/types'
 import { GATE_LINE, LEAD_TYPES, OFF_PLAN_FIELDS, stageOf, stagesFor } from '../../../config'
-import { aed, fullDate, priceShort } from '../../../format'
+import { aed, fullDate, ISO_DAY, priceShort } from '../../../format'
 import { openDeal, openListing, openOwner, panel } from '../../../stores/panel.svelte'
 import { ui } from '../../../stores/ui.svelte'
 import { write } from '../../../write'
@@ -31,38 +31,26 @@ function openInMatches() {
 
 function setOffPlan(on: boolean) {
 	write({
+		domain: 'leads',
 		call: () => crm.leads.patch(lead.id, { off_plan: on }),
 		success: on ? `${lead.name} marked off-plan` : `${lead.name} no longer off-plan`
-	})
-}
-
-const CONSENT_OPTIONS: { value: MarketingConsent; label: string }[] = [
-	{ value: 'unknown', label: 'Not asked' },
-	{ value: 'provided', label: 'Agreed' },
-	{ value: 'withdrawn', label: 'Withdrawn' }
-]
-
-function setConsent(consent: MarketingConsent) {
-	write({
-		call: () => crm.leads.patch(lead.id, { consent }),
-		success:
-			consent === 'provided'
-				? `${lead.name} agreed to promotions`
-				: consent === 'withdrawn'
-					? `${lead.name} withdrew consent: no more promotions`
-					: `${lead.name}'s consent cleared`
 	})
 }
 
 function value(key: (typeof type.fields)[number]) {
 	const v = lead.fields[key.key]
 	if (v === undefined || v === null || v === '' || v === 0) return 'Not stated'
-	return key.money ? aed(Number(v)) : String(v)
+	return key.money
+		? aed(Number(v))
+		: key.date && ISO_DAY.test(String(v))
+			? fullDate(String(v))
+			: String(v)
 }
 
 /** A Vitevue lease lead starts undecided; the agent classifies it as a seller or a landlord. */
 function classify(to: LeadType) {
 	write({
+		domain: 'leads',
 		call: () => crm.leads.patch(lead.id, { lead_type: to }),
 		success: `${lead.name} → ${LEAD_TYPES[to].label}`,
 		event: 'lead_type_changed'
@@ -74,6 +62,7 @@ function pickStage(stage: LeadStage) {
 	if (stage === lead.stage) return
 	if (stage === 'new') {
 		write({
+			domain: 'leads',
 			call: () => crm.leads.moveStage(lead.id, { stage: 'new' }),
 			success: `${lead.name} → ${stageOf('new').label}`,
 			event: 'lead_stage_changed'
@@ -116,7 +105,7 @@ const chain = $derived.by((): ChainPart[] => {
 
 {#if lead.gated}
 	<div class="note gate">
-		<span>{GATE_LINE}. No deal, listing or past transaction with {lead.name} is on file.</span>
+		<span>{GATE_LINE}.</span>
 		{#if lead.owner_id}
 			<button
 				type="button"
@@ -132,9 +121,6 @@ const chain = $derived.by((): ChainPart[] => {
 <section class="sec">
 	<h3>
 		Stage
-		<span class="hint">
-			{lead.gated ? 'only Lost until a prior deal is on record' : 'click to change'}
-		</span>
 	</h3>
 	<div class="stages" role="group" aria-label="Stage">
 		{#each stages as s, i (s.id)}
@@ -238,7 +224,7 @@ const chain = $derived.by((): ChainPart[] => {
 			<Kv k={f.label} v={value(f)} />
 		{/each}
 		<Kv k="Next action" v={lead.next_action || '—'} />
-		<Kv k="Phone" o="normalised · rule"><span class="mono">{lead.phone}</span></Kv>
+		<Kv k="Phone"><span class="mono">{lead.phone}</span></Kv>
 		<Kv k="Language" v={lead.language} />
 	</div>
 </section>
@@ -247,11 +233,10 @@ const chain = $derived.by((): ChainPart[] => {
 	<section class="sec">
 		<h3>
 			Off-plan
-			<span class="hint"><span class="chip outline" title="Off-plan matching is planned.">Planned</span></span>
 		</h3>
 		<label class="check">
 			<input type="checkbox" checked={lead.off_plan} onchange={(e) => setOffPlan(e.currentTarget.checked)} />
-			Off-plan buyer · matched to Launch desk projects
+			Off-plan buyer
 		</label>
 		{#if lead.off_plan}
 			<div class="kv">
@@ -262,19 +247,6 @@ const chain = $derived.by((): ChainPart[] => {
 		{/if}
 	</section>
 {/if}
-
-<section class="sec">
-	<h3>Marketing consent</h3>
-	<label class="check">
-		<span class="sr-only">Marketing consent</span>
-		<select value={lead.consent} onchange={(e) => setConsent(e.currentTarget.value as MarketingConsent)}>
-			{#each CONSENT_OPTIONS as o (o.value)}
-				<option value={o.value}>{o.label}</option>
-			{/each}
-		</select>
-		<span class="hint">Promotions (WhatsApp campaigns) go only to leads who agreed.</span>
-	</label>
-</section>
 
 <section class="sec">
 	<h3>On your agency's file</h3>
@@ -364,6 +336,4 @@ const chain = $derived.by((): ChainPart[] => {
 		Suggested agent: <b>{lead.suggested_agent.name}</b> — {lead.suggested_agent.reason}
 	</div>
 {/if}
-{#if lead.source === 'agent_to_agent'}
-	<div class="notice">Get Form I on file before sharing unit details.</div>
-{/if}
+

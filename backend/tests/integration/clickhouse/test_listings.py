@@ -62,6 +62,11 @@ async def test_json_inventory_annual_filter_benchmark_and_detail_mapping(warehou
             scraped_at=datetime.now(timezone.utc).isoformat(),
             run_id="test-run",
         )
+        if i in (0, 1, 2):
+            raw = json.loads(row["raw_property_json"])
+            raw["listed_date"] = "2026-01-01T00:00:00Z" if i != 1 else "2026-09-30T00:00:00Z"
+            row["raw_property_json"] = json.dumps(raw)
+            row["scraped_at"] = "" if i == 2 else "2026-10-01T00:00:00Z"
         rows.append([row[f] for f in fields])
     await warehouse.insert("pf_listings_bronze", rows, column_names=fields)
     result = await service.list_listings_from_clickhouse(
@@ -77,7 +82,21 @@ async def test_json_inventory_annual_filter_benchmark_and_detail_mapping(warehou
     assert detail.description == "Details"
     assert detail.area_name == "Test Area"
     assert detail.tower_name == "Tower"
-    assert detail.source_run_id == "test-run"
+    assert "source_run_id" not in detail.model_dump()
+    older = await service.list_listings_from_clickhouse(
+        "rent", area="Test Area", building="Tower", min_age_days=91, include_filters=False
+    )
+    assert older.total == 1 and older.listings[0].listing_id == "0"
+    assert older.listings[0].listing_age_days == 273
+    assert older.listings[0].captured_at == datetime(2026, 10, 1, tzinfo=timezone.utc)
+    newer = await service.list_listings_from_clickhouse(
+        "rent", area="Test Area", max_age_days=90, include_filters=False
+    )
+    assert newer.total == 3  # missing snapshot is unknown, not treated as captured today
+    forged = await service.list_listings_from_clickhouse(
+        "rent", building="Tower' OR 1=1 --", include_filters=False
+    )
+    assert forged.total == 0
 
 
 async def test_monthly_price_expression_preserves_known_local_clickhouse_type_failure(warehouse):

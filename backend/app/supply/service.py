@@ -42,22 +42,18 @@ from app.supply.scoring import (
 logger = logging.getLogger(__name__)
 
 
-async def get_upcoming_projects_ch(limit: int = 1000, offset: int = 0) -> List[Dict[str, Any]]:
+async def get_upcoming_projects_ch(
+    limit: int = 1000, offset: int = 0
+) -> tuple[List[Dict[str, Any]], int]:
     """
-    Get all active/upcoming projects from ClickHouse.
+    One page of active/upcoming projects from ClickHouse, and how many there are in all.
     Active = delivery date after the latest loaded DLD sales date and no cancellation.
     """
-    try:
-        anchor_date = await _latest_sales_date() or date.today()
-
-        params = {"anchor_date": anchor_date.isoformat(), "limit": limit, "offset": offset}
-
-        result = await queries.fetch_upcoming_projects(params)
-        return result
-
-    except Exception as e:
-        logger.error(f"Error fetching upcoming projects from ClickHouse: {str(e)}")
-        return []
+    anchor_date = await _latest_sales_date() or date.today()
+    params = {"anchor_date": anchor_date.isoformat(), "limit": limit, "offset": offset}
+    rows = await queries.fetch_upcoming_projects(params)
+    count = await queries.count_upcoming_projects(params)
+    return rows, int(count[0]["total"]) if count else 0
 
 
 def _card_from_row(

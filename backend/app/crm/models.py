@@ -1,10 +1,13 @@
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, Index, Text, UniqueConstraint
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import DateTime, ForeignKey, Text, UniqueConstraint
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
+
+# ClickHouse Date's zero value, which a left join gives a lease with no matched sale.
+_ZERO_DATE = date(1970, 1, 1)
 
 LeadStatus = Literal["expired", "expiring_30", "expiring_60", "expiring_90"]
 LeadPriority = Literal["urgent", "high", "medium"]
@@ -78,6 +81,14 @@ class CrmLead(BaseModel):
     recommended_action: str
     sale_conversation: bool
     source: str = "Transaction registry"
+
+    @field_validator("last_purchase_date", "identity_sale_date", mode="before")
+    @classmethod
+    def _no_zero_date(cls, value: Any) -> Any:
+        """A lease without a matched sale reads Date's zero value (1970-01-01): no date."""
+        if value in (_ZERO_DATE, _ZERO_DATE.isoformat()):
+            return None
+        return value
 
 
 class CrmBreakdownItem(BaseModel):
@@ -158,8 +169,18 @@ class CrmTimelineEvent(BaseModel):
     capital_gain_pct: float | None = None
 
 
+class CrmRenewalOwner(BaseModel):
+    """A manual owner or one unambiguous, verified imported owner."""
+
+    name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    source: Literal["workspace", "owner_import"]
+
+
 class CrmLeadDetailResponse(BaseModel):
     lead: CrmLead
+    owner: CrmRenewalOwner | None = None
     timeline: list[CrmTimelineEvent]
     next_best_actions: list[str]
     agent_signals: list[str] = Field(default_factory=list)
@@ -216,6 +237,7 @@ class CrmLeadWorkspace(SQLModel, table=True):
     owner_name: str | None = None
     owner_email: str | None = None
     owner_phone: str | None = None
+    owner_source: str | None = None
     next_follow_up: date | None = None
     tags: list[str] = SQLField(
         default_factory=list,
@@ -277,6 +299,13 @@ class CrmWorkspaceSummary(BaseModel):
     tags: list[str] = Field(default_factory=list)
     note_count: int = 0
     updated_at: datetime
+
+
+class CrmWorkspacePage(BaseModel):
+    items: list[CrmWorkspaceSummary]
+    total: int
+    limit: int
+    offset: int
 
 
 class CrmWorkspaceResponse(CrmWorkspaceSummary):
@@ -404,7 +433,23 @@ class CrmAgentAreaPreference(SQLModel, table=True):
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
-class CrmCompanyListing(SQLModel, table=True):
+class CrmLicensedBroker(SQLModel, table=True):
+    """One licensed real-estate broker from the regulator's public list (org-agnostic reference).
+
+    Phones are normalized like owner-sheet phones and emails are casefolded, so a sheet row can be
+    compared with them directly. The table is replaced as a whole by ``load_licensed_brokers``."""
+
+    __tablename__ = "crm_licensed_brokers"
+
+    broker_number: int = SQLField(primary_key=True)
+    name_key: str = SQLField(index=True)
+    phones: list[str] = SQLField(default_factory=list, sa_column=Column(JSON, nullable=False))
+    emails: list[str] = SQLField(default_factory=list, sa_column=Column(JSON, nullable=False))
+    card_expiry_date: date | None = SQLField(default=None)
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmCompanyListing(BaseModel):
     """A listing the agency holds the mandate for, owned by one of its agents.
 
     Matched first for buyers (sale) and tenants (rent): the agency knows it is available and can
@@ -412,14 +457,8 @@ class CrmCompanyListing(SQLModel, table=True):
     lead brief's numbers (0 = studio). Synthetic rows are test data and can be removed as a set.
     """
 
-    __tablename__ = "crm_company_listings"
-    __table_args__ = (
-        UniqueConstraint("organization_id", "reference", name="uq_crm_company_listing_reference"),
-        Index("ix_crm_company_listings_match", "organization_id", "status", "mode", "area_name"),
-    )
-
-    id: int | None = SQLField(default=None, primary_key=True)
-    organization_id: str = SQLField(index=True)
+    id: int | None = None
+    organization_id: str
     reference: str
     agent_user_id: str | None = None
     agent_name: str
@@ -429,15 +468,15 @@ class CrmCompanyListing(SQLModel, table=True):
     property_type: str
     bedrooms: int | None = None
     size_sqft: int | None = None
-    price_aed: int = SQLField(index=True)
+    price_aed: int
     area_name: str
     building_name: str | None = None
     unit_number: str | None = None
-    status: str = SQLField(default="active")
-    is_synthetic: bool = SQLField(default=False)
-    listed_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
-    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
-    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    status: str = "active"
+    is_synthetic: bool = False
+    listed_at: datetime
+    created_at: datetime
+    updated_at: datetime
 
 
 class CrmCompanyListingSource(SQLModel, table=True):
@@ -530,17 +569,6 @@ class CrmRenewalArea(BaseModel):
     upcoming_90_days: int
 
 
-class CrmRenewalOwner(BaseModel):
-    """Owner contact for a renewal lead, only when entered by the agent or import-matched."""
-
-    name: str | None = None
-    phone: str | None = None
-    email: str | None = None
-    # workspace: saved on the agent's lead workspace (typed in, or copied there by an owner import).
-    # owner_import: a verified or probable current-owner claim on this unit from an owner import.
-    source: Literal["workspace", "owner_import"]
-
-
 class CrmRenewalLead(BaseModel):
     lead: CrmLead
     owner: CrmRenewalOwner | None = None
@@ -548,8 +576,21 @@ class CrmRenewalLead(BaseModel):
     lead_record_id: int | None = None
 
 
+class CrmRenewalLeadCounts(BaseModel):
+    """Lead units in the agent's whole window, whichever page or kind was asked for."""
+
+    all: int = 0
+    # Lease still running (ends today or later), soonest first in the feed.
+    upcoming: int = 0
+    # Lease ended inside the look-back window.
+    expired: int = 0
+    # Ended with no later lease registered for the exact unit (a subset of expired).
+    vacant: int = 0
+
+
 class CrmRenewalLeadsResponse(BaseModel):
     items: list[CrmRenewalLead]
+    # Leads of the requested kind across every page (the pager's total).
     total: int
     limit: int
     offset: int
@@ -557,6 +598,8 @@ class CrmRenewalLeadsResponse(BaseModel):
     entered_today: int
     preferences: CrmAreaPreferencesResponse
     as_of: date
+    kind: Literal["all", "upcoming", "expired", "vacant"] = "all"
+    counts: CrmRenewalLeadCounts = Field(default_factory=CrmRenewalLeadCounts)
 
 
 class CrmRenewalsResponse(BaseModel):

@@ -15,15 +15,10 @@ onMount(() => {
 		<div class="bg-navy px-6 py-5 text-bone">
 			<p class="text-xs font-semibold uppercase tracking-[0.18em] text-on-navy-muted">Generating study</p>
 			<h2 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
-				Building the seeded workbook
+				Building workbook
 			</h2>
 		</div>
 		<div class="p-6">
-			<p class="mt-3 text-sm text-fg-3">
-				The backend is researching evidence, setting assumptions, and returning a ready-to-edit first-pass
-				study.
-			</p>
-
 			<div class="mt-8 space-y-3">
 				{#each loadingSteps as step, index}
 					<div

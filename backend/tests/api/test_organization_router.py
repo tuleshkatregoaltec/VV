@@ -231,3 +231,29 @@ async def test_admin_create_organization_rejects_unknown_owner_id(api_client, mo
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Owner user not found"
+
+
+@pytest.mark.asyncio
+async def test_owner_cannot_change_seat_limit_on_own_organization(api_client, monkeypatch):
+    """max_users is only changed by Stripe sync or the platform admin."""
+    from app.organization import service as router
+
+    async def override_owner_context():
+        return make_owner_context(org_id="org-1")
+
+    async def override_db():
+        yield SimpleNamespace()
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("owner must not be able to write max_users")
+
+    app.dependency_overrides[require_owner_membership] = override_owner_context
+    app.dependency_overrides[get_db_session] = override_db
+    monkeypatch.setattr(router, "update_organization", fail_if_called)
+
+    response = await api_client.put(
+        "/api/v1/organization/organizations/org-1",
+        json={"max_users": 100000},
+    )
+
+    assert response.status_code == 403

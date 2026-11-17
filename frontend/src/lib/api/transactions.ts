@@ -16,35 +16,34 @@ export type {
 	TransactionResponse
 }
 
+// Filters of the DXBI Transactions pages. Sizes in sq ft; range bounds are half-open (min
+// inclusive, max exclusive).
 interface BaseTransactionFilters {
-	trans_group?: string
 	property_usage?: string
-	timeframe_days?: number
-	project?: string
-	filter_type?: string
 	property_type?: string
-	property_sub_type?: string
-	area?: string
-	area_min?: number
-	area_max?: number
+	bedrooms?: string
+	location_search?: string
+	location?: string
+	building?: string
+	project?: string
+	timeframe_days?: number
+	size_min?: number
+	size_max?: number
 	limit?: number
 	offset?: number
 }
 
 export interface SalesTransactionFilters extends BaseTransactionFilters {
-	building?: string
-	rooms?: string
-	registration_type?: string
+	status?: string
 	price_min?: number
 	price_max?: number
-	price_per_sqm_min?: number
-	price_per_sqm_max?: number
+	price_per_sqft_min?: number
+	price_per_sqft_max?: number
 	transaction_ids?: string
 }
 
 export interface RentalTransactionFilters extends BaseTransactionFilters {
-	tenant_type?: string
-	contract_reg_type?: string
+	contract_type?: string
 	rent_min?: number
 	rent_max?: number
 	contract_ids?: string
@@ -55,6 +54,34 @@ export type SalesFacetFilters = Omit<
 	'limit' | 'offset' | 'transaction_ids'
 >
 export type RentalFacetFilters = Omit<RentalTransactionFilters, 'limit' | 'offset' | 'contract_ids'>
+
+/** An export file and how it relates to the rows the filters matched. */
+export interface TransactionExportFile {
+	blob: Blob
+	rows: number
+	matchingRows: number
+	truncated: boolean
+}
+
+async function exportFile(response: Response): Promise<TransactionExportFile> {
+	const rows = Number(response.headers.get('X-Export-Rows') ?? Number.NaN)
+	const matchingRows = Number(response.headers.get('X-Export-Matching-Rows') ?? Number.NaN)
+	return {
+		blob: await response.blob(),
+		rows,
+		matchingRows,
+		truncated: response.headers.get('X-Export-Truncated') === 'true'
+	}
+}
+
+/** What to tell the user when an export holds only the newest rows of a larger selection. */
+export function exportTruncationNotice(
+	file: TransactionExportFile,
+	noun: 'sales' | 'leases'
+): string | null {
+	if (!file.truncated) return null
+	return `This file holds the newest ${file.rows.toLocaleString('en-US')} of ${file.matchingRows.toLocaleString('en-US')} matching ${noun}. Narrow the filters to export the rest.`
+}
 
 function withFilters(
 	endpoint: string,
@@ -73,19 +100,25 @@ export const transactions = {
 	rentals: (filters: RentalTransactionFilters) =>
 		client.get<RentalContractListResponse>(withFilters('/api/v1/transactions/rentals', filters)),
 
-	exportSales: (
+	exportSales: async (
 		filters: SalesTransactionFilters,
 		format: TransactionExportFormat = 'xlsx'
-	): Promise<Blob> =>
-		client.get<Blob>(withFilters('/api/v1/transactions/sales/export', { ...filters, format }), {
-			returnBlob: true
-		}),
+	): Promise<TransactionExportFile> =>
+		exportFile(
+			await client.get<Response>(
+				withFilters('/api/v1/transactions/sales/export', { ...filters, format }),
+				{ returnResponse: true }
+			)
+		),
 
-	exportRentals: (
+	exportRentals: async (
 		filters: RentalTransactionFilters,
 		format: TransactionExportFormat = 'xlsx'
-	): Promise<Blob> =>
-		client.get<Blob>(withFilters('/api/v1/transactions/rentals/export', { ...filters, format }), {
-			returnBlob: true
-		})
+	): Promise<TransactionExportFile> =>
+		exportFile(
+			await client.get<Response>(
+				withFilters('/api/v1/transactions/rentals/export', { ...filters, format }),
+				{ returnResponse: true }
+			)
+		)
 }

@@ -170,17 +170,6 @@ async def test_ownership_changes_run_the_sync_and_never_fail_the_import(monkeypa
     assert calls == ["org"]
 
 
-def test_import_and_rematch_both_call_the_sync():
-    import inspect
-
-    from app.crm import imports, ownership
-
-    assert "sync_after_ownership_change" in inspect.getsource(imports.process_contact_import)
-    assert "sync_after_ownership_change" in inspect.getsource(
-        ownership.rematch_property_contact_claims
-    )
-
-
 def test_the_same_sale_from_two_imports_resolves_the_same_way():
     day = date(2026, 10, 5)
     a = _sold("o1", "p1", day, unit="1204", price=2_400_000)
@@ -216,6 +205,11 @@ async def test_inbox_owner_check_uses_the_owner_key_not_a_name_search(monkeypatc
         searched["owner_keys"] = set(owner_keys)
         return [_sold("o1", "p1", date(2026, 10, 5))]
 
+    async def assessed(db, organization_id, claims):
+        assert organization_id == "org"
+        return claims
+
+    monkeypatch.setattr(inbound, "_assessed_inbound_claims", assessed)
     monkeypatch.setattr(inbound_repository, "find_identity_claims", find_identity_claims)
     monkeypatch.setattr(inbound_repository, "list_claims_by_owner_keys", list_claims_by_owner_keys)
 

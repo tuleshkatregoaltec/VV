@@ -9,7 +9,7 @@ comparisons and evidence come from the same versions however many queries the op
 runs, and whatever is published meanwhile.
 
 Safety without lease rows: a pin lasts at most ``MAX_LEASE`` and fails closed afterwards,
-while Holocron drops a superseded version only ``RELEASE_RETENTION`` (24 h) after it stopped
+while Holocron drops a superseded version only ``RELEASE_RETENTION`` (2 h) after it stopped
 being published. A pin is taken only on a version that is published at that moment, so the
 version outlives every pin on it. Versions of releases that never went live are never pinned.
 """

@@ -33,6 +33,7 @@ from app.project.service import (
     get_project_details,
     list_all_projects,
 )
+from app.project.viewport import Viewport, optional_viewport, required_viewport
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
@@ -80,7 +81,7 @@ async def list_projects(context: AuthContext = Depends(require_active_subscripti
 
 
 @router.get("/radar", response_model=ProjectRadarResponse)
-@cached_endpoint(prefix="project_radar_ph_box", expire=1800)
+@cached_endpoint(prefix="project_radar_ph_box_v2", expire=1800)
 async def project_radar(
     limit: int = Query(default=1400, ge=100, le=5000, description="Maximum mapped projects"),
     period_days: RadarPeriodDays = Query(
@@ -94,7 +95,7 @@ async def project_radar(
 
 
 @router.get("/radar/overview", response_model=ProjectRadarOverviewResponse)
-@cached_endpoint(prefix="project_radar_overview_ph_box", expire=1800)
+@cached_endpoint(prefix="project_radar_overview_ph_box_v2", expire=1800)
 async def project_radar_overview(
     period_days: RadarPeriodDays = Query(
         default=365,
@@ -107,14 +108,11 @@ async def project_radar_overview(
 
 
 @router.get("/radar/pins", response_model=List[ProjectRadarProject])
-@cached_endpoint(prefix="project_radar_pins_ph_box", expire=600)
+@cached_endpoint(prefix="project_radar_pins_ph_box_v3", expire=600)
 async def project_radar_pins(
-    west: Optional[float] = Query(None, ge=54, le=57, description="Viewport west longitude"),
-    south: Optional[float] = Query(None, ge=24, le=26, description="Viewport south latitude"),
-    east: Optional[float] = Query(None, ge=54, le=57, description="Viewport east longitude"),
-    north: Optional[float] = Query(None, ge=24, le=26, description="Viewport north latitude"),
-    area: Optional[str] = Query(None, description="Area name to fetch pins for"),
-    developer: Optional[str] = Query(None, description="Developer name to focus"),
+    viewport: Optional[Viewport] = Depends(optional_viewport),
+    area: Optional[str] = Query(None, max_length=120, description="Area name to fetch pins for"),
+    developer: Optional[str] = Query(None, max_length=160, description="Developer name to focus"),
     limit: int = Query(default=700, ge=10, le=2500, description="Maximum project pins"),
     period_days: RadarPeriodDays = Query(
         default=365,
@@ -122,19 +120,13 @@ async def project_radar_pins(
     ),
     context: AuthContext = Depends(require_active_subscription),
 ):
-    """Get bounded project pins for a viewport, selected area, or developer overlay."""
-    bbox_values = [west, south, east, north]
-    if any(value is not None for value in bbox_values) and any(
-        value is None for value in bbox_values
-    ):
-        raise HTTPException(
-            status_code=400, detail="Viewport bounds must include west, south, east, and north"
-        )
+    """Get bounded project pins for a viewport (snapped outward to a grid), selected area, or
+    developer overlay."""
     return await get_project_radar_pins(
-        west=west,
-        south=south,
-        east=east,
-        north=north,
+        west=viewport.west if viewport else None,
+        south=viewport.south if viewport else None,
+        east=viewport.east if viewport else None,
+        north=viewport.north if viewport else None,
         area=area,
         developer=developer,
         limit=limit,
@@ -143,34 +135,31 @@ async def project_radar_pins(
 
 
 @router.get("/radar/building-pins", response_model=List[RadarBuildingPin])
-@cached_endpoint(prefix="project_radar_building_pins_ph_box", expire=600)
+@cached_endpoint(prefix="project_radar_building_pins_ph_box_v2", expire=600)
 async def radar_building_pins(
-    west: float = Query(..., ge=54, le=57, description="Viewport west longitude"),
-    south: float = Query(..., ge=24, le=26, description="Viewport south latitude"),
-    east: float = Query(..., ge=54, le=57, description="Viewport east longitude"),
-    north: float = Query(..., ge=24, le=26, description="Viewport north latitude"),
-    limit: int = Query(default=3000, ge=10, le=10000, description="Maximum tower pins"),
+    viewport: Viewport = Depends(required_viewport),
+    # The map asks for at most 5,000 towers; a response of exactly `limit` pins is truncated.
+    limit: int = Query(default=3000, ge=10, le=5000, description="Maximum tower pins"),
     period_days: RadarPeriodDays = Query(
         default=365,
         description="Trailing DLD/Ejari activity window in days (maximum 365)",
     ),
     context: AuthContext = Depends(require_active_subscription),
 ):
-    """Get Property Finder tower pins and linked market evidence for a viewport."""
-    if west >= east or south >= north:
-        raise HTTPException(status_code=400, detail="Viewport bounds are invalid")
+    """Get Property Finder tower pins and linked market evidence for a viewport (snapped
+    outward to a grid)."""
     return await get_radar_building_pins(
-        west=west,
-        south=south,
-        east=east,
-        north=north,
+        west=viewport.west,
+        south=viewport.south,
+        east=viewport.east,
+        north=viewport.north,
         limit=limit,
         period_days=period_days,
     )
 
 
 @router.get("/master", response_model=MasterProjectResponse)
-@cached_endpoint(prefix="master_project", expire=1800)  # 30 minutes
+@cached_endpoint(prefix="master_project_v2", expire=1800)  # 30 minutes
 async def master_project(
     name: str = Query(..., description="master_project_en value"),
     context: AuthContext = Depends(require_active_subscription),
@@ -183,7 +172,7 @@ async def master_project(
 
 
 @router.get("/building/{property_id}", response_model=BuildingDetailResponse)
-@cached_endpoint(prefix="building_details", expire=1800)  # 30 minutes
+@cached_endpoint(prefix="building_details_v2", expire=1800)  # 30 minutes
 async def building_details(
     property_id: int, context: AuthContext = Depends(require_active_subscription)
 ):
@@ -194,59 +183,64 @@ async def building_details(
     return building
 
 
+# Parcels are drawn from zoom 14, where even a 4K screen spans about 0.35 degrees.
+MAX_DDA_PLOT_VIEWPORT_DEGREES = 0.5
+
+
 @router.get("/dda-plots", response_model=List[DDAPlotFeature])
-@cached_endpoint(prefix="dda_plots", expire=3600)  # 1 hour — plot data changes rarely
+@cached_endpoint(prefix="dda_plots_v2", expire=3600)  # 1 hour — plot data changes rarely
 async def get_dda_plots(
     area: Optional[str] = Query(
-        None, description="Area or community name to match against DDA plots"
+        None, max_length=120, description="Area or community name to match against DDA plots"
     ),
-    west: Optional[float] = Query(None, ge=54, le=57, description="Viewport west longitude"),
-    south: Optional[float] = Query(None, ge=24, le=26, description="Viewport south latitude"),
-    east: Optional[float] = Query(None, ge=54, le=57, description="Viewport east longitude"),
-    north: Optional[float] = Query(None, ge=24, le=26, description="Viewport north latitude"),
-    limit: int = Query(default=1200, ge=100, le=5000, description="Maximum DDA plots to return"),
+    viewport: Optional[Viewport] = Depends(optional_viewport),
+    limit: int = Query(default=1200, ge=100, le=2500, description="Maximum DDA plots to return"),
     include_valuations: bool = Query(
         default=False,
         description="Include transaction-derived valuation ranges. Disabled for bulk map rendering.",
     ),
     context: AuthContext = Depends(require_active_subscription),
 ):
-    """Get DDA GIS plot polygons for a community or current map viewport."""
+    """Get DDA GIS plot polygons for a community or a map viewport of at most 0.5 degrees."""
+    if viewport is None and not (area and area.strip()):
+        raise HTTPException(status_code=422, detail="Give a map viewport or an area")
+    if viewport is not None and viewport.span > MAX_DDA_PLOT_VIEWPORT_DEGREES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Viewport spans more than {MAX_DDA_PLOT_VIEWPORT_DEGREES} degrees; zoom in",
+        )
     return await get_dda_plots_for_area(
         area=area,
-        west=west,
-        south=south,
-        east=east,
-        north=north,
+        west=viewport.west if viewport else None,
+        south=viewport.south if viewport else None,
+        east=viewport.east if viewport else None,
+        north=viewport.north if viewport else None,
         limit=limit,
         include_valuations=include_valuations,
     )
 
 
 @router.get("/dda-outlines", response_model=List[DDAOutlineFeature])
-@cached_endpoint(prefix="dda_outlines", expire=3600)
+@cached_endpoint(prefix="dda_outlines_v2", expire=3600)
 async def get_dda_outlines(
-    west: float = Query(..., ge=54, le=57, description="Viewport west longitude"),
-    south: float = Query(..., ge=24, le=26, description="Viewport south latitude"),
-    east: float = Query(..., ge=54, le=57, description="Viewport east longitude"),
-    north: float = Query(..., ge=24, le=26, description="Viewport north latitude"),
+    viewport: Viewport = Depends(required_viewport),
     zoom: float = Query(..., ge=1, le=22, description="Current map zoom"),
     limit: int = Query(default=160, ge=20, le=500, description="Maximum outlines to return"),
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Get coarse DDA planning outlines for low-zoom map context."""
     return await get_dda_outlines_for_bounds(
-        west=west,
-        south=south,
-        east=east,
-        north=north,
+        west=viewport.west,
+        south=viewport.south,
+        east=viewport.east,
+        north=viewport.north,
         zoom=zoom,
         limit=limit,
     )
 
 
 @router.get("/{project_id}", response_model=ProjectDetailResponse)
-@cached_endpoint(prefix="project_details_ph_box", expire=1800)  # 30 minutes
+@cached_endpoint(prefix="project_details_ph_box_v2", expire=1800)  # 30 minutes
 async def project_details(
     project_id: int, context: AuthContext = Depends(require_active_subscription)
 ):

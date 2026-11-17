@@ -15,25 +15,25 @@ describe('insufficientReason', () => {
 
 	it('names a missing unit and says the sale did not identify the property', () => {
 		expect(insufficientReason(row({}))).toBe(
-			'No unit number in the file. Its sale date and price did not match one DLD sale in this location.'
+			'No unit number in the file. Its sale date and price did not match a recorded sale in this location.'
 		)
 	})
 
 	it('names a missing building / project', () => {
 		expect(insufficientReason(row({ building: '', unit: '1203' }))).toBe(
-			'No building or project in the file. Its sale date and price did not match one DLD sale in this location.'
+			'No building or project in the file. Its sale date and price did not match a recorded sale in this location.'
 		)
 	})
 
 	it('names both when both are missing', () => {
 		expect(insufficientReason(row({ building: '' }))).toBe(
-			'No unit number and no building or project in the file. Its sale date and price did not match one DLD sale in this location.'
+			'No unit number and no building or project in the file. Its sale date and price did not match a recorded sale in this location.'
 		)
 	})
 
 	it('says when there was no sale date and price to look up', () => {
 		expect(insufficientReason(row({ date: null, price: null }))).toBe(
-			'No unit number in the file, and no sale date and price to look the property up in DLD.'
+			'No unit number in the file, and no sale date and price to look the property up in sales records.'
 		)
 	})
 

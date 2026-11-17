@@ -6,11 +6,13 @@ import { monthsBetween } from '$lib/feasibility/format'
 import type { CashFlowPeriod, WorkbookOutputs } from '$lib/feasibility/workbook/engine'
 import type { FeasibilityAssumptions, PlotDetails } from '$lib/feasibility/workbook/models'
 import type { ValidationResult } from '$lib/feasibility/workbook/validation'
+import { toSqft } from '$lib/utils/units'
 
 export interface PricingEvidenceStudyViewModel {
 	market_area: string
 	usage: string
 	headline: string
+	data_as_of: PlotResearch['data_as_of']
 	off_plan_unit_benchmarks: PlotResearch['off_plan_unit_benchmarks']
 	market_pricing: PlotResearch['market_pricing']
 	pricing_evidence: PlotResearch['pricing_evidence']
@@ -95,6 +97,7 @@ export function buildPricingEvidenceStudy(
 		market_area: research.market_area,
 		usage: research.usage,
 		headline: studyContext?.headline || research.headline,
+		data_as_of: research.data_as_of,
 		off_plan_unit_benchmarks: research.off_plan_unit_benchmarks,
 		market_pricing: research.market_pricing,
 		pricing_evidence: research.pricing_evidence,
@@ -370,7 +373,7 @@ export function buildBudgetSummary(
 		model.contingencyCost
 	const costPerUnitAed = model.totalUnits > 0 ? model.modelTotalCostsInclVat / model.totalUnits : 0
 	const costPerSqftBua =
-		model.totalBuaSqm > 0 ? model.modelTotalCostsInclVat / (model.totalBuaSqm / 0.092903) : 0
+		model.totalBuaSqm > 0 ? model.modelTotalCostsInclVat / toSqft(model.totalBuaSqm) : 0
 	const revenuePerUnitAed =
 		model.totalUnits > 0 ? model.totalConfiguredRevenue / model.totalUnits : 0
 	const profitPerUnitAed = revenuePerUnitAed - costPerUnitAed

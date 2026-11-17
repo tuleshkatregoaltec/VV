@@ -7,7 +7,6 @@ from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import company_listings, match_repository
-from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import (
     CrmInboundEnquiry,
     CrmInboundMatch,
@@ -65,7 +64,8 @@ from app.supply.service import get_catalog_freshness, list_matching_inventory
 # v8 (3 Nov): tenants are matched against their move-in date; later lease ends are disqualified.
 # v9 (3 Nov): tenant units with no sale match show the lease's own unit number.
 # v10 (5 Nov): buyers are matched against an owner's estimated value, not the old purchase price.
-_ALGORITHM_VERSION = "inbound-v10"
+# v11: eligibility precedes owner collapse; relative move-in dates refresh when their anchor changes.
+_ALGORITHM_VERSION = "inbound-v11"
 # Lowest score stored as a match.
 _MIN_MATCH_SCORE = 50
 # Where refresh keeps how many rows each lane disqualified by move-in timing (read on load).
@@ -177,6 +177,8 @@ def _score_company_listing(
     if scored is None:
         return None
     score, reasons, breakdown = scored
+    if row.status == "pocket":
+        reasons.append("Off-market (pocket listing)")
     contact = " · ".join(part for part in (f"Listed by {row.agent_name}", row.agent_phone) if part)
     return score, [*reasons, contact], breakdown
 
@@ -357,12 +359,10 @@ async def refresh_inbound_matches(
             requested_locations,
             budget_band=_owner_budget_band(criteria) if buying else None,
         )
-        best_by_owner: dict[str, CrmPropertyContactClaim] = {}
-        for claim in claims_result:
-            current = best_by_owner.get(claim.owner_key)
-            if current is None or claim.confidence_score > current.confidence_score:
-                best_by_owner[claim.owner_key] = claim
-        for claim in best_by_owner.values():
+        matched_owners: set[str] = set()
+        for claim in sorted(claims_result, key=lambda claim: claim.confidence_score, reverse=True):
+            if claim.owner_key in matched_owners:
+                continue
             location, location_reason = _location_fit(
                 criteria, claim.area_name, claim.project_name, claim.building_name
             )
@@ -407,6 +407,9 @@ async def refresh_inbound_matches(
                     _hide(hidden, "owners", score)
                     continue
                 lease_reasons.append(lease_reason)
+            if score < _MIN_MATCH_SCORE:
+                continue
+            matched_owners.add(claim.owner_key)
             item = await _upsert_match(
                 db,
                 enquiry=enquiry,
@@ -675,7 +678,8 @@ async def refresh_inbound_matches(
     listing_last_refresh, listing_fresh = await get_inventory_freshness()
     offplan_last_refresh = await get_catalog_freshness()
 
-    if listing_last_refresh and enquiry.intent in {"buy", "rent"}:
+    # A stale portal snapshot (months old) is not suggested: its listings may be long gone.
+    if listing_last_refresh and listing_fresh and enquiry.intent in {"buy", "rent"}:
         requested_locations = _locations(criteria)
         band = _listing_budget_band(criteria)
         listings = await list_listings_from_clickhouse(
@@ -720,13 +724,7 @@ async def refresh_inbound_matches(
                 score=score,
                 title=listing.title,
                 subtitle=_listing_subtitle(listing),
-                reasons=[
-                    *reasons,
-                    "Fresh active listing"
-                    if listing_fresh
-                    else "Listing catalog candidate; availability requires confirmation",
-                    *timing_reasons,
-                ],
+                reasons=[*reasons, "Fresh active listing", *timing_reasons],
                 breakdown=breakdown,
                 snapshot=listing.model_dump(mode="json"),
             )
@@ -796,30 +794,12 @@ async def refresh_inbound_matches(
                 if len(matched_projects) >= 20:
                     break
 
-    if hidden or _HIDDEN_AFTER_KEY in criteria:
-        await match_repository.set_match_hidden_after(db, enquiry_id, hidden)
+    if move_in or hidden or _HIDDEN_AFTER_KEY in criteria:
+        await match_repository.set_match_hidden_after(db, enquiry_id, hidden, move_in=move_in)
     await match_repository.mark_algorithm_version(db, enquiry_id, _ALGORITHM_VERSION)
     await db.commit()
     stored = await match_repository.list_matches_by_score(db, enquiry_id)
-    lanes: dict[str, list[InboundMatchResponse]] = {
-        "company": [],
-        "owners": [],
-        "units": [],
-        "listings": [],
-        "offplan": [],
-        "demand": [],
-    }
-    lane_names = {
-        "company": "company",
-        "owner": "owners",
-        "unit": "units",
-        "listing": "listings",
-        "project": "offplan",
-        "demand": "demand",
-    }
-    for item in stored:
-        if item.state not in {"dismissed", "stale"}:
-            lanes[lane_names[item.target_type]].append(_match_response(item))
+    lanes = _visible_lanes(stored, listing_fresh=listing_fresh)
     return InboundMatchesResponse(
         enquiry_id=enquiry_id,
         listing_fresh=listing_fresh,
@@ -830,6 +810,29 @@ async def refresh_inbound_matches(
         move_in=move_in,
         hidden_after=hidden if move_in else {},
     )
+
+
+_LANE_NAMES = {
+    "company": "company",
+    "owner": "owners",
+    "unit": "units",
+    "listing": "listings",
+    "project": "offplan",
+    "demand": "demand",
+}
+
+
+def _visible_lanes(items, *, listing_fresh: bool) -> dict[str, list[InboundMatchResponse]]:
+    """Matches shown per lane. Without a fresh listing catalog, portal listings show only once
+    an agent saved or contacted them; suggestions from an old snapshot stay hidden."""
+    lanes: dict[str, list[InboundMatchResponse]] = {lane: [] for lane in _LANE_NAMES.values()}
+    for item in items:
+        if item.state in {"dismissed", "stale"}:
+            continue
+        if item.target_type == "listing" and not listing_fresh and item.state == "suggested":
+            continue
+        lanes[_LANE_NAMES[item.target_type]].append(_match_response(item))
+    return lanes
 
 
 async def get_inbound_matches(
@@ -856,32 +859,18 @@ async def get_inbound_matches(
         )
     result = await match_repository.list_matches_by_score(db, enquiry_id)
     items = result
-    if _needs_refresh(items):
+    move_in = _tenant_move_in(enquiry)
+    timing_changed = bool(
+        move_in and (enquiry.criteria or {}).get("_match_move_in") != move_in.isoformat()
+    )
+    if (items and _needs_refresh(items)) or timing_changed:
         return await refresh_inbound_matches(
             db, enquiry_id=enquiry_id, organization_id=organization_id
         )
     move_in = _tenant_move_in(enquiry)
     listing_last_refresh, listing_fresh = await get_inventory_freshness()
     offplan_last_refresh = await get_catalog_freshness()
-    lanes: dict[str, list[InboundMatchResponse]] = {
-        "company": [],
-        "owners": [],
-        "units": [],
-        "listings": [],
-        "offplan": [],
-        "demand": [],
-    }
-    lane_names = {
-        "company": "company",
-        "owner": "owners",
-        "unit": "units",
-        "listing": "listings",
-        "project": "offplan",
-        "demand": "demand",
-    }
-    for item in items:
-        if item.state not in {"dismissed", "stale"}:
-            lanes[lane_names[item.target_type]].append(_match_response(item))
+    lanes = _visible_lanes(items, listing_fresh=listing_fresh)
     return InboundMatchesResponse(
         enquiry_id=enquiry_id,
         listing_fresh=listing_fresh,

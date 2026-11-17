@@ -1,30 +1,24 @@
 /*
- * Vitevue CRM styles (CRM v2, 7 Oct), imported by routes/crm/+layout.svelte.
- * Tokens follow the v2 mockup (vitevue-crm-v2.html, styles.css): system type, semantic colour
- * tokens per appearance, sidebar + toolbar + side panel. The 1 Oct token names (ink, line, btn…)
- * stay as aliases so every component keeps working. Everything is scoped under .crm-root;
- * dark mode follows :root[data-theme='dark']. The v2 system font stack is set on .crm-root only.
+ * CRM component tokens alias the shared Market theme in app.css so both sections
+ * follow the same appearance. Legacy names stay scoped here for existing components.
  */
 
 .crm-root {
 	color-scheme: light;
-	/* Font, --font-mono and --shadow-lg come from app.css so the CRM matches Market. */
-	/* v2 token names, mapped onto the Market palette (app.css) so CRM and Market look alike.
-	 * The Market tokens switch with the theme, so the dark block only holds the rest. */
 	--page: var(--color-bg-app);
 	--card: var(--color-bg-card);
 	--sunk: var(--color-bg-panel);
-	--hover: var(--color-bg-panel);
+	--hover: var(--color-bg-elevated);
 	--sel: var(--color-info-bg);
 	--sep: var(--color-border);
 	--sep-strong: var(--color-border-strong);
 	--text: var(--color-fg-1);
 	--text2: var(--color-fg-3);
 	--text3: var(--color-fg-4);
-	--accent: var(--color-info);
+	--accent: var(--color-accent-text);
 	--accent-fill: var(--color-action);
 	--on-accent: var(--color-fg-on-action);
-	--focus: var(--color-navy-600);
+	--focus: var(--color-info);
 	--red: var(--color-error);
 	--red-bg: var(--color-error-bg);
 	--amber: var(--color-warning);
@@ -33,26 +27,25 @@
 	--green-bg: var(--color-success-bg);
 	--blue: var(--color-info);
 	--blue-bg: var(--color-info-bg);
-	--pink: #b8195a;
-	--pink-bg: #fbe4ee;
+	--pink: var(--color-accent-text);
+	--pink-bg: var(--color-info-bg);
 	--grey-bg: var(--color-bg-panel);
 	--glass: var(--color-bg-card);
-	/* source line colours (always paired with a word) */
-	--l-in: #e5372b;
-	--l-vv: #2c4a66;
-	--l-own: #8a8a90;
-	--l-a2a: #e0336e;
-	/* event kinds */
-	--e-view: #3a8fad;
-	--e-call: #1d9a47;
-	--e-fu: #b26a00;
-	--e-deal: #7a4fd6;
-	--e-dead: #e5372b;
+	/* Source lines and event kinds are always paired with a text label. */
+	--l-in: var(--color-error);
+	--l-vv: var(--color-accent-text);
+	--l-own: var(--color-fg-4);
+	--l-a2a: var(--color-chart-line-alt);
+	--e-view: var(--color-accent-text);
+	--e-call: var(--color-success);
+	--e-fu: var(--color-warning);
+	--e-deal: var(--color-chart-line-tertiary);
+	--e-dead: var(--color-error);
 	--shadow: var(--shadow-sm);
 	--scrim: var(--color-overlay);
 	--ctl: 32px;
-	/* 1 Oct names, mapped onto v2 */
-	--card-2: var(--color-bg-app);
+	/* Legacy component aliases. */
+	--card-2: var(--color-bg-elevated);
 	--ink: var(--text);
 	--ink-2: var(--text2);
 	--muted: var(--text2);
@@ -61,8 +54,8 @@
 	--line-2: var(--sep-strong);
 	--teal: var(--accent);
 	--teal-soft: var(--sel);
-	--btn: var(--accent-fill);
-	--on-btn: var(--on-accent);
+	--btn: var(--color-action);
+	--on-btn: var(--color-fg-on-action);
 	--band: var(--text);
 	--band-2: var(--text2);
 	--on-band: var(--card);
@@ -72,19 +65,6 @@
 
 :root[data-theme="dark"] .crm-root {
 	color-scheme: dark;
-	--hover: var(--color-bg-elevated);
-	--focus: var(--color-navy-100);
-	--pink: #ff8ab8;
-	--pink-bg: #3d1c2b;
-	--l-in: #ff5a4f;
-	--l-vv: #9fb6cf;
-	--l-own: #9a9aa2;
-	--l-a2a: #ff5c93;
-	--e-view: #6fb3cc;
-	--e-call: #43c96b;
-	--e-fu: #f0a73a;
-	--e-deal: #a98bff;
-	--e-dead: #ff5a4f;
 }
 
 @media (pointer: coarse) {
@@ -117,7 +97,7 @@
 		& :where(input, select, textarea) {
 			font-size: 0.9rem;
 			border: 1px solid var(--line-2);
-			border-radius: 8px;
+			border-radius: var(--radius-md);
 			padding: 0.42rem 0.55rem;
 			background: var(--card);
 			color: var(--ink);
@@ -182,12 +162,10 @@
 		&.app.nosb .sb {
 			visibility: hidden;
 		}
-		/* Not overflow: hidden, so the profile menu in the footer can open past the collapsed rail. */
 		.sb {
-			position: relative;
-			z-index: 2;
-			background: var(--card);
-			border-right: 1px solid var(--sep);
+			background: var(--color-bg-card);
+			border-right: 1px solid var(--color-border);
+			line-height: 1.5;
 			display: flex;
 			flex-direction: column;
 			min-width: 0;
@@ -195,8 +173,8 @@
 		.sb-head {
 			display: flex;
 			align-items: center;
-			gap: 10px;
-			padding: 14px 12px 8px 16px;
+			gap: 12px;
+			padding: 14px 16px 8px;
 			min-height: 52px;
 		}
 		.logo {
@@ -204,7 +182,7 @@
 			font-size: 17px;
 			letter-spacing: -0.02em;
 			white-space: nowrap;
-			color: var(--text);
+			color: var(--color-fg-1);
 			text-decoration: none;
 		}
 		.logo i {
@@ -221,47 +199,52 @@
 		.sb nav {
 			flex: 1;
 			overflow: auto;
-			padding: 4px 8px 8px;
+			padding: 0 8px 8px;
 			min-height: 0;
 		}
 		.sb-grp {
 			font-size: 11px;
 			font-weight: 600;
-			color: var(--text2);
+			color: var(--color-fg-4);
 			padding: 12px 8px 4px;
 		}
 		.nav-i {
 			display: flex;
 			align-items: center;
-			gap: 9px;
+			gap: 10px;
 			width: 100%;
 			padding: 0 8px;
 			height: 30px;
-			border-radius: 7px;
+			border-radius: var(--radius-md);
+			font-size: 13.5px;
+			transition:
+				background-color var(--duration-fast),
+				color var(--duration-fast);
 			text-align: left;
-			color: var(--text);
+			color: var(--color-fg-2);
 			text-decoration: none;
 		}
 		.nav-i:hover {
-			background: var(--hover);
+			background: var(--color-bg-panel);
+			color: var(--color-fg-1);
 		}
 		.nav-i[aria-current="page"] {
-			background: var(--sel);
-			color: var(--accent);
+			background: var(--color-info-bg);
+			color: var(--color-info);
 			font-weight: 600;
 		}
 		.nav-i svg {
 			flex: none;
-			color: var(--accent);
+			color: var(--color-info);
 		}
 		.nav-i .ct {
 			margin-left: auto;
 			font-size: 12px;
-			color: var(--text2);
+			color: var(--color-fg-4);
 			font-weight: 500;
 		}
 		.nav-i[aria-current="page"] .ct {
-			color: var(--accent);
+			color: var(--color-info);
 		}
 		.sb-foot {
 			border-top: 1px solid var(--sep);
@@ -272,6 +255,18 @@
 			font-size: 12.5px;
 			line-height: 1.35;
 		}
+		.avatar {
+			width: 34px;
+			height: 34px;
+			border-radius: 50%;
+			background: var(--color-navy-900);
+			color: var(--color-bone-50);
+			display: grid;
+			place-items: center;
+			font-size: 11px;
+			font-weight: 700;
+			flex: none;
+		}
 		.sb-foot .who {
 			min-width: 0;
 			flex: 1;
@@ -279,6 +274,7 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 		}
+
 		.sb-scrim {
 			display: none;
 		}
@@ -299,8 +295,6 @@
 			padding: 10px 18px;
 			border-bottom: 1px solid var(--sep);
 			background: var(--glass);
-			backdrop-filter: saturate(180%) blur(20px);
-			-webkit-backdrop-filter: saturate(180%) blur(20px);
 			min-height: 62px;
 			flex: none;
 		}
@@ -393,7 +387,7 @@
 		.newgrp .newmore {
 			border-top-left-radius: 0;
 			border-bottom-left-radius: 0;
-			border-left: 1px solid rgba(255, 255, 255, 0.35);
+			border-left: 1px solid var(--color-border-strong);
 			padding: 0;
 			width: 28px;
 		}
@@ -403,7 +397,7 @@
 			border: 1px solid var(--btn);
 			background: var(--btn);
 			color: var(--on-btn);
-			border-radius: 8px;
+			border-radius: var(--radius-md);
 			height: var(--ctl);
 			padding: 0 12px;
 			font-size: 14.5px;
@@ -414,20 +408,25 @@
 			gap: 6px;
 			white-space: nowrap;
 			text-decoration: none;
+			transition:
+				background-color var(--duration-fast),
+				border-color var(--duration-fast),
+				color var(--duration-fast);
 		}
 		.btn:hover {
-			filter: brightness(1.07);
+			background: var(--color-action-hover);
+			border-color: var(--color-action-hover);
 		}
 		.btn.ghost {
 			background: var(--card);
 			color: var(--text);
-			border-color: var(--sep-strong);
+			border-color: var(--sep);
 		}
 		.btn.ghost:hover,
 		.btn.danger:hover,
 		.btn.plain:hover {
-			filter: none;
 			background: var(--hover);
+			border-color: var(--sep-strong);
 		}
 		.btn.plain {
 			background: transparent;
@@ -458,7 +457,8 @@
 		.seg {
 			display: inline-flex;
 			background: var(--sunk);
-			border-radius: 8px;
+			border: 1px solid var(--sep);
+			border-radius: var(--radius-md);
 			padding: 2px;
 			gap: 2px;
 			max-width: 100%;
@@ -466,7 +466,7 @@
 		.seg button {
 			height: calc(var(--ctl) - 4px);
 			padding: 0 11px;
-			border-radius: 6px;
+			border-radius: var(--radius-sm);
 			font-size: 14.5px;
 			font-weight: 500;
 			color: var(--text2);
@@ -478,7 +478,7 @@
 		.seg button[aria-checked="true"] {
 			background: var(--card);
 			color: var(--text);
-			box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+			box-shadow: var(--shadow-xs);
 		}
 		.seg button .ct {
 			color: var(--text3);
@@ -538,7 +538,7 @@
 		.card {
 			background: var(--card);
 			border: 1px solid var(--sep);
-			border-radius: 12px;
+			border-radius: var(--radius-lg);
 			box-shadow: var(--shadow);
 			overflow: hidden;
 			min-width: 0;
@@ -585,7 +585,7 @@
 		.kpi {
 			background: var(--card);
 			border: 1px solid var(--sep);
-			border-radius: 12px;
+			border-radius: var(--radius-lg);
 			box-shadow: var(--shadow);
 			padding: 12px 14px;
 			display: flex;
@@ -600,12 +600,18 @@
 			border-color: var(--accent);
 		}
 		.kpi .lbl {
-			font-size: 12px;
+			font-family: var(--font-mono);
+			font-size: 11px;
+			font-weight: 400;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			color: var(--text3);
 		}
 		.kpi .v {
-			font-size: 26px;
-			font-weight: 650;
-			letter-spacing: -0.02em;
+			font-family: var(--font-display);
+			font-size: 30px;
+			font-weight: 400;
+			letter-spacing: normal;
 			line-height: 1.15;
 		}
 		.kpi .v.sm {
@@ -1239,7 +1245,7 @@
 		}
 		.cal .c.today .dn {
 			background: var(--teal);
-			color: var(--card);
+			color: #fff;
 			border-radius: 99px;
 			width: 1.4rem;
 			height: 1.4rem;
@@ -1261,22 +1267,6 @@
 		}
 		.ev:hover {
 			background: var(--line);
-		}
-		/* A slot the event was rescheduled away from: grey and struck through, never happened. */
-		.ev.moved,
-		.evrow.moved .t,
-		.evrow.moved .time {
-			text-decoration: line-through;
-			color: var(--text2);
-		}
-		.ev.moved {
-			--e: var(--text2) !important;
-			background: transparent;
-			border: 1px dashed var(--line);
-			border-left: 3px dashed var(--text2);
-		}
-		.evrow.moved .bar {
-			background: var(--text2) !important;
 		}
 		.dayh {
 			padding: 6px 14px;
@@ -1360,9 +1350,6 @@
 			z-index: 56;
 			display: grid;
 			grid-template-rows: auto auto minmax(0, 1fr) auto;
-		}
-		.drawer.wide {
-			width: min(960px, 100%);
 		}
 		.drawer:focus {
 			outline: none;
@@ -1848,6 +1835,19 @@
 		.feedstrip .sep {
 			color: var(--text3);
 		}
+		.noareas {
+			display: flex;
+			align-items: center;
+			gap: 6px 12px;
+			flex-wrap: wrap;
+			padding: 12px 14px;
+			margin-bottom: 12px;
+			font-size: 13px;
+			border-left: 3px solid var(--amber, #d97706);
+		}
+		.noareas > .btn {
+			margin-left: auto;
+		}
 		.srcdot {
 			display: inline-flex;
 			align-items: center;
@@ -1860,6 +1860,12 @@
 			height: 8px;
 			border-radius: 50%;
 			background: var(--c, var(--l-own));
+		}
+		.leasepager {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 8px 12px;
 		}
 		.boardhead {
 			display: flex;
@@ -2490,8 +2496,8 @@
 			transform: translate(-50%, 14px);
 			opacity: 0;
 			visibility: hidden;
-			background: #1d1d1f;
-			color: #f5f5f7;
+			background: var(--color-action);
+			color: var(--color-fg-on-action);
 			padding: 9px 10px 9px 14px;
 			border-radius: 10px;
 			font-size: 13.5px;
@@ -2502,10 +2508,6 @@
 			transition: all 0.22s;
 			box-shadow: var(--shadow-lg);
 			max-width: min(560px, calc(100% - 32px));
-		}
-		:root[data-theme="dark"] & .toast {
-			background: #f3f3f5;
-			color: #1d1d1f;
 		}
 		.toast.on {
 			transform: translate(-50%, 0);
@@ -2519,12 +2521,10 @@
 			border: 1px solid var(--red);
 		}
 		.toast button {
-			color: #6cb6ff;
+			color: inherit;
+			text-decoration: underline;
 			font-weight: 600;
 			padding: 2px 4px;
-		}
-		:root[data-theme="dark"] & .toast button {
-			color: #0059b8;
 		}
 		.toast.error button {
 			color: inherit;
@@ -2535,7 +2535,7 @@
 			padding: 0.6rem 0.9rem;
 		}
 		.kpis .kpi .v {
-			font-size: 1.35rem;
+			font-size: 30px;
 		}
 		.homefit {
 			display: grid;

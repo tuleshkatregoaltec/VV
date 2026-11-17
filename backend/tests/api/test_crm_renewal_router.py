@@ -55,7 +55,7 @@ async def test_renewals_tab_passes_its_filters_and_defaults_to_no_window(client,
             leads=[], total=0, limit=50, offset=0, as_of=date(2026, 10, 9)
         )
     )
-    monkeypatch.setattr("app.crm.router.list_renewals", service)
+    monkeypatch.setattr("app.crm.router.list_owner_renewals", service)
 
     response = await client.get(
         "/api/v1/crm/renewals",
@@ -64,6 +64,8 @@ async def test_renewals_tab_passes_its_filters_and_defaults_to_no_window(client,
 
     assert response.status_code == 200
     kwargs = service.call_args.kwargs
+    assert kwargs["owner"] == "known"
+    assert (kwargs["organization_id"], kwargs["user_id"]) == ("1", "test-user-id")
     assert (kwargs["window"], kwargs["area"], kwargs["property_type"]) == (
         "vacant",
         "Jumeirah Village Circle",
@@ -84,9 +86,7 @@ async def test_owner_renewals_are_scoped_to_the_signed_in_agency(client, monkeyp
             leads=[], total=0, limit=50, offset=0, as_of=date(2026, 11, 3)
         )
     )
-    everyone = AsyncMock()
     monkeypatch.setattr("app.crm.router.list_owner_renewals", owners)
-    monkeypatch.setattr("app.crm.router.list_renewals", everyone)
 
     for owner in ("known", "unknown"):
         response = await client.get(
@@ -97,7 +97,6 @@ async def test_owner_renewals_are_scoped_to_the_signed_in_agency(client, monkeyp
         kwargs = owners.await_args.kwargs
         assert (kwargs["organization_id"], kwargs["user_id"]) == ("1", "test-user-id")
         assert (kwargs["owner"], kwargs["window"]) == (owner, "expiring_60")
-    everyone.assert_not_awaited()
 
 
 async def test_renewals_reject_an_unknown_owner_choice(client):

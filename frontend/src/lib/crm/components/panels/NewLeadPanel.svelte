@@ -11,13 +11,12 @@ import MoneyInput from '../ui/MoneyInput.svelte'
 import Panel from '../ui/Panel.svelte'
 import Seg from '../ui/Seg.svelte'
 
-/** Type switch first; name, phone, email, source and area survive a type switch. */
+/** Type switch first; name, phone, source and area survive a type switch. */
 let { leadType }: { leadType?: LeadType } = $props()
 
 let type = $state<LeadType>(untrack(() => leadType ?? 'buyer'))
 let name = $state('')
 let phone = $state('')
-let email = $state('')
 let sourceLabel = $state(SOURCE_OPTIONS[0].label)
 let area = $state('')
 let draft = $state<Record<string, string>>({})
@@ -64,11 +63,11 @@ async function submit(e: SubmitEvent) {
 	}
 	saving = true
 	const r = await write({
+		domain: 'leads',
 		call: () =>
 			crm.leads.create({
 				name: name.trim(),
 				phone,
-				email,
 				source: option.source,
 				source_detail: option.label,
 				lead_type: type,
@@ -126,10 +125,6 @@ async function submit(e: SubmitEvent) {
 				</select>
 			</div>
 		</div>
-		<div class="fld">
-			<label for="nl-email">Email (optional)</label>
-			<input id="nl-email" type="email" autocomplete="off" placeholder="name@example.com" bind:value={email} />
-		</div>
 		{#each fields.filter((x) => fieldShown(x, draft)) as f (f.key)}
 			<div class="fld">
 				<label for="nl-{f.key}">{f.label}{f.money ? ' (AED)' : ''}</label>
@@ -141,7 +136,7 @@ async function submit(e: SubmitEvent) {
 						{#each f.options as o (o)}<option value={o}>{o}</option>{/each}
 					</select>
 				{:else}
-					<input id="nl-{f.key}" type="text" required={f.required} bind:value={draft[f.key]} />
+					<input id="nl-{f.key}" type={f.date ? 'date' : 'text'} required={f.required} bind:value={draft[f.key]} />
 				{/if}
 			</div>
 		{/each}

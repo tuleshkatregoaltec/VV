@@ -5,28 +5,32 @@ def test_actual_chat_registration_links_to_public_capabilities_and_warehouse():
     inventory = build_inventory()
     chat = next(agent for agent in inventory["agents"] if agent["id"] == "app.chat.agent.agent")
     assert {tool["function"] for tool in chat["tools"]} == {
-        "app.chat.tools.get_market_pulse",
-        "app.chat.tools.rank_areas",
-        "app.chat.tools.get_similar_projects",
-        "app.chat.tools.query_market_metrics",
-        "app.chat.tools.get_listing_inventory",
-        "app.chat.tools.get_project_delivery_summary",
+        "app.chat.workflows.research_market",
+        "app.chat.workflows.analyze_pricing",
+        "app.chat.workflows.retrieve_personal_crm",
+        "app.chat.workflows.plan_followups",
+        "app.chat.workflows.prepare_action",
     }
-    reachable = set(chat["possible_reachable_functions"])
+    specialists = [
+        item for item in inventory["agents"] if item["id"].startswith("app.chat.workflows.")
+    ]
+    registered = {tool["function"] for item in specialists for tool in item["tools"]}
     assert {
-        "app.analytics.service.get_market_pulse",
-        "app.analytics.queries.fetch_market_pulse",
-        "app.project.service.get_similar_projects",
-        "app.project.queries.fetch_similar_projects",
-        "app.clickhouse.client.query",
-        "app.analytics.market_metrics.get_market_metrics",
-        "app.analytics.market_metric_queries.fetch_metric_rows",
-        "app.project.delivery.get_delivery_summary",
-        "app.listings.service.listing_analytics_from_clickhouse",
-    } <= reachable
-    assert "app.listings.service.list_listings_from_clickhouse" not in reachable
+        "app.chat.tools.query_market_metrics",
+        "app.chat.crm_tools.query_my_crm_records",
+        "app.chat.workflows.propose_crm_action",
+        "app.chat.tools.research_listing_shortlist",
+        "app.chat.tools.comparable_evidence",
+        "app.chat.tools.compare_stored_projects",
+    } <= registered
+    assert all("confirm" not in name for name in registered)
     pulse = inventory["functions"]["app.analytics.queries.fetch_market_pulse"]
-    assert pulse["sql_source_candidates"] == ["ch_transactions"]
+    # Chat's market pulse reads the Analytics DXBI records (an imported source expression the
+    # inventory does not resolve), no longer the combined market layer.
+    from app.analytics import dxbi, queries
+
+    assert "ch_transactions" not in pulse["sql_source_candidates"]
+    assert dxbi.SALES_SOURCE in queries.GET_MARKET_PULSE_SQL
 
 
 def test_declared_legacy_hbu_tools_are_not_assigned_to_selected_production_agents():
@@ -89,3 +93,12 @@ def test_direct_crm_model_calls_are_visible_outside_agent_instrumentation():
     assert functions["app.core.openrouter.create_openrouter_model"][
         "model_configuration_references"
     ] == ["settings.DEFAULT_CHAT_MODEL"]
+
+
+def test_interpolated_sql_source_is_unknown_instead_of_a_where_table(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "queries.py").write_text(
+        'from somewhere import SOURCE\nfrom app.clickhouse.client import query\nasync def fetch():\n    return await query(f"SELECT * FROM {SOURCE} WHERE active = 1")\n'
+    )
+    assert build_inventory(app)["functions"]["app.queries.fetch"]["sql_source_candidates"] == []

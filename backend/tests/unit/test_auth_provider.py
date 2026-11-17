@@ -37,3 +37,23 @@ async def test_magic_link_preserves_redirect_and_creation_flag(monkeypatch):
             },
         }
     )
+
+
+def test_public_auth_client_sends_apikey_when_publishable_key_is_set():
+    public_client = client.build_public_auth_client(
+        "https://example.supabase.co/auth/v1", "sb_publishable_DUMMYTEST"
+    )
+    assert public_client._headers["apikey"] == "sb_publishable_DUMMYTEST"
+    assert "Authorization" not in public_client._headers
+
+
+def test_public_auth_client_sends_no_apikey_when_publishable_key_is_unset():
+    for unset in (None, ""):
+        public_client = client.build_public_auth_client("https://auth.example.com/auth/v1", unset)
+        assert "apikey" not in public_client._headers
+
+
+def test_module_auth_client_follows_publishable_key_setting():
+    # Test env sets no AUTH_PUBLISHABLE_KEY, so the module-level client stays as it is today.
+    assert client.settings.AUTH_PUBLISHABLE_KEY is None
+    assert "apikey" not in client.auth_client._headers

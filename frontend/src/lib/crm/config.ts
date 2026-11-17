@@ -22,7 +22,6 @@ export interface FieldDef {
 	key: LeadFieldKey
 	label: string
 	money?: boolean
-	/** A calendar date, saved as YYYY-MM-DD (tenant move-in: matching holds leases to it). */
 	date?: boolean
 	options?: string[]
 	/** Needed by the New Lead form: without it the backend can never match the lead. */
@@ -319,7 +318,7 @@ export const EVENT_KIND_ORDER: EventKind[] = [
 export const OWNER_SOURCES: { id: OwnerSource; label: string }[] = [
 	{ id: 'agent_contact', label: 'Own contact' },
 	{ id: 'agency_import', label: 'Agency file' },
-	{ id: 'dld_event', label: 'DLD/Ejari event' }
+	{ id: 'dld_event', label: 'Transaction event' }
 ]
 
 export const INVOICE: Record<InvoiceStatus, { label: string; tone: Tone }> = {
@@ -339,5 +338,12 @@ export const ORIGIN_TONE: Record<Origin, Tone> = {
 /** Score chip: ≥70 dark · 45–69 grey · <45 outline. */
 export const scoreClass = (score: number) => (score >= 70 ? '' : score >= 45 ? 'mid' : 'low')
 
+export const ORIGIN_LABEL: Record<Origin, string> = {
+	human: 'Agent',
+	rule: 'System',
+	model: 'Assistant',
+	voice: 'Voice'
+}
+
 export const ownerSourceTone = (label: string): Tone =>
-	label === 'DLD/Ejari event' ? 'blue' : 'neutral'
+	label === 'Transaction event' ? 'blue' : 'neutral'

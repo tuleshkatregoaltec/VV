@@ -91,6 +91,7 @@ $effect(() => {
 
 function move(body: LeadStageMove) {
 	return write({
+		domain: 'leads',
 		call: () => crm.leads.moveStage(lead.id, body),
 		success: `${lead.name} → ${target.label}`,
 		event: 'lead_stage_changed'
@@ -154,7 +155,7 @@ async function submit(e: SubmitEvent) {
 					value_aed: amount,
 					due_date: due || null
 				}),
-			success: (res) => `${res.data.id} opened — request the documents next`,
+			success: (res) => `${res.data.id} opened`,
 			created: (res) => ({ kind: 'deal', id: res.data.id }),
 			event: 'deal_created'
 		})
@@ -189,6 +190,7 @@ function onPicked() {
 	if (!f || !docTarget) return
 	const t = docTarget
 	write({
+		domain: 'leads',
 		call: () => crm.leads.uploadDocument(lead.id, f, t),
 		success: `${t} added to ${lead.name}`,
 		event: 'document_uploaded'
@@ -246,9 +248,8 @@ function onPicked() {
 		</div>
 	{:else if stage === 'listed'}
 		{#if lead.own_listing}
-			<div class="small muted">Links {lead.own_listing.id} · {lead.own_listing.label} to this stage.</div>
+			<div class="small muted">{lead.own_listing.id} · {lead.own_listing.label}</div>
 		{:else}
-			<div class="small muted">Pocket listing · linked to {lead.name}. Add a permit later to publish it.</div>
 			<div class="frow">
 				<div class="fld">
 					<label for="sf-lunit">Unit</label>
@@ -313,12 +314,6 @@ function onPicked() {
 				{#each units as x (x.id)}<option value={x.id}>{x.unit}</option>{/each}
 			</select>
 		</div>
-	{:else if stage === 'won'}
-		<div class="small muted">
-			{lead.own_listing
-				? 'The listing is signed. The deal is made with the buyer or tenant who takes it.'
-				: 'Signed with us. Move to Listed first to create the listing.'}
-		</div>
 	{:else if stage === 'lost'}
 		<div class="fld">
 			<label for="sf-why">Why</label>
@@ -363,6 +358,5 @@ function onPicked() {
 				</div>
 			{/each}
 		</div>
-		<div class="small muted">Optional at this stage.</div>
 	</section>
 {/if}

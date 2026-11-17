@@ -5,7 +5,7 @@ agent is searching for.
 """
 
 from app.crm.owner_repository import _owner_filter_sql
-from app.crm.owners import _sql_owner_property
+from app.crm.owner_rows import sql_owner_property as _sql_owner_property
 
 
 def test_min_value_filter_uses_estimate_then_last_sale():
@@ -56,8 +56,7 @@ def test_owner_property_carries_the_estimate():
             estimated_value_aed=2_687_000,
             estimated_value_low_aed=2_576_000,
             estimated_value_high_aed=2_901_000,
-            valuation_confidence="high",
-            valued_at="2026-11-05",
+            valuation={"confidence": "high", "valued_at": "2026-11-05"},
         )
     )
     assert (
@@ -79,6 +78,6 @@ def test_owner_property_without_estimate():
 
 
 def test_owner_property_says_why_it_was_not_valued():
-    prop = _sql_owner_property(_row(valuation_status="non_residential"))
+    prop = _sql_owner_property(_row(valuation={"status": "non_residential"}))
     assert prop.estimated_value_aed is None
     assert prop.valuation_status == "non_residential"

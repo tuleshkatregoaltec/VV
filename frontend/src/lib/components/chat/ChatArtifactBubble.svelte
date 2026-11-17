@@ -15,6 +15,7 @@ import { cubicOut } from 'svelte/easing'
 import { fade, fly } from 'svelte/transition'
 import type { ListingCardResponse } from '$lib/api/generated/hey-api/types.gen'
 import type { ChatArtifact } from '$lib/chat/artifacts'
+import { safeExternalHref } from '$lib/utils/safeUrl'
 import ChatCustomChartArtifact from './ChatCustomChartArtifact.svelte'
 import ChatMarketTrendArtifact from './ChatMarketTrendArtifact.svelte'
 
@@ -166,7 +167,6 @@ function resultSummary(): string {
 					{#if !artifact.data?.listings?.length}
 						<div class="rounded-md border border-dashed border-border bg-card p-5 text-center">
 							<p class="text-sm font-semibold text-fg-1">No matching records</p>
-							<p class="mt-1 text-xs leading-5 text-fg-4">Try a broader area, budget, or bedroom range.</p>
 						</div>
 					{:else}
 						{#each artifact.data.listings as listing (listing.listing_id)}
@@ -190,11 +190,11 @@ function resultSummary(): string {
 													{listingLocation(listing) || listing.location_name || 'Dubai'}
 												</p>
 											</div>
-											{#if listing.share_url}
+											{#if safeExternalHref(listing.share_url)}
 												<a
-													href={listing.share_url}
+													href={safeExternalHref(listing.share_url)}
 													target="_blank"
-													rel="noreferrer"
+													rel="noopener noreferrer"
 													class="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border text-fg-4 transition hover:bg-elevated hover:text-fg-1"
 													aria-label="Open record"
 													title="Open record"
@@ -227,13 +227,6 @@ function resultSummary(): string {
 							</article>
 						{/each}
 					{/if}
-				</div>
-				<div class="rounded-md border border-border bg-panel p-3 text-xs leading-5 text-fg-3">
-					<span class="font-semibold text-fg-2">Source:</span>
-					Listings import
-					<span class="mx-1 text-fg-5">/</span>
-					<span class="font-semibold text-fg-2">Scope:</span>
-					current exact matches
 				</div>
 			</div>
 		{/if}

@@ -65,7 +65,9 @@ async def main() -> None:
         # Keep the last publication visible through insert/validation failures. EXCHANGE is
         # atomic in Atomic/Shared databases; unsupported engines fail without replacing data.
         staging = f"{TABLE}_staging_{uuid4().hex}"
-        await client.command(f"CREATE TABLE {staging} AS {TABLE}")
+        await client.command(
+            CREATE_TABLE.replace(f"CREATE TABLE IF NOT EXISTS {TABLE}", f"CREATE TABLE {staging}")
+        )
         await client.insert(
             staging, [[r[c] for c in COLUMNS] for r in results], column_names=list(COLUMNS)
         )

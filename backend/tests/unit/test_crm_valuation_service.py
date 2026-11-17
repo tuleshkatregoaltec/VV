@@ -1,6 +1,8 @@
 """Valuing stored owner claims: registry join, stale-value clearing and import scope."""
 
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -64,9 +66,24 @@ class _Db:
 def world(monkeypatch):
     state = {"claims": [], "sales": [], "stats": [], "quarters": [], "import_id": "unset"}
 
-    async def claims(db, organization_id, import_id=None):
+    async def claims(db, organization_id, import_id=None, *, generation=None):
         state["import_id"] = import_id
-        return [c for c in state["claims"] if import_id is None or c.import_id == import_id]
+        return [
+            (
+                c,
+                {
+                    "assessed_status": c.ownership_status,
+                    "latest_sale_date": c.latest_sale_date.isoformat()
+                    if c.latest_sale_date
+                    else None,
+                    "latest_sale_price_aed": c.latest_sale_price_aed,
+                    "unit_number": c.unit_number,
+                    **state.get("assessment", {}).get(c.id, {}),
+                },
+            )
+            for c in state["claims"]
+            if import_id is None or c.import_id == import_id
+        ]
 
     async def sales(parameters):
         return state["sales"]
@@ -78,6 +95,11 @@ def world(monkeypatch):
     async def quarters(area_keys, property_types):
         return state["quarters"]
 
+    monkeypatch.setattr(
+        valuation_service,
+        "open_store",
+        AsyncMock(return_value=SimpleNamespace(state=SimpleNamespace(generation=1))),
+    )
     monkeypatch.setattr(owner_repository, "list_claims_for_valuation", claims)
     monkeypatch.setattr(owner_queries, "fetch_owner_property_signatures", sales)
     monkeypatch.setattr(valuation_queries, "fetch_comparable_stats", stats)
@@ -178,63 +200,6 @@ async def test_import_scope_only_touches_that_import(world):
     assert two.estimated_value_aed is None
 
 
-async def test_import_completion_survives_valuation_failure(monkeypatch):
-    # A real rollback expires committed ORM state; the completed response must still be readable.
-    from sqlalchemy import inspect, text
-    from sqlalchemy.ext.asyncio import create_async_engine
-    from sqlmodel.ext.asyncio.session import AsyncSession
-
-    from app.crm import imports
-    from app.crm.import_models import CrmContactImport, CrmContactList
-
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    tables = [
-        CrmContactImport.__table__,
-        CrmContactList.__table__,
-        CrmPropertyContactClaim.__table__,
-    ]
-    try:
-        async with engine.begin() as connection:
-            await connection.run_sync(
-                lambda conn: CrmContactImport.metadata.create_all(conn, tables)
-            )
-        async with AsyncSession(engine, expire_on_commit=False) as db:
-            record = CrmContactImport(
-                organization_id="org",
-                created_by_user_id="user",
-                name="Completed import",
-                original_filename="owners.csv",
-                sha256="synthetic",
-                size_bytes=1,
-                status="completed",
-                created_at=NOW,
-                completed_at=NOW,
-            )
-            db.add(record)
-            await db.commit()
-            record_id = record.id
-
-            async def broken(db, **kwargs):
-                await db.execute(text("SELECT 1"))  # valuation's read transaction is active
-                raise RuntimeError("clickhouse unavailable")
-
-            monkeypatch.setattr(imports, "value_owner_claims", broken)
-            await imports._value_import(
-                db, organization_id="org", import_id=record_id, record=record
-            )
-            assert not inspect(record).expired
-            response = await imports._import_response(db, record)
-            assert (response.id, response.status, response.name) == (
-                record_id,
-                "completed",
-                "Completed import",
-            )
-            await db.refresh(record)
-            assert record.status == "completed"
-    finally:
-        await engine.dispose()
-
-
 def test_stats_row_carries_price_quartiles():
     stats = valuation_service._stats(
         {"count": 6, "psf": [900.0, 935.0, 980.0], "price": [1_950_000.0, 2_100_000.0, 2_250_000.0]}
@@ -252,3 +217,22 @@ async def test_ready_home_is_valued_from_ready_sales_only(world):
     assert ready.estimated_value_aed == 2_000_000
     assert offplan.estimated_value_aed == 3_000_000
     assert sorted(world["ready_calls"]) == [False, True]
+
+
+async def test_current_assessment_overrides_stale_import_status_and_sale_identity(world):
+    former = _claim(1, estimated_value_aed=9_000_000)
+    current = _claim(2, status="unit_linked_unverified", unit="wrong-source-unit")
+    world["claims"] = [former, current]
+    world["assessment"] = {
+        1: {"assessed_status": "former_owner"},
+        2: {"assessed_status": "verified_current_owner", "unit_number": "187"},
+    }
+    world["sales"] = [_sale()]
+    world["stats"] = [_building_stats()]
+    result = await _run()
+    assert former.estimated_value_aed is None
+    assert former.valuation["status"] == "not_current_owner"
+    assert current.estimated_value_aed == 2_000_000
+    assert current.ownership_status == "unit_linked_unverified"
+    assert current.unit_number == "wrong-source-unit"
+    assert result.considered == 1

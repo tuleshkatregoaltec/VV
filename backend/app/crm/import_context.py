@@ -13,6 +13,7 @@ from app.crm.identity import (
     _usable_project_name,
 )
 from app.crm.import_events import has_sale_evidence
+from app.market.reference import unit_lookup_key
 
 
 def property_details(evidence: dict) -> dict[str, str]:
@@ -126,13 +127,13 @@ def in_file_context(candidate: ParsedContact, row: dict) -> bool:
 def _compatible_details(candidate: ParsedContact, row: dict) -> bool:
     fields = candidate.evidence.get("source_fields", {})
     source_units = {
-        _normalize_unit(value)
+        unit_lookup_key(value)
         for value in (
             candidate.unit_number,
             str(candidate.evidence.get("source_unit_number") or ""),
         )
     } - {"", "0"}
-    if source_units and _normalize_unit(row.get("unit_number")) not in source_units:
+    if source_units and unit_lookup_key(str(row.get("unit_number") or "")) not in source_units:
         return False
     # Broad DLD legal categories such as Residential/Land do not distinguish villas
     # from apartments. Only explicit physical types may exclude a candidate.
@@ -167,7 +168,7 @@ def _compatible_details(candidate: ParsedContact, row: dict) -> bool:
         value = _usable_project_name(str(fields.get(field) or ""))
         if not value:
             continue
-        if field == "building_name" and _normalize_unit(value) in source_units:
+        if field == "building_name" and unit_lookup_key(value) in source_units:
             # Some villa exports repeat the property code under BuildingName 2.
             # It has already been checked as an identifier, not a location name.
             continue
@@ -195,6 +196,12 @@ async def recover_from_file_context(candidates: list[ParsedContact]) -> None:
     groups = defaultdict(list)
     for candidate in candidates:
         if candidate.evidence.get("property_identity_resolution"):
+            continue
+        if "original_identifiers" in candidate.evidence:
+            candidate.evidence["context_lookup"] = {
+                "status": "qualified_match_review",
+                "reason": "The complete qualified identifier lookup did not resolve this source; date/price context cannot replace its original typed identifiers.",
+            }
             continue
         locations = candidate.evidence.get("file_context", {}).get("locations", [])
         if not has_sale_evidence(candidate):

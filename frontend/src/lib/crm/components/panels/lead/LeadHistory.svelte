@@ -2,7 +2,7 @@
 import { createQuery } from '@tanstack/svelte-query'
 import { crm } from '../../../api'
 import type { LeadDetail } from '../../../api/types'
-import { ORIGIN_TONE } from '../../../config'
+import { ORIGIN_LABEL, ORIGIN_TONE } from '../../../config'
 import { crmQueries } from '../../../queries'
 import { toast } from '../../../stores/toast.svelte'
 import { errorText, refreshCrm } from '../../../write'
@@ -45,7 +45,7 @@ async function undoLast() {
 					<div>
 						<span class="when">{e.at}</span>
 						<span>{e.text}</span>
-						<Chip tone={ORIGIN_TONE[e.origin]}>{e.origin}</Chip>
+						<Chip tone={ORIGIN_TONE[e.origin]}>{ORIGIN_LABEL[e.origin]}</Chip>
 					</div>
 				{/each}
 			</div>

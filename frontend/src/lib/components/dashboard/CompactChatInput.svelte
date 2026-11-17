@@ -1,6 +1,6 @@
 <script lang="ts">
 let {
-	placeholder = 'Ask me anything about Dubai real estate...',
+	placeholder = 'Ask about Dubai real estate…',
 	onSubmit,
 	disabled = false
 }: {

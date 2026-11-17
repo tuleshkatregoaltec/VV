@@ -16,15 +16,19 @@ case "$report" in
     ;;
 esac
 case "$cadence" in
-  daily|weekly|monthly)
+  daily|weekly|monthly|morning)
     ;;
   *)
-    echo "usage: $0 rentals|sales [daily|weekly|monthly]" >&2
+    echo "usage: $0 rentals|sales [daily|weekly|monthly|morning]" >&2
     exit 64
     ;;
 esac
-if [[ "$report" == "sales" && "$cadence" != "daily" ]]; then
-  echo "sales supports the daily cadence only" >&2
+if [[ "$report" == "sales" && "$cadence" != "daily" && "$cadence" != "morning" ]]; then
+  echo "sales supports the daily and morning cadences only" >&2
+  exit 64
+fi
+if [[ "$report" == "rentals" && "$cadence" == "morning" ]]; then
+  echo "the morning cadence is for sales only" >&2
   exit 64
 fi
 
@@ -50,6 +54,14 @@ case "$report:$cadence" in
     start_offset=365
     end_offset=181
     timeout_duration="${DXBI_MONTHLY_TIMEOUT:-24h}"
+    ;;
+  sales:morning)
+    # DXBI lists a day's sales before their units (an empty "No.", no sale page) and fills them
+    # in about a day later. Re-read the last 3 days, today included, after the night's scrape;
+    # the run's name ("-morning") sorts after "-daily", so it loads last and its listing wins.
+    start_offset=$(( ${DXBI_SALES_MORNING_DAYS:-3} - 1 ))
+    end_offset=0
+    timeout_duration="${DXBI_DAILY_TIMEOUT:-3h}"
     ;;
   *)
     start_offset="${DXBI_SALES_LOOKBACK_DAYS:-7}"

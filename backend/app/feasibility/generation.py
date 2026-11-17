@@ -4,8 +4,12 @@ import logging
 from datetime import date
 
 from fastapi import HTTPException
+from pydantic_ai.usage import RunUsage
 
 from app.area.service import get_area_detail
+from app.chat import operations as chat_operations
+from app.config import settings
+from app.core.decorators import cache as redis_cache
 from app.feasibility.assumption_defaults import (
     sanitize_generated_assumptions,
 )
@@ -43,6 +47,7 @@ from app.feasibility.research import (
     build_off_plan_pricing_confidence,
     build_off_plan_unit_benchmarks,
     get_comparable_data,
+    get_data_as_of,
     get_market_pricing,
     get_off_plan_pricing_curve,
     get_rental_rates_by_size_band,
@@ -50,6 +55,7 @@ from app.feasibility.research import (
     resolve_market_area,
 )
 from app.feasibility.service import get_plot_details_or_404
+from app.market.units import per_sqm
 from app.plots.evidence import get_land_sale_evidence
 from app.plots.models import Usage
 from app.plots.service import get_plot_details as fetch_plot_details
@@ -57,11 +63,17 @@ from app.project.service import get_project_market_snapshot
 
 logger = logging.getLogger(__name__)
 
+# v2: studies priced from DXBI's listed records; v1 entries were built on DLD's stale register.
+HBU_CACHE_PREFIX = "feasibility:hbu:v2"
+
 
 async def generate_hbu_study(
     plot_number: str,
     usage_override: Usage | None = None,
     development_model: DevelopmentModel = "build_to_sell_residential",
+    *,
+    run_usage: RunUsage | None = None,
+    token_budget: int | None = None,
 ) -> PlotResearch | None:
     development_model = development_model or "build_to_sell_residential"
     generation_date = date.today()
@@ -128,7 +140,7 @@ async def generate_hbu_study(
                 area_name=area_detail_result.area_name,
                 rental_contract_count_12m=area_detail_result.rental_contract_count_12m,
                 median_annual_rent=area_detail_result.median_annual_rent,
-                avg_rent_price_sqm_12m=area_detail_result.avg_rent_price_sqm_12m,
+                avg_rent_price_sqm_12m=per_sqm(area_detail_result.avg_rent_price_sqft_12m),
                 gross_yield_pct=area_detail_result.gross_yield_pct,
                 top_developers=area_detail_result.top_developers,
                 top_master_projects=area_detail_result.top_master_projects,
@@ -155,7 +167,9 @@ async def generate_hbu_study(
                     no_of_units=row.no_of_units,
                     rental_contract_count_12m=snapshot.rental_contract_count_12m if snapshot else 0,
                     median_annual_rent=snapshot.median_annual_rent if snapshot else None,
-                    avg_rent_price_sqm_12m=snapshot.avg_rent_price_sqm_12m if snapshot else None,
+                    avg_rent_price_sqm_12m=per_sqm(snapshot.avg_rent_price_sqft_12m)
+                    if snapshot
+                    else None,
                     gross_yield_pct=snapshot.gross_yield_pct if snapshot else None,
                     rationale=list(row.rationale),
                 )
@@ -298,6 +312,8 @@ async def generate_hbu_study(
             development_model=development_model,
             usage_override=usage_override,
         ),
+        usage=run_usage,
+        token_budget=token_budget,
     )
 
     draft.assumptions = (
@@ -355,6 +371,8 @@ async def generate_hbu_study(
             2,
         )
 
+    data_as_of = await get_data_as_of(market_area)
+
     return PlotResearch(
         plot_number=details.plot_number,
         usage=usage,
@@ -365,6 +383,7 @@ async def generate_hbu_study(
         pricing_evidence=pricing_evidence,
         competition_evidence=competition_evidence,
         land_sales_evidence=land_sales_evidence,
+        data_as_of=data_as_of,
         market_pricing=market_pricing,
         off_plan_market_pricing=off_plan_market_pricing,
         off_plan_pricing_confidence=off_plan_confidence,
@@ -393,29 +412,69 @@ async def generate_hbu_for_plot(
     plot_number: str,
     usage_override: Usage | None = None,
     development_model: DevelopmentModel | None = None,
+    *,
+    user_id: str,
+    organization_id: str,
 ) -> PlotResearch:
-    study = await generate_hbu_study(
-        plot_number,
-        usage_override=usage_override,
-        development_model=development_model,
+    """Cached per plot, usage, model and day; a miss runs inside the user's admission.
+
+    The study is built only from plot and market evidence (no user or tenant data),
+    so repeat requests for the same plot reuse it without spending model tokens.
+    """
+    development_model = development_model or "build_to_sell_residential"
+    key = ":".join(
+        (
+            HBU_CACHE_PREFIX,
+            date.today().isoformat(),
+            plot_number.strip(),
+            usage_override or "inferred",
+            development_model,
+        )
     )
+    cached = await redis_cache.get(key)
+    if cached is not None:
+        try:
+            return PlotResearch.model_validate(cached)
+        except ValueError:
+            logger.warning("Ignoring an invalid cached HBU study")
+    async with chat_operations.admitted_run(
+        user_id=user_id,
+        organization_id=organization_id,
+        token_limit=settings.FEASIBILITY_RUN_TOKEN_LIMIT,
+    ) as (run_usage, token_budget):
+        study = await generate_hbu_study(
+            plot_number,
+            usage_override=usage_override,
+            development_model=development_model,
+            run_usage=run_usage,
+            token_budget=token_budget,
+        )
     if study is None:
         raise HTTPException(status_code=404, detail="GIS plot not found")
+    await redis_cache.set(
+        key, study.model_dump(mode="json"), expire=settings.FEASIBILITY_HBU_CACHE_SECONDS
+    )
     return study
 
 
-async def generate_seeded_study(request: GenerateStudyRequest) -> GenerateStudyResponse:
+async def generate_seeded_study(
+    request: GenerateStudyRequest, *, user_id: str, organization_id: str
+) -> GenerateStudyResponse:
     try:
         research = await generate_hbu_for_plot(
             request.plot_number,
             usage_override=request.usage_override,
             development_model=request.development_model,
+            user_id=user_id,
+            organization_id=organization_id,
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("generate_hbu_study failed for plot %s: %s", request.plot_number, e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("generate_hbu_study failed (%s)", type(e).__name__)
+        raise HTTPException(
+            status_code=500, detail="The study could not be generated. Please try again."
+        ) from e
     plot = await get_plot_details_or_404(request.plot_number)
     return GenerateStudyResponse(
         plot_data=plot,

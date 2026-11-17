@@ -1,20 +1,29 @@
 from __future__ import annotations
 
-import csv
 import hashlib
 import io
 import json
+import logging
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 import openpyxl
 from fastapi import HTTPException, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.crm import inbound_repository
+from app.core.async_work import run_in_thread
+from app.crm import import_jobs, inbound_repository
 from app.crm.ai import _ai_extract, _ai_header_mapping
 from app.crm.identity import _normalize_email, _normalize_phone
+from app.crm.import_safety import (
+    MAX_IMPORT_COLUMNS,
+    MAX_IMPORT_ROWS,
+    ImportInputError,
+    client_message,
+    csv_rows,
+    validate_xlsx,
+)
 from app.crm.inbound import _bulk_ownership_enrichments, _find_or_create_contact
 from app.crm.inbound_models import (
     CrmInboundActivity,
@@ -42,6 +51,8 @@ from app.crm.inbound_policy import (
 )
 
 _MAX_FILE_BYTES = 50 * 1024 * 1024
+
+logger = logging.getLogger(__name__)
 
 
 def _header_mapping(headers: list[Any]) -> dict[str, int]:
@@ -97,7 +108,7 @@ def _file_rows(
     rows: list[tuple[str, int, dict[str, Any]]] = []
     mappings: list[dict[str, Any]] = []
     if filename.lower().endswith(".csv"):
-        raw = list(csv.reader(io.StringIO(data.decode("utf-8-sig"))))
+        raw = csv_rows(data)
         header_index, header_values, mapping = _best_header([tuple(row) for row in raw])
         headers = list(header_values)
         sheet_name = Path(filename).stem
@@ -122,11 +133,18 @@ def _file_rows(
                 "field_map": {key: headers[index] for key, index in mapping.items()},
             }
         )
+        if len(rows) > MAX_IMPORT_ROWS:
+            raise ImportInputError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
         return rows, {"sheets": mappings}
 
+    validate_xlsx(data)
     workbook = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     try:
         for sheet in workbook.worksheets:
+            if sheet.max_column and sheet.max_column > MAX_IMPORT_COLUMNS:
+                raise ImportInputError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
+            if sheet.max_row and sheet.max_row > MAX_IMPORT_ROWS + 15:
+                raise ImportInputError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
             preview = list(sheet.iter_rows(min_row=1, max_row=15, values_only=True))
             header_index, header_values, mapping = _best_header(preview)
             mapping = _mapping_override_for_sheet(
@@ -145,7 +163,11 @@ def _file_rows(
             for row_number, values in enumerate(
                 sheet.iter_rows(min_row=header_index + 2, values_only=True), start=header_index + 2
             ):
+                if len(values) > MAX_IMPORT_COLUMNS:
+                    raise ImportInputError(f"Import exceeds the {MAX_IMPORT_COLUMNS}-column limit")
                 if any(value not in (None, "") for value in values):
+                    if len(rows) >= MAX_IMPORT_ROWS:
+                        raise ImportInputError(f"Import exceeds the {MAX_IMPORT_ROWS:,}-row limit")
                     rows.append(
                         (
                             sheet.title,
@@ -226,7 +248,7 @@ async def preview_inbound_import(
     if len(data) > _MAX_FILE_BYTES:
         raise HTTPException(status_code=413, detail="Inbound import exceeds 50 MB")
     try:
-        preview = _preview_file(data, filename)
+        preview = await run_in_thread(_preview_file, data, filename)
         ai_mapped_sheets: set[str] = set()
         for sheet in preview.sheets:
             has_identity = bool(
@@ -245,13 +267,15 @@ async def preview_inbound_import(
                     {"sheet": sheet.sheet, "field_map": sheet.field_map} for sheet in preview.sheets
                 ]
             }
-            preview = _preview_file(data, filename, override, ai_mapped_sheets)
+            preview = await run_in_thread(_preview_file, data, filename, override, ai_mapped_sheets)
             preview.warnings.append(
                 "AI suggested mappings are highlighted for review and are not applied until approval"
             )
         return preview
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Could not read import: {exc}") from exc
+        logger.warning("Inbound import preview failed", exc_info=True)
+        message = client_message(exc, "Check that it is a valid CSV or XLSX file.")
+        raise HTTPException(status_code=422, detail=f"Could not read import: {message}") from exc
 
 
 async def process_inbound_import(
@@ -268,50 +292,87 @@ async def process_inbound_import(
     if not filename.lower().endswith((".xlsx", ".csv")):
         raise HTTPException(status_code=415, detail="Upload a CSV or XLSX file")
     data = await upload.read(_MAX_FILE_BYTES + 1)
+    if not data:
+        raise HTTPException(status_code=400, detail="File is empty, so nothing was imported.")
+    if len(data) > _MAX_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="Inbound import exceeds 50 MB")
+    record = await import_jobs.enqueue(
+        db,
+        kind="inbound",
+        data=data,
+        filename=filename,
+        name=name,
+        user_id=user_id,
+        organization_id=organization_id,
+        campaign_context=campaign_context,
+        mapping_override=mapping_override,
+    )
+    return _import_response(record)
+
+
+async def _execute_inbound_import(
+    db: AsyncSession,
+    *,
+    upload: UploadFile,
+    name: str,
+    user_id: str,
+    organization_id: str,
+    campaign_context: str = "",
+    mapping_override: dict[str, Any] | None = None,
+    _record: CrmInboundImport | None = None,
+    _commit: Callable[[], Awaitable[None]] | None = None,
+) -> InboundImportResponse:
+    filename = Path(upload.filename or "inbound-leads.xlsx").name
+    if not filename.lower().endswith((".xlsx", ".csv")):
+        raise HTTPException(status_code=415, detail="Upload a CSV or XLSX file")
+    data = await upload.read(_MAX_FILE_BYTES + 1)
     if len(data) > _MAX_FILE_BYTES:
         raise HTTPException(status_code=413, detail="Inbound import exceeds 50 MB")
     campaign_context = campaign_context.strip()[:4_000]
     digest = hashlib.sha256(data + b"\0" + campaign_context.casefold().encode()).hexdigest()
-    existing_result = await inbound_repository.find_import_by_digest(db, digest, organization_id)
-    if existing := existing_result:
-        return _import_response(existing)
-
     now = _utcnow()
-    record = CrmInboundImport(
-        organization_id=organization_id,
-        created_by_user_id=user_id,
-        name=name.strip() or Path(filename).stem,
-        original_filename=filename,
-        sha256=digest,
-        size_bytes=len(data),
-        status="processing",
-        mapping={},
-        summary={},
-        created_at=now,
-    )
-    inbound_repository.save(db, record)
-    await db.commit()
-    await db.refresh(record)
+    if _record is not None:
+        record = _record
+    else:
+        existing_result = await inbound_repository.find_import_by_digest(
+            db, digest, organization_id
+        )
+        if existing := existing_result:
+            return _import_response(existing)
+
+        record = CrmInboundImport(
+            organization_id=organization_id,
+            created_by_user_id=user_id,
+            name=name.strip() or Path(filename).stem,
+            original_filename=filename,
+            sha256=digest,
+            size_bytes=len(data),
+            status="processing",
+            mapping={},
+            summary={},
+            created_at=now,
+        )
+        inbound_repository.save(db, record)
+        await db.commit()
+        await db.refresh(record)
     summary = InboundImportSummary()
     imported_enquiries: list[CrmInboundEnquiry] = []
     imported_contacts: dict[int, CrmInboundContact] = {}
     try:
-        rows, mapping = _file_rows(data, filename, mapping_override)
+        rows, mapping = await run_in_thread(_file_rows, data, filename, mapping_override)
         mapping["campaign_context"] = campaign_context
         record.mapping = mapping
         summary.total_rows = len(rows)
         for sheet_mapping in mapping.get("sheets", []):
             fields = set(sheet_mapping.get("field_map", {}))
             if not ({"full_name", "first_name"} & fields):
-                raise ValueError(
+                raise ImportInputError(
                     f"Map a full-name or first-name column for {sheet_mapping.get('sheet', 'the import')}"
                 )
             if not ({"phone", "email", "whatsapp"} & fields):
-                raise ValueError(
+                raise ImportInputError(
                     f"Map a phone, email, or WhatsApp column for {sheet_mapping.get('sheet', 'the import')}"
                 )
-        if summary.total_rows > 10_000:
-            raise ValueError("Inbound import exceeds the 10,000-row synchronous import limit")
         row_fingerprints: set[str] = set()
         for sheet, row_number, row in rows:
             first = _text(row.get("first_name"))
@@ -475,12 +536,20 @@ async def process_inbound_import(
         record.summary = summary.model_dump()
         record.completed_at = _utcnow()
         inbound_repository.save(db, record)
-        await db.commit()
+        if _commit is not None:
+            await _commit()
+        else:
+            await db.commit()
         await db.refresh(record)
     except Exception as exc:
+        if _record is not None:
+            await db.rollback()
+            raise
         await db.rollback()
+        await db.refresh(record)
         record.status = "failed"
-        record.error_message = str(exc)[:1_000]
+        logger.exception("Inbound import failed", extra={"import_id": record.id})
+        record.error_message = client_message(exc, "The file could not be processed.")[:1_000]
         record.summary = summary.model_dump()
         record.completed_at = _utcnow()
         inbound_repository.save(db, record)
@@ -514,6 +583,7 @@ async def delete_inbound_import(db: AsyncSession, import_id: int, organization_i
     record = result
     if not record:
         raise HTTPException(status_code=404, detail="Inbound import not found")
+    input_key = await import_jobs.delete_input_for_import(db, record)
     imported_enquiries = await inbound_repository.list_import_contact_ids(
         db, import_id, organization_id
     )
@@ -523,3 +593,5 @@ async def delete_inbound_import(db: AsyncSession, import_id: int, organization_i
         await inbound_repository.delete_orphan_contacts(db, contact_ids, organization_id)
     await inbound_repository.delete_record(db, record)
     await db.commit()
+    if input_key:
+        await import_jobs.remove_input(input_key)

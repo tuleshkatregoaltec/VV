@@ -38,7 +38,7 @@ def test_owner_units_are_filtered_by_property_identity_after_ranking(monkeypatch
             unit_keys=["u1", "u2"],
         )
     )
-    assert len(calls) == 2  # the page and its filter options
+    assert len(calls) == 1  # current VV combines the empty page and its filter options
     for sql, params in calls:
         assert "unit_keys" not in sql[: sql.index("ranked_unit AS")]
         assert "property_identity_key IN (" in sql[sql.index("FROM leads") :]
@@ -65,7 +65,7 @@ def test_unknown_owner_leases_leave_out_the_owner_units(monkeypatch):
             exclude_units=True,
         )
     )
-    assert len(calls) == 2
+    assert len(calls) == 1
     for sql, params in calls:
         assert "NOT (property_identity_key IN (" in sql
         assert "unit_keys" not in sql[: sql.index("ranked_unit AS")]
@@ -112,9 +112,18 @@ def _owner_renewals(monkeypatch, keys, leads, owners=None, owner="known"):
 
     async def attach(db, *, candidate_keys, user_id, organization_id):
         seen["owner_lookup"] = candidate_keys
-        return owners or {}
+        available = (
+            owners
+            if owners is not None
+            else {key: CrmRenewalOwner(name="Known Example", source="owner_import") for key in keys}
+        )
+        return {key: value for key, value in available.items() if key in candidate_keys}
 
-    monkeypatch.setattr(renewal_repository, "list_current_owner_unit_keys", owner_keys)
+    async def uncached(namespace, params, model, compute):
+        return await compute()
+
+    monkeypatch.setattr(renewal_leads.lead_cache, "cached", uncached)
+    monkeypatch.setattr(renewal_repository, "list_imported_unit_keys", owner_keys)
     monkeypatch.setattr(opportunity_queries, "_tables_exist", tables_exist)
     monkeypatch.setattr(opportunity_queries, "fetch_renewals", fetch)
     monkeypatch.setattr(renewal_leads, "_lead_from_row", lambda row: type("L", (), row)())
@@ -142,8 +151,8 @@ def test_only_this_agencys_current_owner_units_are_listed(monkeypatch):
     owner = CrmRenewalOwner(name="Maya Example", phone="+971500000002", source="owner_import")
     res, seen = _owner_renewals(monkeypatch, ["u1", "u2"], [_lead("u1")], {"u1": owner})
     assert seen["organization_id"] == "org"
-    assert seen["unit_keys"] == ["u1", "u2"]
-    assert seen["owner_lookup"] == ["u1"]
+    assert seen["unit_keys"] == ["u1"]
+    assert seen["owner_lookup"] == ["u1", "u2"]
     assert res.owners == {"u1": owner}
     assert res.total == 1
 
@@ -158,10 +167,10 @@ def test_no_owner_imports_means_an_empty_list_without_querying_leases(monkeypatc
 
 def test_unknown_owner_leases_exclude_this_agencys_owner_units_and_show_no_owner(monkeypatch):
     owner = CrmRenewalOwner(name="Maya Example", source="workspace")
-    res, seen = _owner_renewals(monkeypatch, ["u1"], [_lead("u7")], {"u7": owner}, owner="unknown")
+    res, seen = _owner_renewals(monkeypatch, ["u1"], [_lead("u7")], {"u1": owner}, owner="unknown")
     assert seen["unit_keys"] == ["u1"]
     assert seen["exclude_units"] is True
-    assert "owner_lookup" not in seen
+    assert seen["owner_lookup"] == ["u1"]
     assert res.owners == {}
     assert res.total == 1
 
@@ -196,7 +205,10 @@ def test_new_contract_under_another_key_blocks_an_old_known_owner_vacancy():
         SELECT 'new', 'unique', '101', 'Tower', '', '', 'Marina',
                '2026-01-01', '2027-01-01', '2026-11-02', 'b'
     ), """
-    owner = opportunity_queries._OWNER_IDENTITIES.replace("{unit_keys:Array(String)}", "('old')")
+    owner = (
+        "property_identity_key IN (SELECT property_identity_key FROM identified_unit "
+        "WHERE unit_candidate_key IN ('old'))"
+    )
     try:
         sql = (
             prefix + ranking + " SELECT unit_candidate_key FROM ranked_unit WHERE identity_rank = 1"
@@ -218,5 +230,59 @@ def test_changed_lease_key_keeps_the_known_owners_contact(monkeypatch):
 
     monkeypatch.setattr(opportunity_queries, "fetch_owner_unit_aliases", aliases)
     res, seen = _owner_renewals(monkeypatch, ["old"], [_lead("new")], {"old": owner})
-    assert seen["owner_lookup"] == ["new", "old"]
+    assert seen["owner_lookup"] == ["old"]
     assert res.owners == {"new": owner}
+
+
+async def test_known_owner_filter_and_direction_are_part_of_the_shared_cache_key(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    class Cache:
+        def __init__(self):
+            self.rows = {}
+
+        async def get(self, key):
+            return self.rows.get(key)
+
+        async def set(self, key, value, expire=None):
+            self.rows[key] = value
+
+    cache = Cache()
+    monkeypatch.setattr(renewal_leads.lead_cache, "_cache_client", lambda: cache)
+    monkeypatch.setattr(
+        renewal_leads.lead_cache, "lead_data_revision", AsyncMock(return_value="same-release")
+    )
+    monkeypatch.setattr(renewal_leads.lead_cache, "_inflight", {})
+    calls = []
+
+    async def compute(**params):
+        calls.append(params)
+        return renewal_leads.CrmRenewalsResponse(
+            leads=[], total=len(calls), limit=50, offset=0, as_of=AS_OF
+        )
+
+    monkeypatch.setattr(renewal_leads, "_compute_renewals", compute)
+    params = dict(
+        window=None,
+        area=None,
+        property_type=None,
+        project=None,
+        building=None,
+        limit=50,
+        offset=0,
+        as_of=AS_OF,
+    )
+    totals = []
+    for keys, excluded in [
+        (["tenant-a-unit"], False),
+        (["tenant-b-unit"], False),
+        (["tenant-a-unit"], True),
+        (["tenant-a-unit"], False),
+    ]:
+        totals.append(
+            (
+                await renewal_leads.list_renewals(**params, unit_keys=keys, exclude_units=excluded)
+            ).total
+        )
+    assert totals == [1, 2, 3, 1]
+    assert len(calls) == 3

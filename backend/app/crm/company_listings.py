@@ -276,7 +276,9 @@ async def list_company_listings(
             listings=0,
             agents=0,
             last_scraped_at=None,
-        ) if source else None,
+        )
+        if source
+        else None,
     )
     company = next((item for item in companies if item.broker_id == broker_id), None)
     if broker_id and company is None:
@@ -330,7 +332,9 @@ async def list_company_listings(
         agents=agent_inventory,
         items=items,
         # A search counts its matches; otherwise the agent's or company's listing total.
-        total=int(rows[0]["matched_total"]) if rows else 0
+        total=int(rows[0]["matched_total"])
+        if rows
+        else 0
         if search and search.strip()
         else selected_agent.listings
         if selected_agent

@@ -5,32 +5,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="robots" content="index, follow" />
 		<meta name="format-detection" content="telephone=no" />
-		<script>
-			;(() => {
-				try {
-					const stored = JSON.parse(localStorage.getItem('vitevue-preferences') || '{}')
-					const preference = ['light', 'dark', 'system'].includes(stored.theme)
-						? stored.theme
-						: 'system'
-					const resolved =
-						preference === 'system'
-							? window.matchMedia('(prefers-color-scheme: dark)').matches
-								? 'dark'
-								: 'light'
-							: preference
-					document.documentElement.dataset.theme = resolved
-					document.documentElement.dataset.themePreference = preference
-					document.documentElement.style.colorScheme = resolved
-				} catch {
-					const resolved = window.matchMedia('(prefers-color-scheme: dark)').matches
-						? 'dark'
-						: 'light'
-					document.documentElement.dataset.theme = resolved
-					document.documentElement.dataset.themePreference = 'system'
-					document.documentElement.style.colorScheme = resolved
-				}
-			})()
-		</script>
+		<script src="/theme-init.js"></script>
 
 		<!-- Favicons -->
 		<link rel="icon" href="/favicon.ico" sizes="32x32" />

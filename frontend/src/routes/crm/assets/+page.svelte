@@ -1,5 +1,5 @@
 <script lang="ts">
-import { createQuery } from '@tanstack/svelte-query'
+import { createInfiniteQuery, createQuery } from '@tanstack/svelte-query'
 import Building from 'lucide-svelte/icons/building-2'
 import Mail from 'lucide-svelte/icons/mail'
 import Phone from 'lucide-svelte/icons/phone'
@@ -7,12 +7,11 @@ import Search from 'lucide-svelte/icons/search'
 import UserRound from 'lucide-svelte/icons/user-round'
 import Users from 'lucide-svelte/icons/users'
 import X from 'lucide-svelte/icons/x'
-import { crm } from '$lib/crm/api'
+import { crm, crmPresentationMode } from '$lib/crm/api'
 import type {
 	CompanyListingAgentInventory,
 	ListingCard,
 	ListingStatus,
-	RenewalOwnerFilter,
 	RenewalWindow
 } from '$lib/crm/api/types'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
@@ -50,33 +49,34 @@ $effect(() => {
 /** The chosen company's agents, kept while one agent's listings are shown. */
 let companyAgents = $state<CompanyListingAgentInventory[]>([])
 let selectedAgent = $state<CompanyListingAgentInventory | null>(null)
-/**
- * Renewals (client, 3 Nov): a toggle between leases on units with a current owner in the
- * agency's owner imports (with that owner's contact) and every other lease, whose owner is still
- * to be found. 50 at a time up to the 200 the endpoint serves.
- */
-let renewalLimit = $state(50)
-const OWNER_ITEMS: { id: RenewalOwnerFilter; label: string }[] = [
-	{ id: 'known', label: 'Owner known' },
-	{ id: 'unknown', label: 'Owner unknown' }
-]
+/** Renewals: every lease in the dataset, 50 at a time up to the 200 the endpoint serves. */
 /** Area options: every area in the lease data (the list My areas uses), fetched once. */
 const renewalAreas = createQuery(() => ({
 	...crmQueries.feedAreas(),
 	enabled: ui.assetTab === 'renewals'
 }))
-const renewals = createQuery(() => ({
-	...crmQueries.renewals({
+let ownerFilterSupported = $state(false)
+const renewalPages = createInfiniteQuery(() => ({
+	...crmQueries.renewalsInfinite({
 		area: ui.renewalArea,
 		window: ui.renewalWindow,
+		owner: ownerFilterSupported ? ui.renewalOwner : undefined,
 		property_type: ui.renewalPtype,
 		project: ui.renewalProject,
 		building: ui.renewalBuilding,
-		limit: renewalLimit,
-		owner: ui.renewalOwner
+		limit: 50
 	}),
 	enabled: ui.assetTab === 'renewals'
 }))
+$effect(() => {
+	if (renewalPages.data?.pages[0]?.owner_filter_supported) ownerFilterSupported = true
+})
+const renewals = $derived({
+	...renewalPages,
+	data: renewalPages.data
+		? { ...renewalPages.data.pages[0], items: renewalPages.data.pages.flatMap((p) => p.items) }
+		: undefined
+})
 const scope = $derived(ui.assetTab === 'company' ? 'company' : 'mine')
 const companyAgentFilter = $derived({
 	allCompanies: true,
@@ -150,9 +150,12 @@ const facts = $derived.by(() => {
 })
 
 const TABS: { id: AssetTab; label: string }[] = [
-	{ id: 'mine', label: 'My listings' },
-	{ id: 'company', label: 'Company listings' },
-	{ id: 'portfolio', label: 'Portfolio' },
+	{ id: 'mine', label: crmPresentationMode ? 'My listings' : 'My listings · coming soon' },
+	{
+		id: 'company',
+		label: crmPresentationMode ? 'Company listings' : 'Company listings · coming soon'
+	},
+	{ id: 'portfolio', label: crmPresentationMode ? 'Portfolio' : 'Portfolio · coming soon' },
 	{ id: 'renewals', label: 'Renewals' },
 	{ id: 'market', label: 'Market' }
 ]
@@ -226,7 +229,6 @@ const WINDOWS: { id: Exclude<RenewalWindow, ''>; label: string }[] = [
 
 function filterRenewals(change: () => void) {
 	change()
-	renewalLimit = 50
 }
 
 /** Projects are listed for the picked area, buildings for the picked project. */
@@ -247,17 +249,10 @@ function pickRenewalProject(project: string) {
 
 const options = (list: string[] | undefined) => (list ?? []).map((x) => ({ id: x, label: x }))
 
-function startRenewal(id: string, unit: string) {
-	write({
-		call: () => crm.renewals.start(id),
-		success: `Renewal started — ${unit} · rent deal opened`
-	})
-}
-
 const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 </script>
 
-<svelte:head><title>Assets · CRM Beta</title></svelte:head>
+<svelte:head><title>Assets · CRM</title></svelte:head>
 
 <PageHeader title="Assets" {facts} />
 
@@ -524,7 +519,7 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 									</tr>
 								{/each}
 							{:else}
-								<tr><td colspan="7"><Empty text="No closed deals yet. They land here once transferred." /></td></tr>
+								<tr><td colspan="7"><Empty text="No closed deals yet." /></td></tr>
 							{/each}
 						</tbody>
 					</table>
@@ -534,12 +529,14 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 	</QueryView>
 {:else if ui.assetTab === 'renewals'}
 	<div class="filters">
+		{#if ownerFilterSupported}
 		<Seg
 			label="Owner"
-			items={OWNER_ITEMS}
 			value={ui.renewalOwner}
+			items={[{ id: 'known', label: 'Owner known' }, { id: 'unknown', label: 'Owner unknown' }]}
 			onselect={(v) => filterRenewals(() => (ui.renewalOwner = v))}
 		/>
+		{/if}
 		<FilterMenu
 			label="Lease end"
 			allLabel="All lease ends"
@@ -594,14 +591,7 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 				<div class="tblwrap">
 					<table class="tbl">
 						<thead>
-							<tr>
-								<th>Unit</th>
-								<th>Owner</th>
-								<th>Property</th>
-								<th class="r">Rent a year</th>
-								<th>Ends</th>
-								<th></th>
-							</tr>
+							<tr><th>Unit</th><th>Property</th><th class="r">Rent a year</th><th>Ends</th><th></th></tr>
 						</thead>
 						<tbody>
 							{#each res.items as r (r.id)}
@@ -611,46 +601,30 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 											{r.unit}
 										</button>
 										<div class="sub">{r.area}</div>
-									</td>
-									<td data-label="Owner">
-										{ui.renewalOwner === 'unknown' ? 'Not on file' : (r.owner?.name ?? 'Name not imported')}
-										{#if r.owner?.phone}
-											<div class="sub"><a href="tel:{r.owner.phone}">{r.owner.phone}</a></div>
-										{/if}
+										{#if ownerFilterSupported}<div class="sub">{r.owner?.name ?? 'Owner unknown'}{#if r.owner?.phone}{' · '}{r.owner.phone}{/if}</div>{/if}
 									</td>
 									<td data-label="Property">{r.property}</td>
 									<td class="r num" data-label="Rent a year">{r.rent_aed ? fmt(r.rent_aed) : ''}</td>
 									<td data-label="Ends"><Chip chip={r.end_chip} /></td>
 									<td class="r" data-label="">
-										<button type="button" class="btn ghost sm" onclick={() => startRenewal(r.id, r.unit)}>
-											Start renewal
+										<button type="button" class="btn ghost sm" disabled title="Renewal workflows are coming soon">
+											Start renewal · coming soon
 										</button>
 									</td>
 								</tr>
 							{:else}
-								<tr>
-									<td colspan="6">
-										<Empty
-											text={ui.renewalOwner === 'unknown'
-												? 'No leases match these filters.'
-												: 'No leases on units with an owner on file match these filters.'}
-										/>
-									</td>
-								</tr>
+								<tr><td colspan="5"><Empty text="No leases match these filters." /></td></tr>
 							{/each}
 						</tbody>
 					</table>
 				</div>
-				{#if res.items.length < res.total && renewalLimit < 200}
+				{#if renewalPages.hasNextPage}
 					<div class="cb">
-						<button type="button" class="btn ghost sm" onclick={() => (renewalLimit += 50)}>
+						<button type="button" class="btn ghost sm" disabled={renewalPages.isFetchingNextPage} onclick={() => renewalPages.fetchNextPage()}>
 							Show more · {fmt(res.items.length)} of {fmt(res.total)}
 						</button>
 					</div>
-				{:else if res.items.length < res.total}
-					<div class="cb small muted">
-						Showing the first {fmt(res.items.length)} of {fmt(res.total)}. Pick an area or a lease end to see the rest.
-					</div>
+
 				{/if}
 			{/snippet}
 		</QueryView>

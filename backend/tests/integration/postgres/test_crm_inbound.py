@@ -272,60 +272,62 @@ async def test_a_rerun_keeps_matches_found_again_visible_when_they_were_loaded_f
     await matching._upsert_match(pg_session, score=80, **arguments)
     await pg_session.commit()
 
+    item_id = item.id
     pg_session.expire_all()
-    assert (await pg_session.get(CrmInboundMatch, item.id)).state == "suggested"
+    assert (await pg_session.get(CrmInboundMatch, item_id)).state == "suggested"
 
 
-async def test_company_listings_query_keeps_to_the_agency_deal_type_area_and_band(pg_session):
-    # Only the agency's own active listings of the right deal type, area and price are matched.
+async def test_company_listings_use_only_the_tenants_persisted_broker(pg_session, monkeypatch):
     from datetime import datetime, timezone
 
-    from app.crm import match_repository
-    from app.crm.models import CrmCompanyListing
+    from app.crm import company_listings
+    from app.crm.models import CrmCompanyListingSource
+    from app.organization.models import Organization
 
     org, other = str(uuid4()), str(uuid4())
     now = datetime.now(timezone.utc)
-
-    def listing(
-        ref,
-        *,
-        organization_id=org,
-        mode="sale",
-        area="Dubai Marina",
-        price=2_500_000,
-        status="active",
-    ):
-        return CrmCompanyListing(
-            organization_id=organization_id,
-            reference=ref,
-            agent_name="Sara Ali",
-            mode=mode,
-            title=ref,
-            property_type="Apartment",
-            bedrooms=2,
-            price_aed=price,
-            area_name=area,
-            status=status,
-            listed_at=now,
+    pg_session.add_all(
+        [
+            Organization(id=org, name="Agency", max_members=5, created_at=now, updated_at=now),
+            Organization(
+                id=other, name="Other agency", max_members=5, created_at=now, updated_at=now
+            ),
+        ]
+    )
+    await pg_session.flush()
+    pg_session.add(
+        CrmCompanyListingSource(
+            organization_id=org,
+            broker_id="approved-broker",
+            broker_name="Agency",
+            selected_by_user_id="owner",
             created_at=now,
             updated_at=now,
         )
-
-    pg_session.add_all(
-        [
-            listing("kept"),
-            listing("other-agency", organization_id=other),
-            listing("rent", mode="rent", price=150_000),
-            listing("other-area", area="Business Bay"),
-            listing("too-cheap", price=1_000_000),
-            listing("sold", status="sold"),
-            listing("under-offer", status="under_offer"),
-            listing("pocket", status="pocket"),
-        ]
     )
     await pg_session.commit()
+    calls = []
 
-    rows = await match_repository.find_company_listings(
-        pg_session, org, mode="sale", locations=["Dubai Marina"], band=(1_750_000, 3_000_000)
+    async def query(sql, parameters):
+        calls.append((sql, parameters))
+        return []
+
+    monkeypatch.setattr(company_listings, "query", query)
+    arguments = dict(
+        mode="sale",
+        locations=["Dubai Marina"],
+        band=(1750000, 3000000),
+        property_type="Apartment",
+        bedrooms=["2"],
     )
-    assert sorted(row.reference for row in rows) == ["kept", "pocket"]
+    assert (
+        await company_listings.find_matching_company_listings(pg_session, other, **arguments) == []
+    )
+    assert calls == []  # A different organization cannot borrow this source selection.
+    assert await company_listings.find_matching_company_listings(pg_session, org, **arguments) == []
+    sql, parameters = calls[0]
+    assert parameters["broker_id"] == "approved-broker"
+    assert parameters["price_min"] == 1750000 and parameters["price_max"] == 3000000
+    assert parameters["category_ids"] == [1, 3]
+    assert parameters["bedrooms"] == ["2"]
+    assert parameters["limit"] == 200 and "is_available = 1" in sql

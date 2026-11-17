@@ -1,0 +1,6 @@
+interface:
+  display_name: "Crew for VV"
+  short_description: "Plan, delegate, and verify VV work with GPT agents"
+  default_prompt: "Use $crew to complete this VV task with scoped workers and independent verification."
+policy:
+  allow_implicit_invocation: false

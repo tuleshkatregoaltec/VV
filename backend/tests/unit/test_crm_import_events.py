@@ -8,15 +8,16 @@ import openpyxl
 import pytest
 
 from app.crm import owner_queries
-from app.crm.cadastral import _select_plot, _villa_code_variants, villa_sales_for_plots
+from app.crm.cadastral import _select_plot
 from app.crm.identity import _candidate_owner_key, _claim_preference
-from app.crm.import_events import event_family, is_mortgage_review, matches_report_status
+from app.crm.import_events import event_family
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.import_parsing import _inspect_csv, _inspect_xlsx, _parse_csv, _parse_xlsx
 from app.crm.ownership import (
     _apply_evidence,
     _recover_property_identity_from_near_transaction,
     _recover_property_identity_from_transaction,
+    _reuse_mortgage_property_from_sale_anchors,
 )
 
 
@@ -63,6 +64,10 @@ def test_procedures_retained_without_incidental_sale_inference(procedure, family
     assert row.ownership_status == (
         "former_owner" if family == "sale" else "unit_linked_unverified"
     )
+    if family == "sale":
+        # A corroborated Seller describes disposal; non-sale procedures never infer ownership.
+        assert row.confidence_score == 95
+        assert row.party_role == "Seller"
 
 
 def test_dated_owner_snapshot_and_multiple_phones_survive_without_buyer_role():
@@ -86,9 +91,7 @@ def test_dated_owner_snapshot_and_multiple_phones_survive_without_buyer_role():
         },
         rentals={},
     )
-    # The matching DLD sale confirms the owner-list acquisition.
-    assert row.ownership_status == "verified_current_owner"
-    assert row.evidence["acquisition_inferred"] is True
+    assert row.ownership_status == "unit_linked_unverified"
 
 
 def test_missing_unit_retains_land_evidence_without_zero_or_shared_owner_identity():
@@ -167,102 +170,40 @@ async def test_financing_amount_is_never_looked_up_as_sale_signature(monkeypatch
     query.assert_not_awaited()
 
 
-def test_villa_code_variants_cover_prefixed_and_bare_unit_numbers():
-    # DLD sales record the same villa as "DH2-XV728B" and as "XV728B".
-    assert _villa_code_variants("DH2-XV728B") == {"dh2-xv728b", "xv728b"}
-    assert _villa_code_variants(" xv 728b ") == {"xv728b"}
-    assert _villa_code_variants("0") == set()
-
-
-async def test_villa_sales_link_plot_to_its_own_community_only(monkeypatch):
-    # A plot's pre-registration code identifies its villa; the same code in another
-    # community (e.g. Damac Hills 1) is a different property and must be ignored.
-    row = parse("NameEn,Master Project,Project,LandNumber\nExample,DAMAC HILLS 2,0,2822\n")[0]
-    row.evidence["cadastral_identity"] = {
-        "property_key": "dld-land:505:2822:0",
-        "villa_code": "DH2-XV728B",
-        "master_project": "DAMAC HILLS 2",
-        "project": "DAMAC HILLS (2) - BASSWOOD",
-        "area_name": "Madinat Hind 4",
-    }
-
-    def sale(unit_key, area, on):
-        return {
-            "unit_key": unit_key,
-            "area_name": area,
-            "project_name": "",
-            "transaction_date": on,
-            "sale_amount_aed": 1_200_000,
-            "sale_key": f"{unit_key}-{on}",
-        }
-
-    fetch = AsyncMock(
-        return_value=[
-            sale("dh2-xv728b", "Damac Hills 2", date(2016, 11, 29)),
-            sale("xv728b", "Damac Hills 2", date(2024, 2, 13)),
-            sale("xv728b", "Damac Hills", date(2018, 6, 27)),
-        ]
-    )
-    monkeypatch.setattr(owner_queries, "fetch_unit_sales", fetch)
-
-    sales = await villa_sales_for_plots([row])
-
-    assert set(fetch.await_args.args[0]["unit_keys"]) == {"dh2-xv728b", "xv728b"}
-    assert [s["transaction_date"] for s in sales["dld-land:505:2822:0"]] == [
-        date(2016, 11, 29),
-        date(2024, 2, 13),
-    ]
-
-
-def _claim(status, procedure, family=None):
-    evidence = {"event_family": family} if family else {}
-    return CrmPropertyContactClaim(
-        ownership_status=status, procedure_type=procedure, evidence=evidence
-    )
-
-
-@pytest.mark.parametrize(
-    ("status", "procedure", "family", "expected"),
-    [
-        ("unit_linked_unverified", "Mortgage Registration", "financing", True),
-        ("unmatched", "Delayed Mortgage", "financing", True),
-        # Imports made before event families were stored still read the procedure.
-        ("unmatched", "Lease Finance Registration", None, True),
-        # A later sale or an unresolved property keeps its stronger, existing answer.
-        ("former_owner", "Mortgage Registration", "financing", False),
-        ("insufficient_property_data", "Mortgage Registration", "financing", False),
-        ("unit_linked_unverified", "Complete Delayed Sell", "sale", False),
-    ],
-)
-def test_report_mortgage_category_covers_unverified_and_needs_review_only(
-    status, procedure, family, expected
+@pytest.mark.parametrize("procedure,linked", [("Sell", True), ("Grant on Delayed Sell", False)])
+def test_mortgage_can_borrow_property_identity_only_from_a_sale_without_proving_ownership(
+    procedure, linked
 ):
-    # Mortgages are reported apart so "unverified" and "needs review" show real gaps.
-    assert is_mortgage_review(_claim(status, procedure, family)) is expected
-
-
-def test_report_status_filter_moves_mortgages_out_of_their_stored_status():
-    mortgage = _claim("unit_linked_unverified", "Mortgage Registration", "financing")
-    sale = _claim("unit_linked_unverified", "Complete Delayed Sell", "sale")
-
-    assert matches_report_status(mortgage, "mortgage")
-    assert not matches_report_status(mortgage, "unit_linked_unverified")
-    assert matches_report_status(sale, "unit_linked_unverified")
-    assert not matches_report_status(sale, "mortgage")
-
-def test_source_identity_is_available_for_matching_but_never_persisted_in_evidence():
-    row = parse(
-        "NameEn,BuildingNameEn,UnitNumber,IdNumber,UaeIdNumber\nExample,Tower,101,AB1234567,784197003510696\n"
-    )[0]
-    assert set(row.owner_identity_tokens) == {"document", "emirates_id"}
-    assert all(len(token) == 64 for token in row.owner_identity_tokens.values())
-    assert "AB1234567" not in str(row.evidence)
-    assert "784197003510696" not in str(row.evidence)
-    assert "AB1234567" not in repr(row)
-    assert "owner_identity_tokens" not in row.evidence
-
-
-@pytest.mark.parametrize("placeholder", ["null", "unknown", "0", "000000", "111111"])
-def test_placeholder_identity_is_not_ownership_proof(placeholder):
-    row = parse(f"NameEn,BuildingNameEn,UnitNumber,IdNumber\nExample,Tower,101,{placeholder}\n")[0]
-    assert not row.owner_identity_tokens
+    rows = parse(
+        "NameEn,Regis,ProcedureValue,ProcedureNameEn,ProcedurePartyTypeNameEn,UnitNumber\n"
+        f"Seller,2025-01-01,2000000,{procedure},Seller,101\n"
+        "Borrower,2025-01-01,1500000,Mortgage Registration,Buyer,101\n"
+    )
+    anchor, mortgage = rows
+    for row in rows:
+        row.area_name = "Area"
+        row.project_name = "Project"
+        row.building_name = "Tower"
+    source = {
+        "area_name": "Area",
+        "project_name": "Project",
+        "building_name": "Tower",
+        "unit_number": "101",
+    }
+    anchor.evidence["property_identity_resolution"] = {
+        "method": "unique_transaction_signature",
+        "source": source,
+        "resolved": {**source, "building_name": "Registry Tower", "sale_key": "sale-1"},
+    }
+    assert _reuse_mortgage_property_from_sale_anchors(rows) == int(linked)
+    assert bool(mortgage.evidence.get("mortgage_property_resolution")) is linked
+    _apply_evidence(
+        mortgage,
+        sales={
+            mortgage.property_key: [
+                {"transaction_date": date(2025, 1, 1), "sale_amount_aed": 2000000}
+            ]
+        },
+        rentals={},
+    )
+    assert mortgage.ownership_status == "unit_linked_unverified"

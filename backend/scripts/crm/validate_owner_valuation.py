@@ -20,7 +20,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.clickhouse.client import close_clickhouse, query
 from app.crm import owner_repository
+from app.crm.owner_assessment import restore_row
 from app.crm.owner_repository import CURRENT_OWNER_STATUSES
+from app.crm.owner_store import open_store
 from app.crm.valuation_service import _registry_rows
 from app.crm.valuation_validation import (
     closest_sales,
@@ -68,11 +70,34 @@ async def sample(args: argparse.Namespace) -> None:
     out.mkdir(parents=True, exist_ok=True)
     factory = async_sessionmaker(get_postgres_engine(), class_=AsyncSession, expire_on_commit=False)
     async with factory() as db:
-        claims = [
-            c
-            for c in await owner_repository.list_claims_for_valuation(db, args.organization_id)
-            if c.ownership_status in CURRENT_OWNER_STATUSES and c.estimated_value_aed
-        ]
+        store = await open_store(db, args.organization_id)
+        candidates = await owner_repository.list_claims_for_valuation(
+            db, args.organization_id, generation=store.state.generation
+        )
+        claims = []
+        for claim, row in candidates:
+            row = restore_row(row)
+            status = row.get("assessed_status")
+            if (
+                status in CURRENT_OWNER_STATUSES
+                and row.get("event_assessed_status", status) in CURRENT_OWNER_STATUSES
+                and claim.estimated_value_aed
+            ):
+                claims.append(
+                    claim.model_copy(
+                        update={
+                            name: row.get(name)
+                            for name in (
+                                "latest_sale_date",
+                                "latest_sale_price_aed",
+                                "unit_number",
+                                "area_name",
+                                "building_name",
+                                "project_name",
+                            )
+                        }
+                    )
+                )
         db.expunge_all()  # read-only: never commit; keep the loaded rows usable
     others = Counter(_area(c.area_name) for c in claims if not _focus(c.area_name) and c.area_name)
     fifth = others.most_common(1)[0][0] if others else None

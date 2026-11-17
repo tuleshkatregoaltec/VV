@@ -18,12 +18,17 @@ import { page } from '$app/state'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import { supplyQueries } from '$lib/queries/supply'
+import { safeExternalHref } from '$lib/utils/safeUrl'
 
 const projectId = $derived(Number(page.params.projectId))
 const projectQuery = createQuery(() =>
 	supplyQueries.catalogueProject(Number.isFinite(projectId) ? projectId : null)
 )
 const project = $derived(projectQuery.data ?? null)
+function brochureHref(item: { download_url?: string | null; url?: string | null } | undefined) {
+	return safeExternalHref(item?.download_url ?? item?.url)
+}
+
 const brochures = $derived(project?.brochures ?? [])
 const floorplans = $derived(project?.floorplans ?? [])
 const gallery = $derived(project?.gallery ?? [])
@@ -187,11 +192,11 @@ function hideBrokenImage(event: Event) {
 							</p>
 
 							<div class="mt-6 flex flex-wrap gap-2">
-								{#if brochures.length > 0}
+								{#if brochureHref(brochures[0])}
 									<a
-										href={brochures[0].download_url ?? brochures[0].url}
+										href={brochureHref(brochures[0])}
 										target="_blank"
-										rel="noreferrer"
+										rel="noopener noreferrer"
 										download
 										class="ui-button"
 										data-variant="primary"
@@ -237,12 +242,9 @@ function hideBrokenImage(event: Event) {
 				<div class="rounded-lg border border-border bg-card p-5 shadow-sm">
 					<div class="flex flex-wrap items-start justify-between gap-4">
 						<div>
-							<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
-								Internal / Project risk
-							</p>
 							<h2 class="mt-2 flex items-center gap-2 text-lg font-semibold text-fg-1">
 								<ShieldCheck size={18} strokeWidth={2} />
-								Risk cockpit
+								Project risk
 							</h2>
 						</div>
 						<div class="rounded-md border px-3 py-2 text-right {riskPillClass(project.project_risk_badge)}">
@@ -259,7 +261,7 @@ function hideBrokenImage(event: Event) {
 								<div class="flex items-start justify-between gap-3">
 									<div class="min-w-0">
 										<p class="text-sm font-semibold text-fg-1">{indicator.label}</p>
-										<p class="mt-1 truncate text-xs text-fg-4">{indicator.note ?? 'Internal signal'}</p>
+										<p class="mt-1 truncate text-xs text-fg-4">{indicator.note ?? ''}</p>
 									</div>
 									<span class="rounded-full border px-2 py-0.5 text-xs font-semibold {riskPillClass(indicator.status)}">
 										{riskPillLabel(indicator.status)}
@@ -321,10 +323,6 @@ function hideBrokenImage(event: Event) {
 							<span class="text-fg-4">Estimated project IRR</span>
 							<span class="font-semibold text-fg-1">{project.estimated_project_irr ?? '~'}</span>
 						</div>
-						<p class="mt-3 text-xs leading-5 text-fg-4">
-							{project.sales_inventory_source ?? 'Live inventory pending.'}
-						</p>
-						<p class="mt-1 text-xs leading-5 text-fg-4">Estimated IRR source: Feasibility model.</p>
 					</div>
 				</aside>
 			</section>
@@ -348,8 +346,8 @@ function hideBrokenImage(event: Event) {
 								Gallery
 							</h2>
 							<div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-								{#each [...masterPlans, ...gallery].slice(0, 12) as asset (asset.id)}
-									<a href={asset.url} target="_blank" rel="noreferrer" class="group block overflow-hidden rounded-md bg-panel">
+								{#each [...masterPlans, ...gallery].filter((asset) => safeExternalHref(asset.url)).slice(0, 12) as asset (asset.id)}
+									<a href={safeExternalHref(asset.url)} target="_blank" rel="noopener noreferrer" class="group block overflow-hidden rounded-md bg-panel">
 										<div class="relative aspect-[4/3]">
 											<div class="absolute inset-0 flex items-center justify-center text-fg-5">
 												<ImageIcon size={24} strokeWidth={1.8} />
@@ -436,11 +434,11 @@ function hideBrokenImage(event: Event) {
 							Documents
 						</h2>
 						<div class="space-y-2">
-							{#each brochures as brochure (brochure.id)}
+							{#each brochures.filter((item) => brochureHref(item)) as brochure (brochure.id)}
 								<a
-									href={brochure.download_url ?? brochure.url}
+									href={brochureHref(brochure)}
 									target="_blank"
-									rel="noreferrer"
+									rel="noopener noreferrer"
 									download
 									class="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm transition-colors hover:border-border-strong hover:bg-panel"
 								>
@@ -448,11 +446,11 @@ function hideBrokenImage(event: Event) {
 									<Download size={14} strokeWidth={2} class="flex-shrink-0 text-fg-4" />
 								</a>
 							{/each}
-							{#each floorplans as floorplan (floorplan.id)}
+							{#each floorplans.filter((item) => brochureHref(item)) as floorplan (floorplan.id)}
 								<a
-									href={floorplan.download_url ?? floorplan.url}
+									href={brochureHref(floorplan)}
 									target="_blank"
-									rel="noreferrer"
+									rel="noopener noreferrer"
 									download
 									class="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm transition-colors hover:border-border-strong hover:bg-panel"
 								>

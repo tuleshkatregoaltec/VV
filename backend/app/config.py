@@ -1,15 +1,16 @@
 import os
+import re
 import warnings
 from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from cryptography.fernet import Fernet
 from dotenv import dotenv_values
 from pydantic import (
     AnyUrl,
     BeforeValidator,
     EmailStr,
+    Field,
     PostgresDsn,
     computed_field,
     field_validator,
@@ -25,6 +26,20 @@ def parse_cors(v: Any) -> list[str] | str:
     if isinstance(v, list | str):
         return v
     raise ValueError(v)
+
+
+def validate_assistant_model_id(value: str) -> str:
+    """Reject prohibited families and implicit model routing for every assistant role."""
+    value = value.strip()
+    normalized = "".join(character for character in value.lower() if character.isalnum())
+    if (
+        not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.:+-]+", value)
+        or "gemini" in normalized
+        or ("qwen38" in normalized and "max" in normalized)
+        or value.lower().startswith("openrouter/")
+    ):
+        raise ValueError("Assistant roles require an explicit non-Gemini, non-Qwen3.8-Max model")
+    return value
 
 
 class Settings(BaseSettings):
@@ -48,18 +63,15 @@ class Settings(BaseSettings):
     FRONTEND_URL: AnyUrl  # configMap
     PUBLIC_API_BASE_URL: AnyUrl | None = None
 
-    # Google Calendar OAuth. Leave unset to keep the integration disabled.
-    GOOGLE_CALENDAR_CLIENT_ID: str | None = None
-    GOOGLE_CALENDAR_CLIENT_SECRET: str | None = None
-    GOOGLE_CALENDAR_REDIRECT_URI: AnyUrl | None = None
-    GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY: str | None = None
-
     # Security
     SESSION_SECRET: str  # Bitwarden Secrets
     SERVICE_API_KEY: str  # Bitwarden Secrets
 
     # CORS
     ALLOWED_ORIGINS: Annotated[list[AnyUrl] | str, BeforeValidator(parse_cors)] = []
+    # Optional full-match regex for extra origins, e.g. Cloudflare Pages previews:
+    # ^https://[a-z0-9-]+\.vv-pilot\.pages\.dev$
+    ALLOWED_ORIGIN_REGEX: str | None = None
 
     # Honeybadger
     HONEYBADGER_API_KEY: str | None = None
@@ -74,41 +86,62 @@ class Settings(BaseSettings):
     # OpenRouter
     OPENROUTER_API_KEY: str  # Bitwarden Secrets
     DEFAULT_CHAT_MODEL: str  # configMap
-    # CRM Assistant only: with an OpenAI key it calls OpenAI directly; otherwise it uses OpenRouter.
-    ASSISTANT_OPENAI_API_KEY: str | None = None
-    ASSISTANT_MODEL: str | None = None
-    # CRM Assistant voice: an OpenRouter model that accepts audio; unset uses DEFAULT_CHAT_MODEL.
-    ASSISTANT_VOICE_MODEL: str | None = None
+
+    # Assistant qualification candidates are isolated from feasibility and imports.
+    # Enable only after capped model evaluations and provider/privacy approval.
+    ASSISTANT_ENABLED: bool = False
+    ASSISTANT_TYPED_ROUTING_ENABLED: bool = False
+    ASSISTANT_ROUTER_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_COORDINATOR_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_MARKET_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_PRICING_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_CRM_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_FOLLOWUP_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_ACTION_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_WHATSAPP_CLASSIFIER_MODEL: str = "openai/gpt-6-luna"
+    ASSISTANT_WHATSAPP_DRAFTER_MODEL: str = "openai/gpt-6-luna"
+    # Per-turn budget, separate from each user's daily allowance (a turn reserves
+    # min(turn limit, remaining allowance)). Sized for openai/gpt-6-luna (1.05M context,
+    # $0.10/M input, $0.50/M output): a logged 8-request tool turn used 29,516 tokens,
+    # so 160k covers a two-workflow turn of 15-20 requests and costs at most ~$0.04.
+    ASSISTANT_TURN_TOKEN_LIMIT: int = Field(default=160_000, ge=8_000)
+    ASSISTANT_TURN_MIN_TOKENS: int = Field(default=16_000, ge=1_000)
+    ASSISTANT_TURN_REQUEST_LIMIT: int = Field(default=20, ge=1)
+    ASSISTANT_TURN_TOOL_CALLS_LIMIT: int = Field(default=24, ge=1)
+    # Prior-turn text replayed to the model, and the point at which older tool
+    # outputs inside a turn are compacted before the next request.
+    ASSISTANT_HISTORY_TOKEN_LIMIT: int = Field(default=8_000, ge=500)
+    ASSISTANT_REQUEST_CONTEXT_TOKEN_LIMIT: int = Field(default=32_000, ge=4_000)
+    # Feasibility LLM runs (DEFAULT_CHAT_MODEL) share the same daily allowance.
+    FEASIBILITY_RUN_TOKEN_LIMIT: int = Field(default=300_000, ge=8_000)
+    FEASIBILITY_HBU_CACHE_SECONDS: int = Field(default=86_400, ge=60)
+
+    @field_validator(
+        "ASSISTANT_ROUTER_MODEL",
+        "ASSISTANT_COORDINATOR_MODEL",
+        "ASSISTANT_MARKET_MODEL",
+        "ASSISTANT_PRICING_MODEL",
+        "ASSISTANT_CRM_MODEL",
+        "ASSISTANT_FOLLOWUP_MODEL",
+        "ASSISTANT_ACTION_MODEL",
+        "ASSISTANT_WHATSAPP_CLASSIFIER_MODEL",
+        "ASSISTANT_WHATSAPP_DRAFTER_MODEL",
+    )
+    @classmethod
+    def validate_assistant_models(cls, value: str) -> str:
+        return validate_assistant_model_id(value)
 
     # Auth
     AUTH_URL: AnyUrl  # configMap
     AUTH_SERVICE_ROLE_KEY: str  # Bitwarden Secrets
+    # Hosted Supabase requires an `apikey` header on every /auth/v1 call; self-hosted GoTrue ignores it.
+    AUTH_PUBLISHABLE_KEY: str | None = None
     FIRST_SUPERUSER: EmailStr | None = None
     FIRST_SUPERUSER_PASSWORD: str | None = None
     FIRST_SUPERUSER_RENAME_FROM: EmailStr | None = None
     FIRST_SUPERUSER_FIRST_NAME: str = "Admin"
     FIRST_SUPERUSER_LAST_NAME: str = "User"
     FIRST_SUPERUSER_AVATAR_URL: str | None = None
-
-    # Brevo (CRM › Connectors › Email). One Vitevue account; names match the CVBuilder pipeline.
-    BREVO_API_KEY: str | None = None
-    BREVO_SENDER_EMAIL: str | None = None  # must be a verified sender in Brevo
-    BREVO_SENDER_NAME: str | None = None
-    BREVO_REPLY_TO: str | None = None
-    BREVO_WEBHOOK_SECRET: str | None = None  # POST /api/v1/crm/email/brevo-webhook?secret=...
-    # Inbound parsing: mail to this subdomain (MX → Brevo) is posted to /email/brevo-inbound.
-    BREVO_INBOUND_DOMAIN: str | None = None
-    # Phase 1 has one company: an email from an unknown sender becomes its lead.
-    BREVO_INBOUND_ORGANIZATION_ID: str | None = None
-    # Connectors › Email keeps sends, templates and received emails in this JSON file (no tables).
-    CRM_EMAIL_STORE_PATH: str | None = None
-
-    # Meta WhatsApp Cloud API (CRM › Connectors › WhatsApp). Leave unset to keep it disabled.
-    WHATSAPP_ACCESS_TOKEN: str | None = None  # system user token, Bitwarden Secrets
-    WHATSAPP_APP_SECRET: str | None = None  # checks X-Hub-Signature-256 on webhooks, Bitwarden
-    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str | None = None  # our own random string, Bitwarden Secrets
-    WHATSAPP_WABA_ID: str | None = None  # WhatsApp Business Account ID, configMap
-    WHATSAPP_GRAPH_API_VERSION: str | None = None  # e.g. "v23.0": a version Meta supports
 
     # PostHog
     POSTHOG_API_KEY: str | None = None
@@ -131,11 +164,53 @@ class Settings(BaseSettings):
     CLICKHOUSE_DATABASE: str  # configMap
     CLICKHOUSE_SECURE: bool = False  # configMap
 
+    # CRM worker-local resource budgets; account for all workers/replicas when sizing.
+    CRM_RENTAL_BASE_ENABLED: bool = False
+    CRM_INBOUND_OWNER_ENRICHMENT_MODE: Literal["live", "stored", "off"] = "live"
+    CRM_MAX_EXPENSIVE_REQUESTS: int = Field(default=2, ge=1, le=32)
+    CRM_MAX_EXPENSIVE_REQUESTS_PER_ORG: int = Field(default=2, ge=1, le=16)
+    # Requests beyond these budgets queue this long, then get 429 before any work starts.
+    CRM_ADMISSION_WAIT_SECONDS: float = Field(default=30.0, gt=0, le=90)
+    CRM_MAX_CONCURRENT_QUERIES: int = Field(default=1, ge=1, le=8)
+    CRM_QUERY_MAX_MEMORY_BYTES: int = Field(default=3_000_000_000, ge=67_108_864)
+    CRM_QUERY_MAX_THREADS: int = Field(default=2, ge=1, le=16)
+
     # Stripe
     STRIPE_SECRET_KEY: str  # Bitwarden Secrets
     STRIPE_WEBHOOK_SECRET: str  # Bitwarden Secrets
     STRIPE_PRICE_ID_TIER1: str  # configMap
     STRIPE_PRICE_ID_TIER2: str  # configMap
+
+    # Single-number WhatsApp connectivity demo. Credentials stay server-side.
+    WHATSAPP_DEMO_ENABLED: bool = False
+    WHATSAPP_VERIFY_TOKEN: str | None = Field(default=None, repr=False)
+    WHATSAPP_APP_SECRET: str | None = Field(default=None, repr=False)
+    WHATSAPP_ACCESS_TOKEN: str | None = Field(default=None, repr=False)
+    WHATSAPP_PHONE_NUMBER_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    WHATSAPP_TEST_RECIPIENT: str | None = Field(default=None, pattern=r"^\d{7,15}$")
+    WHATSAPP_GRAPH_API_VERSION: str | None = Field(default=None, pattern=r"^v\d+\.\d+$")
+    WHATSAPP_TEST_TEMPLATE: Literal["hello_world", "jaspers_market_order_confirmation_v1"] = (
+        "hello_world"
+    )
+    WHATSAPP_AUTOMATION_ENABLED: bool = False
+    WHATSAPP_PILOT_USER_ID: str | None = None
+    WHATSAPP_PILOT_ORGANIZATION_ID: str | None = None
+    WHATSAPP_MAX_DAILY_TURNS: int = Field(default=20, ge=1, le=100)
+    # Customer channel is separate from the private self-assistant pilot.
+    WHATSAPP_CUSTOMER_AUTOMATION_ENABLED: bool = False
+    WHATSAPP_CUSTOMER_PHONE_NUMBER_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    WHATSAPP_CUSTOMER_ACCOUNT_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    WHATSAPP_CUSTOMER_ACCESS_TOKEN: str | None = Field(default=None, repr=False)
+    WHATSAPP_CUSTOMER_TEST_RECIPIENT: str | None = Field(default=None, pattern=r"^\d{7,15}$")
+    # Multi-agent Embedded Signup. App and configuration IDs are public values the
+    # browser SDK needs; the app secret above exchanges codes server-side.
+    WHATSAPP_APP_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: str | None = Field(default=None, pattern=r"^\d+$")
+    # Comma-separated Fernet keys; the first encrypts, all decrypt (rotation).
+    WHATSAPP_TOKEN_ENCRYPTION_KEY: str | None = Field(default=None, repr=False)
+    WHATSAPP_CLASSIFIER_CONCURRENCY: int = Field(default=4, ge=1, le=32)
+    # Read receipt, typing indicator and a human-paced delay before automatic replies.
+    WHATSAPP_HUMAN_TIMING_ENABLED: bool = True
 
     # Frontend URLs for Stripe redirects
     FRONTEND_SUCCESS_URL: AnyUrl  # configMap
@@ -189,13 +264,6 @@ class Settings(BaseSettings):
     def validate_session_secret(cls, v: str) -> str:
         if len(v) < 32:
             raise ValueError("SESSION_SECRET must be at least 32 characters")
-        return v
-
-    @field_validator("GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY")
-    @classmethod
-    def validate_google_calendar_encryption_key(cls, v: str | None) -> str | None:
-        if v:
-            Fernet(v.encode())
         return v
 
     @model_validator(mode="after")

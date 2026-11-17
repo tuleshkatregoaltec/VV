@@ -24,13 +24,13 @@ ps:
 	docker compose -f docker-compose.dev.yml ps
 
 dev-backend:
-	set -a && source .env && set +a && cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+	set -a && source .env.dev && set +a && cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 dev-frontend:
-	set -a && source .env && set +a && cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173
+	set -a && source .env.dev && set +a && cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173
 
 dev-app:
-	set -a && source .env && set +a && \
+	set -a && source .env.dev && set +a && \
 		for port in 8000 5173; do \
 			pid=$(lsof -t -nP -iTCP:$port -sTCP:LISTEN 2>/dev/null | head -n 1); \
 			if [ -n "$pid" ]; then \
@@ -82,6 +82,22 @@ test-frontend:
 build-frontend:
 	set -a && source .env.dev && set +a && cd frontend && bun run build
 
+# Explicit public endpoints for the isolated pilot; do not source local credentials.
+build-pilot-frontend api_url auth_url publishable_key="":
+	cd frontend && PUBLIC_API_BASE_URL="$1" PUBLIC_AUTH_BASE_URL="$2" PUBLIC_AUTH_PUBLISHABLE_KEY="$3" PUBLIC_CRM_PRESENTATION_MODE=true PUBLIC_POSTHOG_KEY= PUBLIC_POSTHOG_HOST= bun run build
+
+# Reuse restored accounts and saved ownership results without full reassessment.
+dev-pilot-backend:
+	set -a && source .env.dev && set +a && cd backend && uv run alembic upgrade head && CRM_INBOUND_OWNER_ENRICHMENT_MODE=stored CRM_MAX_EXPENSIVE_REQUESTS=1 CRM_MAX_EXPENSIVE_REQUESTS_PER_ORG=1 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# Status is local-only; send-test sends one approved template to the configured test recipient.
+whatsapp-demo command='status':
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.whatsapp_demo "$1"
+
+# Durable single-number pilot automation; other senders cannot acquire this identity.
+whatsapp-worker:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.whatsapp_worker
+
 format-frontend:
 	cd frontend && bun run format
 
@@ -98,8 +114,8 @@ check-all:
 	just test-backend
 	just test-frontend
 
-test-e2e:
-	set -a && source .env.dev && set +a && cd e2e && bun run test
+test-e2e *args:
+	set -a && source .env.dev && set +a && cd e2e && bun run test "$@"
 
 test-guards:
 	set -a && source .env.dev && set +a && cd e2e && bun run test:guards
@@ -142,7 +158,15 @@ test-evaluation *args:
 
 # Explicit live model execution, private evidence, local authenticated application.
 ai-evaluate *args:
-	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation run {{args}}
+	cd backend && uv run python -m scripts.evaluation run {{args}}
+
+# Opt-in isolated fixture creation/verification/cleanup; never call models or create auth users.
+ai-evaluation-snapshot *args:
+	cd backend && uv run python -m scripts.evaluation.fixture_snapshot {{args}}
+
+# Preview by default; --live compares models using synthetic tools, never live records/actions.
+ai-model-trial *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation.model_trial {{args}}
 
 # Local trace assessment and comparison; never call models or export evidence.
 ai-assess *args:
@@ -154,3 +178,30 @@ ai-compare *args:
 # Preview by default. --upload explicitly sends only allowlisted metadata to LangSmith.
 ai-export *args:
 	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation export {{args}}
+
+# Read-only proposals from retained DXBI report evidence; no warehouse writes.
+audit-dxbi-name-repairs *args:
+	set -a && source .env.dev && set +a && PYTHONPATH=holocron uv run --project holocron python holocron/scripts/audit_dxbi_name_repairs.py {{args}}
+
+# Read-only controlled comparison of the one explicitly authorized owner workbook.
+compare-owner-import *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.crm.compare_owner_import "$@"
+
+# Evaluate a reproducible 20-file owner sample against read-only DXBI evidence.
+evaluate-owner-corpus *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.crm.evaluate_owner_corpus "$@"
+
+# Offline owner-recovery experiment handoff; no live importer writes.
+owner-recovery *args:
+	cd backend && uv run python -m scripts.crm.owner_recovery_experiment.cli "$@"
+
+# Export only the fixed experiment's unresolved rows, including original columns.
+export-unresolved-owner-rows *args:
+	cd backend && uv run python -m scripts.crm.export_unresolved_owner_rows "$@"
+# Run one resource-bounded import at a time, separate from the HTTP process.
+crm-import-worker *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m app.crm.import_worker {{args}}
+
+# Sample-only enterprise preview; no backend, credentials or service startup required.
+demo-assistant:
+	cd frontend && bun run dev -- --host 127.0.0.1 --port 5173

@@ -5,6 +5,7 @@ from app.feasibility import queries
 from app.feasibility.models import (
     ComparableData,
     ComparableProject,
+    DataSourceAsOf,
     MarketPricingRow,
     OffPlanPricingConfidence,
     OffPlanPricingRow,
@@ -18,6 +19,7 @@ from app.feasibility.normalization import (
     Stage,
     normalize_project_stage,
 )
+from app.market.units import SQM_TO_SQFT
 from app.plots.models import PlotDetails, Usage
 
 
@@ -210,8 +212,48 @@ async def get_market_pricing(
             transaction_count=int(row["transaction_count"]),
             median_price_sqm=float(row["median_price_sqm"]),
             avg_area_sqm=float(row["avg_area_sqm"]) if row.get("avg_area_sqm") else None,
+            last_transaction_date=row.get("last_transaction_date"),
         )
         for row in rows
+    ]
+
+
+def _as_of(value: Any) -> str | None:
+    return str(value)[:10] if value else None
+
+
+async def get_data_as_of(area_name: str) -> list[DataSourceAsOf]:
+    """Per input of a study, its source and the date its latest record is from."""
+    rows = await queries.fetch_data_as_of({"area_name": area_name})
+    row = rows[0] if rows else {}
+    return [
+        DataSourceAsOf(
+            key="market_pricing",
+            label="Sales pricing",
+            source="dxbi",
+            as_of=_as_of(row.get("sales_as_of")),
+        ),
+        DataSourceAsOf(
+            key="rental_rates",
+            label="Rental rates",
+            source="dxbi",
+            as_of=_as_of(row.get("rentals_as_of")),
+        ),
+        DataSourceAsOf(
+            key="off_plan_pricing",
+            label="Off-plan pricing by handover horizon",
+            source="dld",
+            as_of=_as_of(row.get("off_plan_curve_as_of")),
+            note="DXBI has no project handover date, so the handover curve uses DLD registrations.",
+        ),
+        DataSourceAsOf(
+            key="comparable_projects",
+            label="Comparable projects and their prices",
+            source="dld",
+            as_of=_as_of(row.get("comparables_as_of")),
+            note="The project register, its prices and plot land area are DLD's; DXBI carries "
+            "no register and names buildings its own way.",
+        ),
     ]
 
 
@@ -246,16 +288,22 @@ async def get_off_plan_pricing_curve(
     ]
 
 
+def _sqft_label(area_sqm: float, *, unit: bool = True) -> str:
+    value = f"{round(area_sqm * SQM_TO_SQFT):,}"
+    return f"{value} sq ft" if unit else value
+
+
 async def get_rental_rates_by_size_band(
     area_name: str,
     days: int = 365,
 ) -> list[RentalRateBySizeBand]:
+    # Bands are defined in m² (the warehouse unit) and labelled in sq ft, as the product shows.
     size_bands = [
-        ("studio", "< 55 sqm", 0, 55),
-        ("1br", "55–90 sqm", 55, 90),
-        ("2br", "90–140 sqm", 90, 140),
-        ("3br", "140–200 sqm", 140, 200),
-        ("4br+", "> 200 sqm", 200, 99999),
+        ("studio", f"< {_sqft_label(55)}", 0, 55),
+        ("1br", f"{_sqft_label(55, unit=False)}–{_sqft_label(90)}", 55, 90),
+        ("2br", f"{_sqft_label(90, unit=False)}–{_sqft_label(140)}", 90, 140),
+        ("3br", f"{_sqft_label(140, unit=False)}–{_sqft_label(200)}", 140, 200),
+        ("4br+", f"> {_sqft_label(200)}", 200, 99999),
     ]
     results: list[RentalRateBySizeBand] = []
     for unit_type, label, lo, hi in size_bands:

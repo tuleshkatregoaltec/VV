@@ -1,0 +1,12 @@
+[Unit]
+Description=ViteVue nightly DXBI rentals location sweep
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/repos/vitevue-platform
+ExecStart=/usr/local/sbin/dxbi-location-sweep rentals
+TimeoutStartSec=4h
+Nice=5

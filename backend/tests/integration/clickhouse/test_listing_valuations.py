@@ -16,6 +16,8 @@ def _valuation(key, asking=1_800_000):
     row = dict.fromkeys(COLUMNS, 0)
     row.update(
         listing_id=key,
+        property_type="Apartment",
+        location_names=["Dubai", "Marina", "Tower"],
         estimate_aed=2_000_000,
         low_aed=1_900_000,
         high_aed=2_100_000,
@@ -136,3 +138,68 @@ async def test_real_insert_failure_preserves_serving_release(warehouse, monkeypa
     with pytest.raises((TypeError, ValueError)):
         await value_listings.main()
     assert (await warehouse.query(f"SELECT listing_id FROM {TABLE}")).result_rows == [("previous",)]
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"size_json": '{"value":500}'},
+        {"bedrooms": "1"},
+        {"raw_property_json": '{"property_type":"villa","completion_status":"completed"}'},
+        {"listing_location_names_json": '["Dubai","Marina","Different Tower"]'},
+    ],
+)
+async def test_changed_subject_is_excluded_by_filter_counts_and_sort(
+    warehouse, install_serving, updates
+):
+    await _seed(warehouse, install_serving)
+    assignment = ", ".join(f"{column} = {{{column}:String}}" for column in updates)
+    await warehouse.command(
+        f"ALTER TABLE pf_listings_bronze UPDATE {assignment} WHERE listing_id='A' SETTINGS mutations_sync=1",
+        parameters=updates,
+    )
+    filters = dict(
+        mode="sale",
+        search=None,
+        area=None,
+        property_type=None,
+        bedrooms=None,
+        bedrooms_in=None,
+        price_min=None,
+        price_max=None,
+    )
+    assert (await queries.fetch_valuation_counts(filters))[0]["below_market_count"] == 1
+    assert (
+        await queries.fetch_listing_count(
+            {**filters, "search": "REF-A", "market_position": "below_market"}
+        )
+    )[0]["total"] == 0
+    rows = await queries.fetch_listing_rows(
+        filters, limit=10, offset=0, sort="value_gap", with_valuations=True
+    )
+    assert rows[0]["listing_id"] == "B"
+
+
+async def test_atomic_publication_upgrades_legacy_subject_schema_without_altering_serving(
+    warehouse, monkeypatch
+):
+    legacy = CREATE_TABLE.replace("    property_type LowCardinality(String),\n", "").replace(
+        "    location_names Array(String),\n", ""
+    )
+    await warehouse.command(legacy)
+    columns = [column for column in COLUMNS if column not in {"property_type", "location_names"}]
+    previous = _valuation("previous")
+    await warehouse.insert(TABLE, [[previous[column] for column in columns]], column_names=columns)
+    monkeypatch.setattr(queries, "_valuations_ready", False)
+    assert await queries.valuations_available() is False
+    monkeypatch.setattr(sys, "argv", ["value_listings.py"])
+    monkeypatch.setattr(value_listings, "_rows", AsyncMock(return_value=[{}]))
+    monkeypatch.setattr(
+        value_listings, "value_listing_rows", AsyncMock(return_value=[_valuation("current")])
+    )
+    monkeypatch.setattr(value_listings, "close_clickhouse", AsyncMock())
+    await value_listings.main()
+    assert await queries.valuations_available() is True
+    assert (
+        await warehouse.query(f"SELECT listing_id, location_names FROM {TABLE}")
+    ).result_rows == [("current", ["Dubai", "Marina", "Tower"])]

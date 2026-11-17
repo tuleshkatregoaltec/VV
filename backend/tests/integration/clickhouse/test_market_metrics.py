@@ -1,16 +1,19 @@
-"""Market metrics against the repository's canonical tables and serving views.
+"""Market metrics over uniform synthetic DXBI listed-record projections.
 
-Expected numbers are worked out by hand from the fixture rows below, not produced by the
-code under test. The tables come from Holocron's schema file and the views from the backend
-serving script, so the test exercises the production definitions rather than fixture DDL.
-Coverage comes from the served release's ledger entry, as Holocron publishes it.
+Expected arithmetic is worked out by hand. Historical multi-source-shaped fixture rows are
+adapted into the current DXBI listed-column contract; unmodified production source SQL then
+computes metrics, labels and load-window coverage. Native source isolation/identity rules are
+covered separately in test_analytics_dxbi.py and test_transactions.py. Legacy immutable-release
+pin tests exercise app.market.releases directly, not the DXBI metrics service.
 """
 
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
+from app.analytics.assistant import get_comparable_evidence
+from app.analytics.assistant_models import ComparableRequest
 from app.analytics.market_metrics import get_market_metrics
 from app.analytics.models import MarketMetricsRequest
 
@@ -34,10 +37,11 @@ JVC = ("Al Barsha South Fourth", "jumeirah village circle", "Jumeirah Village Ci
 def sale(key, when, group, price, area_sqm, area, master="", served=1, status="dld_only",
          source="dld_open_data", rooms="1 B/R", building="Tower A", geo=JVC,
          method="label_evidence"):  # fmt: skip
+    when = when.replace(tzinfo=UTC)
     return [
         key, key, when, group, price, area_sqm, area, master, "Unit", "Flat", "Residential",
         rooms, building, "Existing Properties", source, status, served,
-        datetime(2026, 10, 2, 6, 0), "r-sales", *geo, method,
+        datetime(2026, 10, 2, 6, 0, tzinfo=UTC), "r-sales", *geo, method,
         area_sqm, "Apartment", geo[2] or geo[0],
     ]  # fmt: skip
 
@@ -83,10 +87,11 @@ MARSA_DISTRICT_ONLY = ("Marsa Dubai", "", "", "district_name")
 
 def rent(key, registered, start, end, annual, contract, version, bedrooms, area="Marsa Dubai",
          geo=MARINA):  # fmt: skip
+    registered, start, end = (value.replace(tzinfo=UTC) for value in (registered, start, end))
     return [
         key, key, registered, start, end, annual, contract, 80.0, area, "", "Flat",
         "Residential", version, bedrooms, "dld_open_data", "matched" if bedrooms else "dld_only",
-        1, datetime(2026, 10, 2, 6, 0), "r-rent", *geo,
+        1, datetime(2026, 10, 2, 6, 0, tzinfo=UTC), "r-rent", *geo,
         # Uniform bedroom label: DXBI's "2 Bed" / "2 Beds" are one label; unknown stays ''.
         80.0, "Apartment", f"{bedrooms.split()[0]} B/R" if bedrooms else "", geo[2] or geo[0],
     ]  # fmt: skip
@@ -121,27 +126,106 @@ async def publish_coverage(
     await warehouse.insert(
         "market_release_ledger",
         # Each call is a newer version of the entry (ReplacingMergeTree keeps the latest).
-        [[release_id, dataset, state, json.dumps({"ranges": ranges}), datetime.now(),
-          datetime.now()]],
+        [[release_id, dataset, state, json.dumps({"ranges": ranges}), datetime.now(UTC),
+          datetime.now(UTC)]],
         column_names=["release_id", "dataset", "state", "coverage_json", "started_at",
                       "updated_at"],
     )  # fmt: skip
+
+    source, date_field = {
+        "market_sale_events": ("dxbi_sales_unit_events", "transaction_date"),
+        "market_rental_events": ("dxbi_rental_events", "lease_start"),
+    }[dataset]
+    await warehouse.command(
+        "ALTER TABLE source_load_windows DELETE WHERE bronze_table={source:String} SETTINGS mutations_sync=1",
+        parameters={"source": source},
+    )
+    if ranges:
+        await warehouse.insert(
+            "source_load_windows",
+            [
+                [
+                    source,
+                    date_field,
+                    date.fromisoformat(r["from"]),
+                    date.fromisoformat(r["to"]),
+                    "complete" if r["status"] == "verified" else "partial",
+                    0,
+                    datetime.now(UTC),
+                ]
+                for r in ranges
+            ],
+            column_names=[
+                "bronze_table",
+                "date_field",
+                "window_start",
+                "window_end",
+                "status",
+                "first_row",
+                "loaded_at",
+            ],
+        )
 
 
 @pytest.fixture
 async def served(warehouse, install_serving):
     await install_serving(
-        tables=("market_sale_events", "market_rental_events", "market_release_ledger"),
-        views=("ch_transactions", "ch_rent_contracts"),
+        tables=(
+            "market_sale_events",
+            "market_rental_events",
+            "market_release_ledger",
+            "source_load_windows",
+            "dxbi_sales_unit_events",
+            "dxbi_rental_events",
+        ),
+        views=(),
     )
+    # Canonical DXBI listed columns, over hand-calculated synthetic observations. Labels
+    # already resolved by the profile/hierarchy stay canonical (raw spellings are metadata).
+    bedrooms = "if(rooms_en = '', '', if(rooms_en = 'Studio', 'Studio', concat(extract(rooms_en, '^([0-9]+)'), ' Bed')))"
+    await warehouse.command(f"""CREATE VIEW dxbi_sales_listed AS
+        SELECT transaction_id AS sale_key, toDate(instance_date) AS transaction_date,
+               '' AS unit_number, building_name_en AS building_name,
+               master_project_en AS project_name,
+               if(community_name != '', community_name, district_name) AS area_name,
+               property_type, {bedrooms} AS bedrooms,
+               if(reg_type_en = 'Existing Properties', 'Ready', 'Offplan') AS market_status,
+               size_sqm * 10.7639 AS size_sqft, actual_worth AS sale_amount_aed,
+               actual_worth / nullIf(size_sqm * 10.7639, 0) AS price_per_sqft_aed,
+               district_name AS profile_area, master_project_en AS profile_master,
+               master_project_en AS profile_project, 'fixture' AS profile_project_source,
+               '' AS profile_bedrooms, '' AS profile_status, 0 AS profile_size,
+               lowerUTF8(replaceRegexpAll(master_project_en, '[^A-Za-z0-9]', '')) AS scope_key,
+               master_project_en AS scope_name, 'Project' AS scope_kind,
+               lowerUTF8(replaceRegexpAll(community_name, '[^A-Za-z0-9]', '')) AS master_key,
+               community_name AS master_name, building_name_en AS building_id,
+               building_name_en AS building_display, built_at
+        FROM market_sale_events WHERE is_served = 1 AND trans_group_en = 'Sales'
+    """)
+    await warehouse.command("""CREATE VIEW dxbi_leases_listed AS
+        SELECT contract_id AS contract_key, toDate(contract_start_date) AS lease_start,
+               toDate(contract_end_date) AS lease_end, '' AS unit_number,
+               '' AS building_name, master_project_en AS project_name,
+               if(community_name != '', community_name, district_name) AS area_name,
+               property_type, bedrooms, size_sqm * 10.7639 AS size_sqft,
+               annual_amount AS annual_rent_aed, contract_amount AS contract_amount_aed,
+               dateDiff('month', contract_start_date, contract_end_date) AS contract_term_months,
+               version_en AS contract_state, district_name AS profile_area,
+               master_project_en AS profile_master, master_project_en AS profile_project,
+               'fixture' AS profile_project_source, '' AS profile_bedrooms, 0 AS profile_size,
+               lowerUTF8(replaceRegexpAll(master_project_en, '[^A-Za-z0-9]', '')) AS scope_key,
+               master_project_en AS scope_name, 'Project' AS scope_kind,
+               lowerUTF8(replaceRegexpAll(community_name, '[^A-Za-z0-9]', '')) AS master_key,
+               community_name AS master_name, '' AS building_id, '' AS building_display, built_at
+        FROM market_rental_events WHERE is_served = 1
+    """)
     await warehouse.insert("market_sale_events", SALES, column_names=SALE_COLUMNS)
     await warehouse.insert("market_rental_events", RENTS, column_names=RENT_COLUMNS)
-    # Every day from the first to the last loaded record was loaded in full.
     await publish_coverage(
         warehouse, "r-sales", "market_sale_events", verified(("2026-08-31", "2026-10-01"))
     )
     await publish_coverage(
-        warehouse, "r-rent", "market_rental_events", verified(("2026-09-05", "2026-10-01"))
+        warehouse, "r-rent", "market_rental_events", verified(("2026-09-01", "2026-10-01"))
     )
     return warehouse
 
@@ -153,8 +237,8 @@ def request(**fields) -> MarketMetricsRequest:
 
 
 ALL_SALE_METRICS = [
-    "count", "total_aed", "mean_aed", "median_aed", "mean_aed_per_sqm", "median_aed_per_sqm",
-    "weighted_aed_per_sqm", "mean_aed_per_sqft",
+    "count", "total_aed", "mean_aed", "median_aed", "mean_aed_per_sqft", "median_aed_per_sqft",
+    "weighted_aed_per_sqft",
 ]  # fmt: skip
 
 
@@ -170,19 +254,30 @@ async def test_last_month_average_sale_price_in_jvc(served):
     assert values["total_aed"] == 6_000_000
     assert values["mean_aed"] == 2_000_000
     assert values["median_aed"] == 1_000_000
-    # Per-sqm rates 20,000 / 10,000 / 40,000; weighted = 6,000,000 / 250 sqm.
-    assert values["mean_aed_per_sqm"] == pytest.approx(70_000 / 3, abs=0.01)
-    assert values["median_aed_per_sqm"] == 20_000
-    assert values["weighted_aed_per_sqm"] == 24_000
+    # Sizes are stored in m²; every rate is per sq ft. Per-m² rates 20,000 / 10,000 / 40,000
+    # are 1,858.03 / 929.02 / 3,716.07 per sq ft; weighted = 6,000,000 / (250 m² x 10.7639).
     assert values["mean_aed_per_sqft"] == pytest.approx(70_000 / 3 / SQFT, abs=0.01)
+    assert values["median_aed_per_sqft"] == pytest.approx(20_000 / SQFT, abs=0.01)
+    assert values["weighted_aed_per_sqft"] == pytest.approx(6_000_000 / (250 * SQFT), abs=0.01)
+    assert "mean_aed_per_sqm" not in values
     assert values["rated_count"] == 3
     assert {(m.area, m.master_project) for m in result.matched_locations} == {
-        ("Al Barsha South Fourth", "Jumeirah Village Circle"),
-        ("JUMEIRAH VILLAGE CIRCLE", ""),
+        ("Jumeirah Village Circle", "Jumeirah Village Circle"),
     }
-    assert result.sources == {"dubai_pulse/dld_only": 1, "dld_open_data/dld_only": 1,
-                              "dld_open_data/matched": 1}  # fmt: skip
+    assert result.sources == {"dxbi/listed": 3}
     assert "Small sample: 3 eligible records." in result.limitations
+
+
+async def test_chat_coverage_counts_only_eligible_stored_records(served):
+    from app.chat.tools import get_database_coverage
+
+    result = await get_database_coverage(None, "sales")
+    # Three September JVC sales, one Business Bay sale and two outside September.
+    # Unserved duplicates, mortgages, gifts and zero-price rows are excluded.
+    assert result["eligible_record_count"] == 6
+    assert (result["data_from"], result["data_to"]) == ("2026-08-31", "2026-10-01")
+    assert "release_id" not in result
+    assert result["load_evidence"]["ranges"] == verified(("2026-08-31", "2026-10-01"))
 
 
 async def test_market_wide_median_of_an_even_count_averages_the_middle_pair(served):
@@ -274,11 +369,9 @@ async def test_rentals_annual_versus_contract_new_versus_renewed(served):
         ("Renewed", 1, 120_000),
     ]
     assert any("1 of 3 records" in item for item in two_bed.limitations)
-    assert any(
-        item.startswith("1 records matching the other filters are located by DLD only at "
-                        "district level (Marsa Dubai)")
-        for item in two_bed.limitations
-    )  # fmt: skip
+    # DXBI names each record's location: it does not infer a DLD-only district warning.
+    assert not any("located by DLD only" in item for item in two_bed.limitations)
+    assert {match.community for match in two_bed.matched_locations} == {"Dubai Marina"}
     district = await get_market_metrics(
         request(dataset="rentals", location="Marsa Dubai", bedrooms=["2"])
     )
@@ -330,7 +423,9 @@ async def test_api_and_chat_tool_return_the_database_result(served, client):
         assert result["total"]["values"] == expected
         assert (result["period"]["start"], result["period"]["end"]) == ("2026-09-01", "2026-09-30")
         assert result["coverage"]["status"] == "complete"
-    assert api == chat
+    from app.chat.security import safe_data
+
+    assert safe_data(api) == chat
 
 
 async def test_registered_chat_agent_executes_the_tool_against_the_database(served, client):
@@ -344,7 +439,7 @@ async def test_registered_chat_agent_executes_the_tool_against_the_database(serv
     from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
     from pydantic_ai.models.function import FunctionModel
 
-    from app.chat.agent import agent
+    from app.chat.workflows import market_agent as agent
 
     arguments = {
         "dataset": "sales",
@@ -373,7 +468,9 @@ async def test_registered_chat_agent_executes_the_tool_against_the_database(serv
         await agent.run("What was the average sale price in JVC last month?")
 
     api = (await client.post("/api/v1/analytics/market-metrics", json=arguments)).json()
-    assert returned and json.loads(json.dumps(returned[0])) == api
+    from app.chat.security import safe_data
+
+    assert returned and json.loads(json.dumps(returned[0])) == safe_data(api)
     assert api["total"]["count"] == 3
     assert api["total"]["values"] == {"mean_aed": 2_000_000, "median_aed": 1_000_000}
 
@@ -441,13 +538,13 @@ async def test_one_answer_comes_from_one_release(served, monkeypatch):
 
     monkeypatch.setattr(market_metric_queries, "fetch_release_id", publication_mid_request)
     result = await get_market_metrics(request(dataset="sales", location="JVC"))
-    assert len(calls) == 2 and result.release_id == "r-sales"
+    assert len(calls) == 2 and result.release_id == "dxbi-20261002060000"
     assert not any("release changed" in item for item in result.limitations)
 
 
 async def test_source_vocabularies_meet_in_one_district_and_community(served):
-    """S1 (Pulse: Al Barsha South Fourth + master JVC) and S2 (open data: label
-    JUMEIRAH VILLAGE CIRCLE) are one place; grouping never splits them by raw spelling."""
+    """Different raw labels have one canonical district/community in the listed projection;
+    grouping uses that resolved identity rather than splitting on source spelling."""
     by_area = await get_market_metrics(request(dataset="sales", group_by="area"))
     assert [(row.group, row.count) for row in by_area.rows] == [
         ("Al Barsha South Fourth", 3),
@@ -476,13 +573,16 @@ async def publish_version(warehouse, release_id: str) -> None:
 async def test_a_pinned_operation_reads_one_immutable_release_throughout(served):
     """PR #13's lease contract: every query under one pin reads the same immutable versions,
     even when a new release is published and the serving view changes mid-operation."""
-    from app.market.releases import ReleaseUnavailable, pin_market_release
+    from app.clickhouse.client import query
+    from app.market.releases import ReleaseUnavailable, pin_market_release, pinned_table
 
     await publish_version(served, "a1a1a1a1a1a1")
     async with pin_market_release() as pin:
         assert pin.release_id == "sales=a1a1a1a1a1a1" and pin.missing == ("rentals",)
         assert ("sales", date(2026, 8, 31), date(2026, 10, 1), "complete") in pin.coverage()
-        first = await get_market_metrics(request(dataset="sales", location="JVC"))
+        first = await query(
+            f"SELECT count() AS n FROM {pinned_table('sales')} WHERE trans_group_en='Sales' AND is_served=1 AND actual_worth>0 AND toMonth(instance_date)=9 AND community_name='Jumeirah Village Circle'"
+        )
 
         # A new release goes live: one more September JVC sale, in its own version and in
         # the mutable serving table the dashboards read.
@@ -495,17 +595,22 @@ async def test_a_pinned_operation_reads_one_immutable_release_throughout(served)
             served, "a1a1a1a1a1a1", "market_sale_events",
             verified(("2026-08-31", "2026-10-01")), state="superseded",
         )  # fmt: skip
-        again = await get_market_metrics(request(dataset="sales", location="JVC", group_by="month"))
+        again = await query(
+            f"SELECT count() AS n FROM {pinned_table('sales')} WHERE trans_group_en='Sales' AND is_served=1 AND actual_worth>0 AND toMonth(instance_date)=9 AND community_name='Jumeirah Village Circle'"
+        )
 
-        assert first.total.count == again.total.count == 3
-        assert first.release_id == again.release_id == "a1a1a1a1a1a1"
-        assert first.coverage.status == "complete"
+        assert first == again == [{"n": 3}]
+        assert pin.versions["sales"].release_id == "a1a1a1a1a1a1"
         with pytest.raises(ReleaseUnavailable):
-            await get_market_metrics(request(dataset="rentals"))
+            pinned_table("rentals")
 
     async with pin_market_release(("sales",)) as later:
         assert later.release_id == "sales=b2b2b2b2b2b2"
-        assert (await get_market_metrics(request(dataset="sales", location="JVC"))).total.count == 4
+        assert (
+            await query(
+                f"SELECT count() AS n FROM {pinned_table('sales')} WHERE trans_group_en='Sales' AND is_served=1 AND actual_worth>0 AND toMonth(instance_date)=9 AND community_name='Jumeirah Village Circle'"
+            )
+        ) == [{"n": 4}]
 
 
 async def test_an_expired_pin_fails_closed_instead_of_reading_a_dropped_version(served):
@@ -521,6 +626,58 @@ async def test_an_expired_pin_fails_closed_instead_of_reading_a_dropped_version(
         token = releases._pinned.set(expired)
         try:
             with pytest.raises(releases.ReleaseLeaseExpired):
-                await get_market_metrics(request(dataset="sales"))
+                releases.pinned_table("sales")
         finally:
             releases._pinned.reset(token)
+
+
+async def test_comparable_filters_exclude_other_dates_and_bound_sample_without_losing_count(served):
+    result = await get_comparable_evidence(
+        ComparableRequest(
+            dataset="sales",
+            location="JVC",
+            building="Tower A",
+            bedrooms="1",
+            period={"type": "previous_month"},
+            reference_date=date(2026, 10, 3),
+            target_size_sqft=1076.39,
+            size_tolerance=0.01,
+            limit=1,
+        )
+    )
+    assert result["matching_count"] == 2 and result["sample_count"] == 1
+    assert result["median_aed"] == 2_500_000
+    assert result["middle_50_percent_range_aed"] == [1_750_000, 3_250_000]
+    assert result["records"][0]["amount_aed"] == 4_000_000
+    assert result["records"][0]["event_date"] == date(2026, 9, 30)
+    assert (
+        result["indicative_value_aed"] is None
+    )  # insufficient evidence must not fabricate appraisal
+    assert result["coverage"]["status"] == "complete"
+    assert (
+        not {"row_key", "transaction_id", "unit_number", "contact_name"}
+        & result["records"][0].keys()
+    )
+
+
+async def test_comparable_location_injection_is_literal_and_date_window_is_bounded(served):
+    request = ComparableRequest(
+        dataset="sales",
+        location="JVC",
+        building="Tower A' OR 1=1 --",
+        bedrooms="1",
+        period={"type": "previous_month"},
+        reference_date=date(2026, 10, 3),
+    )
+    result = await get_comparable_evidence(request)
+    assert result["matching_count"] == 0 and result["records"] == []
+    with pytest.raises(ValueError, match="two years"):
+        await get_comparable_evidence(
+            request.model_copy(
+                update={
+                    "period": request.period.model_copy(
+                        update={"type": "rolling_days", "days": 1000}
+                    )
+                }
+            )
+        )

@@ -29,6 +29,7 @@ const LINE: Record<MatchRow['line'], string> = {
 
 function pursue(r: MatchRow) {
 	write({
+		domain: 'leads',
 		call: () => crm.leads.pursue(leadId, r.key),
 		success: (res) =>
 			res.data.pursued
@@ -40,6 +41,7 @@ function pursue(r: MatchRow) {
 
 function shortlist(r: MatchRow) {
 	write({
+		domain: 'matches',
 		call: () => crm.leads.shortlist(leadId, r.key),
 		success: (res) => (res.data.on ? `On the shortlist · ${res.data.count}` : 'Off the shortlist')
 	})
@@ -54,6 +56,7 @@ function watch(r: MatchRow) {
 
 function renewal(r: MatchRow) {
 	write({
+		domain: 'leads',
 		call: () => crm.leads.renewalCall(leadId, r.key),
 		success: (res) => `Renewal call planned · ${dayLabel(res.data.date)} ${res.data.time ?? ''}`
 	})
@@ -61,6 +64,7 @@ function renewal(r: MatchRow) {
 
 function ask(r: MatchRow) {
 	write({
+		domain: 'leads',
 		call: () => crm.leads.ask(leadId, r.key),
 		success: (res) => `Asked ${res.data.asked} · logged on ${data.lead.name}`
 	})
@@ -90,6 +94,10 @@ const OPEN_LABEL: Partial<Record<MatchRow['kind'], string>> = {
 	inbox: 'Open in inbox'
 }
 </script>
+
+<div class="filters">
+	<button type="button" class="btn ghost sm" onclick={() => write({ domain: 'matches', call: () => crm.leads.refreshMatches(leadId), success: 'Matches refreshed' })}>Refresh matches</button>
+</div>
 
 {#snippet hit(r: MatchRow)}
 	<div class={['hit cl', r.kind === 'project' && !r.pursuable && 'nofit']} style:--c={LINE[r.line]}>
@@ -139,7 +147,7 @@ const OPEN_LABEL: Partial<Record<MatchRow['kind'], string>> = {
 				type="button"
 				class="btn ghost sm"
 				aria-pressed={Boolean(r.pursued)}
-				title={r.pursued ? `Next: ${r.pursued.next}. Click to stop.` : 'Sets the next action'}
+				title={r.pursued ? `Next: ${r.pursued.next}` : undefined}
 				onclick={() => pursue(r)}
 			>
 				{#if r.pursued}<Check size={14} />Pursued{:else}Pursue{/if}
@@ -168,17 +176,17 @@ const OPEN_LABEL: Partial<Record<MatchRow['kind'], string>> = {
 				{t.title}
 				<span class="facts">
 					{t.sub}{#if t.hidden_after && data.move_by}
-						· <button type="button" class="linkbtn" onclick={() => (after = true)}>
+						· <button type="button" class="linkbtn" disabled title="After-move filtering is unavailable">
 							Show {t.hidden_after} after {dayLabel(data.move_by)}
 						</button>
 					{:else if after && data.move_by && (t.id === 'owners' || t.id === 'events')}
-						· <button type="button" class="linkbtn" onclick={() => (after = false)}>
+						· <button type="button" class="linkbtn" disabled title="After-move filtering is unavailable">
 							Hide after {dayLabel(data.move_by)}
 						</button>
 					{/if}
 				</span>
 			</h2>
-			{#if t.chip}<Chip chip={t.chip} title="Raised on the 6 Oct call, not built yet." />{/if}
+			{#if t.chip}<Chip chip={t.chip} />{/if}
 		</div>
 		{#if t.gate}
 			{@const ownerId = t.gate.owner_id}

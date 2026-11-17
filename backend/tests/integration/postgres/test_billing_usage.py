@@ -66,7 +66,7 @@ async def test_subscription_sync_updates_existing_record_and_prefers_active(
     assert stored.subscription_status == "active"
 
 
-async def test_checkout_failure_preserves_already_committed_seat_change(pg_session, monkeypatch):
+async def test_checkout_failure_does_not_grant_unpaid_seats(pg_session, monkeypatch):
     org = await organizations.create_organization(pg_session, "Checkout failure", 1)
     org_id = org.id
     owner = str(uuid4())
@@ -84,7 +84,8 @@ async def test_checkout_failure_preserves_already_committed_seat_change(pg_sessi
     assert "Failed to create Stripe customer" in error.value.detail
     pg_session.expire_all()
     stored = await organizations.get_organization_by_id(pg_session, org_id)
-    assert stored.max_users == 4
+    # Requested seats become an entitlement only after confirmed Stripe payment.
+    assert stored.max_users == 1
     assert stored.subscription_status == "failed"
     assert stored.stripe_customer_id is None
 

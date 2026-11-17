@@ -757,7 +757,11 @@ def test_pocket_listings_are_matched_and_marked_off_market():
     # the card says so, letting the agent pitch it as off-market.
     from app.crm.matching import _score_company_listing
 
-    buyer = {"locations": ["Dubai Marina"], "property_type": "Apartment", "budget_max_aed": 2_500_000}
+    buyer = {
+        "locations": ["Dubai Marina"],
+        "property_type": "Apartment",
+        "budget_max_aed": 2_500_000,
+    }
     pocket = _company_listing(2_500_000)
     pocket.status = "pocket"
     reasons = _score_company_listing(buyer, [], "buy", pocket)[1]

@@ -11,7 +11,6 @@ from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any
 
-from app.crm.valuation_validation import closest_sales
 from app.listings import comparables
 from app.listings import queries as listing_queries
 from app.listings.comparables import (
@@ -29,6 +28,7 @@ from app.listings.valuation import (
     listing_subject,
     market_position,
 )
+from app.market.comparables import closest_sales
 
 _CHUNK = 2000
 _WINDOW_DAYS = 365
@@ -50,6 +50,8 @@ COLUMNS = (
     "asking_aed",
     "bedrooms",
     "size_sqft",
+    "property_type",
+    "location_names",
     "version",
     "valued_at",
 )
@@ -69,6 +71,8 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
     asking_aed UInt64,
     bedrooms LowCardinality(String),
     size_sqft Float64,
+    property_type LowCardinality(String),
+    location_names Array(String),
     version LowCardinality(String),
     valued_at Date
 )
@@ -142,6 +146,8 @@ def _unvalued(subject: ListingSubject, building: str, valued_at: date) -> dict[s
         "asking_aed": subject.asking_aed,
         "bedrooms": subject.subject.bedrooms,
         "size_sqft": float(subject.subject.size_sqft or 0),
+        "property_type": subject.subject.property_type,
+        "location_names": subject.location_names,
         "version": LISTING_VALUATION_VERSION,
         "valued_at": valued_at,
         "exact_count": 0,
@@ -189,6 +195,8 @@ def _value_one(
         "asking_aed": subject.asking_aed,
         "bedrooms": beds,
         "size_sqft": float(subject.subject.size_sqft or 0),
+        "property_type": subject.subject.property_type,
+        "location_names": subject.location_names,
         "version": LISTING_VALUATION_VERSION,
         "valued_at": valued_at,
         "exact_count": int(result.detail.get("exact_count") or 0),

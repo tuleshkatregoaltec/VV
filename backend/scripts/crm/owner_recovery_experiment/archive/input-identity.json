@@ -1,0 +1,18 @@
+{
+  "verified_original_snapshot_and_catalogue": true,
+  "index_original_metadata_consistent": true,
+  "files": {
+    "snapshot.sqlite": {
+      "sha256": "d2391698049815749d7fc45f13576ca3742da46cc72ecfb83743377ce8cc6b99",
+      "bytes": 2501513216
+    },
+    "places-snapshot.json": {
+      "sha256": "421fed1712c5f00405b28d552e33498598f67e9784e4fdd0e1dacd529c39d910",
+      "bytes": 1742135
+    },
+    "community-index.sqlite": {
+      "sha256": "205c812286b30db8362d8596413c8372f89fb349fb67bd575da16e5180164c19",
+      "bytes": 774496256
+    }
+  }
+}

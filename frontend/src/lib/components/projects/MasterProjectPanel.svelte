@@ -11,7 +11,7 @@ let {
 
 function statusLabel(status: string | null): string {
 	if (status === 'C') return 'Completed'
-	if (status === 'U') return 'Under Construction'
+	if (status === 'U') return 'Under construction'
 	if (status === 'P') return 'Planned'
 	return status || ''
 }
@@ -42,7 +42,7 @@ function getProjectKey(project: MasterProjectResponse['projects'][number], index
 		<div class="flex items-center gap-2 mb-1">
 			<span
 				class="text-[10px] font-semibold uppercase tracking-wider text-fg-4 bg-slate-100 px-2 py-0.5 rounded-sm"
-				>Master Project</span
+				>Master project</span
 			>
 		</div>
 		<h2 class="text-xl font-semibold text-fg-1 leading-tight">{master.master_name}</h2>
@@ -90,7 +90,7 @@ function getProjectKey(project: MasterProjectResponse['projects'][number], index
 	<!-- Unit mix -->
 	{#if master.unit_composition.length > 0}
 		<div class="space-y-2.5">
-			<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Unit Mix</h3>
+			<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Unit mix</h3>
 			<div class="space-y-2">
 				{#each master.unit_composition as unit (unit.property_sub_type)}
 					<div>
@@ -115,7 +115,7 @@ function getProjectKey(project: MasterProjectResponse['projects'][number], index
 	<!-- Sub-projects list -->
 	<div class="space-y-2">
 		<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">
-			Sub-Projects ({master.total_projects})
+			Sub-projects ({master.total_projects})
 		</h3>
 		<div class="space-y-1.5 max-h-72 overflow-y-auto">
 			{#each master.projects as project, index (getProjectKey(project, index))}

@@ -1,13 +1,46 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { client } from '$lib/api/client'
-import { getOwner, listOwnerImportRows } from '$lib/crm/api/backend'
+import { getOwner, listOwnerImportProperties, listOwnerImportRows } from '$lib/crm/api/backend'
 
 /* A row on an import report opens its owner, and each of the owner's units shows what the file
    said next to what DLD has, with the match result, as the old CRM's owner profile did. */
 afterEach(() => vi.restoreAllMocks())
 
 describe('import report rows', () => {
+	it('retains the explicit preview cap so omitted property history can be disclosed', async () => {
+		vi.spyOn(client, 'get').mockResolvedValue({
+			rows: [
+				{
+					property_key: 'synthetic|216',
+					area: '',
+					project: '',
+					building: 'Synthetic',
+					unit: '216',
+					property_type: 'Apartment',
+					rows: 51,
+					buyers: 1,
+					sellers: 0,
+					records_truncated: true,
+					records: Array.from({ length: 50 }, (_, index) => ({
+						name: 'Synthetic Owner',
+						role: 'Buyer',
+						status: 'unmatched',
+						sheet: 'Owners',
+						row: index + 2
+					}))
+				}
+			],
+			total: 1,
+			limit: 100,
+			offset: 0
+		} as never)
+		const page = await listOwnerImportProperties(7, { search: '', offset: 0 })
+		expect(page.rows[0].rows).toBe(51)
+		expect(page.rows[0].records).toHaveLength(50)
+		expect(page.rows[0].recordsTruncated).toBe(true)
+	})
+
 	it('carry the owner key the Owner panel opens with', async () => {
 		vi.spyOn(client, 'get').mockResolvedValue({
 			list: { id: 5 },
@@ -68,6 +101,60 @@ describe('owner unit check', () => {
 		})
 	}
 
+	it('keeps two source rows of the same property apart', async () => {
+		// One owner can hold a villa on two rows (a sale and a resale). Keyed by the property alone,
+		// the panel's list throws a duplicate-key error and never leaves "Loading…".
+		vi.spyOn(client, 'get').mockImplementation(async (url: string) => {
+			if (url.startsWith('/api/v1/crm/owner-workspaces')) return [] as never
+			if (url.startsWith('/api/v1/crm/contact-imports')) return [] as never
+			const row = (n: number) => ({
+				property_key: 'maple3|demapleiii-v-349',
+				building_name: 'Maple 3',
+				project_name: 'Maple',
+				area_name: 'Dubai Hills Estate',
+				unit_number: 'DEMAPLEIII-V-349',
+				property_type: 'Villa',
+				ownership_status: 'probable_current_owner',
+				source_lists: ['Dubai Hills'],
+				source_rows: [`Reviewed source:${n}`]
+			})
+			return {
+				owner_key: 'abc123',
+				contact_name: 'X',
+				highest_ownership_status: 'probable_current_owner',
+				properties: [row(1), row(2)]
+			} as never
+		})
+		const o = await getOwner('abc123')
+		expect(o.unit_rows.map((u) => u.id)).toEqual([
+			'maple3|demapleiii-v-349',
+			'maple3|demapleiii-v-349#2'
+		])
+		expect(o.unit_rows.map((u) => u.key)).toEqual([
+			'maple3|demapleiii-v-349',
+			'maple3|demapleiii-v-349'
+		])
+	})
+
+	it('carries the whole portfolio, the current count and the developer-seller flag', async () => {
+		// The list counts properties in its view; the screens show it beside the whole portfolio.
+		vi.spyOn(client, 'get').mockImplementation(async (url: string) => {
+			if (url.startsWith('/api/v1/crm/owner-workspaces')) return [] as never
+			if (url.startsWith('/api/v1/crm/contact-imports')) return [] as never
+			return {
+				owner_key: 'abc123',
+				contact_name: 'X',
+				highest_ownership_status: 'former_owner',
+				property_count: 40,
+				current_property_count: 29,
+				developer_side_seller: true,
+				properties: []
+			} as never
+		})
+		const o = await getOwner('abc123')
+		expect([o.units_total, o.units_current, o.developer_side_seller]).toEqual([40, 29, true])
+	})
+
 	it('shows the file record, the DLD record, the result and the lease', async () => {
 		serve({
 			ownership_status: 'verified_current_owner',
@@ -107,10 +194,10 @@ describe('owner unit check', () => {
 				market: 'Ready'
 			},
 			result: {
-				label: 'Verified owner',
+				label: 'Current owner',
 				confidence: 98,
 				reason: 'Acquisition date and price match the latest sale.',
-				chip: { tone: 'green', label: 'Verified owner' }
+				chip: { tone: 'green', label: 'Current owner' }
 			},
 			lease: { end: '2026-09-22', aed: 120_000 }
 		})

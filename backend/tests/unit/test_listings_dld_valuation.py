@@ -28,6 +28,10 @@ SALE_ROW = {
     "v_market_position": "below_market",
     "v_value_gap_pct": -0.1,
     "v_building_key": "hayatboulevard",
+    "v_bedrooms": "2 Bed",
+    "v_size_sqft": 1000.0,
+    "v_property_type": "Apartment",
+    "v_location_names": ["Dubai", "Town Square", "Hayat Boulevard", "Hayat Boulevard 2A"],
 }
 
 
@@ -232,6 +236,10 @@ async def test_villa_evidence_is_the_latest_same_bedroom_sales(monkeypatch):
     stored = {
         **{k: v for k, v in SALE_ROW.items() if k.startswith("v_")},
         "v_basis": "bedroom_price",
+        "v_bedrooms": "4 Bed",
+        "v_size_sqft": 2400.0,
+        "v_property_type": "Villa",
+        "v_location_names": ["Dubai", "Damac Hills 2", "Verona"],
         "v_building_key": "verona",
         "v_level": "building_type_beds",
     }
@@ -455,6 +463,17 @@ def test_current_valuation_sql_rejects_changed_price_and_out_of_scope_listings()
     db.create_function("JSONExtractInt", 2, lambda raw, key: int(json.loads(raw).get(key, 0)))
     db.create_function("JSONExtractFloat", 2, lambda raw, key: float(json.loads(raw).get(key, 0)))
     db.create_function("trimBoth", 1, str.strip)
+    import re
+
+    db.create_function(
+        "replaceRegexpAll", 3, lambda value, pattern, repl: re.sub(pattern, repl, value)
+    )
+    db.create_function(
+        "multiIf",
+        5,
+        lambda first, one, second, two, otherwise: one if first else two if second else otherwise,
+    )
+    db.create_function("JSONExtract", 2, lambda raw, _type: raw)
     try:
         for changes, expected in [
             ({}, 1),
@@ -479,7 +498,10 @@ def test_current_valuation_sql_rejects_changed_price_and_out_of_scope_listings()
                 + """ FROM (
                 SELECT :category AS category_id, :raw AS raw_property_json,
                        :price_json AS price_json, '{"value": 1000}' AS size_json,
-                       :asking AS v_asking_aed, :estimate AS v_estimate_aed
+                       :asking AS v_asking_aed, :estimate AS v_estimate_aed,
+                       1000.0 AS v_size_sqft, '2 Bed' AS v_bedrooms, '2' AS bedrooms,
+                       'Apartment' AS v_property_type, '[]' AS v_location_names,
+                       '[]' AS listing_location_names_json
             )"""
             )
             params = {
@@ -492,3 +514,37 @@ def test_current_valuation_sql_rejects_changed_price_and_out_of_scope_listings()
             assert db.execute(sql, params).fetchone() == (expected,)
     finally:
         db.close()
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"size_json": '{"value":500}'},
+        {"bedrooms": "1"},
+        {"raw_property_json": '{"property_type":"villa","completion_status":"completed"}'},
+        {"listing_location_names_json": '["Dubai","Town Square","Different Building"]'},
+    ],
+)
+async def test_subject_changes_suppress_stored_value_flag_and_detail_evidence(
+    api, monkeypatch, changes
+):
+    changed = {**SALE_ROW, **changes}
+    api["rows"] = [changed]
+    card = (
+        await service.list_listings_from_clickhouse(mode="sale", include_filters=False)
+    ).listings[0]
+    assert card.market_position == "insufficient_data"
+    assert card.estimated_value_aed is None
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(queries, "fetch_listing_detail", AsyncMock(return_value=[changed]))
+    monkeypatch.setattr(
+        queries,
+        "fetch_listing_valuation",
+        AsyncMock(return_value=[{k: v for k, v in changed.items() if k.startswith("v_")}]),
+    )
+    sales = AsyncMock(return_value=[])
+    monkeypatch.setattr(queries, "fetch_building_sales", sales)
+    detail = await service.get_listing_from_clickhouse("L1")
+    assert detail.valuation_comparables == []
+    sales.assert_not_awaited()

@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onDestroy } from 'svelte'
+import { searchFilterOptions } from '$lib/utils/filterSearch'
 import BaseDropdown from './BaseDropdown.svelte'
 
 type DropdownVariant = 'field' | 'inverse' | 'icon'
@@ -10,7 +11,8 @@ let {
 	options,
 	value = $bindable('All'),
 	onchange,
-	variant = 'field'
+	variant = 'field',
+	approximate = false
 }: {
 	id: string
 	ariaLabel: string
@@ -18,6 +20,7 @@ let {
 	value?: string
 	onchange?: (newValue: string) => void
 	variant?: DropdownVariant
+	approximate?: boolean
 } = $props()
 
 let searchQuery = $state('')
@@ -84,12 +87,16 @@ function select(option: string, close: () => void) {
 
 let resolvedOptions = $derived.by(() => {
 	const ordered =
-		value && value !== 'All' && !options.includes(value) ? ['All', value, ...options] : options
+		!approximate && value && value !== 'All' && !options.includes(value)
+			? ['All', value, ...options]
+			: options
 	return Array.from(new Set(ordered))
 })
 
 let filteredOptions = $derived(
-	resolvedOptions.filter((option) => option.toLowerCase().includes(searchQuery.toLowerCase()))
+	approximate
+		? searchFilterOptions(resolvedOptions, searchQuery)
+		: resolvedOptions.filter((option) => option.toLowerCase().includes(searchQuery.toLowerCase()))
 )
 
 let displayedOptions = $derived(filteredOptions.slice(0, visibleCount))

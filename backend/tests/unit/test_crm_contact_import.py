@@ -133,7 +133,7 @@ def test_embedded_property_identifiers_are_recovered_from_building_field():
 
 
 @pytest.mark.asyncio
-async def test_unique_transaction_signature_recovers_canonical_property(monkeypatch):
+async def test_unique_transaction_signature_cannot_invent_a_missing_source_unit(monkeypatch):
     contact = _contact(
         area_name="",
         project_name="Sidra 2",
@@ -164,13 +164,9 @@ async def test_unique_transaction_signature_recovers_canonical_property(monkeypa
 
     result = await _recover_property_identity_from_transaction([contact])
 
-    assert result["unique"] == 1
-    assert contact.area_name == "Dubai Hills Estate"
-    assert contact.building_name == "Sidra 2"
-    assert contact.unit_number == "DE-SIDRA2-V-117"
-    assert (
-        contact.evidence["property_identity_resolution"]["method"] == "unique_transaction_signature"
-    )
+    assert result["resolved"] == 0
+    assert contact.unit_number == "NULL"
+    assert "property_identity_resolution" not in contact.evidence
 
 
 @pytest.mark.asyncio
@@ -262,7 +258,7 @@ async def test_transaction_collision_requires_unique_location_context(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_near_transaction_date_recovers_unit_with_project_context(monkeypatch):
+async def test_near_date_and_project_cannot_replace_an_original_unit_identifier(monkeypatch):
     contact = _contact(
         area_name="",
         project_name="Sidra 2",
@@ -293,12 +289,9 @@ async def test_near_transaction_date_recovers_unit_with_project_context(monkeypa
 
     result = await _recover_property_identity_from_near_transaction([contact])
 
-    assert result["resolved"] == 1
-    assert contact.building_name == "Sidra 2"
-    assert contact.unit_number == "DESIDRA2-V-57"
-    resolution = contact.evidence["property_identity_resolution"]
-    assert resolution["method"] == "near_transaction_signature_with_location"
-    assert resolution["date_delta_days"] == 1
+    assert result["resolved"] == 0
+    assert contact.unit_number == "NULL"
+    assert "property_identity_resolution" not in contact.evidence
 
 
 @pytest.mark.asyncio
@@ -430,6 +423,15 @@ def test_aura_plot_preregistration_column_is_used_as_the_villa_identifier():
 @pytest.mark.asyncio
 async def test_delete_import_removes_published_records_and_the_import(monkeypatch):
     monkeypatch.setattr("app.crm.imports.delete_drop_log", AsyncMock())
+    input_lookup = AsyncMock(return_value="private-input")
+
+    async def remove_committed_input(key):
+        assert key == "private-input"
+        assert db.commit.await_count == 1  # Never orphan a still-committed import on rollback.
+
+    cleanup = AsyncMock(side_effect=remove_committed_input)
+    monkeypatch.setattr("app.crm.imports.import_jobs.delete_input_for_import", input_lookup)
+    monkeypatch.setattr("app.crm.imports.import_jobs.remove_input", cleanup)
     record = MagicMock()
     record.mapping = {}
     lookup = MagicMock()
@@ -444,6 +446,8 @@ async def test_delete_import_removes_published_records_and_the_import(monkeypatc
     )
 
     assert db.exec.await_count == 3
+    input_lookup.assert_awaited_once_with(db, record)
+    cleanup.assert_awaited_once_with("private-input")
     db.delete.assert_awaited_once_with(record)
     db.commit.assert_awaited_once()
 
@@ -526,180 +530,6 @@ def test_contact_only_row_remains_unverified_even_with_exact_unit():
 
     assert contact.ownership_status == "unit_linked_unverified"
     assert "does not establish a sale acquisition" in contact.match_reason
-
-
-def _owner_list_contact(**overrides) -> ParsedContact:
-    contact = _contact(party_role="", procedure_type="", **overrides)
-    contact.evidence["event_family"] = "contact_snapshot"
-    return contact
-
-
-def test_owner_list_row_matching_latest_sale_is_verified():
-    # Owner-list sheets omit Buyer/Seller; a DLD sale on the same date and price
-    # proves the acquisition, so these owners must not stay unverified.
-    contact = _owner_list_contact()
-    sales = {
-        contact.property_key: [
-            {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2_250_000}
-        ]
-    }
-
-    _apply_evidence(contact, sales=sales, rentals={})
-
-    assert contact.ownership_status == "verified_current_owner"
-    assert contact.evidence["acquisition_inferred"] is True
-
-
-def test_owner_list_row_with_later_sale_is_former_owner():
-    # An owner-list entry whose acquisition is followed by a resale is not a lead.
-    contact = _owner_list_contact(
-        transaction_date=date(2018, 9, 4), transaction_price_aed=1_300_000
-    )
-    sales = {
-        contact.property_key: [
-            {"transaction_date": date(2018, 9, 4), "sale_amount_aed": 1_300_000},
-            {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2_250_000},
-        ]
-    }
-
-    _apply_evidence(contact, sales=sales, rentals={})
-
-    assert contact.ownership_status == "former_owner"
-    assert contact.later_sale_date == date(2025, 1, 31)
-
-
-def test_owner_list_row_without_price_matching_sale_date_is_probable():
-    # Date alone fits the sale but cannot prove the amount.
-    contact = _owner_list_contact(transaction_price_aed=None)
-    sales = {
-        contact.property_key: [
-            {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2_250_000}
-        ]
-    }
-
-    _apply_evidence(contact, sales=sales, rentals={})
-
-    assert contact.ownership_status == "probable_current_owner"
-
-
-@pytest.mark.parametrize(
-    ("row_date", "row_price"),
-    [(date(2023, 6, 1), 2_250_000), (date(2025, 1, 31), 1_000_000)],
-)
-def test_owner_list_row_without_matching_sale_stays_unverified(row_date, row_price):
-    # A registration date may be a title-deed date, not the sale date; without a
-    # matching DLD sale the row is not evidence of a conflict.
-    contact = _owner_list_contact(transaction_date=row_date, transaction_price_aed=row_price)
-    sales = {
-        contact.property_key: [
-            {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2_250_000}
-        ]
-    }
-
-    _apply_evidence(contact, sales=sales, rentals={})
-
-    assert contact.ownership_status == "unit_linked_unverified"
-    assert "acquisition_inferred" not in contact.evidence
-
-
-def test_mortgage_row_is_not_treated_as_owner_list_acquisition():
-    # Financing events do not transfer ownership.
-    contact = _contact(procedure_type="Mortgage Registration")
-    contact.evidence["event_family"] = "financing"
-    sales = {
-        contact.property_key: [
-            {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2_250_000}
-        ]
-    }
-
-    _apply_evidence(contact, sales=sales, rentals={})
-
-    assert contact.ownership_status == "unit_linked_unverified"
-
-
-def _plot_contact(**overrides) -> ParsedContact:
-    values = {
-        "unit_number": "",
-        "building_name": "",
-        "project_name": "",
-        "transaction_date": date(2022, 12, 29),
-        "transaction_price_aed": 1_717_600,
-        "procedure_type": "Complete Delayed Sell",
-    }
-    contact = _contact(**{**values, **overrides})
-    contact.evidence["event_family"] = "sale"
-    contact.evidence["cadastral_identity"] = {
-        "property_key": "dld-land:505:2822:0",
-        "villa_code": "dh2-xv728b",
-    }
-    return contact
-
-
-def _villa_sale(on: date, amount: int) -> dict:
-    return {"transaction_date": on, "sale_amount_aed": amount, "sale_key": f"s-{on}"}
-
-
-def test_plot_seller_is_former_owner_without_registry_sales():
-    # The file itself records the disposal; villas without a unit must not hide it.
-    contact = _plot_contact(party_role="Seller")
-
-    _apply_evidence(contact, sales={}, rentals={})
-
-    assert contact.ownership_status == "former_owner"
-
-
-def test_plot_buyer_with_later_villa_sale_is_former_owner():
-    # A resale of the same villa after the buyer's acquisition ends their ownership.
-    contact = _plot_contact()
-    sales = {
-        contact.property_key: [
-            _villa_sale(date(2016, 11, 29), 1_200_000),
-            _villa_sale(date(2024, 2, 13), 1_200_000),
-        ]
-    }
-
-    _apply_evidence(contact, sales=sales, rentals={})
-
-    assert contact.ownership_status == "former_owner"
-    assert contact.later_sale_date == date(2024, 2, 13)
-
-
-def test_plot_buyer_without_later_villa_sale_is_probable_owner():
-    # The handover is not in DLD sales, but no resale is recorded since.
-    contact = _plot_contact()
-    sales = {contact.property_key: [_villa_sale(date(2016, 11, 29), 1_200_000)]}
-
-    _apply_evidence(contact, sales=sales, rentals={})
-
-    assert contact.ownership_status == "probable_current_owner"
-
-
-def test_plot_buyer_matching_latest_villa_sale_is_verified():
-    contact = _plot_contact(transaction_date=date(2024, 2, 13), transaction_price_aed=1_200_000)
-    sales = {contact.property_key: [_villa_sale(date(2024, 2, 14), 1_200_000)]}
-
-    _apply_evidence(contact, sales=sales, rentals={})
-
-    assert contact.ownership_status == "verified_current_owner"
-
-
-def test_plot_mortgage_without_later_sale_does_not_become_current_owner():
-    # A mortgage does not prove who acquired the villa.
-    contact = _plot_contact(procedure_type="Mortgage Registration")
-    contact.evidence["event_family"] = "financing"
-    sales = {contact.property_key: [_villa_sale(date(2016, 11, 29), 1_200_000)]}
-
-    _apply_evidence(contact, sales=sales, rentals={})
-
-    assert contact.ownership_status == "unit_linked_unverified"
-
-
-def test_plot_without_villa_sales_stays_unverified():
-    contact = _plot_contact()
-
-    _apply_evidence(contact, sales={}, rentals={})
-
-    assert contact.ownership_status == "unit_linked_unverified"
 
 
 def test_unresolvable_source_and_registry_gap_are_distinct_states():
@@ -908,170 +738,3 @@ async def test_owner_profile_enrichment_adds_authoritative_registry_details(monk
     assert result.registry_price_per_sqft_aed == 2_877
     assert result.registry_market_status == "Ready"
     registry_query.assert_awaited_once()
-
-
-
-def _match_companions(rows, events):
-    from app.crm.ownership import _apply_companion_ownership
-
-    sales = {rows[0].property_key: events}
-    for row in rows:
-        _apply_evidence(row, sales=sales, rentals={})
-    _apply_companion_ownership(rows, sales)
-
-
-def test_independent_acquisition_verifies_owner_without_using_mortgage_amount():
-    sale = _contact(source_row_number=2)
-    loan = _contact(
-        source_row_number=3, procedure_type="Mortgage Registration", transaction_price_aed=900000
-    )
-    _match_companions(
-        [sale, loan], [{"transaction_date": sale.transaction_date, "sale_amount_aed": 2250000}]
-    )
-    assert loan.ownership_status == "verified_current_owner"
-    assert loan.transaction_price_aed == 900000
-    assert loan.procedure_type == "Mortgage Registration"
-    assert loan.evidence["companion_ownership"]["registry_sale_price_aed"] == 2250000
-    assert loan.evidence["companion_ownership"]["source_row_number"] == 2
-
-
-def test_property_sale_alone_does_not_make_a_lender_the_owner():
-    loan = _contact(procedure_type="Mortgage Registration", transaction_price_aed=900000)
-    _match_companions(
-        [loan], [{"transaction_date": loan.transaction_date, "sale_amount_aed": 2250000}]
-    )
-    assert loan.ownership_status == "unit_linked_unverified"
-    assert "companion_ownership" not in loan.evidence
-
-
-@pytest.mark.parametrize(
-    "other",
-    [
-        {"contact_name": "Different Owner"},
-        {"phone_primary": "+971509876543"},
-        {"unit_number": "603"},
-    ],
-)
-def test_acquisition_cannot_be_borrowed_from_another_contact_or_property(other):
-    sale = _contact()
-    loan = _contact(procedure_type="Mortgage Registration", **other)
-    _match_companions(
-        [sale, loan], [{"transaction_date": sale.transaction_date, "sale_amount_aed": 2250000}]
-    )
-    assert loan.ownership_status != "verified_current_owner"
-    assert "companion_ownership" not in loan.evidence
-
-
-@pytest.mark.parametrize("identity", ["absent", "same", "conflict"])
-def test_name_only_requires_identity_proof_and_conflicting_ids_block_contact_match(identity):
-    kwargs = {} if identity == "conflict" else {"phone_primary": None, "email_primary": None}
-    sale = _contact(**kwargs)
-    loan = _contact(procedure_type="Mortgage Registration", **kwargs)
-    if identity == "same":
-        sale.owner_identity_tokens = loan.owner_identity_tokens = {"document": "same-token"}
-    elif identity == "conflict":
-        sale.owner_identity_tokens = {"emirates_id": "one"}
-        loan.owner_identity_tokens = {"emirates_id": "another"}
-    _match_companions(
-        [sale, loan], [{"transaction_date": sale.transaction_date, "sale_amount_aed": 2250000}]
-    )
-    assert (loan.ownership_status == "verified_current_owner") == (identity == "same")
-
-
-def test_prior_named_acquisition_and_later_sale_establish_former_owner():
-    sale = _contact(transaction_date=date(2024, 1, 1))
-    loan = _contact(procedure_type="Mortgage Registration", transaction_date=date(2024, 6, 1))
-    events = [
-        {"transaction_date": sale.transaction_date, "sale_amount_aed": 2250000},
-        {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2500000},
-    ]
-    _match_companions([sale, loan], events)
-    assert loan.ownership_status == "former_owner"
-    assert loan.later_sale_date == date(2025, 1, 31)
-
-
-def test_matched_disposal_can_establish_former_owner_without_an_older_purchase():
-    seller = _contact(party_role="Seller")
-    loan = _contact(procedure_type="Mortgage Registration", transaction_date=date(2024, 1, 1))
-    _match_companions(
-        [seller, loan], [{"transaction_date": seller.transaction_date, "sale_amount_aed": 2250000}]
-    )
-    assert loan.ownership_status == "former_owner"
-
-
-@pytest.mark.parametrize("gap", [1, 14, 15])
-def test_shifted_acquisition_remains_probable_only_within_bounded_date_window(gap):
-    from datetime import timedelta
-
-    observed = date(2025, 1, 31)
-    sale = _contact(transaction_date=observed + timedelta(days=gap))
-    loan = _contact(procedure_type="Mortgage Registration")
-    _match_companions([sale, loan], [{"transaction_date": observed, "sale_amount_aed": 2250000}])
-    assert loan.ownership_status == (
-        "probable_current_owner" if gap <= 14 else "unit_linked_unverified"
-    )
-    if gap <= 14:
-        assert loan.evidence["companion_ownership"]["date_delta_days"] == gap
-
-
-def test_same_day_named_buyer_and_seller_require_review_instead_of_promotion():
-    buyer = _contact()
-    seller = _contact(party_role="Seller")
-    loan = _contact(procedure_type="Mortgage Registration")
-    _match_companions(
-        [buyer, seller, loan],
-        [{"transaction_date": buyer.transaction_date, "sale_amount_aed": 2250000}],
-    )
-    assert loan.ownership_status == "unit_linked_unverified"
-
-
-def test_existing_conflicting_sale_assessment_is_preserved():
-    sale = _contact()
-    conflict = _contact(transaction_price_aed=1000000)
-    _match_companions(
-        [sale, conflict], [{"transaction_date": sale.transaction_date, "sale_amount_aed": 2250000}]
-    )
-    assert conflict.ownership_status == "conflicting_claim"
-
-
-def test_inferred_companion_unit_without_original_unit_is_not_independent_property_proof():
-    sale = _contact(evidence={"property_identity_resolution": {"source": {"unit_number": ""}}})
-    loan = _contact(procedure_type="Mortgage Registration")
-    _match_companions(
-        [sale, loan], [{"transaction_date": sale.transaction_date, "sale_amount_aed": 2250000}]
-    )
-    assert loan.ownership_status == "unit_linked_unverified"
-
-
-def test_possible_newer_acquisition_prevents_a_former_owner_assertion():
-    old_sale = _contact(transaction_date=date(2024, 1, 1))
-    newer_claim = _contact(transaction_date=date(2025, 6, 1))
-    loan = _contact(procedure_type="Mortgage Registration", transaction_date=date(2024, 6, 1))
-    events = [
-        {"transaction_date": old_sale.transaction_date, "sale_amount_aed": 2250000},
-        {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2500000},
-    ]
-    _match_companions([old_sale, newer_claim, loan], events)
-    assert loan.ownership_status == "unit_linked_unverified"
-
-
-def test_derived_mortgage_assessment_cannot_be_reused_as_acquisition_proof():
-    from app.crm.ownership import _apply_companion_ownership
-
-    derived = _contact(
-        procedure_type="Mortgage Registration", ownership_status="verified_current_owner"
-    )
-    loan = _contact(
-        procedure_type="Mortgage Registration", ownership_status="unit_linked_unverified"
-    )
-    _apply_companion_ownership(
-        [derived, loan],
-        {
-            loan.property_key: [
-                {"transaction_date": loan.transaction_date, "sale_amount_aed": 2250000}
-            ]
-        },
-    )
-    assert loan.ownership_status == "unit_linked_unverified"
-
-

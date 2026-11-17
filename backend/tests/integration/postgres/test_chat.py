@@ -25,6 +25,8 @@ async def test_conversation_ownership_and_message_json_survive_real_commits(pg_s
     conversation_id = conversation.id
     payload = {
         "total_tokens": 12,
+        "guardrail_version": 1,
+        "private": False,
         "artifacts": [
             {"id": "tool-1", "type": "chart", "data": {"points": [], "legacy": {"x": 1}}}
         ],

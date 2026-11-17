@@ -25,6 +25,8 @@ export interface RequestOptions {
 	body?: unknown
 	headers?: Record<string, string>
 	returnBlob?: boolean
+	/** The raw Response, for a download whose headers describe the file. */
+	returnResponse?: boolean
 	signal?: AbortSignal
 }
 
@@ -36,8 +38,46 @@ interface StreamOptions {
 type QueryValue = string | number | boolean | null | undefined | Date
 type QueryParams = Record<string, QueryValue | QueryValue[]>
 
+const BUSY_RETRIES = 3
+
+/**
+ * A read the server turned away only because it was momentarily full (429 with
+ * Retry-After, sent by CRM admission, or 503 with Retry-After, sent when the warehouse
+ * is out of memory or time) is retried after the advised delay, at most 5 seconds. Writes,
+ * and 429s or 503s without Retry-After (a used-up allowance, a real outage), are never replayed.
+ */
+function busyRetryDelay(res: Response, method: string, attempt: number): number | null {
+	if ((res.status !== 429 && res.status !== 503) || method !== 'GET' || attempt >= BUSY_RETRIES)
+		return null
+	const seconds = Number(res.headers.get('Retry-After'))
+	if (!res.headers.has('Retry-After') || !Number.isFinite(seconds) || seconds < 0) return null
+	return Math.min(seconds, 5) * 1000
+}
+
+function sleep(ms: number, signal?: AbortSignal) {
+	return new Promise<void>((resolve, reject) => {
+		if (signal?.aborted) return reject(signal.reason)
+		const timer = setTimeout(resolve, ms)
+		signal?.addEventListener(
+			'abort',
+			() => {
+				clearTimeout(timer)
+				reject(signal.reason)
+			},
+			{ once: true }
+		)
+	})
+}
+
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-	const { method = 'GET', body, headers = {}, returnBlob = false, signal } = options
+	const {
+		method = 'GET',
+		body,
+		headers = {},
+		returnBlob = false,
+		returnResponse = false,
+		signal
+	} = options
 
 	// if access token available, add auth header.
 	const access_token = await get_access_token()
@@ -67,16 +107,21 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 	}
 
 	let res: Response
-	try {
-		res = await fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
-	} catch (err) {
-		if (err instanceof Error && err.name === 'AbortError') throw err
-		throw new ApiError(
-			'Could not reach the API server. Check that the backend is running and try again.',
-			0,
-			'network_error',
-			err
-		)
+	for (let attempt = 0; ; attempt++) {
+		try {
+			res = await fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
+		} catch (err) {
+			if (err instanceof Error && err.name === 'AbortError') throw err
+			throw new ApiError(
+				'Could not reach the API server. Check that the backend is running and try again.',
+				0,
+				'network_error',
+				err
+			)
+		}
+		const wait = busyRetryDelay(res, method, attempt)
+		if (wait === null) break
+		await sleep(wait, signal)
 	}
 
 	if (!res.ok) {
@@ -118,6 +163,10 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
 	if (res.status === 204) {
 		return undefined as T
+	}
+
+	if (returnResponse) {
+		return res as T
 	}
 
 	if (returnBlob) {
@@ -240,7 +289,12 @@ async function stream(endpoint: string, onChunk: StreamCallback, options: Stream
 			}
 
 			if (!terminalEventSeen) {
-				onChunk(JSON.stringify({ type: 'done' }))
+				onChunk(
+					JSON.stringify({
+						type: 'error',
+						error: 'Stream ended before completion. Please try again.'
+					})
+				)
 			}
 		})
 		.catch((error) => {

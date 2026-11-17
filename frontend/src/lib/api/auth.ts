@@ -9,14 +9,24 @@ import type {
 import { AuthClient } from '@supabase/auth-js'
 import { browser } from '$app/environment'
 import { env } from '$env/dynamic/public'
+import * as staticPublicEnv from '$env/static/public'
+import { clearUserBrowserState } from '$lib/auth/user-browser-state'
+import { authClientHeaders } from './auth-client-options'
 import { client } from './client'
 import type { AuthMeResponse, UpdateProfileResponse } from './generated/hey-api/types.gen'
 
 export type { AuthMeResponse, UpdateProfileResponse }
 export type AuthenticatedUser = AuthMeResponse
 
+// On Cloudflare the Worker serves $env/dynamic/public from wrangler.jsonc `vars` (or Pages env vars),
+// not from the build shell. Fall back to a value baked in at build time (just build-pilot-frontend).
+const builtInPublicEnv = staticPublicEnv as Record<string, string | undefined>
+const publishableKey =
+	env.PUBLIC_AUTH_PUBLISHABLE_KEY || builtInPublicEnv.PUBLIC_AUTH_PUBLISHABLE_KEY
+
 export const authClient = new AuthClient({
 	url: env.PUBLIC_AUTH_BASE_URL,
+	headers: authClientHeaders(publishableKey),
 	storageKey: 'authentication',
 	detectSessionInUrl: true,
 	persistSession: true
@@ -228,6 +238,7 @@ export async function logout(redirectTo = '/'): Promise<void> {
 
 	const { clearUser } = await import('$lib/stores/user.svelte')
 	clearUser()
+	clearUserBrowserState()
 
 	window.location.href = redirectTo
 }

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal, get_args
 
 from openai.types import chat
 from pydantic_ai.models.openai import OpenAIStreamedResponse
@@ -6,6 +6,18 @@ from pydantic_ai.models.openrouter import OpenRouterModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 
 _OPENAI_SERVICE_TIERS = {"auto", "default", "flex", "scale", "priority", None}
+
+AssistantRole = Literal[
+    "router",
+    "coordinator",
+    "market",
+    "pricing",
+    "crm",
+    "followup",
+    "action",
+    "whatsapp_classifier",
+    "whatsapp_drafter",
+]
 
 
 def _drop_unknown_service_tier(data: dict[str, Any]) -> dict[str, Any]:
@@ -38,5 +50,45 @@ def create_openrouter_model() -> CompatibleOpenRouterModel:
 
     return CompatibleOpenRouterModel(
         model_name=settings.DEFAULT_CHAT_MODEL,
+        provider=OpenRouterProvider(api_key=settings.OPENROUTER_API_KEY),
+    )
+
+
+class AssistantModelDisabled(RuntimeError):
+    pass
+
+
+class AssistantOpenRouterModel(CompatibleOpenRouterModel):
+    """Gate both streamed and ordinary provider requests until qualification."""
+
+    def prepare_request(self, model_settings, model_request_parameters):
+        from app.config import settings, validate_assistant_model_id
+
+        if not settings.ASSISTANT_ENABLED:
+            raise AssistantModelDisabled("Assistant model rollout is disabled")
+        validate_assistant_model_id(self.model_name)
+        prepared, parameters = super().prepare_request(model_settings, model_request_parameters)
+        prepared = dict(prepared or {})
+        body = dict(prepared.get("extra_body") or {})
+        if any(key in body for key in ("model", "models", "preset", "route")):
+            raise ValueError("Assistant model routing and fallback overrides are not allowed")
+        body["provider"] = {
+            **body.get("provider", {}),
+            "zdr": True,
+            "data_collection": "deny",
+            "allow_fallbacks": False,
+        }
+        prepared["extra_body"] = body
+        return prepared, parameters
+
+
+def create_assistant_model(*, role: AssistantRole) -> AssistantOpenRouterModel:
+    from app.config import settings, validate_assistant_model_id
+
+    if role not in get_args(AssistantRole):
+        raise ValueError("Unknown assistant model role")
+    model_name = validate_assistant_model_id(getattr(settings, f"ASSISTANT_{role.upper()}_MODEL"))
+    return AssistantOpenRouterModel(
+        model_name=model_name,
         provider=OpenRouterProvider(api_key=settings.OPENROUTER_API_KEY),
     )

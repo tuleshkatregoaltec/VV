@@ -29,7 +29,8 @@ export function valueLabel(card: Card): string {
 	if (card.valuation_method === 'dld_sales') {
 		if (card.market_position === 'below_market') return `${pct(card.value_gap_pct)} below value`
 		// Asking prices usually sit 5–10% above sale prices: not necessarily overpriced.
-		if (card.market_position === 'above_market') return `Asking ${pct(card.value_gap_pct)} above sales`
+		if (card.market_position === 'above_market')
+			return `Asking ${pct(card.value_gap_pct)} above sales`
 		if (card.market_position === 'near_market') return 'At value'
 		return 'Not enough sales'
 	}
@@ -41,7 +42,8 @@ export function valueLabel(card: Card): string {
 }
 
 export function valueTone(card: Pick<Card, 'market_position' | 'valuation_method'>): string {
-	if (card.market_position === 'below_market') return 'border-success-border bg-success-bg text-success'
+	if (card.market_position === 'below_market')
+		return 'border-success-border bg-success-bg text-success'
 	if (card.market_position === 'near_market') return 'border-info-border bg-info-bg text-info'
 	if (card.market_position === 'above_market')
 		return card.valuation_method === 'dld_sales'
@@ -56,7 +58,7 @@ export function basisText(card: Card): string {
 		if (card.market_position === 'insufficient_data')
 			return 'Too few same-bedroom sales in this building'
 		const confidence = card.valuation_confidence ? ` · ${card.valuation_confidence} confidence` : ''
-		return `${card.comparable_count.toLocaleString()} DLD sales${confidence}`
+		return `${card.comparable_count.toLocaleString()} recorded sales${confidence}`
 	}
 	return card.comparable_count
 		? `${card.comparable_count.toLocaleString()} peer listings`

@@ -1,6 +1,7 @@
 import asyncio
 from typing import Any
 
+from app.market.units import per_sqft, sqft
 from app.plots.geometry import land_use_labels
 from app.project import radar_queries
 from app.project.mapping import (
@@ -86,8 +87,8 @@ def _radar_stats_from_row(row: dict[str, Any], period_days: int) -> ProjectRadar
         rental_contract_count_12m=rent_count,
         total_sales_volume_12m=sales_volume,
         dda_plot_count=int(row.get("dda_plot_count") or 0),
-        dda_total_plot_area_sqm=_float_or_none(row.get("dda_total_plot_area_sqm")) or 0.0,
-        dda_total_gfa_sqm=_float_or_none(row.get("dda_total_gfa_sqm")) or 0.0,
+        dda_total_plot_area_sqft=sqft(_float_or_none(row.get("dda_total_plot_area_sqm")) or 0.0),
+        dda_total_gfa_sqft=sqft(_float_or_none(row.get("dda_total_gfa_sqm")) or 0.0),
         activity_period_days=period_days,
         activity_period_start=row.get("activity_period_start"),
         activity_period_end=row.get("activity_period_end"),
@@ -135,13 +136,13 @@ def _radar_projects_from_rows(
             median_sale_price=_float_or_none(row.get("median_sale_price")),
             median_annual_rent=_float_or_none(row.get("median_annual_rent")),
             gross_yield_pct=_radar_gross_yield_pct(row),
-            avg_sale_price_sqm_12m=_float_or_none(row.get("avg_sale_price_sqm")),
-            avg_rent_price_sqm_12m=_float_or_none(row.get("avg_rent_price_sqm")),
+            avg_sale_price_sqft_12m=per_sqft(_float_or_none(row.get("avg_sale_price_sqm"))),
+            avg_rent_price_sqft_12m=per_sqft(_float_or_none(row.get("avg_rent_price_sqm"))),
             sales_transaction_count=int(row.get("sales_transaction_count") or 0),
             rental_contract_count=int(row.get("rental_contract_count") or 0),
             total_sales_volume=_float_or_none(row.get("total_sales_volume")) or 0.0,
-            avg_sale_price_sqm=_float_or_none(row.get("avg_sale_price_sqm")),
-            avg_rent_price_sqm=_float_or_none(row.get("avg_rent_price_sqm")),
+            avg_sale_price_sqft=per_sqft(_float_or_none(row.get("avg_sale_price_sqm"))),
+            avg_rent_price_sqft=per_sqft(_float_or_none(row.get("avg_rent_price_sqm"))),
         )
         for row in rows
     ]
@@ -170,20 +171,22 @@ def _radar_areas_from_rows(
             total_sales_volume_12m=_float_or_none(row.get("total_sales_volume")) or 0.0,
             median_sale_price=_float_or_none(row.get("median_sale_price")),
             median_annual_rent=_float_or_none(row.get("median_annual_rent")),
-            avg_sale_price_sqm_12m=_float_or_none(row.get("avg_sale_price_sqm")),
-            avg_rent_price_sqm_12m=_float_or_none(row.get("avg_rent_price_sqm")),
+            avg_sale_price_sqft_12m=per_sqft(_float_or_none(row.get("avg_sale_price_sqm"))),
+            avg_rent_price_sqft_12m=per_sqft(_float_or_none(row.get("avg_rent_price_sqm"))),
             gross_yield_pct=_radar_gross_yield_pct(row),
             top_developers=_developer_display_list(row.get("top_developers"), developers, limit=5),
             top_master_projects=list(row.get("top_master_projects") or [])[:5],
             dda_plot_count=int(row.get("dda_plot_count") or 0),
-            dda_total_plot_area_sqm=_float_or_none(row.get("dda_total_plot_area_sqm")) or 0.0,
-            dda_total_gfa_sqm=_float_or_none(row.get("dda_total_gfa_sqm")) or 0.0,
+            dda_total_plot_area_sqft=sqft(
+                _float_or_none(row.get("dda_total_plot_area_sqm")) or 0.0
+            ),
+            dda_total_gfa_sqft=sqft(_float_or_none(row.get("dda_total_gfa_sqm")) or 0.0),
             dda_dominant_land_uses=land_use_labels(row.get("dda_dominant_land_uses"), limit=5),
             sales_transaction_count=int(row.get("sales_transaction_count") or 0),
             rental_contract_count=int(row.get("rental_contract_count") or 0),
             total_sales_volume=_float_or_none(row.get("total_sales_volume")) or 0.0,
-            avg_sale_price_sqm=_float_or_none(row.get("avg_sale_price_sqm")),
-            avg_rent_price_sqm=_float_or_none(row.get("avg_rent_price_sqm")),
+            avg_sale_price_sqft=per_sqft(_float_or_none(row.get("avg_sale_price_sqm"))),
+            avg_rent_price_sqft=per_sqft(_float_or_none(row.get("avg_rent_price_sqm"))),
         )
         for row in rows
     ]

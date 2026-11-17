@@ -99,7 +99,9 @@ async def mark_algorithm_version(db: AsyncSession, enquiry_id, version):
     )
 
 
-async def set_match_hidden_after(db: AsyncSession, enquiry_id, hidden: dict[str, int]):
+async def set_match_hidden_after(
+    db: AsyncSession, enquiry_id, hidden: dict[str, int], *, move_in=None
+):
     """Store refresh's timing counts beside the brief, touching only that key.
 
     Refresh runs for seconds; rewriting the whole criteria from the copy it loaded would undo a
@@ -108,11 +110,15 @@ async def set_match_hidden_after(db: AsyncSession, enquiry_id, hidden: dict[str,
     return await db.exec(
         text(
             "UPDATE crm_inbound_enquiries "
-            "SET criteria = jsonb_set(criteria::jsonb, '{_match_hidden_after}', "
-            "CAST(:hidden AS jsonb))::json "
+            "SET criteria = jsonb_set(jsonb_set(criteria::jsonb, '{_match_hidden_after}', "
+            "CAST(:hidden AS jsonb)), '{_match_move_in}', CAST(:move_in AS jsonb))::json "
             "WHERE id = :enquiry_id"
         ),
-        params={"hidden": json.dumps(hidden), "enquiry_id": enquiry_id},
+        params={
+            "hidden": json.dumps(hidden),
+            "enquiry_id": enquiry_id,
+            "move_in": json.dumps(move_in.isoformat() if move_in else None),
+        },
     )
 
 

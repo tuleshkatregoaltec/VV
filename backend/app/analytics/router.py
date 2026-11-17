@@ -1,7 +1,7 @@
 """Analytics API endpoints with flexible filtering from daily aggregates."""
 
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -37,8 +37,28 @@ from app.core.dependencies import AuthContext, require_active_subscription
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
+# Request bounds: the warehouse binds day counts as Int32 and its records start in 2002 (DLD) and
+# 2014 (DXBI), so 10,000 days and dates from 2000 cover every record; anything else is a 422.
+MAX_LOOKBACK_DAYS = 10_000
+EARLIEST_DATE = date(2000, 1, 1)
+LATEST_DATE = date(2100, 12, 31)
+
+
+def _lookback_days(default: Optional[int], description: str):
+    return Query(default=default, ge=1, le=MAX_LOOKBACK_DAYS, description=description)
+
+
+def _date(description: str):
+    return Query(default=None, ge=EARLIEST_DATE, le=LATEST_DATE, description=description)
+
+
+def _ordered(start_date: Optional[date], end_date: Optional[date]) -> None:
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must not be after end_date")
+
 
 @router.get("/sales", response_model=AnalyticsResponse)
+@cached_endpoint(prefix="analytics:sales:v1", expire=900, daily=True)
 async def get_sales_analytics(
     context: AuthContext = Depends(require_active_subscription),
     market_type: Optional[str] = Query(
@@ -49,16 +69,11 @@ async def get_sales_analytics(
         default="Residential",
         description="Residential or Commercial (ignored if market_type set)",
     ),
-    timeframe_days: Optional[int] = Query(
-        default=None,
-        description="Number of days to look back (overrides start_date if provided)",
+    timeframe_days: Optional[int] = _lookback_days(
+        None, "Number of days to look back (overrides start_date if provided)"
     ),
-    start_date: Optional[date] = Query(
-        default=None, description="Explicit start date (YYYY-MM-DD)"
-    ),
-    end_date: Optional[date] = Query(
-        default=None, description="Explicit end date (YYYY-MM-DD), defaults to today"
-    ),
+    start_date: Optional[date] = _date("Explicit start date (YYYY-MM-DD)"),
+    end_date: Optional[date] = _date("Explicit end date (YYYY-MM-DD), defaults to today"),
     master_project: Optional[str] = Query(
         default=None, description="Filter by master project name"
     ),
@@ -86,6 +101,7 @@ async def get_sales_analytics(
     - By market: ?market_type=residential_units&timeframe_days=90
     - Custom range: ?start_date=2024-01-01&end_date=2024-12-31
     """
+    _ordered(start_date, end_date)
     return await analytics_service.get_sales_analytics(
         market_type=market_type,
         property_usage=property_usage,
@@ -102,19 +118,15 @@ async def get_sales_analytics(
 
 
 @router.get("/rentals", response_model=RentalAnalyticsResponse)
+@cached_endpoint(prefix="analytics:rentals:v1", expire=900, daily=True)
 async def get_rental_analytics(
     context: AuthContext = Depends(require_active_subscription),
     property_usage: str = Query(default="Residential", description="Residential or Commercial"),
-    timeframe_days: Optional[int] = Query(
-        default=None,
-        description="Number of days to look back (overrides start_date if provided)",
+    timeframe_days: Optional[int] = _lookback_days(
+        None, "Number of days to look back (overrides start_date if provided)"
     ),
-    start_date: Optional[date] = Query(
-        default=None, description="Explicit start date (YYYY-MM-DD)"
-    ),
-    end_date: Optional[date] = Query(
-        default=None, description="Explicit end date (YYYY-MM-DD), defaults to today"
-    ),
+    start_date: Optional[date] = _date("Explicit start date (YYYY-MM-DD)"),
+    end_date: Optional[date] = _date("Explicit end date (YYYY-MM-DD), defaults to today"),
     master_project: Optional[str] = Query(
         default=None, description="Filter by master project name"
     ),
@@ -138,6 +150,7 @@ async def get_rental_analytics(
     - Custom range: ?start_date=2024-06-01&end_date=2024-08-31
     - Filtered: ?property_usage=Commercial&rent_bucket=200K-500K
     """
+    _ordered(start_date, end_date)
     return await analytics_service.get_rental_analytics(
         property_usage=property_usage,
         timeframe_days=timeframe_days,
@@ -151,9 +164,10 @@ async def get_rental_analytics(
 
 
 @router.get("/market-trend", response_model=MarketTrendResponse)
+@cached_endpoint(prefix="analytics:market_trend:v1", expire=900, daily=True)
 async def get_market_trend(
     context: AuthContext = Depends(require_active_subscription),
-    days: int = Query(default=180, description="Number of days to look back (30, 90, 180, 365)"),
+    days: int = _lookback_days(180, "Number of days to look back (30, 90, 180, 365)"),
     market_type: Optional[str] = Query(
         default=None,
         description=f"Market type (overrides property_usage). One of: {', '.join(MARKET_FILTERS)}",
@@ -178,16 +192,20 @@ async def get_market_trend(
 
 
 @router.get("/projects", response_model=ProjectSearchResponse)
+@cached_endpoint(prefix="analytics:dxbi:search:v4", expire=300)
 async def search_projects_endpoint(
     context: AuthContext = Depends(require_active_subscription),
-    search: str = Query(default="", description="Master project name search term"),
-    limit: int = Query(default=50, description="Max results to return"),
+    search: str = Query(
+        default="", max_length=200, description="Building, project or area keywords"
+    ),
+    limit: int = Query(default=50, ge=1, le=100, description="Max results to return"),
 ):
-    """Search master project names for the selector dropdown."""
+    """Projects, masters and buildings for the selector (a building is its own scope)."""
     return await get_project_search(search=search, limit=limit)
 
 
 @router.get("/project/sub-projects", response_model=SubProjectsResponse)
+@cached_endpoint(prefix="analytics:dxbi:subprojects:v3", expire=300)
 async def get_sub_projects_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: str = Query(description="Master project name"),
@@ -200,13 +218,28 @@ async def get_sub_projects_endpoint(
 
 
 @router.get("/project/summary", response_model=ProjectAnalyticsResponse)
-@cached_endpoint(prefix="analytics:project_summary", expire=900)
+@cached_endpoint(prefix="analytics:dxbi:project_summary:v8", expire=900, daily=True)
 async def get_project_summary_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
     project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    building_id: Optional[str] = Query(
+        default=None, description="Building id (from the search): scopes to that building"
+    ),
     filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
+    ),
+    summary_days: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=3650,
+        description="Window for headline sales, rental, yield and usage counts: last N calendar "
+        "days including today in Dubai. Omit for all dates. Configuration history is unchanged.",
+    ),
+    usage: Literal["auto", "Residential", "Commercial"] = Query(
+        default="auto",
+        description="Residential or Commercial records; auto shows Commercial for a scope "
+        "with no residential records",
     ),
 ):
     """
@@ -215,46 +248,70 @@ async def get_project_summary_endpoint(
     or project with filter_type=project for a specific sub-project.
     """
     project_name, resolved_filter_type = _resolve_project_scope(
-        master_project=master_project, project=project, filter_type=filter_type
+        master_project=master_project,
+        project=project,
+        filter_type=filter_type,
+        building_id=building_id,
     )
     return await get_project_summary(
         project_name=project_name,
         filter_type=resolved_filter_type,
         master_project=master_project,
+        usage=usage,
+        summary_days=summary_days,
     )
 
 
 @router.get("/project/trends", response_model=ProjectTrendsResponse)
+@cached_endpoint(prefix="analytics:dxbi:trends:v4", expire=300, daily=True)
 async def get_project_trends_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
     project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    building_id: Optional[str] = Query(
+        default=None, description="Building id (from the search): scopes to that building"
+    ),
     filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
-    days: int = Query(default=365, description="Number of days to look back"),
+    days: int = _lookback_days(365, "Number of days to look back"),
+    usage: Literal["auto", "Residential", "Commercial"] = Query(
+        default="auto",
+        description="Residential or Commercial records; auto shows Commercial for a scope "
+        "with no residential records",
+    ),
 ):
     """Sales price trend time series for a project, master, or virtual master."""
     project_name, resolved_filter_type = _resolve_project_scope(
-        master_project=master_project, project=project, filter_type=filter_type
+        master_project=master_project,
+        project=project,
+        filter_type=filter_type,
+        building_id=building_id,
     )
     return await get_project_trends(
-        project_name=project_name, days=days, filter_type=resolved_filter_type
+        project_name=project_name, days=days, filter_type=resolved_filter_type, usage=usage
     )
 
 
 @router.get("/project/forecast", response_model=ProjectForecastResponse)
+@cached_endpoint(prefix="analytics:dxbi:forecast:v1", expire=900, daily=True)
 async def get_project_forecast_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
     project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    building_id: Optional[str] = Query(
+        default=None, description="Building id (from the search): scopes to that building"
+    ),
     filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
-    days: int = Query(default=365, description="Number of days to look back"),
+    days: int = _lookback_days(365, "Number of days to look back"),
 ):
     project_name, resolved_filter_type = _resolve_project_scope(
-        master_project=master_project, project=project, filter_type=filter_type
+        master_project=master_project,
+        project=project,
+        filter_type=filter_type,
+        building_id=building_id,
     )
     return await get_project_forecast(
         project_name=project_name, days=days, filter_type=resolved_filter_type
@@ -262,16 +319,23 @@ async def get_project_forecast_endpoint(
 
 
 @router.get("/project/pipeline", response_model=ProjectPipelineResponse)
+@cached_endpoint(prefix="analytics:dxbi:pipeline:v1", expire=900, daily=True)
 async def get_project_pipeline_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
     project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    building_id: Optional[str] = Query(
+        default=None, description="Building id (from the search): scopes to that building"
+    ),
     filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
 ):
     project_name, resolved_filter_type = _resolve_project_scope(
-        master_project=master_project, project=project, filter_type=filter_type
+        master_project=master_project,
+        project=project,
+        filter_type=filter_type,
+        building_id=building_id,
     )
     return await get_project_pipeline(project_name=project_name, filter_type=resolved_filter_type)
 
@@ -280,10 +344,14 @@ async def get_project_pipeline_endpoint(
     "/project/price-distribution",
     response_model=ProjectPriceDistributionResponse,
 )
+@cached_endpoint(prefix="analytics:dxbi:distribution:v4", expire=300)
 async def get_project_price_distribution_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
     project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    building_id: Optional[str] = Query(
+        default=None, description="Building id (from the search): scopes to that building"
+    ),
     filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
@@ -291,14 +359,23 @@ async def get_project_price_distribution_endpoint(
         default=None,
         description="Optional registration type filter (e.g. 'Off-Plan Properties')",
     ),
+    usage: Literal["auto", "Residential", "Commercial"] = Query(
+        default="auto",
+        description="Residential or Commercial records; auto shows Commercial for a scope "
+        "with no residential records",
+    ),
 ):
     project_name, resolved_filter_type = _resolve_project_scope(
-        master_project=master_project, project=project, filter_type=filter_type
+        master_project=master_project,
+        project=project,
+        filter_type=filter_type,
+        building_id=building_id,
     )
     return await get_project_price_distribution(
         project_name=project_name,
         filter_type=resolved_filter_type,
         reg_type=reg_type,
+        usage=usage,
     )
 
 

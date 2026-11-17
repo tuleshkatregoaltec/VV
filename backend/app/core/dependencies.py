@@ -41,7 +41,10 @@ async def require_admin(request: Request) -> AuthenticatedUser:
 
 
 async def require_api_key(x_api_key: str = Header(...)) -> None:
-    if not secrets.compare_digest(x_api_key, settings.SERVICE_API_KEY):
+    # Compare bytes: compare_digest raises TypeError on non-ASCII str, which surfaced as a 500.
+    if not secrets.compare_digest(
+        x_api_key.encode("utf-8"), settings.SERVICE_API_KEY.encode("utf-8")
+    ):
         raise HTTPException(status_code=401, detail="Invalid API key")
     return None
 

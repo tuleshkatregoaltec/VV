@@ -37,15 +37,9 @@ export type PanelState =
 	| { kind: 'new-listing'; fromLeadId?: number }
 	| { kind: 'new-deal'; leadId?: number }
 	| { kind: 'new-task'; date?: string }
-	| { kind: 'edit-event'; id: number }
 	| { kind: 'new-owner' }
 	| { kind: 'new-import'; ownersOnly?: boolean; leadsOnly?: boolean }
 	| { kind: 'areas' }
-	| { kind: 'email-compose'; leadIds: number[] }
-	| { kind: 'email-send'; id: number }
-	| { kind: 'email-inbound'; id: number }
-	| { kind: 'email-template'; id?: number }
-	| { kind: 'whatsapp-chat'; waId: string }
 	| { kind: 'owner-lead'; id: string }
 	| { kind: 'add-record'; ownerId: string }
 	| { kind: 'send'; target: 'listing' | 'market'; id: string }

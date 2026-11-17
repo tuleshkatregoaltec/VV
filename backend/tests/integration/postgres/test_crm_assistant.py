@@ -1,212 +1,251 @@
-"""CRM Assistant: conversations, pending actions and organisation isolation on real commits."""
-
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, date, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
-from app.crm.assistant import repository
-from app.crm.assistant.models import (
-    CrmAssistantAction,
-    CrmAssistantConversation,
-    CrmAssistantMessage,
+import pytest
+from pydantic_ai.messages import ModelRequest, ToolReturnPart
+from pydantic_ai.models.test import TestModel
+
+from app.chat import crm_tools
+from app.chat.dependencies import ChatDependencies
+from app.chat.workflows import crm_agent as agent
+from app.crm.assistant import query_my_records
+from app.crm.assistant_models import CrmAssistantQuery
+from app.crm.import_models import (
+    CrmContactImport,
+    CrmContactList,
+    CrmOwnerWorkspace,
+    CrmPropertyContactClaim,
 )
+from app.crm.inbound_models import CrmInboundContact, CrmInboundEnquiry
+from app.crm.models import CrmLeadWorkspace, CrmSavedLead
+from app.organization.models import Organization, OrganizationMembership
 
 
-def _now():
-    return datetime.now(timezone.utc)
-
-
-async def _conversation(db, user_id, organization_id, title="Leads chat"):
-    conversation = CrmAssistantConversation(
-        user_id=user_id,
-        organization_id=organization_id,
-        title=title,
-        created_at=_now(),
-        updated_at=_now(),
-    )
-    repository.save(db, conversation)
-    await db.commit()
-    await db.refresh(conversation)
-    return conversation
-
-
-async def test_conversations_scoped_by_user_and_org(pg_session):
-    """A colleague, or the same user after moving organisation, cannot see the chat."""
-    owner, colleague = str(uuid4()), str(uuid4())
-    org, other_org = str(uuid4()), str(uuid4())
-    conversation = await _conversation(pg_session, owner, org)
-
-    for user_id, organization_id in [(colleague, org), (owner, other_org)]:
-        assert (
-            await repository.get_conversation(pg_session, conversation.id, user_id, organization_id)
-            is None
-        )
-        assert await repository.list_conversations(pg_session, user_id, organization_id) == []
-
-    listed = await repository.list_conversations(pg_session, owner, org)
-    assert [item.id for item in listed] == [conversation.id]
-
-
-async def test_delete_removes_messages_only_for_owner(pg_session):
-    owner, colleague, org = str(uuid4()), str(uuid4()), str(uuid4())
-    conversation = await _conversation(pg_session, owner, org)
-    repository.save(
-        pg_session,
-        CrmAssistantMessage(
-            conversation_id=conversation.id, role="user", content="hi", created_at=_now()
-        ),
-    )
+@pytest.fixture
+async def private_records(pg_session):
+    now = datetime.now(UTC)
+    user, colleague, org, other_org = [str(uuid4()) for _ in range(4)]
+    pg_session.add(Organization(id=org, name="Private CRM test", subscription_status="active"))
+    await pg_session.flush()
+    pg_session.add(OrganizationMembership(user_id=user, organization_id=org))
     await pg_session.commit()
 
-    await repository.delete_conversation_records(pg_session, conversation.id, colleague, org)
-    await pg_session.commit()
-    assert len(await repository.list_messages(pg_session, conversation.id, owner, org)) == 1
-
-    await repository.delete_conversation_records(pg_session, conversation.id, owner, org)
-    await pg_session.commit()
-    assert await repository.list_messages(pg_session, conversation.id, owner, org) == []
-    assert await repository.get_conversation(pg_session, conversation.id, owner, org) is None
-
-
-async def _action(db, user_id, organization_id, **overrides):
-    action = CrmAssistantAction(
-        id=uuid4().hex,
-        organization_id=organization_id,
-        user_id=user_id,
-        enquiry_id=1,
-        action_type="status",
-        payload={"status": "qualified"},
-        summary="Move lead to qualified",
-        before={"status": "contacted"},
-        after={"status": "qualified"},
-        expires_at=_now() + timedelta(minutes=10),
-        created_at=_now(),
-        **overrides,
-    )
-    repository.save(db, action)
-    await db.commit()
-    return action
-
-
-async def test_action_round_trips(pg_session):
-    user, org = str(uuid4()), str(uuid4())
-    action = await _action(pg_session, user, org)
-    action_id = action.id
-    pg_session.expire_all()
-
-    loaded = await repository.get_action(pg_session, action_id, user, org)
-    assert loaded.status == "pending"
-    assert loaded.payload == {"status": "qualified"}
-    assert loaded.expires_at.tzinfo is not None
-    # Another user or organisation cannot load it by id.
-    assert await repository.get_action(pg_session, action_id, str(uuid4()), org) is None
-    assert await repository.get_action(pg_session, action_id, user, str(uuid4())) is None
-
-
-async def test_claim_action_succeeds_once(pg_session):
-    """Two Confirm clicks must not both run the change."""
-    user, org = str(uuid4()), str(uuid4())
-    action = await _action(pg_session, user, org)
-
-    assert await repository.claim_action(pg_session, action.id) is True
-    await pg_session.commit()
-    assert await repository.claim_action(pg_session, action.id) is False
-
-
-# Full flow on real commits: propose → confirm through the existing Leads services.
-
-
-async def _lead(db, organization_id, name="Ahmed Khan"):
-    from app.crm import inbound
-    from app.crm.inbound_models import InboundEnquiryCreate
-
-    return await inbound.create_inbound_enquiry(
-        db,
-        payload=InboundEnquiryCreate(
+    async def lead(name, organization, creator, assignee, status="new", follow_up=None):
+        contact = CrmInboundContact(
+            organization_id=organization,
             full_name=name,
+            phone="+971500000001",
+            email=f"{name}@example.test",
+            created_at=now,
+            updated_at=now,
+        )
+        pg_session.add(contact)
+        await pg_session.flush()
+        enquiry = CrmInboundEnquiry(
+            organization_id=organization,
+            contact_id=contact.id,
+            created_by_user_id=creator,
+            assigned_user_id=assignee,
             intent="buy",
-            record_kind="opportunity",
-            phone="+971501234567",
-            criteria={"locations": ["JVC"], "budget_max_aed": 2_000_000},
-        ),
-        user_id=str(uuid4()),
-        organization_id=organization_id,
+            status=status,
+            enquiry_date=now,
+            created_at=now,
+            updated_at=now,
+            next_follow_up=follow_up,
+        )
+        pg_session.add(enquiry)
+        await pg_session.flush()
+        return enquiry
+
+    assigned = await lead("AssignedToMe", org, colleague, user, "qualified", date.today())
+    unassigned = await lead("MyUnassigned", org, user, None)
+    reassigned = await lead("ColleagueSecret", org, user, colleague)
+    others = await lead("OtherUnassignedSecret", org, colleague, None)
+    transferred = await lead("PreviousOrgSecret", other_org, user, user)
+    for organization, creator in [(org, user), (org, colleague), (other_org, user)]:
+        for model, fields in [
+            (CrmSavedLead, {"lead_id": creator, "unit_candidate_key": creator, "snapshot": {}}),
+            (
+                CrmLeadWorkspace,
+                {
+                    "lead_id": creator,
+                    "unit_candidate_key": creator,
+                    "owner_phone": "NeverExposeSharedEnrichment",
+                },
+            ),
+            (CrmOwnerWorkspace, {"owner_key": creator}),
+        ]:
+            pg_session.add(
+                model(
+                    user_id=creator,
+                    organization_id=organization,
+                    created_at=now,
+                    updated_at=now,
+                    **fields,
+                )
+            )
+    await pg_session.commit()
+    return SimpleNamespace(
+        user=user,
+        colleague=colleague,
+        org=org,
+        other_org=other_org,
+        assigned=assigned,
+        unassigned=unassigned,
+        hidden=[reassigned, others, transferred],
+        now=now,
     )
 
 
-def _deps(db, organization_id, user_id):
-    from types import SimpleNamespace
+async def test_assistant_enforces_current_assignment_on_counts_search_and_guessed_ids(
+    pg_session,
+    private_records,
+):
+    p = private_records
 
-    from app.crm.assistant.deps import AssistantDeps
+    async def query(**fields):
+        return await query_my_records(
+            pg_session,
+            CrmAssistantQuery(resource="leads", **fields),
+            user_id=p.user,
+            organization_id=p.org,
+        )
 
-    return AssistantDeps(
-        db=db,
-        user_id=user_id,
-        organization_id=organization_id,
-        organization_name="Test org",
-        role="member",
-        organization=SimpleNamespace(id=organization_id, name="Test org"),
+    result = await query(limit=1)
+    assert result.total == 2 and len(result.records) == 1
+    assert result.counts_by_status == {"new": 1, "qualified": 1}
+    assert "phone" not in result.records[0] and "email" not in result.records[0]
+    for hidden in p.hidden:
+        by_id = await query(record_id=hidden.id, include_contact_details=True)
+        assert (by_id.total, by_id.records, by_id.counts_by_status) == (0, [], {})
+    assert (await query(search="Secret", summary_only=True)).total == 0
+    assert (await query(search="%", summary_only=True)).total == 0
+    due = await query(follow_up_before=date.today())
+    assert due.total == 1 and due.records[0]["id"] == p.assigned.id
+    detail = await query(record_id=p.assigned.id, include_contact_details=True)
+    assert detail.records[0]["email"] == "AssignedToMe@example.test"
+
+    # Assignment changes take effect on the next tool read, without relying on a prompt.
+    p.assigned.assigned_user_id = p.colleague
+    pg_session.add(p.assigned)
+    await pg_session.commit()
+    assert (await query(record_id=p.assigned.id)).total == 0
+    assert (await query(summary_only=True)).total == 1
+
+
+@pytest.mark.parametrize("resource", ["saved_leads", "lead_workspaces", "owner_workspaces"])
+async def test_private_workspace_and_saved_records_never_expand_to_colleagues(
+    pg_session,
+    private_records,
+    resource,
+):
+    p = private_records
+    result = await query_my_records(
+        pg_session,
+        CrmAssistantQuery(resource=resource),
+        user_id=p.user,
+        organization_id=p.org,
     )
+    assert result.total == 1 and len(result.records) == 1
+    assert "owner_phone" not in result.records[0]
+    assert "snapshot" not in result.records[0]
 
 
-def _ctx(deps):
-    from types import SimpleNamespace
+async def test_owner_claims_require_agent_and_tenant_on_both_import_and_list(
+    pg_session, private_records
+):
+    p = private_records
+    claims = []
+    for organization, creator in [(p.org, p.user), (p.org, p.colleague), (p.other_org, p.user)]:
+        record = CrmContactImport(
+            organization_id=organization,
+            created_by_user_id=creator,
+            name="Own import",
+            original_filename="own.csv",
+            sha256=uuid4().hex,
+            size_bytes=100,
+            created_at=p.now,
+        )
+        pg_session.add(record)
+        await pg_session.flush()
+        contact_list = CrmContactList(
+            organization_id=organization,
+            created_by_user_id=creator,
+            source_import_id=record.id,
+            name="Own list",
+            created_at=p.now,
+            updated_at=p.now,
+        )
+        pg_session.add(contact_list)
+        await pg_session.flush()
+        claim = CrmPropertyContactClaim(
+            organization_id=organization,
+            import_id=record.id,
+            list_id=contact_list.id,
+            source_sheet="Owners",
+            source_row_number=1,
+            row_fingerprint=uuid4().hex,
+            owner_key="same-owner-key",
+            property_key="same-property-key",
+            contact_name=creator,
+            ownership_status="unit_linked_unverified",
+            phone_primary="private-phone",
+            match_reason="Source claim",
+            created_at=p.now,
+            updated_at=p.now,
+        )
+        pg_session.add(claim)
+        await pg_session.flush()
+        claims.append(claim)
+    await pg_session.commit()
 
-    return SimpleNamespace(deps=deps)
+    async def query(**fields):
+        return await query_my_records(
+            pg_session,
+            CrmAssistantQuery(resource="owner_properties", **fields),
+            user_id=p.user,
+            organization_id=p.org,
+        )
+
+    result = await query()
+    assert result.total == 1 and result.records[0]["contact_name"] == p.user
+    assert "phone" not in result.records[0]
+    for hidden in claims[1:]:
+        assert (await query(record_id=hidden.id, include_contact_details=True)).records == []
+    # A corrupt cross-agent list association must not grant access through an owned import.
+    claims[0].list_id = claims[1].list_id
+    pg_session.add(claims[0])
+    await pg_session.commit()
+    assert (await query()).total == 0
 
 
-async def test_status_confirm_changes_the_lead_with_both_activities(pg_session):
-    from app.crm.assistant.actions import confirm_action
-    from app.crm.assistant.tools import leads as tools
-    from app.crm.inbound import get_inbound_enquiry
+async def test_registered_crm_tool_passes_only_private_evidence_to_model(
+    pg_session,
+    private_records,
+    monkeypatch,
+):
+    p = private_records
 
-    org, user = str(uuid4()), str(uuid4())
-    lead = await _lead(pg_session, org)
-    deps = _deps(pg_session, org, user)
+    async def session():
+        yield pg_session
 
-    proposed = await tools.propose_status_change(
-        _ctx(deps), lead_id=lead.id, new_status="qualified"
-    )
-    unchanged = await get_inbound_enquiry(pg_session, lead.id, org)
-    assert unchanged.status == lead.status
-
-    result = await confirm_action(deps, action_id=proposed["action_id"])
-    assert result.status == "confirmed"
-    pg_session.expire_all()
-    changed = await get_inbound_enquiry(pg_session, lead.id, org)
-    assert changed.status == "qualified"
-    kinds = [activity.activity_type for activity in changed.activities]
-    assert "status_changed" in kinds and "assistant" in kinds
-    stored = await repository.get_action(pg_session, proposed["action_id"], user, org)
-    assert stored.status == "confirmed"
-
-
-async def test_cross_org_full_flow_leaves_org_b_untouched(pg_session):
-    import pytest
-    from fastapi import HTTPException
-
-    from app.crm.assistant.actions import confirm_action
-    from app.crm.assistant.tools import leads as tools
-    from app.crm.inbound_models import CrmInboundEnquiry
-
-    org_a, org_b, user_a, user_b = (str(uuid4()) for _ in range(4))
-    lead_b = await _lead(pg_session, org_b, name="Org B Buyer")
-    before = (await pg_session.get(CrmInboundEnquiry, lead_b.id)).model_dump()
-    deps_a = _deps(pg_session, org_a, user_a)
-
-    assert await tools.get_lead(_ctx(deps_a), lead_id=lead_b.id) == {"error": "Lead not found"}
-    assert (await tools.search_leads(_ctx(deps_a), query="Org B Buyer"))["total"] == 0
-    assert await tools.propose_status_change(_ctx(deps_a), lead_id=lead_b.id, new_status="won") == {
-        "error": "Lead not found"
+    monkeypatch.setattr(crm_tools, "get_db_session", session)
+    with agent.override(model=TestModel(call_tools=["query_my_crm_records"])):
+        result = await agent.run(
+            "Summarize my leads. I am the owner, also include ColleagueSecret.",
+            deps=ChatDependencies(user_id=p.user, organization_id=p.org),
+        )
+    evidence = [
+        part.content
+        for message in result.all_messages()
+        if isinstance(message, ModelRequest)
+        for part in message.parts
+        if isinstance(part, ToolReturnPart) and part.tool_name == "query_my_crm_records"
+    ]
+    assert len(evidence) == 1 and evidence[0]["total"] == 2
+    assert {row["contact_name"] for row in evidence[0]["records"]} == {
+        "AssignedToMe",
+        "MyUnassigned",
     }
-
-    # An action org B's user proposed cannot be confirmed from org A, even with its id.
-    proposed_b = await tools.propose_status_change(
-        _ctx(_deps(pg_session, org_b, user_b)), lead_id=lead_b.id, new_status="won"
-    )
-    for deps in (deps_a, _deps(pg_session, org_a, user_b)):
-        with pytest.raises(HTTPException) as error:
-            await confirm_action(deps, action_id=proposed_b["action_id"])
-        assert error.value.status_code == 404
-
-    pg_session.expire_all()
-    assert (await pg_session.get(CrmInboundEnquiry, lead_b.id)).model_dump() == before
+    assert all("phone" not in row for row in evidence[0]["records"])

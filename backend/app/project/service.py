@@ -3,6 +3,7 @@ import logging
 from typing import Any, List, Optional
 
 from app.core.observability import operation
+from app.market.units import per_sqft, sqft
 from app.project import queries
 from app.project.mapping import _float_or_none, _room_sort_key
 from app.project.models import (
@@ -178,7 +179,7 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
                     property_sub_type=row["property_sub_type_en"],
                     count=row["count"],
                     percentage=round((row["count"] / total_units) * 100, 2),
-                    avg_area_sqm=float(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
+                    avg_area_sqft=sqft(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
                 )
             )
 
@@ -278,7 +279,7 @@ async def get_master_project(master_name: str) -> Optional[MasterProjectResponse
                     property_sub_type=row["property_sub_type_en"],
                     count=row["count"],
                     percentage=round((row["count"] / total_units_comp) * 100, 2),
-                    avg_area_sqm=float(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
+                    avg_area_sqft=sqft(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
                 )
             )
 
@@ -327,7 +328,7 @@ async def get_building_details(property_id: int) -> Optional[BuildingDetailRespo
             rooms_en=row["rooms_en"],
             count=row["count"],
             percentage=round((row["count"] / total_units) * 100, 1) if total_units else 0,
-            avg_area_sqm=float(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
+            avg_area_sqft=sqft(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
         )
         for row in units_result
     ]
@@ -365,8 +366,8 @@ async def get_project_market_snapshot(project_id: int) -> Optional[ProjectMarket
         median_sale_price=row.get("median_sale_price"),
         median_annual_rent=row.get("median_annual_rent"),
         gross_yield_pct=row.get("gross_yield_pct"),
-        avg_sale_price_sqm_12m=row.get("avg_sale_price_sqm_12m"),
-        avg_rent_price_sqm_12m=row.get("avg_rent_price_sqm_12m"),
+        avg_sale_price_sqft_12m=per_sqft(row.get("avg_sale_price_sqm_12m")),
+        avg_rent_price_sqft_12m=per_sqft(row.get("avg_rent_price_sqm_12m")),
     )
 
 

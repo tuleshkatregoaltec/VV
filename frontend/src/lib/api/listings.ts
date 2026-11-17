@@ -5,8 +5,7 @@ import type {
 	ListingFiltersResponse as GeneratedListingFiltersResponse,
 	ListingListResponse as GeneratedListingListResponse,
 	ListingFloorPlanResponse,
-	ListingImageResponse,
-	ListingPartyResponse
+	ListingImageResponse
 } from './generated/hey-api/types.gen'
 
 export type ListingMode = 'sale' | 'rent'
@@ -107,7 +106,7 @@ export interface ListingAnalyticsResponse {
 	trend: ListingTrendPoint[]
 }
 
-export type { ListingFloorPlanResponse, ListingImageResponse, ListingPartyResponse }
+export type { ListingFloorPlanResponse, ListingImageResponse }
 
 export interface ListingParams {
 	mode?: ListingMode

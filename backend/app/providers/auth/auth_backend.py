@@ -18,8 +18,7 @@ class AuthBackend(AuthenticationBackend):
         try:
             scheme, encoded_jwt = auth.split()
         except ValueError:
-            # HTTP 400 (defined in middleware) as opposed to 401
-            # also does not set application type json
+            # Rendered as a JSON 401 by the middleware's on_error handler (see app.main).
             raise AuthenticationError({"detail": "Invalid credentials"})
 
         if scheme.lower() != "bearer":
