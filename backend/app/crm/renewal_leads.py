@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timezone
+from typing import Literal
 
 from fastapi import HTTPException
 from pydantic import RootModel
@@ -142,6 +143,8 @@ async def list_renewals(
     limit: int,
     offset: int,
     as_of: date | None = None,
+    unit_keys: list[str] | None = None,
+    exclude_units: bool = False,
 ) -> CrmRenewalsResponse:
     """Every lease in the dataset, whatever any agent's areas, narrowed by the tab's filters.
 
@@ -158,6 +161,8 @@ async def list_renewals(
         "limit": limit,
         "offset": offset,
         "as_of": anchor,
+        "unit_keys": sorted(set(unit_keys or [])),
+        "exclude_units": exclude_units,
     }
     return await lead_cache.cached(
         "renewals", params, CrmRenewalsResponse, lambda: _compute_renewals(**params)
@@ -174,6 +179,8 @@ async def _compute_renewals(
     limit: int,
     offset: int,
     as_of: date,
+    unit_keys: list[str],
+    exclude_units: bool,
 ) -> CrmRenewalsResponse:
     anchor = as_of
     empty = CrmRenewalsResponse(leads=[], total=0, limit=limit, offset=offset, as_of=anchor)
@@ -192,6 +199,8 @@ async def _compute_renewals(
             building=building,
             limit=limit,
             offset=offset,
+            unit_keys=unit_keys,
+            exclude_units=exclude_units,
         )
     except Exception as exc:
         raise lead_data_error(exc, "renewals") from exc
@@ -203,6 +212,76 @@ async def _compute_renewals(
             "projects": list(facets.get("projects") or []),
             "buildings": list(facets.get("buildings") or []),
         }
+    )
+
+
+async def list_owner_renewals(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    organization_id: str,
+    window: str | None,
+    area: str | None,
+    property_type: str | None,
+    project: str | None,
+    building: str | None,
+    limit: int,
+    offset: int,
+    as_of: date | None = None,
+    owner: Literal["known", "unknown"] = "known",
+) -> CrmRenewalsResponse:
+    """Assets › Renewals, split by whether the agency has the unit's owner on file.
+
+    known: units with a current owner in the owner imports, each with that owner's contact
+    (client, 3 Nov: someone the agency can call as the lease ends).
+    unknown: every other lease, the units whose owner is still to be found.
+    """
+    imported_keys = await renewal_repository.list_imported_unit_keys(db, organization_id)
+    known_owners = await _owners_by_candidate(
+        db, candidate_keys=imported_keys, user_id=user_id, organization_id=organization_id
+    )
+    keys = sorted(known_owners)
+    if owner == "unknown":
+        return await list_renewals(
+            window=window,
+            area=area,
+            property_type=property_type,
+            project=project,
+            building=building,
+            limit=limit,
+            offset=offset,
+            as_of=as_of,
+            unit_keys=keys,
+            exclude_units=True,
+        )
+    if not keys:
+        # No filter would mean every lease in Dubai, so an agency without owner imports sees none.
+        anchor = as_of or date.today()
+        return CrmRenewalsResponse(leads=[], total=0, limit=limit, offset=offset, as_of=anchor)
+    res = await list_renewals(
+        window=window,
+        area=area,
+        property_type=property_type,
+        project=project,
+        building=building,
+        limit=limit,
+        offset=offset,
+        as_of=as_of,
+        unit_keys=keys,
+    )
+    candidate_keys = [lead.unit_candidate_key for lead in res.leads]
+    changed_keys = sorted(set(candidate_keys) - set(keys))
+    aliases = (
+        await opportunity_queries.fetch_owner_unit_aliases(changed_keys, keys)
+        if changed_keys
+        else []
+    )
+    owners = dict(known_owners)
+    for row in aliases:
+        if row["candidate_key"] not in owners and row["owner_candidate_key"] in owners:
+            owners[row["candidate_key"]] = owners[row["owner_candidate_key"]]
+    return res.model_copy(
+        update={"owners": {key: owners[key] for key in candidate_keys if key in owners}}
     )
 
 

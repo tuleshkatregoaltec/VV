@@ -323,6 +323,9 @@ export function createPresentationCrm(live: CrmApi, today: string): CrmApi {
 			rent: { aed: locations[i % 6][3], from: date(-320 + i), to: date(45 + i) },
 			market: {
 				sale: [locations[i % 6][2] * 0.95, locations[i % 6][2] * 1.05],
+				estimate: locations[i % 6][2],
+				confidence: 'medium' as const,
+				valued_at: date(0),
 				rent: [locations[i % 6][3] * 0.95, locations[i % 6][3] * 1.05]
 			},
 			rent_history: [

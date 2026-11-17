@@ -111,9 +111,9 @@ from app.crm.recently_sold import approve_recent_seller
 from app.crm.renewal_leads import (
     get_area_preferences,
     get_renewal_detail,
+    list_owner_renewals,
     list_renewal_areas,
     list_renewal_leads,
-    list_renewals,
     open_renewal_lead,
     until_disconnected,
     update_area_preferences,
@@ -1014,12 +1014,19 @@ async def crm_renewals(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     as_of: date | None = Query(default=None),
+    owner: Literal["known", "unknown"] = "known",
     context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    """Assets › Renewals: every lease in the dataset, narrowed by the tab's filters."""
+    """Assets › Renewals: agency owners on file, or units whose owner is still unknown."""
+    user_id, organization_id = _auth_ids(context)
     return await _until_disconnect(
         request,
-        list_renewals(
+        list_owner_renewals(
+            db,
+            user_id=user_id,
+            organization_id=organization_id,
+            owner=owner,
             window=window,
             area=area,
             property_type=property_type,

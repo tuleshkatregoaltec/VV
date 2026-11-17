@@ -34,5 +34,22 @@ async def list_current_owner_claims(db: AsyncSession, organization_id, candidate
     ).all()
 
 
+async def list_imported_unit_keys(db: AsyncSession, organization_id) -> list[str]:
+    """Potential imported units; current assessment and contact policy decide known owners."""
+    return list(
+        (
+            await db.exec(
+                select(CrmPropertyContactClaim.unit_candidate_key)
+                .where(
+                    CrmPropertyContactClaim.organization_id == organization_id,
+                    CrmPropertyContactClaim.unit_candidate_key.is_not(None),  # type: ignore[union-attr]
+                    CrmPropertyContactClaim.unit_candidate_key != "",
+                )
+                .distinct()
+            )
+        ).all()
+    )
+
+
 def save(db: AsyncSession, record):
     db.add(record)

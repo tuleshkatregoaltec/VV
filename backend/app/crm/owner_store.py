@@ -1091,8 +1091,8 @@ class StoreReader:
         for column, name, operator in (
             ("p.annual_rent_aed", "min_rent", ">="),
             ("p.annual_rent_aed", "max_rent", "<="),
-            ("p.sale_price_aed", "min_value", ">="),
-            ("p.sale_price_aed", "max_value", "<="),
+            ("coalesce(p.estimated_value_aed, p.sale_price_aed)", "min_value", ">="),
+            ("coalesce(p.estimated_value_aed, p.sale_price_aed)", "max_value", "<="),
         ):
             if params[name] is not None:
                 property_filters.append(f"{column} {operator} :{name}")

@@ -272,10 +272,20 @@ export async function createActiveOrganization(
 ): Promise<{ organizationId: string }> {
 	const createResponse = await backendPost(request, '/api/v1/organization/create', ownerToken, {
 		name,
-		max_users: maxUsers
+		max_users: 1
 	});
 	expect(createResponse.ok()).toBeTruthy();
 	const createJson = (await createResponse.json()) as { organization_id: string };
+
+	// Self-service creation grants one seat; only an administrator can provision more.
+	const seatsResponse = await request.put(
+		`${API_BASE_URL}/api/v1/admin/organizations/${createJson.organization_id}`,
+		{
+			headers: { Authorization: `Bearer ${adminToken}` },
+			data: { max_users: maxUsers }
+		}
+	);
+	expect(seatsResponse.ok()).toBeTruthy();
 
 	const activateResponse = await backendPatch(
 		request,

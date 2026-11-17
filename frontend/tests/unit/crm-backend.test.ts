@@ -523,6 +523,32 @@ describe('CRM market listings from /api/v1/listings', () => {
 		expect(list.some((m) => m.id === 'c')).toBe(false)
 		expect(list[0].id).toBe('a')
 	})
+	it('does not turn a suppressed stale or low-confidence raw valuation into an under-market badge', async () => {
+		serve({
+			'/api/v1/listings': {
+				listings: [
+					{
+						...card('stale', 900_000, null),
+						valuation_method: 'dld_sales',
+						estimated_value_aed: 1_000_000,
+						market_position: 'insufficient_data',
+						value_gap_pct: null,
+						valuation_confidence: 'high',
+						valued_at: '2025-01-01'
+					},
+					{
+						...card('low-confidence', 900_000, null),
+						valuation_method: 'dld_sales',
+						estimated_value_aed: 1_000_000,
+						market_position: 'insufficient_data',
+						value_gap_pct: null,
+						valuation_confidence: 'low'
+					}
+				]
+			}
+		})
+		expect(await backend.listMarket()).toEqual([])
+	})
 })
 
 function lease(overrides: Partial<CrmLead> = {}): CrmLead {
@@ -1101,4 +1127,116 @@ describe('CRM company listing source', () => {
 		await backend.clearCompanyListingSource()
 		expect(del).toHaveBeenCalledWith('/api/v1/crm/company-listings/source')
 	})
+})
+
+describe('Tenant matches respect the saved move-in date', () => {
+	const tenant = (criteria: Record<string, unknown>) =>
+		enquiry({
+			id: 11,
+			intent: 'rent',
+			status: 'qualified',
+			qualification_complete: true,
+			criteria: {
+				locations: ['JVC'],
+				property_type: 'Apartment',
+				budget_max_aed: 120_000,
+				...criteria
+			}
+		})
+	const unitMatch = {
+		id: 1,
+		target_type: 'unit',
+		target_key: 'u1',
+		state: 'suggested',
+		fit: 'near',
+		title: 'Binghatti Gate · Unit 1204',
+		subtitle: '2 · AED 110,000',
+		reasons: ['Lease ends 15 Jan 2027, before move-in 1 Feb 2027'],
+		missing_fields: [],
+		snapshot: {},
+		generated_at: new Date().toISOString()
+	}
+	const matches = (extra: Record<string, unknown>) => ({
+		enquiry_id: 11,
+		listing_fresh: true,
+		lanes: { company: [], owners: [], units: [unitMatch], listings: [], offplan: [], demand: [] },
+		...extra
+	})
+
+	it('holds tenant matches to the move-in date and counts what frees up later', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries/11': tenant({ move_in: '2027-02-01' }),
+			'/api/v1/crm/inbound/enquiries/11/matches': matches({
+				move_in: '2027-02-01',
+				hidden_after: { units: 2 }
+			})
+		})
+		const res = await backend.leadMatches(11)
+		expect(res.move_by).toBe('2027-02-01')
+		const units = res.tiers.find((t) => t.id === 'units')
+		expect(units?.sub).toBe('1 found · 2 free after Mon 1 Feb')
+		expect(units?.hidden_after).toBe(0)
+		expect(res.brief).toContainEqual({ k: 'Move-in', v: '1 Feb 2027' })
+	})
+
+	it('matches a tenant with no move-in date as before', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries/11': tenant({}),
+			'/api/v1/crm/inbound/enquiries/11/matches': matches({})
+		})
+		const res = await backend.leadMatches(11)
+		expect(res.move_by).toBeNull()
+		expect(res.tiers.some((t) => t.sub.includes('free after'))).toBe(false)
+	})
+
+	it('shows an old free-text move-in as it was written', async () => {
+		serve({
+			'/api/v1/crm/inbound/enquiries/11': tenant({ move_in: 'ASAP' }),
+			'/api/v1/crm/inbound/enquiries/11/matches': matches({ move_in: '2026-11-03' })
+		})
+		const res = await backend.leadMatches(11)
+		expect(res.brief).toContainEqual({ k: 'Move-in', v: 'ASAP' })
+	})
+})
+
+it('preserves renewal paging and resolves the owner by unit identity rather than event identity', async () => {
+	const get = serve({
+		'/api/v1/crm/renewals': {
+			leads: [lease({ lead_id: 'event-id', unit_candidate_key: 'unit-key' })],
+			owners: {
+				'unit-key': { name: 'Resolved Owner', phone: '+971500000001', source: 'owner_import' }
+			},
+			total: 1
+		}
+	})
+	const result = await backend.listRenewals({
+		area: '',
+		window: '',
+		property_type: '',
+		project: '',
+		building: '',
+		limit: 50,
+		offset: 50,
+		owner: 'known'
+	})
+	expect(get.mock.calls[0][0]).toContain('offset=50')
+	expect(get.mock.calls[0][0]).toContain('owner=known')
+	expect(result.items[0]).toMatchObject({
+		id: 'event-id',
+		owner: { name: 'Resolved Owner', phone: '+971500000001' }
+	})
+})
+
+it('does not claim known-owner filtering when an older API omits its owners map', async () => {
+	serve({ '/api/v1/crm/renewals': { leads: [lease()], total: 1 } })
+	const result = await backend.listRenewals({
+		area: '',
+		window: '',
+		property_type: '',
+		project: '',
+		building: '',
+		limit: 50
+	})
+	expect(result.owner_filter_supported).toBe(false)
+	expect(result.items).toHaveLength(1)
 })

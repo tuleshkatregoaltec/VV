@@ -55,10 +55,12 @@ const renewalAreas = createQuery(() => ({
 	...crmQueries.feedAreas(),
 	enabled: ui.assetTab === 'renewals'
 }))
+let ownerFilterSupported = $state(false)
 const renewalPages = createInfiniteQuery(() => ({
 	...crmQueries.renewalsInfinite({
 		area: ui.renewalArea,
 		window: ui.renewalWindow,
+		owner: ownerFilterSupported ? ui.renewalOwner : undefined,
 		property_type: ui.renewalPtype,
 		project: ui.renewalProject,
 		building: ui.renewalBuilding,
@@ -66,6 +68,9 @@ const renewalPages = createInfiniteQuery(() => ({
 	}),
 	enabled: ui.assetTab === 'renewals'
 }))
+$effect(() => {
+	if (renewalPages.data?.pages[0]?.owner_filter_supported) ownerFilterSupported = true
+})
 const renewals = $derived({
 	...renewalPages,
 	data: renewalPages.data
@@ -524,6 +529,14 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 	</QueryView>
 {:else if ui.assetTab === 'renewals'}
 	<div class="filters">
+		{#if ownerFilterSupported}
+		<Seg
+			label="Owner"
+			value={ui.renewalOwner}
+			items={[{ id: 'known', label: 'Owner known' }, { id: 'unknown', label: 'Owner unknown' }]}
+			onselect={(v) => filterRenewals(() => (ui.renewalOwner = v))}
+		/>
+		{/if}
 		<FilterMenu
 			label="Lease end"
 			allLabel="All lease ends"
@@ -588,6 +601,7 @@ const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 											{r.unit}
 										</button>
 										<div class="sub">{r.area}</div>
+										{#if ownerFilterSupported}<div class="sub">{r.owner?.name ?? 'Owner unknown'}{#if r.owner?.phone}{' · '}{r.owner.phone}{/if}</div>{/if}
 									</td>
 									<td data-label="Property">{r.property}</td>
 									<td class="r num" data-label="Rent a year">{r.rent_aed ? fmt(r.rent_aed) : ''}</td>

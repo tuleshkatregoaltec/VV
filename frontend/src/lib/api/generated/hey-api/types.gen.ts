@@ -3480,6 +3480,30 @@ export type CrmOwnerProperty = {
      */
     registry_area_name?: string | null;
     /**
+     * Estimated Value Aed
+     */
+    estimated_value_aed?: number | null;
+    /**
+     * Estimated Value Low Aed
+     */
+    estimated_value_low_aed?: number | null;
+    /**
+     * Estimated Value High Aed
+     */
+    estimated_value_high_aed?: number | null;
+    /**
+     * Valuation Confidence
+     */
+    valuation_confidence?: 'high' | 'medium' | 'low' | null;
+    /**
+     * Valued At
+     */
+    valued_at?: string | null;
+    /**
+     * Valuation Status
+     */
+    valuation_status?: string | null;
+    /**
      * Later Sale Date
      */
     later_sale_date?: string | null;
@@ -3961,6 +3985,12 @@ export type CrmRenewalsResponse = {
      * As Of
      */
     as_of: string;
+    /**
+     * Owners
+     */
+    owners?: {
+        [key: string]: CrmRenewalOwner;
+    };
 };
 
 /**
@@ -6832,6 +6862,16 @@ export type InboundMatchesResponse = {
     lanes: {
         [key: string]: Array<InboundMatchResponse>;
     };
+    /**
+     * Move In
+     */
+    move_in?: string | null;
+    /**
+     * Hidden After
+     */
+    hidden_after?: {
+        [key: string]: number;
+    };
 };
 
 /**
@@ -7199,6 +7239,10 @@ export type ListingAnalyticsResponse = {
      */
     snapshot_at?: string | null;
     /**
+     * Data As Of
+     */
+    data_as_of?: string | null;
+    /**
      * Trend
      */
     trend?: Array<ListingTrendPoint>;
@@ -7357,6 +7401,38 @@ export type ListingCardResponse = {
      */
     urgency_terms?: Array<string>;
     /**
+     * Valuation Method
+     */
+    valuation_method?: 'dld_sales' | 'asking_peers';
+    /**
+     * Estimated Value Aed
+     */
+    estimated_value_aed?: number | null;
+    /**
+     * Estimated Value Low Aed
+     */
+    estimated_value_low_aed?: number | null;
+    /**
+     * Estimated Value High Aed
+     */
+    estimated_value_high_aed?: number | null;
+    /**
+     * Valuation Confidence
+     */
+    valuation_confidence?: 'high' | 'medium' | 'low' | null;
+    /**
+     * Value Gap Pct
+     */
+    value_gap_pct?: number | null;
+    /**
+     * Is Off Plan
+     */
+    is_off_plan?: boolean;
+    /**
+     * Valued At
+     */
+    valued_at?: string | null;
+    /**
      * Is Available
      */
     is_available?: boolean | null;
@@ -7376,6 +7452,34 @@ export type ListingCardResponse = {
      * Share Url
      */
     share_url?: string | null;
+};
+
+/**
+ * ListingComparableSale
+ *
+ * A DLD sale behind a listing's estimate: same building, type and bedrooms, closest size.
+ */
+export type ListingComparableSale = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Unit
+     */
+    unit?: string | null;
+    /**
+     * Size Sqft
+     */
+    size_sqft: number;
+    /**
+     * Price Aed
+     */
+    price_aed: number;
+    /**
+     * Psf
+     */
+    psf: number;
 };
 
 /**
@@ -7531,6 +7635,38 @@ export type ListingDetailResponse = {
      */
     urgency_terms?: Array<string>;
     /**
+     * Valuation Method
+     */
+    valuation_method?: 'dld_sales' | 'asking_peers';
+    /**
+     * Estimated Value Aed
+     */
+    estimated_value_aed?: number | null;
+    /**
+     * Estimated Value Low Aed
+     */
+    estimated_value_low_aed?: number | null;
+    /**
+     * Estimated Value High Aed
+     */
+    estimated_value_high_aed?: number | null;
+    /**
+     * Valuation Confidence
+     */
+    valuation_confidence?: 'high' | 'medium' | 'low' | null;
+    /**
+     * Value Gap Pct
+     */
+    value_gap_pct?: number | null;
+    /**
+     * Is Off Plan
+     */
+    is_off_plan?: boolean;
+    /**
+     * Valued At
+     */
+    valued_at?: string | null;
+    /**
      * Is Available
      */
     is_available?: boolean | null;
@@ -7594,6 +7730,10 @@ export type ListingDetailResponse = {
      * View 360 Url
      */
     view_360_url?: string | null;
+    /**
+     * Valuation Comparables
+     */
+    valuation_comparables?: Array<ListingComparableSale>;
 };
 
 /**
@@ -7737,6 +7877,10 @@ export type ListingListResponse = {
      */
     offset: number;
     filters?: ListingFiltersResponse;
+    /**
+     * Data As Of
+     */
+    data_as_of?: string | null;
 };
 
 /**
@@ -15034,6 +15178,10 @@ export type CrmCrmRenewalsData = {
          * As Of
          */
         as_of?: string | null;
+        /**
+         * Owner
+         */
+        owner?: 'known' | 'unknown';
     };
     url: '/api/v1/crm/renewals';
 };
@@ -15758,6 +15906,14 @@ export type ListingsListListingsData = {
          * Price Max
          */
         price_max?: number | null;
+        /**
+         * Market Position
+         */
+        market_position?: 'below_market' | 'near_market' | 'above_market' | 'insufficient_data' | null;
+        /**
+         * Sort
+         */
+        sort?: 'default' | 'value_gap';
     };
     url: '/api/v1/listings';
 };

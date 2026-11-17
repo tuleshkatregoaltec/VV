@@ -4,7 +4,7 @@ import { goto } from '$app/navigation'
 import { crm } from '../../../api'
 import type { LeadDetail, LeadStage, LeadType } from '../../../api/types'
 import { GATE_LINE, LEAD_TYPES, OFF_PLAN_FIELDS, stageOf, stagesFor } from '../../../config'
-import { aed, fullDate, priceShort } from '../../../format'
+import { aed, fullDate, ISO_DAY, priceShort } from '../../../format'
 import { openDeal, openListing, openOwner, panel } from '../../../stores/panel.svelte'
 import { ui } from '../../../stores/ui.svelte'
 import { write } from '../../../write'
@@ -40,7 +40,11 @@ function setOffPlan(on: boolean) {
 function value(key: (typeof type.fields)[number]) {
 	const v = lead.fields[key.key]
 	if (v === undefined || v === null || v === '' || v === 0) return 'Not stated'
-	return key.money ? aed(Number(v)) : String(v)
+	return key.money
+		? aed(Number(v))
+		: key.date && ISO_DAY.test(String(v))
+			? fullDate(String(v))
+			: String(v)
 }
 
 /** A Vitevue lease lead starts undecided; the agent classifies it as a seller or a landlord. */

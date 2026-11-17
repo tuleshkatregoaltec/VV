@@ -11,6 +11,7 @@ from app.crm.inbound_policy import (
     _belongs_in_inbox,
     _deterministic_criteria,
     _lead_priority,
+    _normalize_consent,
     _normalize_intent,
     _qualification_complete,
     _redact,
@@ -767,3 +768,14 @@ def test_pocket_listings_are_matched_and_marked_off_market():
     assert "Off-market (pocket listing)" in reasons
     live = _score_company_listing(buyer, [], "buy", _company_listing(2_500_000))[1]
     assert "Off-market (pocket listing)" not in live
+
+
+def test_imported_consent_counts_only_a_clear_yes():
+    """WhatsApp promotions go only to leads with consent "provided"; a spreadsheet's "Yes" must
+    count, and anything unclear must never be read as agreement."""
+    for yes in ("Yes", "Y", "TRUE", "1", "Opt-in", "agreed", "provided"):
+        assert _normalize_consent(yes) == "provided", yes
+    for no in ("No", "false", "0", "Opted out", "withdrawn", "Unsubscribed"):
+        assert _normalize_consent(no) == "withdrawn", no
+    for unclear in ("maybe", "ask later", "", None, "yes?no"):
+        assert _normalize_consent(unclear) == "unknown", unclear

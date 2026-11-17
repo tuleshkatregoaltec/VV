@@ -15,6 +15,7 @@ from app.crm.ownership import (
     refresh_property_contact_rentals,
     rematch_property_contact_claims,
 )
+from app.crm.valuation_service import value_owner_claims
 from app.postgres import close_postgres, get_postgres_engine
 
 
@@ -77,6 +78,11 @@ async def main() -> None:
                         {"unique_transaction_signature"} if args.audit_unique_transactions else None
                     ),
                 )
+                # Ownership may have changed: re-value current owners, clear former owners.
+                valuation = await value_owner_claims(
+                    db, organization_id=args.organization_id, import_id=args.import_id
+                )
+                print(f"Valued {valuation.valued} of {valuation.considered} current owners")
     finally:
         await close_clickhouse()
         await close_postgres()

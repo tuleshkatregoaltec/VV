@@ -41,6 +41,7 @@ from app.crm.inbound_policy import (
     _FIRST_RESPONSE_MINUTES,
     _deterministic_criteria,
     _lead_priority,
+    _normalize_consent,
     _normalize_intent,
     _parse_datetime,
     _redact,
@@ -433,7 +434,7 @@ async def _execute_inbound_import(
                 email=email,
                 whatsapp=_normalize_phone(row.get("whatsapp")),
                 language=_text(row.get("language")) or None,
-                consent_status=_text(row.get("consent")) or "unknown",
+                consent_status=_normalize_consent(row.get("consent")),
             )
             inferred_data: dict[str, Any] = {}
             if ai_intent in {"buy", "rent", "sell", "let"} and intent is None:

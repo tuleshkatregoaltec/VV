@@ -174,6 +174,17 @@ def _location_names(row: dict[str, Any]) -> list[str]:
     return [str(item) for item in _as_list(row.get("listing_location_names_json")) if item]
 
 
+def _valuation_date(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10]) if value else None
+    except ValueError:
+        return None
+
+
 def _card_from_row(row: Any) -> ListingCardResponse:
     row = _row_to_dict(row)
     category_id = _int_or_none(row.get("category_id"))
@@ -239,11 +250,20 @@ def _card_from_row(row: Any) -> ListingCardResponse:
         market_median_price_per_sqft_aed=market_psf,
         market_estimate_aed=market_estimate,
         market_delta_pct=market_delta,
-        market_position=_market_position(market_delta, comparable_count),
+        market_position=row.get("market_position_override")
+        or _market_position(market_delta, comparable_count),
         comparable_count=comparable_count,
         benchmark_level=_benchmark_level(property_type, comparable_count),
         urgency_signal=urgency_signal,
         urgency_terms=urgency_terms,
+        valuation_method=row.get("valuation_method") or "asking_peers",
+        estimated_value_aed=_float_or_none(row.get("estimated_value_aed")),
+        estimated_value_low_aed=_float_or_none(row.get("estimated_value_low_aed")),
+        estimated_value_high_aed=_float_or_none(row.get("estimated_value_high_aed")),
+        valuation_confidence=row.get("valuation_confidence") or None,
+        value_gap_pct=_float_or_none(row.get("value_gap_pct")),
+        is_off_plan=str(raw_property.get("completion_status") or "").startswith("off_plan"),
+        valued_at=_valuation_date(row.get("valued_at")),
         is_available=_bool_or_none(row.get("is_available")),
         is_verified=_bool_or_none(row.get("is_verified")),
         is_featured=_bool_or_none(row.get("is_featured")),

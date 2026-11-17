@@ -11,7 +11,7 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(shots, `${name}.png`), fullPage: false })
 }
 
-const iso = '2026-11-06T09:00:00Z'
+const iso = new Date().toISOString()
 const emptyContacts = { total: 0, blocked: 0, sync_requested_at: null, synced_at: null }
 
 function connectedStatus(overrides: Record<string, unknown> = {}) {
@@ -163,6 +163,8 @@ test('an agent connects WhatsApp, blocks contacts, turns replies on and disconne
 				})
 			})
 		}
+		// The current workspace also reads its empty conversations while connecting.
+		if (method === 'GET' && ['/connections', '/notifications', '/connections/conn-1/threads'].includes(path)) return route.fulfill({ json: [] })
 		unreachable.push(`${method} ${path}`)
 		return route.fulfill({ status: 404, json: { detail: 'unexpected' } })
 	})
@@ -231,6 +233,7 @@ test('an agent connects WhatsApp, blocks contacts, turns replies on and disconne
 
 	// 3. Connected: the number shows, contacts are still syncing.
 	await expect(page.getByText('+971 50 123 4567').first()).toBeVisible()
+	await page.getByRole('tab', { name: /^Block list/ }).click()
 	await expect(page.getByText('Syncing your contacts from WhatsApp')).toBeVisible()
 	const complete = calls.find((c) => c.path === '/signup/complete')
 	expect(complete?.body).toEqual({
@@ -241,10 +244,13 @@ test('an agent connects WhatsApp, blocks contacts, turns replies on and disconne
 		business_id: 'biz-1',
 		event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'
 	})
+	// The Connection tab keeps the guarded automation controls beside its status.
+	await page.getByRole('tab', { name: 'Connection', exact: true }).click()
 	// While contacts are still arriving, replies cannot be switched on by accident.
 	await expect(page.getByRole('button', { name: 'Turn on replies' })).toBeDisabled()
 
 	// 4. Contacts arrive; the sync notice goes away on its own.
+	await page.getByRole('tab', { name: /^Block list/ }).click()
 	status = connectedStatus({
 		contacts: { total: contacts.length, blocked: 0, sync_requested_at: iso, synced_at: iso }
 	})
@@ -284,6 +290,7 @@ test('an agent connects WhatsApp, blocks contacts, turns replies on and disconne
 		.toBe(true)
 
 	// 6. Turn replies on.
+	await page.getByRole('tab', { name: 'Connection', exact: true }).click()
 	await page.getByRole('button', { name: 'Turn on replies' }).click()
 	await expect(page.getByText('are being answered automatically')).toBeVisible()
 	expect(calls.find((c) => c.path === '/connection/automation')?.body).toEqual({ enabled: true })
@@ -462,6 +469,7 @@ test('a switched-on number that the server has paused says so instead of "On"', 
 	usePersona
 }) => {
 	await usePersona('active-member')
+	await page.route('**/api/v1/whatsapp/notifications**', route => route.fulfill({ json: [] }))
 	await page.setViewportSize({ width: 1440, height: 900 })
 	const contacts = people
 	await page.route('**/api/v1/crm/**', (route) => route.fulfill({ json: [] }))
@@ -481,7 +489,7 @@ test('a switched-on number that the server has paused says so instead of "On"', 
 			json: path.endsWith('/contacts') ? { items: contacts, total: contacts.length } : []
 		})
 	})
-	await page.goto('/crm/whatsapp')
+	await page.goto('/crm/whatsapp?tab=connection')
 	const card = page.getByRole('region', { name: 'Automatic replies' })
 	await expect(card.getByText('Paused', { exact: true })).toBeVisible()
 	await expect(

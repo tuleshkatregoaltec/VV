@@ -31,6 +31,39 @@ def _budget_fit(criteria: dict[str, Any], value: int | None) -> tuple[int, str]:
     return 0, "Outside budget"
 
 
+# Owners on file are valued today (client call, 5 Nov): the buyer's budget is compared with that
+# estimate and its range, not with the price the owner paid years ago.
+OWNER_BUDGET_MARGIN = 0.10
+_NO_CEILING = 10**12
+
+
+def _owner_budget_band(criteria: dict[str, Any]) -> tuple[int, int] | None:
+    """The values worth fetching owners for: the budget widened by the flexible margin."""
+    maximum = int(criteria.get("budget_max_aed") or 0)
+    minimum = int(criteria.get("budget_min_aed") or 0)
+    if not maximum and not minimum:
+        return None
+    low = round(minimum * (1 - OWNER_BUDGET_MARGIN)) if minimum else 0
+    high = round(maximum * (1 + OWNER_BUDGET_MARGIN)) if maximum else _NO_CEILING
+    return low, high
+
+
+def _owner_value_fit(
+    criteria: dict[str, Any], estimate: int, low: int, high: int
+) -> tuple[int, str]:
+    """Budget points for an owner's estimated value and its low-high range."""
+    band = _owner_budget_band(criteria)
+    if band is None:
+        return 0, "Budget is missing"
+    minimum = int(criteria.get("budget_min_aed") or 0)
+    maximum = int(criteria.get("budget_max_aed") or 0) or _NO_CEILING
+    if minimum <= estimate <= maximum:
+        return 15, f"Est. value AED {estimate:,}, within budget"
+    if low <= band[1] and high >= band[0]:
+        return 9, f"Est. range AED {low:,}–{high:,} overlaps budget"
+    return 0, "Outside budget"
+
+
 # Portal listings: the buyer's budget is a band, not a ceiling (matching call, 26 Oct).
 # Anything outside it is not shown; inside it, closer prices earn more of the 25 points.
 LISTING_BUDGET_BELOW = 0.30

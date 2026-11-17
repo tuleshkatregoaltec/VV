@@ -34,6 +34,9 @@ export function shortDate(iso: string): string {
 	return `${d.getUTCDate()} ${MON[d.getUTCMonth()]}`
 }
 
+/** A calendar day saved by date inputs. */
+export const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
 /** 10 Nov 2025 */
 export function fullDate(iso: string): string {
 	const d = utc(iso)

@@ -351,6 +351,16 @@ def _property_from_rows(
         later_sale_date=best.later_sale_date,
         lease_end=best.lease_end,
         annual_rent_aed=best.annual_rent_aed,
+        estimated_value_aed=best.estimated_value_aed,
+        estimated_value_low_aed=best.estimated_value_low_aed,
+        estimated_value_high_aed=best.estimated_value_high_aed,
+        valuation_confidence=(best.valuation or {}).get("confidence"),
+        valued_at=(
+            date.fromisoformat(best.valuation["valued_at"])
+            if (best.valuation or {}).get("valued_at")
+            else None
+        ),
+        valuation_status=(best.valuation or {}).get("status"),
         duplicate_count=_claim_duplicate_count(claims),
         source_lists=sorted({contact_list.name for _, contact_list in rows}),
         source_rows=_claim_source_rows(claims),
@@ -426,7 +436,7 @@ def _assessed_property_matches(
                 return False
     for value, minimum, maximum in (
         (item.annual_rent_aed, min_rent_aed, max_rent_aed),
-        (item.latest_sale_price_aed, min_value_aed, max_value_aed),
+        (item.estimated_value_aed or item.latest_sale_price_aed, min_value_aed, max_value_aed),
     ):
         if minimum is not None and (value is None or value < minimum):
             return False

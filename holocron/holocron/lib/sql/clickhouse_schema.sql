@@ -2518,3 +2518,30 @@ ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS stray UInt8 DEFAULT 0;
 -- CREATE ... AS ranking preserves source types; the validated revision and schema
 -- hash travel in its table COMMENT through EXCHANGE. Schema setup must not build
 -- this asset or mark an empty placeholder ready. Source pipelines remain manual.
+
+-- Estimated value of ready residential sale listings from DLD sales (listing underpricing,
+-- 11 Nov 2026). Written by backend/scripts/listings/value_listings.py; one row per listing_id,
+-- joined to pf_listings_bronze by the listings API. Keep in sync with
+-- backend/app/listings/valuation_service.py: CREATE_TABLE.
+CREATE TABLE IF NOT EXISTS listing_valuations (
+    listing_id String,
+    estimate_aed UInt64,
+    low_aed UInt64,
+    high_aed UInt64,
+    confidence LowCardinality(String),
+    level LowCardinality(String),
+    basis LowCardinality(String),
+    comparable_count UInt32,
+    building_key String,
+    market_position LowCardinality(String),
+    value_gap_pct Float64,
+    asking_aed UInt64,
+    bedrooms LowCardinality(String),
+    size_sqft Float64,
+    property_type LowCardinality(String),
+    location_names Array(String),
+    version LowCardinality(String),
+    valued_at Date
+)
+ENGINE = ReplacingMergeTree(valued_at)
+ORDER BY listing_id;

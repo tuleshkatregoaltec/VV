@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from app.plots import evidence
 from app.plots import service as plots
@@ -61,12 +61,24 @@ async def test_plot_search_geometry_and_details_share_identity_without_triggerin
     assert await plots.list_communities() == ["Test's Community"]
 
 
-async def test_land_evidence_preserves_usage_fallback_units_and_far_calculation(warehouse):
+async def test_land_evidence_preserves_usage_fallback_units_and_far_calculation(
+    warehouse, monkeypatch
+):
+    # This test isolates land-size/usage/FAR arithmetic on a uniform projection. Production
+    # DXBI source selection is covered by test_analytics_dxbi and test_transactions.
+    from app.analytics.dxbi import SALES_SOURCE
+    from app.plots import queries
+
+    monkeypatch.setattr(
+        queries, "_PLOT_SALES", queries._PLOT_SALES.replace(SALES_SOURCE, "ch_transactions")
+    )
     await warehouse.command("""CREATE TABLE ch_transactions (
         transaction_id String, instance_date Date, area_name_en String, project_name_en String,
         procedure_name_en String, property_usage_en String, procedure_area Float64,
         actual_worth Float64, nearest_landmark_en String, trans_group_en String,
-        property_type_en String, property_type String
+        property_type_en String, property_type String,
+        location_name String MATERIALIZED area_name_en,
+        size_sqm Float64 MATERIALIZED procedure_area
     ) ENGINE = MergeTree ORDER BY transaction_id""")
     await warehouse.insert(
         "ch_transactions",
@@ -132,7 +144,7 @@ async def test_synthetic_project_ids_resolve_distinct_reelly_and_legacy_sources(
                 25.1,
                 55.2,
                 "On sale",
-                datetime(2028, 1, 1),
+                datetime(2028, 1, 1, tzinfo=UTC),
                 20,
                 "Dubai",
             ]

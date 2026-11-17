@@ -180,13 +180,13 @@ _OWNER_TYPES = (
 )
 _PROPERTY_COLUMNS = (
     "organization_id, generation, list_id, canonical_owner_key, ordinal, status, ready, "
-    "rental_linked, lease_end, annual_rent_aed, sale_price_aed, match_status, location_text, "
+    "rental_linked, lease_end, annual_rent_aed, sale_price_aed, estimated_value_aed, match_status, location_text, "
     "headline_rank, confidence"
 )
 _PROPERTY_TYPES = (
     "organization_id varchar, generation bigint, list_id integer, canonical_owner_key varchar, "
     "ordinal integer, status varchar, ready boolean, rental_linked boolean, lease_end date, "
-    "annual_rent_aed bigint, sale_price_aed bigint, match_status varchar, location_text text, "
+    "annual_rent_aed bigint, sale_price_aed bigint, estimated_value_aed bigint, match_status varchar, location_text text, "
     "headline_rank integer, confidence integer"
 )
 
@@ -266,6 +266,7 @@ def _profile_records(
                     "lease_end": item.lease_end.isoformat() if item.lease_end else None,
                     "annual_rent_aed": item.annual_rent_aed,
                     "sale_price_aed": item.latest_sale_price_aed,
+                    "estimated_value_aed": item.estimated_value_aed,
                     "match_status": item.source_reference.transaction_match_status
                     if item.source_reference
                     else None,

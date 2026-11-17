@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import orjson
-from sqlalchemy import ARRAY, Integer, String, any_, exists, func, literal, or_, text
+from sqlalchemy import ARRAY, Integer, String, and_, any_, exists, func, literal, or_, text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -11,6 +11,7 @@ from app.crm.import_events import source_size_unit
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactList,
+    CrmOwnerAssessedClaim,
     CrmOwnerAssessmentRevision,
     CrmPropertyContactClaim,
 )
@@ -109,6 +110,10 @@ async def list_owner_history_rows(
             "unit_candidate_key",
             "lease_end",
             "annual_rent_aed",
+            "estimated_value_aed",
+            "estimated_value_low_aed",
+            "estimated_value_high_aed",
+            "valuation",
             "created_at",
             "updated_at",
         )
@@ -255,6 +260,12 @@ WITH base AS (
         c.later_sale_date,
         c.lease_end,
         c.annual_rent_aed,
+        c.estimated_value_aed,
+        c.estimated_value_low_aed,
+        c.estimated_value_high_aed,
+        c.valuation::jsonb ->> 'confidence' AS valuation_confidence,
+        c.valuation::jsonb ->> 'valued_at' AS valued_at,
+        c.valuation::jsonb ->> 'status' AS valuation_status,
         c.owner_key AS owner_key_sql,
         c.property_key AS property_key_sql,
         CASE c.ownership_status
@@ -356,10 +367,14 @@ def _owner_filter_sql(
         clauses.append(f"{alias}.annual_rent_aed <= :owner_max_rent")
         parameters["owner_max_rent"] = max_rent_aed
     if min_value_aed is not None:
-        clauses.append(f"{alias}.latest_sale_price_aed >= :owner_min_value")
+        clauses.append(
+            f"coalesce({alias}.estimated_value_aed, {alias}.latest_sale_price_aed) >= :owner_min_value"
+        )
         parameters["owner_min_value"] = min_value_aed
     if max_value_aed is not None:
-        clauses.append(f"{alias}.latest_sale_price_aed <= :owner_max_value")
+        clauses.append(
+            f"coalesce({alias}.estimated_value_aed, {alias}.latest_sale_price_aed) <= :owner_max_value"
+        )
         parameters["owner_max_value"] = max_value_aed
     return " AND ".join(f"({clause})" for clause in clauses), parameters
 
@@ -751,6 +766,40 @@ async def list_claims_with_lists(db: AsyncSession, organization_id):
             .where(CrmPropertyContactClaim.organization_id == organization_id)
         )
     ).all()
+
+
+CURRENT_OWNER_STATUSES = ("verified_current_owner", "probable_current_owner")
+
+
+async def list_claims_for_valuation(
+    db: AsyncSession, organization_id, import_id=None, *, generation: int
+):
+    """Current assessed owner events and stale estimates, with their canonical sale identity."""
+    claim, assessed = CrmPropertyContactClaim, CrmOwnerAssessedClaim
+    is_current = and_(
+        assessed.assessed_status.in_(CURRENT_OWNER_STATUSES),
+        func.coalesce(
+            assessed.row["event_assessed_status"].as_string(), assessed.assessed_status
+        ).in_(CURRENT_OWNER_STATUSES),
+    )
+    statement = (
+        select(claim, assessed.row)
+        .outerjoin(
+            assessed,
+            and_(
+                assessed.claim_id == claim.id,
+                assessed.organization_id == claim.organization_id,
+                assessed.generation == generation,
+            ),
+        )
+        .where(
+            claim.organization_id == organization_id,
+            or_(is_current, claim.estimated_value_aed.is_not(None)),
+        )
+    )
+    if import_id is not None:
+        statement = statement.where(claim.import_id == import_id)
+    return [(item, row or {}) for item, row in (await db.exec(statement.order_by(claim.id))).all()]
 
 
 async def owner_sources_only(db: AsyncSession, organization_id: str) -> bool:

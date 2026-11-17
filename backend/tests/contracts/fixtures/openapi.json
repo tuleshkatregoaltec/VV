@@ -4284,7 +4284,7 @@
 			"get": {
 				"tags": ["crm", "crm"],
 				"summary": "Crm Renewals",
-				"description": "Assets \u203a Renewals: every lease in the dataset, narrowed by the tab's filters.",
+				"description": "Assets \u203a Renewals: agency owners on file, or units whose owner is still unknown.",
 				"operationId": "crm-crm_renewals",
 				"parameters": [
 					{
@@ -4410,6 +4410,17 @@
 								}
 							],
 							"title": "As Of"
+						}
+					},
+					{
+						"name": "owner",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["known", "unknown"],
+							"type": "string",
+							"default": "known",
+							"title": "Owner"
 						}
 					}
 				],
@@ -5722,7 +5733,7 @@
 			"get": {
 				"tags": ["listings", "listings"],
 				"summary": "List Listings",
-				"description": "List Property Finder listings from ph_box ClickHouse.",
+				"description": "List Property Finder listings from ph_box ClickHouse.\n\nSale listings carry an estimated value from DLD sales; `market_position=below_market` with\n`sort=value_gap` lists possible bargains, biggest discount first.",
 				"operationId": "listings-list_listings",
 				"parameters": [
 					{
@@ -5876,6 +5887,34 @@
 								}
 							],
 							"title": "Price Max"
+						}
+					},
+					{
+						"name": "market_position",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"enum": ["below_market", "near_market", "above_market", "insufficient_data"],
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Market Position"
+						}
+					},
+					{
+						"name": "sort",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["default", "value_gap"],
+							"type": "string",
+							"default": "default",
+							"title": "Sort"
 						}
 					}
 				],
@@ -18089,6 +18128,74 @@
 						],
 						"title": "Registry Area Name"
 					},
+					"estimated_value_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value Aed"
+					},
+					"estimated_value_low_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value Low Aed"
+					},
+					"estimated_value_high_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value High Aed"
+					},
+					"valuation_confidence": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["high", "medium", "low"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Confidence"
+					},
+					"valued_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valued At"
+					},
+					"valuation_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Status"
+					},
 					"later_sale_date": {
 						"anyOf": [
 							{
@@ -18896,6 +19003,13 @@
 						"type": "string",
 						"format": "date",
 						"title": "As Of"
+					},
+					"owners": {
+						"additionalProperties": {
+							"$ref": "#/components/schemas/CrmRenewalOwner"
+						},
+						"type": "object",
+						"title": "Owners"
 					}
 				},
 				"type": "object",
@@ -23576,6 +23690,25 @@
 						},
 						"type": "object",
 						"title": "Lanes"
+					},
+					"move_in": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Move In"
+					},
+					"hidden_after": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Hidden After"
 					}
 				},
 				"type": "object",
@@ -24163,6 +24296,18 @@
 						],
 						"title": "Snapshot At"
 					},
+					"data_as_of": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Data As Of"
+					},
 					"trend": {
 						"items": {
 							"$ref": "#/components/schemas/ListingTrendPoint"
@@ -24522,6 +24667,85 @@
 						"type": "array",
 						"title": "Urgency Terms"
 					},
+					"valuation_method": {
+						"type": "string",
+						"enum": ["dld_sales", "asking_peers"],
+						"title": "Valuation Method",
+						"default": "asking_peers"
+					},
+					"estimated_value_aed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value Aed"
+					},
+					"estimated_value_low_aed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value Low Aed"
+					},
+					"estimated_value_high_aed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value High Aed"
+					},
+					"valuation_confidence": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["high", "medium", "low"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Confidence"
+					},
+					"value_gap_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Value Gap Pct"
+					},
+					"is_off_plan": {
+						"type": "boolean",
+						"title": "Is Off Plan",
+						"default": false
+					},
+					"valued_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valued At"
+					},
 					"is_available": {
 						"anyOf": [
 							{
@@ -24581,6 +24805,42 @@
 				"type": "object",
 				"required": ["listing_id", "listing_mode", "asset_class", "title"],
 				"title": "ListingCardResponse"
+			},
+			"ListingComparableSale": {
+				"properties": {
+					"date": {
+						"type": "string",
+						"format": "date",
+						"title": "Date"
+					},
+					"unit": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Unit"
+					},
+					"size_sqft": {
+						"type": "number",
+						"title": "Size Sqft"
+					},
+					"price_aed": {
+						"type": "integer",
+						"title": "Price Aed"
+					},
+					"psf": {
+						"type": "number",
+						"title": "Psf"
+					}
+				},
+				"type": "object",
+				"required": ["date", "size_sqft", "price_aed", "psf"],
+				"title": "ListingComparableSale",
+				"description": "A DLD sale behind a listing's estimate: same building, type and bedrooms, closest size."
 			},
 			"ListingDetailResponse": {
 				"properties": {
@@ -24930,6 +25190,85 @@
 						"type": "array",
 						"title": "Urgency Terms"
 					},
+					"valuation_method": {
+						"type": "string",
+						"enum": ["dld_sales", "asking_peers"],
+						"title": "Valuation Method",
+						"default": "asking_peers"
+					},
+					"estimated_value_aed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value Aed"
+					},
+					"estimated_value_low_aed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value Low Aed"
+					},
+					"estimated_value_high_aed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Value High Aed"
+					},
+					"valuation_confidence": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["high", "medium", "low"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Confidence"
+					},
+					"value_gap_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Value Gap Pct"
+					},
+					"is_off_plan": {
+						"type": "boolean",
+						"title": "Is Off Plan",
+						"default": false
+					},
+					"valued_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valued At"
+					},
 					"is_available": {
 						"anyOf": [
 							{
@@ -25089,6 +25428,13 @@
 							}
 						],
 						"title": "View 360 Url"
+					},
+					"valuation_comparables": {
+						"items": {
+							"$ref": "#/components/schemas/ListingComparableSale"
+						},
+						"type": "array",
+						"title": "Valuation Comparables"
 					}
 				},
 				"type": "object",
@@ -25349,6 +25695,18 @@
 					},
 					"filters": {
 						"$ref": "#/components/schemas/ListingFiltersResponse"
+					},
+					"data_as_of": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Data As Of"
 					}
 				},
 				"type": "object",

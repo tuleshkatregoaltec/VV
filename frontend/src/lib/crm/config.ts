@@ -22,6 +22,7 @@ export interface FieldDef {
 	key: LeadFieldKey
 	label: string
 	money?: boolean
+	date?: boolean
 	options?: string[]
 	/** Needed by the New Lead form: without it the backend can never match the lead. */
 	required?: boolean
@@ -136,7 +137,7 @@ export const LEAD_TYPES: Record<
 			{ key: 'bedrooms', label: 'Bedrooms', options: BEDROOM_OPTIONS },
 			{ key: 'budget_aed', label: 'Budget a year', money: true, required: true },
 			{ key: 'cheques', label: 'Cheques' },
-			{ key: 'move_in', label: 'Move-in' }
+			{ key: 'move_in', label: 'Move-in', date: true }
 		]
 	},
 	landlord: {

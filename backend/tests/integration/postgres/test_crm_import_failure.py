@@ -39,7 +39,10 @@ async def test_warehouse_failure_is_recorded_after_session_rollback(pg_session, 
         )
     ).one()
     assert record.status == "failed"
-    assert record.error_message == "Warehouse unavailable"
+    # Persist a retryable, client-safe report without exposing upstream exception details.
+    assert record.error_message == "The file could not be processed. Check it and try again."
+    assert error.value.detail == f"Import failed: {record.error_message}"
+    assert "Warehouse unavailable" not in error.value.detail
     assert record.completed_at is not None
     assert not (
         await pg_session.exec(

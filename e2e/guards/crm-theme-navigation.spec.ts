@@ -43,7 +43,7 @@ for (const theme of ['light', 'dark'] as const) {
 			.getByRole('link', { name: 'Workflows', exact: true }));
 
 		await page.getByRole('navigation', { name: 'Switch section' }).getByRole('link', { name: 'CRM', exact: true }).click();
-		await expect(page.getByRole('heading', { name: 'Conveyancing', exact: true })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
 		await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
 		// These are rendered surfaces in each tool, so a future private CRM palette fails this check.
 		expect(await surfaceStyle(page.locator('.crm-root .card').first())).toEqual(marketCard);

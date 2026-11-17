@@ -278,8 +278,11 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 										<Kv
 											k="Market range"
 											v={u.market
-												? `Sale ${short(u.market.sale[0])}–${short(u.market.sale[1])} · rent ${short(u.market.rent[0])}–${short(u.market.rent[1])}`
+												? `${aed(u.market.estimate)} · range ${short(u.market.sale[0])}–${short(u.market.sale[1])}${u.market.rent ? ` · rent ${short(u.market.rent[0])}–${short(u.market.rent[1])}` : ''}`
 												: '—'}
+											o={u.market
+												? `Vitevue estimate · ${u.market.confidence} confidence · ${fullDate(u.market.valued_at)}`
+												: (u.market_note ?? 'Vitevue estimate')}
 										/>
 									</div>
 									{#if u.check}

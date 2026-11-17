@@ -82,7 +82,7 @@ async def test_json_inventory_annual_filter_benchmark_and_detail_mapping(warehou
     assert detail.description == "Details"
     assert detail.area_name == "Test Area"
     assert detail.tower_name == "Tower"
-    assert detail.source_run_id == "test-run"
+    assert "source_run_id" not in detail.model_dump()
     older = await service.list_listings_from_clickhouse(
         "rent", area="Test Area", building="Tower", min_age_days=91, include_filters=False
     )

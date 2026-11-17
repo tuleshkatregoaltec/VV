@@ -88,6 +88,7 @@ async def fetch_matching_rentals(parameters):
             c.contract_state,
             c.observed_contracts,
             m.unit_number,
+            c.unit_number AS lease_unit_number,
             m.last_purchase_date,
             m.matched_sale_price,
             m.match_status,
@@ -95,7 +96,7 @@ async def fetch_matching_rentals(parameters):
         FROM dxbi_rental_unit_candidates AS c FINAL
         LEFT JOIN dxbi_rental_sale_matches AS m FINAL USING (unit_candidate_key)
         WHERE
-            c.lease_end BETWEEN today() - 1825 AND today() + 90
+            c.lease_end BETWEEN today() - 1825 AND ifNull({move_by:Nullable(Date)}, today()) + 90
             AND (
                 {area:String} = ''
                 OR positionCaseInsensitiveUTF8(c.area_name, {area:String}) > 0
@@ -107,7 +108,8 @@ async def fetch_matching_rentals(parameters):
                 OR lowerUTF8(c.property_type) = lowerUTF8({property_type:String})
             )
         ORDER BY
-            abs(dateDiff('day', today(), c.lease_end)) ASC,
+            c.lease_end > ifNull({move_by:Nullable(Date)}, toDate('2149-06-06')) ASC,
+            abs(dateDiff('day', ifNull({move_by:Nullable(Date)}, today()), c.lease_end)) ASC,
             c.annual_rent_aed DESC
         LIMIT 40
         """,
@@ -616,6 +618,20 @@ async def fetch_dashboard(
 _AREA_LEAD_CTE = AREA_LEAD_CTE
 
 
+# Rank all leases before restricting to an owner's units. Candidate keys can change between
+# contracts for the same resolved property, so an early key filter can resurrect an old lease.
+_OWNER_IDENTITIES = """property_identity_key IN (
+    WITH {identity_cte}
+    SELECT property_identity_key FROM identified_unit
+    WHERE unit_candidate_key IN {{unit_keys:Array(String)}}
+)""".format(
+    identity_cte=LIVE_LEAD_CTE[: LIVE_LEAD_CTE.index("ranked_unit AS (")]
+    .removeprefix("\nWITH ")
+    .removeprefix("WITH ")
+    .rstrip(",\n")
+)
+
+
 async def run_until_disconnected(is_disconnected, work):
     """Run `work` with time-limited queries; None (queries stopped) if the caller went away."""
     try:
@@ -728,6 +744,8 @@ async def fetch_renewals(
     building,
     limit,
     offset,
+    unit_keys=None,
+    exclude_units=False,
 ):
     """Assets › Renewals: one page of leases with its total, plus the options for its filters.
 
@@ -756,10 +774,15 @@ async def fetch_renewals(
         search=None,
         unlet_only=unlet_only,
     )
+    if unit_keys:
+        owner_filter = f"NOT ({_OWNER_IDENTITIES})" if exclude_units else _OWNER_IDENTITIES
+        where += f" AND {owner_filter}"
+        facet_where += f" AND {owner_filter}"
     base = {
         "as_of": anchor.isoformat(),
         "expired_days": expired_days,
         "areas": [area] if area else [],
+        **({"unit_keys": unit_keys} if unit_keys else {}),
     }
     # One ranking pass: the page's total and sorted keys use every filter; the options use the
     # facet filters, which are the page's minus project, building and property type.
@@ -813,6 +836,25 @@ async def fetch_renewals(
         name: list(row.get(name) or []) for name in ("property_types", "projects", "buildings")
     }
     return rows, int(row.get("total") or 0), facets
+
+
+async def fetch_owner_unit_aliases(candidate_keys: list[str], owner_keys: list[str]):
+    """Map current lease keys to this agency's owner keys using the same resolved identity."""
+    identity_cte = _LEAD_CTE[: _LEAD_CTE.index("ranked_unit AS (")].rstrip(",\n")
+    return await query(
+        identity_cte
+        + """
+        SELECT DISTINCT target.unit_candidate_key AS candidate_key,
+                        owner.unit_candidate_key AS owner_candidate_key
+        FROM identified_unit AS target
+        INNER JOIN identified_unit AS owner
+            ON target.property_identity_key = owner.property_identity_key
+        WHERE target.unit_candidate_key IN {candidate_keys:Array(String)}
+          AND owner.unit_candidate_key IN {owner_keys:Array(String)}
+        ORDER BY candidate_key, owner_candidate_key
+        """,
+        {"candidate_keys": candidate_keys, "owner_keys": owner_keys},
+    )
 
 
 async def fetch_renewal_areas(anchor):

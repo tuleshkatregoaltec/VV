@@ -439,3 +439,29 @@ async def test_exact_area_identity_collision_refuses_publication_and_keeps_live_
     print(
         "exact_area_collision=rejected; previous_artifact=unchanged; selected_lease=collision-old"
     )
+
+
+async def test_owner_identity_filter_is_identical_on_live_and_published_ranked_base(
+    rental_graph, monkeypatch
+):
+    options = dict(
+        status=None,
+        unlet_only=False,
+        expired_days=365,
+        area=None,
+        property_type=None,
+        project=None,
+        building=None,
+        limit=100,
+        offset=0,
+        unit_keys=["saved-alias"],
+    )
+    outcomes = []
+    for enabled in (False, True):
+        monkeypatch.setattr(rental_base.settings, "CRM_RENTAL_BASE_ENABLED", enabled)
+        known = await opportunity_queries.fetch_renewals(ANCHOR, **options)
+        unknown = await opportunity_queries.fetch_renewals(ANCHOR, **options, exclude_units=True)
+        assert [row["event_key"] for row in known[0]] == ["current-alias"]
+        assert "current-alias" not in {row["event_key"] for row in unknown[0]}
+        outcomes.append(_comparable((known, unknown)))
+    assert outcomes[0] == outcomes[1]

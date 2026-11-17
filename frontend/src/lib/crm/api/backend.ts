@@ -40,7 +40,7 @@ import type {
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { currentUser } from '$lib/stores/user.svelte'
 import { groupOf, LEAD_TYPES, ownerPropertyKind, PROPERTY_TYPES, SOURCE_OPTIONS } from '../config'
-import { aed, fmt, fullDate, plural, short } from '../format'
+import { aed, dayLabel, fmt, fullDate, ISO_DAY, plural, short } from '../format'
 import { crmScopeKey, onCrmIdentityChange } from '../identity.svelte'
 import { IMPORT_STATUS } from '../importStatus'
 import {
@@ -793,10 +793,17 @@ export async function leadMatches(id: number): Promise<LeadMatches> {
 	const side = groupOf(lead.lead_type)
 	const brief = LEAD_TYPES[lead.lead_type].fields
 		.filter((f) => lead.fields[f.key])
-		.map((f) => ({
-			k: f.label,
-			v: f.money ? aed(Number(lead.fields[f.key])) : String(lead.fields[f.key])
-		}))
+		.map((f) => {
+			const value = String(lead.fields[f.key])
+			return {
+				k: f.label,
+				v: f.money
+					? aed(Number(lead.fields[f.key]))
+					: f.date && ISO_DAY.test(value)
+						? fullDate(value)
+						: value
+			}
+		})
 	const tab = side === 'sl' ? 'sell' : lead.off_plan ? 'offplan' : 'ready'
 	// Matching needs a qualified brief (the backend refuses otherwise): ask the agent for one.
 	if (!e.qualification_complete) {
@@ -814,12 +821,17 @@ export async function leadMatches(id: number): Promise<LeadMatches> {
 	}
 	const res = await loadMatches(id)
 	const live = (lane: string) => (res.lanes[lane] ?? []).filter((m) => m.state !== 'dismissed')
+	const moveBy = res.move_in ?? null
+	const freeAfter = (lane: string) => {
+		const count = res.hidden_after?.[lane] ?? 0
+		return count && moveBy ? ` · ${count} free after ${dayLabel(moveBy)}` : ''
+	}
 
 	const tiers: MatchTier[] = LANES[side].map((t, i) => ({
 		id: t.lane,
 		n: i + 1,
 		title: t.title,
-		sub: `${live(t.lane).length} found`,
+		sub: `${live(t.lane).length} found${freeAfter(t.lane)}`,
 		chip: null,
 		gate: null,
 		groups: [
@@ -865,7 +877,7 @@ export async function leadMatches(id: number): Promise<LeadMatches> {
 		tab,
 		lead,
 		brief,
-		move_by: null,
+		move_by: moveBy,
 		shortlist: Object.values(res.lanes)
 			.flat()
 			.filter((m) => m.state === 'saved').length,
@@ -979,6 +991,36 @@ function ownerRow(p: CrmOwnerProfile, ws: CrmOwnerWorkspaceSummary | undefined):
 	}
 }
 
+/** Today's estimated value of the unit (owner valuation, 5 Nov); rent is not estimated yet. */
+function ownerMarket(p: CrmOwnerProperty): OwnerUnit['market'] {
+	if (!p.estimated_value_aed || !p.valuation_confidence || !p.valued_at) return null
+	return {
+		sale: [
+			p.estimated_value_low_aed ?? p.estimated_value_aed,
+			p.estimated_value_high_aed ?? p.estimated_value_aed
+		],
+		rent: null,
+		estimate: p.estimated_value_aed,
+		confidence: p.valuation_confidence,
+		valued_at: p.valued_at
+	}
+}
+
+/** valuation_service skip statuses, in words an agent can act on. */
+const NOT_ESTIMATED: Record<string, string> = {
+	non_residential: 'land or commercial',
+	no_registry_match: 'no matching recorded sale',
+	ambiguous_registry_match: 'Registry match unclear',
+	no_comparables: 'too few recent sales',
+	not_current_owner: 'no longer owned'
+}
+
+function ownerMarketNote(p: CrmOwnerProperty): string | undefined {
+	if (p.estimated_value_aed) return undefined
+	const why = p.valuation_status ? NOT_ESTIMATED[p.valuation_status] : undefined
+	return why ? `Not estimated · ${why}` : 'Not estimated yet'
+}
+
 function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 	const sale =
 		p.registry_sale_price_aed ?? p.latest_sale_price_aed ?? p.imported_transaction_price_aed ?? null
@@ -1018,7 +1060,8 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 		status_chip: chip,
 		// The backend keeps the lease end, not its start, so "Rent now" shows through `status`.
 		rent: null,
-		market: null,
+		market: ownerMarket(p),
+		market_note: ownerMarketNote(p),
 		rent_history: [],
 		transactions: [...new Map(transactions.map((t) => [`${t.when}${t.what}`, t])).values()].map(
 			(t) => ({ ...t, when: t.when.slice(0, 10) })
@@ -1762,6 +1805,7 @@ function discountChip(pct: number): Chip {
 function marketListing(l: ListingCardResponse): MarketListing | null {
 	const price = l.price_value ?? null
 	const value = l.market_estimate_aed ?? null
+	if (l.listing_mode === 'sale' && l.is_off_plan) return null
 	if (!price || !value) return null
 	const discount = Math.round(((value - price) / value) * 1000) / 10
 	const beds = l.bedrooms ? (/^\d+$/.test(l.bedrooms) ? `${l.bedrooms}BR` : l.bedrooms) : null
@@ -1869,13 +1913,15 @@ export async function listRenewals(
 			project: p.project || undefined,
 			building: p.building || undefined,
 			limit: p.limit,
-			offset: p.offset ?? 0
+			offset: p.offset ?? 0,
+			owner: p.owner || undefined
 		}),
 		{ signal }
 	)
 	return {
+		owner_filter_supported: Object.hasOwn(res, 'owners'),
 		offset: p.offset ?? 0,
-		items: res.leads.map((l) => renewal(l, null)),
+		items: res.leads.map((l) => renewal(l, renewalOwner(res.owners?.[l.unit_candidate_key]))),
 		total: res.total,
 		property_types: res.property_types ?? [],
 		projects: res.projects ?? [],

@@ -663,7 +663,7 @@ async def test_a_lease_refresh_changes_only_lease_fields_and_reaches_the_publish
     )
     params = {"o": org, "fields": list(lease_fields)}
     before = (await pg_session.execute(snapshot, params)).mappings().all()
-    new_end = TODAY + timedelta(days=200)
+    new_end = TODAY + timedelta(days=45)
     monkeypatch.setattr(
         ownership,
         "_rental_evidence_for_units",
@@ -727,3 +727,119 @@ async def test_folder_counts_reconcile_with_all(pg_session, tenant, list_choice)
         - s.folder_overlap
         + s.unfiled_profiles
     )
+
+
+async def test_valuation_rebuilds_current_projection_and_filters_by_estimate(pg_session, tenant):
+    """A new estimate must reach stored profiles and filters without rewriting the old sale."""
+    from sqlmodel import select
+
+    org = tenant["org"]
+    before = await owner_store.open_store(pg_session, org)
+    claim = (
+        await pg_session.exec(
+            select(CrmPropertyContactClaim).where(
+                CrmPropertyContactClaim.organization_id == org,
+                CrmPropertyContactClaim.contact_name == "Alice Example",
+                CrmPropertyContactClaim.unit_number == "601",
+            )
+        )
+    ).one()
+    claim.estimated_value_aed = 2_600_000
+    claim.estimated_value_low_aed = 2_500_000
+    claim.estimated_value_high_aed = 2_800_000
+    claim.valuation = {"confidence": "high", "valued_at": "2026-11-05", "status": "valued"}
+    await pg_session.commit()
+    await owner_store.rebuild(pg_session.bind, org)
+    refreshed = await owner_store.open_store(pg_session, org)
+    assert refreshed.state.generation != before.state.generation
+    result = await owners.get_owner_registry(
+        pg_session,
+        organization_id=org,
+        **_registry_arguments(
+            search="Alice",
+            min_value_aed=2_500_000,
+            max_value_aed=2_800_000,
+        ),
+    )
+    assert result.total == 1
+    prop = next(p for p in result.owners[0].properties if p.unit_number == "601")
+    assert (prop.estimated_value_aed, prop.valuation_confidence, prop.valued_at) == (
+        2_600_000,
+        "high",
+        date(2026, 11, 5),
+    )
+    assert prop.latest_sale_price_aed == 900_000
+    values = (
+        await pg_session.exec(
+            text(
+                "SELECT sale_price_aed, estimated_value_aed FROM crm_owner_registry_properties "
+                "WHERE organization_id=:org AND generation=:gen AND estimated_value_aed IS NOT NULL"
+            ),
+            params={"org": org, "gen": refreshed.state.generation},
+        )
+    ).all()
+    assert values and all(tuple(row) == (900_000, 2_600_000) for row in values)
+
+    claim.estimated_value_aed = None
+    claim.estimated_value_low_aed = None
+    claim.estimated_value_high_aed = None
+    claim.valuation = {"status": "no_registry_match"}
+    await pg_session.commit()
+    await owner_store.rebuild(pg_session.bind, org)
+    cleared = await owners.get_owner_registry(
+        pg_session,
+        organization_id=org,
+        **_registry_arguments(
+            search="Alice",
+            min_value_aed=2_500_000,
+        ),
+    )
+    assert cleared.total == 0
+    fallback = await owners.get_owner_registry(
+        pg_session,
+        organization_id=org,
+        **_registry_arguments(
+            search="Alice",
+            min_value_aed=800_000,
+            max_value_aed=950_000,
+        ),
+    )
+    assert fallback.total == 1
+
+
+async def test_maintenance_valuation_uses_assessment_without_rewriting_import(
+    pg_session, tenant, monkeypatch
+):
+    from sqlmodel import select
+
+    from app.crm import valuation_service
+
+    org = tenant["org"]
+    former = (
+        await pg_session.exec(
+            select(CrmPropertyContactClaim).where(
+                CrmPropertyContactClaim.organization_id == org,
+                CrmPropertyContactClaim.contact_name == "Carol Seller",
+            )
+        )
+    ).one()
+    assert former.ownership_status == "verified_current_owner"  # stale import assertion
+    former.estimated_value_aed = 9_000_000
+    await pg_session.commit()
+
+    async def value_current(claims, valued_at, summary):
+        assert former.id not in {claim.id for claim in claims}
+        for claim in claims:
+            claim.estimated_value_aed = 2_600_000
+            claim.estimated_value_low_aed = 2_500_000
+            claim.estimated_value_high_aed = 2_800_000
+            claim.valuation = {"confidence": "high", "valued_at": valued_at.isoformat()}
+            summary.valued += 1
+
+    monkeypatch.setattr(valuation_service, "_value_chunk", value_current)
+    result = await valuation_service.value_owner_claims(pg_session, organization_id=org)
+    assert result.valued > 0
+    await pg_session.refresh(former)
+    assert former.estimated_value_aed is None
+    assert former.valuation["status"] == "not_current_owner"
+    assert former.ownership_status == "verified_current_owner"

@@ -786,6 +786,8 @@ export type RenewalWindow =
 	| 'expiring_60'
 	| 'expiring_90'
 
+export type RenewalOwnerFilter = 'known' | 'unknown'
+
 export interface RenewalListParams {
 	area: string
 	window: RenewalWindow
@@ -796,9 +798,11 @@ export interface RenewalListParams {
 	building: string
 	limit: number
 	offset?: number
+	owner?: RenewalOwnerFilter
 }
 
 export interface RenewalListResponse {
+	owner_filter_supported?: boolean
 	offset: number
 	items: Renewal[]
 	total: number
@@ -952,7 +956,14 @@ export interface OwnerUnit {
 	status: string
 	status_chip: Chip
 	rent: { aed: number; from: string; to: string } | null
-	market: { sale: [number, number]; rent: [number, number] } | null
+	market: {
+		sale: [number, number]
+		rent: [number, number] | null
+		estimate: number
+		confidence: 'high' | 'medium' | 'low'
+		valued_at: string
+	} | null
+	market_note?: string
 	rent_history: { year: number; aed: number }[]
 	transactions: { when: string; what: string; aed: number | null }[]
 	/** Where this unit came from: "Business Bay 2024 SVR · Sheet1 row 12". Empty when unknown. */

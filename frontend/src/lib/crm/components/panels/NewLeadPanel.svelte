@@ -136,7 +136,7 @@ async function submit(e: SubmitEvent) {
 						{#each f.options as o (o)}<option value={o}>{o}</option>{/each}
 					</select>
 				{:else}
-					<input id="nl-{f.key}" type="text" required={f.required} bind:value={draft[f.key]} />
+					<input id="nl-{f.key}" type={f.date ? 'date' : 'text'} required={f.required} bind:value={draft[f.key]} />
 				{/if}
 			</div>
 		{/each}

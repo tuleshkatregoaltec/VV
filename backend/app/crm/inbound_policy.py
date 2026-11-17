@@ -121,6 +121,42 @@ def _normalize_intent(value: Any, notes: str = "") -> str | None:
     return None
 
 
+# A consent column as people fill it in. Only a clear yes counts: promotions (WhatsApp campaigns)
+# go to "provided" alone, so anything unclear stays "unknown" rather than being read as agreement.
+_CONSENT_YES = {
+    "provided",
+    "yes",
+    "y",
+    "true",
+    "1",
+    "agreed",
+    "agree",
+    "optin",
+    "optedin",
+    "consented",
+}
+_CONSENT_NO = {
+    "withdrawn",
+    "no",
+    "n",
+    "false",
+    "0",
+    "optout",
+    "optedout",
+    "unsubscribed",
+    "declined",
+}
+
+
+def _normalize_consent(value: Any) -> str:
+    token = _token(value)
+    if token in _CONSENT_YES:
+        return "provided"
+    if token in _CONSENT_NO:
+        return "withdrawn"
+    return "unknown"
+
+
 def _qualification_complete(enquiry: CrmInboundEnquiry) -> bool:
     if (
         enquiry.record_kind != "opportunity"

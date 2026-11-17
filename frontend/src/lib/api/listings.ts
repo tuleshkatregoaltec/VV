@@ -17,6 +17,19 @@ export type ListingMarketPosition =
 	| 'insufficient_data'
 export type ListingBenchmarkLevel = 'building_layout' | 'project_layout' | 'insufficient_data'
 export type ListingUrgencySignal = 'explicit_urgency' | 'value_language' | 'none'
+/** dld_sales: valued from DLD sales of the same bedroom count in the same building (11 Nov 2026).
+    asking_peers: compared with other listings' asking prices (rent, commercial). */
+export type ListingValuationMethod = 'dld_sales' | 'asking_peers'
+export type ListingSort = 'default' | 'value_gap'
+
+/** A DLD sale behind a listing's estimate: same building, type and bedrooms. */
+export interface ListingComparableSale {
+	date: string
+	unit: string | null
+	size_sqft: number
+	price_aed: number
+	psf: number
+}
 
 export interface ListingIntelligenceFields {
 	asset_class: ListingAssetClass
@@ -30,6 +43,15 @@ export interface ListingIntelligenceFields {
 	benchmark_level: ListingBenchmarkLevel
 	urgency_signal: ListingUrgencySignal
 	urgency_terms: string[]
+	valuation_method: ListingValuationMethod
+	estimated_value_aed: number | null
+	estimated_value_low_aed: number | null
+	estimated_value_high_aed: number | null
+	valuation_confidence: 'high' | 'medium' | 'low' | null
+	/** Asking / estimate - 1: -0.12 is asking 12% below the estimate. Null when not flagged. */
+	value_gap_pct: number | null
+	is_off_plan: boolean
+	valued_at: string | null
 }
 
 // The backend always serializes these defaulted fields; the generated types mark them optional.
@@ -39,7 +61,9 @@ export interface ListingCardResponse
 
 export interface ListingDetailResponse
 	extends Omit<GeneratedListingDetailResponse, keyof ListingIntelligenceFields>,
-		ListingIntelligenceFields {}
+		ListingIntelligenceFields {
+	valuation_comparables: ListingComparableSale[]
+}
 
 export interface ListingFiltersResponse extends GeneratedListingFiltersResponse {
 	asset_classes: ListingAssetClass[]
@@ -49,6 +73,8 @@ export interface ListingListResponse
 	extends Omit<GeneratedListingListResponse, 'listings' | 'filters'> {
 	listings: ListingCardResponse[]
 	filters: ListingFiltersResponse
+	/** When the listing data was collected; listings may have sold or changed since. */
+	data_as_of: string | null
 }
 
 export interface ListingTrendPoint {
@@ -76,6 +102,7 @@ export interface ListingAnalyticsResponse {
 	verified_count: number
 	area_count: number
 	snapshot_at: string | null
+	data_as_of: string | null
 	trend: ListingTrendPoint[]
 }
 
@@ -92,6 +119,9 @@ export interface ListingParams {
 	bedrooms?: string
 	price_min?: number
 	price_max?: number
+	/** List only: e.g. below_market with sort value_gap is the possible-bargains view. */
+	market_position?: ListingMarketPosition
+	sort?: ListingSort
 }
 
 export const listings = {
@@ -107,7 +137,9 @@ export const listings = {
 				property_type: params.property_type,
 				bedrooms: params.bedrooms,
 				price_min: params.price_min,
-				price_max: params.price_max
+				price_max: params.price_max,
+				market_position: params.market_position,
+				sort: params.sort
 			})
 		),
 
