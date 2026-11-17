@@ -133,3 +133,83 @@ test('an agent is not offered the Agents view', async ({ page, usePersona }) => 
 	})
 	await expect(page.getByRole('button', { name: 'Agents', exact: true })).toHaveCount(0)
 })
+
+const DETAIL = {
+	days: 30,
+	metrics: TEAM.agents[0],
+	sources: [
+		{ kind: 'marketing', label: 'Property Finder', count: 3 },
+		{ kind: 'vitevue_sold', label: 'Owner file · recently sold', count: 1 }
+	],
+	activity: ['11', '12', '13', '14', '15', '16', '17'].map((d, i) => ({
+		date: `2026-11-${d}`,
+		calls: i,
+		messages: 2,
+		meetings: 0
+	})),
+	leads: [
+		{
+			id: 42,
+			name: 'Tom Walsh',
+			status: 'new',
+			source: 'Meta',
+			source_kind: 'marketing',
+			assigned_at: '2026-11-17T08:00:00Z',
+			first_contact_at: null,
+			last_contact_at: null,
+			next_follow_up: null,
+			overdue: true
+		},
+		{
+			id: 41,
+			name: 'Lina Saleh',
+			status: 'contacted',
+			source: 'Property Finder',
+			source_kind: 'marketing',
+			assigned_at: '2026-11-16T08:00:00Z',
+			first_contact_at: '2026-11-16T08:14:00Z',
+			last_contact_at: '2026-11-16T09:00:00Z',
+			next_follow_up: '2026-11-19',
+			overdue: false
+		}
+	]
+}
+
+test('a manager opens one agent’s lead analytics', async ({ page, usePersona }) => {
+	await isolate(page)
+	await usePersona('active-member')
+	await mockCrm(page, MANAGER_SCOPE)
+	await page.route('**/api/v1/crm/assignment/analytics/omar?**', (route) => json(route, DETAIL))
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await page.goto('/crm/team/omar')
+
+	await expect(page.getByRole('heading', { name: 'Omar Khan' })).toBeVisible({ timeout: 15_000 })
+	await expect(page.getByText('Avg first response').first()).toBeVisible()
+	await expect(page.getByText('14 min').first()).toBeVisible()
+	await expect(page.getByText('Activity · last 7 days')).toBeVisible()
+	await expect(page.getByText('Owner file · recently sold')).toBeVisible()
+	await expect(page.getByRole('link', { name: 'Lina Saleh' })).toHaveAttribute(
+		'href',
+		'/crm/leads?lead=41'
+	)
+	await expect(page.getByText('Overdue', { exact: true })).toBeVisible()
+	const nav = page.getByRole('navigation', { name: 'CRM sections' })
+	await expect(nav.getByRole('link', { name: 'Manager view', exact: true })).toHaveAttribute(
+		'aria-current',
+		'page'
+	)
+})
+
+test('a person outside the manager’s teams is not shown', async ({ page, usePersona }) => {
+	await isolate(page)
+	await usePersona('active-member')
+	await mockCrm(page, MANAGER_SCOPE)
+	await page.route('**/api/v1/crm/assignment/analytics/zed?**', (route) =>
+		json(route, { detail: 'This person is not in a team you manage' }, 404)
+	)
+	await page.goto('/crm/team/zed')
+
+	await expect(page.getByText('This person is not in a team you manage.')).toBeVisible({
+		timeout: 15_000
+	})
+})

@@ -138,7 +138,12 @@ const path = $derived(page.url.pathname.replace(/\/$/, ''))
 					class="nav-i"
 					href={it.href}
 					title={it.label}
-					aria-current={path === it.href || (it.href !== '/crm' && path.startsWith(`${it.href}/`)) ? 'page' : undefined}
+					aria-current={path === it.href ||
+						(it.href !== '/crm' && path.startsWith(`${it.href}/`)) ||
+						// An agent's analytics page belongs to Manager view.
+						(it.href === '/crm/settings' && path.startsWith('/crm/team/'))
+							? 'page'
+							: undefined}
 					onclick={() => (chrome.sbOpen = false)}
 				>
 					<it.icon size={16} aria-hidden="true" />
