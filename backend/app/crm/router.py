@@ -19,12 +19,14 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_owner, require_active_subscription
 from app.crm import (
+    agent_analytics,
     agent_languages,
     assignment,
     oversight,
     owner_import_requests,
     routing,
 )
+from app.crm.analytics_models import AgentAnalyticsDetail, AnalyticsWindow, TeamAnalyticsResponse
 from app.crm.company_listings import (
     clear_company_source,
     list_company_listings,
@@ -530,6 +532,40 @@ async def crm_team_workload(
     person's last logged activity. Recorded facts only; nothing is scored or ranked."""
     user_id, organization_id = _auth_ids(context)
     return await oversight.team_workload(db, organization_id, user_id)
+
+
+@router.get(
+    "/assignment/analytics", response_model=TeamAnalyticsResponse, dependencies=EXPENSIVE_LANE
+)
+async def crm_team_analytics(
+    days: AnalyticsWindow = Query(AnalyticsWindow.month),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """For managers and administrators: each person in their teams with open work, average
+    first-response and pool claim times and leads contacted in the last 24 hours, over the last
+    7, 30 or 90 days. Recorded facts only; nothing is scored or ranked."""
+    user_id, organization_id = _auth_ids(context)
+    return await agent_analytics.team_analytics(db, organization_id, user_id, days=int(days))
+
+
+@router.get(
+    "/assignment/analytics/{agent_user_id}",
+    response_model=AgentAnalyticsDetail,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_agent_analytics(
+    agent_user_id: str,
+    days: AnalyticsWindow = Query(AnalyticsWindow.month),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """One person's figures, lead sources, last 7 days of activity and leads, for a manager of
+    their team. Anyone outside the caller's teams answers 404. Recorded facts only."""
+    user_id, organization_id = _auth_ids(context)
+    return await agent_analytics.agent_analytics(
+        db, organization_id, user_id, agent_user_id, days=int(days)
+    )
 
 
 @router.post("/inbound/pool", response_model=LeadAssignmentResponse, dependencies=EXPENSIVE_LANE)

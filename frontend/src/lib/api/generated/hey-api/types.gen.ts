@@ -230,6 +230,29 @@ export type AdminConnectionRow = {
 };
 
 /**
+ * AgentAnalyticsDetail
+ */
+export type AgentAnalyticsDetail = {
+    /**
+     * Days
+     */
+    days: number;
+    metrics: AgentLeadMetrics;
+    /**
+     * Sources
+     */
+    sources: Array<SourceCount>;
+    /**
+     * Activity
+     */
+    activity: Array<DailyActivity>;
+    /**
+     * Leads
+     */
+    leads: Array<AgentLeadRow>;
+};
+
+/**
  * AgentConnectionStatus
  *
  * State of the signed-in agent's WhatsApp number.
@@ -344,6 +367,112 @@ export type AgentLanguagesWrite = {
 };
 
 /**
+ * AgentLeadMetrics
+ */
+export type AgentLeadMetrics = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Team Ids
+     */
+    team_ids?: Array<string>;
+    /**
+     * Open Leads
+     */
+    open_leads?: number;
+    /**
+     * By Status
+     */
+    by_status?: {
+        [key: string]: number;
+    };
+    /**
+     * Awaiting First Contact
+     */
+    awaiting_first_contact?: number;
+    /**
+     * Overdue First Contact
+     */
+    overdue_first_contact?: number;
+    /**
+     * Contacted 24H
+     */
+    contacted_24h?: number;
+    /**
+     * Avg First Response Minutes
+     */
+    avg_first_response_minutes?: number | null;
+    /**
+     * Avg Claim Minutes
+     */
+    avg_claim_minutes?: number | null;
+    /**
+     * Assigned In Window
+     */
+    assigned_in_window?: number;
+    /**
+     * Qualified Or Better
+     */
+    qualified_or_better?: number;
+    /**
+     * Last Activity At
+     */
+    last_activity_at?: string | null;
+};
+
+/**
+ * AgentLeadRow
+ */
+export type AgentLeadRow = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Source Kind
+     */
+    source_kind: 'marketing' | 'vitevue_lease' | 'vitevue_sold' | 'own';
+    /**
+     * Assigned At
+     */
+    assigned_at?: string | null;
+    /**
+     * First Contact At
+     */
+    first_contact_at?: string | null;
+    /**
+     * Last Contact At
+     */
+    last_contact_at?: string | null;
+    /**
+     * Next Follow Up
+     */
+    next_follow_up?: string | null;
+    /**
+     * Overdue
+     */
+    overdue?: boolean;
+};
+
+/**
  * AnalyticsResponse
  *
  * Complete analytics response for dashboard
@@ -451,6 +580,13 @@ export type AnalyticsUnitComposition = {
      */
     avg_unit_size_sqft?: number;
 };
+
+/**
+ * AnalyticsWindow
+ *
+ * The windows a manager can pick, as a query parameter (a Literal would reject "7").
+ */
+export type AnalyticsWindow = 7 | 30 | 90;
 
 /**
  * ApprovedFact
@@ -5045,6 +5181,28 @@ export type DdaPlotFeature = {
      * Subdivision Confirmed Count
      */
     subdivision_confirmed_count?: number;
+};
+
+/**
+ * DailyActivity
+ */
+export type DailyActivity = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Calls
+     */
+    calls?: number;
+    /**
+     * Messages
+     */
+    messages?: number;
+    /**
+     * Meetings
+     */
+    meetings?: number;
 };
 
 /**
@@ -12039,6 +12197,24 @@ export type SignupConfigResponse = {
 };
 
 /**
+ * SourceCount
+ */
+export type SourceCount = {
+    /**
+     * Kind
+     */
+    kind: 'marketing' | 'vitevue_lease' | 'vitevue_sold' | 'own';
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Count
+     */
+    count: number;
+};
+
+/**
  * StudyContext
  */
 export type StudyContext = {
@@ -12710,6 +12886,24 @@ export type SyncAfterCheckoutRequest = {
      * Session Id
      */
     session_id: string;
+};
+
+/**
+ * TeamAnalyticsResponse
+ */
+export type TeamAnalyticsResponse = {
+    /**
+     * Days
+     */
+    days: number;
+    /**
+     * Generated At
+     */
+    generated_at: string;
+    /**
+     * Agents
+     */
+    agents: Array<AgentLeadMetrics>;
 };
 
 /**
@@ -15178,6 +15372,65 @@ export type CrmCrmTeamWorkloadResponses = {
 };
 
 export type CrmCrmTeamWorkloadResponse = CrmCrmTeamWorkloadResponses[keyof CrmCrmTeamWorkloadResponses];
+
+export type CrmCrmTeamAnalyticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        days?: AnalyticsWindow;
+    };
+    url: '/api/v1/crm/assignment/analytics';
+};
+
+export type CrmCrmTeamAnalyticsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmTeamAnalyticsError = CrmCrmTeamAnalyticsErrors[keyof CrmCrmTeamAnalyticsErrors];
+
+export type CrmCrmTeamAnalyticsResponses = {
+    /**
+     * Successful Response
+     */
+    200: TeamAnalyticsResponse;
+};
+
+export type CrmCrmTeamAnalyticsResponse = CrmCrmTeamAnalyticsResponses[keyof CrmCrmTeamAnalyticsResponses];
+
+export type CrmCrmAgentAnalyticsData = {
+    body?: never;
+    path: {
+        /**
+         * Agent User Id
+         */
+        agent_user_id: string;
+    };
+    query?: {
+        days?: AnalyticsWindow;
+    };
+    url: '/api/v1/crm/assignment/analytics/{agent_user_id}';
+};
+
+export type CrmCrmAgentAnalyticsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmAgentAnalyticsError = CrmCrmAgentAnalyticsErrors[keyof CrmCrmAgentAnalyticsErrors];
+
+export type CrmCrmAgentAnalyticsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentAnalyticsDetail;
+};
+
+export type CrmCrmAgentAnalyticsResponse = CrmCrmAgentAnalyticsResponses[keyof CrmCrmAgentAnalyticsResponses];
 
 export type CrmCrmReleaseLeadsToPoolData = {
     body: PoolReleaseRequest;

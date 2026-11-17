@@ -1,8 +1,8 @@
 """A manager's view of their teams: who holds how many leads, at which stage, and what is late.
 
-Only recorded facts are shown (lead stages, first-response deadlines, logged activity). The
-meeting mentioned performance ratings and response-time scores; none are computed here because
-no metric or ranking rule has been agreed.
+Only recorded facts are shown (lead stages, first-response deadlines, logged activity).
+Average first-response and pool claim times per person were agreed on 17 Nov 2026 and live in
+`agent_analytics`; still no ratings or rankings.
 """
 
 from __future__ import annotations

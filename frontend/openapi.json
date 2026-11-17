@@ -2747,6 +2747,97 @@
 				}
 			}
 		},
+		"/api/v1/crm/assignment/analytics": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Team Analytics",
+				"description": "For managers and administrators: each person in their teams with open work, average\nfirst-response and pool claim times and leads contacted in the last 24 hours, over the last\n7, 30 or 90 days. Recorded facts only; nothing is scored or ranked.",
+				"operationId": "crm-crm_team_analytics",
+				"parameters": [
+					{
+						"name": "days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/AnalyticsWindow",
+							"default": 30
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TeamAnalyticsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/assignment/analytics/{agent_user_id}": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Agent Analytics",
+				"description": "One person's figures, lead sources, last 7 days of activity and leads, for a manager of\ntheir team. Anyone outside the caller's teams answers 404. Recorded facts only.",
+				"operationId": "crm-crm_agent_analytics",
+				"parameters": [
+					{
+						"name": "agent_user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Agent User Id"
+						}
+					},
+					{
+						"name": "days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/AnalyticsWindow",
+							"default": 30
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentAnalyticsDetail"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/inbound/pool": {
 			"post": {
 				"tags": ["crm", "crm"],
@@ -13550,6 +13641,41 @@
 				],
 				"title": "AdminConnectionRow"
 			},
+			"AgentAnalyticsDetail": {
+				"properties": {
+					"days": {
+						"type": "integer",
+						"title": "Days"
+					},
+					"metrics": {
+						"$ref": "#/components/schemas/AgentLeadMetrics"
+					},
+					"sources": {
+						"items": {
+							"$ref": "#/components/schemas/SourceCount"
+						},
+						"type": "array",
+						"title": "Sources"
+					},
+					"activity": {
+						"items": {
+							"$ref": "#/components/schemas/DailyActivity"
+						},
+						"type": "array",
+						"title": "Activity"
+					},
+					"leads": {
+						"items": {
+							"$ref": "#/components/schemas/AgentLeadRow"
+						},
+						"type": "array",
+						"title": "Leads"
+					}
+				},
+				"type": "object",
+				"required": ["days", "metrics", "sources", "activity", "leads"],
+				"title": "AgentAnalyticsDetail"
+			},
 			"AgentConnectionStatus": {
 				"properties": {
 					"state": {
@@ -13779,6 +13905,180 @@
 				"type": "object",
 				"title": "AgentLanguagesWrite"
 			},
+			"AgentLeadMetrics": {
+				"properties": {
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"team_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Team Ids"
+					},
+					"open_leads": {
+						"type": "integer",
+						"title": "Open Leads",
+						"default": 0
+					},
+					"by_status": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "By Status"
+					},
+					"awaiting_first_contact": {
+						"type": "integer",
+						"title": "Awaiting First Contact",
+						"default": 0
+					},
+					"overdue_first_contact": {
+						"type": "integer",
+						"title": "Overdue First Contact",
+						"default": 0
+					},
+					"contacted_24h": {
+						"type": "integer",
+						"title": "Contacted 24H",
+						"default": 0
+					},
+					"avg_first_response_minutes": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg First Response Minutes"
+					},
+					"avg_claim_minutes": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Claim Minutes"
+					},
+					"assigned_in_window": {
+						"type": "integer",
+						"title": "Assigned In Window",
+						"default": 0
+					},
+					"qualified_or_better": {
+						"type": "integer",
+						"title": "Qualified Or Better",
+						"default": 0
+					},
+					"last_activity_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Activity At"
+					}
+				},
+				"type": "object",
+				"required": ["user_id", "name"],
+				"title": "AgentLeadMetrics"
+			},
+			"AgentLeadRow": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"source": {
+						"type": "string",
+						"title": "Source"
+					},
+					"source_kind": {
+						"type": "string",
+						"enum": ["marketing", "vitevue_lease", "vitevue_sold", "own"],
+						"title": "Source Kind"
+					},
+					"assigned_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assigned At"
+					},
+					"first_contact_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "First Contact At"
+					},
+					"last_contact_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Contact At"
+					},
+					"next_follow_up": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Next Follow Up"
+					},
+					"overdue": {
+						"type": "boolean",
+						"title": "Overdue",
+						"default": false
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "status", "source", "source_kind"],
+				"title": "AgentLeadRow"
+			},
 			"AnalyticsResponse": {
 				"properties": {
 					"timeframe_days": {
@@ -13949,6 +14249,12 @@
 				"type": "object",
 				"required": ["rooms", "count", "pct_of_total"],
 				"title": "AnalyticsUnitComposition"
+			},
+			"AnalyticsWindow": {
+				"type": "integer",
+				"enum": [7, 30, 90],
+				"title": "AnalyticsWindow",
+				"description": "The windows a manager can pick, as a query parameter (a Literal would reject \"7\")."
 			},
 			"ApprovedFact": {
 				"properties": {
@@ -21660,6 +21966,33 @@
 				],
 				"title": "DDAPlotFeature",
 				"description": "DDA GIS plot polygon for map overlay."
+			},
+			"DailyActivity": {
+				"properties": {
+					"date": {
+						"type": "string",
+						"format": "date",
+						"title": "Date"
+					},
+					"calls": {
+						"type": "integer",
+						"title": "Calls",
+						"default": 0
+					},
+					"messages": {
+						"type": "integer",
+						"title": "Messages",
+						"default": 0
+					},
+					"meetings": {
+						"type": "integer",
+						"title": "Meetings",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"required": ["date"],
+				"title": "DailyActivity"
 			},
 			"DataSourceAsOf": {
 				"properties": {
@@ -33379,6 +33712,26 @@
 				"title": "SignupConfigResponse",
 				"description": "Public values for FB.init/FB.login. `configured` is false until Meta is set up."
 			},
+			"SourceCount": {
+				"properties": {
+					"kind": {
+						"type": "string",
+						"enum": ["marketing", "vitevue_lease", "vitevue_sold", "own"],
+						"title": "Kind"
+					},
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					}
+				},
+				"type": "object",
+				"required": ["kind", "label", "count"],
+				"title": "SourceCount"
+			},
 			"StudyContext": {
 				"properties": {
 					"headline": {
@@ -34632,6 +34985,29 @@
 				"required": ["session_id"],
 				"title": "SyncAfterCheckoutRequest",
 				"description": "Request to sync after checkout"
+			},
+			"TeamAnalyticsResponse": {
+				"properties": {
+					"days": {
+						"type": "integer",
+						"title": "Days"
+					},
+					"generated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Generated At"
+					},
+					"agents": {
+						"items": {
+							"$ref": "#/components/schemas/AgentLeadMetrics"
+						},
+						"type": "array",
+						"title": "Agents"
+					}
+				},
+				"type": "object",
+				"required": ["days", "generated_at", "agents"],
+				"title": "TeamAnalyticsResponse"
 			},
 			"TeamMemberInput": {
 				"properties": {

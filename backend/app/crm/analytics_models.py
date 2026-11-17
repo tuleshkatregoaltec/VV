@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from enum import IntEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 AnalyticsDays = Literal[7, 30, 90]
 SourceKind = Literal["marketing", "vitevue_lease", "vitevue_sold", "own"]
+
+
+class AnalyticsWindow(IntEnum):
+    """The windows a manager can pick, as a query parameter (a Literal would reject "7")."""
+
+    week = 7
+    month = 30
+    quarter = 90
 
 
 class AgentLeadMetrics(BaseModel):
