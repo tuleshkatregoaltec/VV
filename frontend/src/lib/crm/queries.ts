@@ -1,6 +1,7 @@
 import type { OwnerImportRequestResponse } from '$lib/api/generated/hey-api/types.gen'
 import { getTeams } from '$lib/api/organization'
 import { getQueryClient } from '$lib/queries/client'
+import type { AnalyticsDays } from './agentMetrics'
 import { crm } from './api'
 import type {
 	CompanyListingFilter,
@@ -137,6 +138,9 @@ export const crmKeys = {
 	leadAssignments: (id: number) => [...crmScopeKey(), 'lead', id, 'assignments'] as const,
 	routingRules: () => [...crmScopeKey(), 'routing', 'rules'] as const,
 	workload: () => [...crmScopeKey(), 'assignment', 'workload'] as const,
+	analytics: (days: AnalyticsDays) => [...crmScopeKey(), 'assignment', 'analytics', days] as const,
+	agentAnalytics: (userId: string, days: AnalyticsDays) =>
+		[...crmScopeKey(), 'assignment', 'analytics', userId, days] as const,
 	teams: () => [...crmScopeKey(), 'teams'] as const
 }
 
@@ -449,6 +453,17 @@ export const crmQueries = {
 		enabled: crmIdentityKnown(),
 		queryKey: crmKeys.workload(),
 		queryFn: crm.assignment.workload
+	}),
+	teamAnalytics: (days: AnalyticsDays) => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.analytics(days),
+		queryFn: () => crm.assignment.analytics(days)
+	}),
+	agentAnalytics: (userId: string, days: AnalyticsDays) => ({
+		enabled: crmIdentityKnown() && Boolean(userId),
+		queryKey: crmKeys.agentAnalytics(userId, days),
+		queryFn: () => crm.assignment.agentAnalytics(userId, days),
+		retry: false
 	}),
 	teams: () => ({
 		enabled: crmIdentityKnown(),

@@ -26,7 +26,10 @@ export type MatchTabId = 'ready' | 'offplan' | 'sell'
 
 const defaults = {
 	leadTab: 'all' as LeadTab,
-	leadView: 'list' as 'list' | 'board',
+	/** Managers also get 'agents': per-person lead analytics (17 Nov). */
+	leadView: 'list' as 'list' | 'board' | 'agents',
+	/** Agents view and agent page window, in days. */
+	analyticsDays: 30 as 7 | 30 | 90,
 	/** Leads › Board: which group's columns show (6 Oct). */
 	leadGroup: 'bt' as 'bt' | 'sl',
 	q: '',

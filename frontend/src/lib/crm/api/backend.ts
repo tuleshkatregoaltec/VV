@@ -11,6 +11,7 @@
 import { me as authMe } from '$lib/api/auth'
 import { ApiError, client } from '$lib/api/client'
 import type {
+	AgentAnalyticsDetail,
 	AgentLanguagesResponse,
 	AssignmentEventResponse,
 	AssignmentScopeResponse,
@@ -48,6 +49,7 @@ import type {
 	RoutingRuleResponse,
 	RoutingRuleUpdate,
 	RoutingRuleWrite,
+	TeamAnalyticsResponse,
 	WorkloadResponse
 } from '$lib/api/generated/hey-api/types.gen'
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
@@ -1402,6 +1404,16 @@ export async function releaseToPool(
 
 /** Each managed team's recorded workload (managers and administrators). */
 export const teamWorkload = () => client.get<WorkloadResponse>(`${CRM}/assignment/workload`)
+
+/** Each managed person's lead figures over the last 7, 30 or 90 days (managers and administrators). */
+export const teamAnalytics = (days: 7 | 30 | 90) =>
+	client.get<TeamAnalyticsResponse>(`${CRM}/assignment/analytics?days=${days}`)
+
+/** One person's figures, sources, last 7 days of activity and leads; 404 outside your teams. */
+export const agentAnalytics = (userId: string, days: 7 | 30 | 90) =>
+	client.get<AgentAnalyticsDetail>(
+		`${CRM}/assignment/analytics/${encodeURIComponent(userId)}?days=${days}`
+	)
 
 /** Record the languages a team member speaks (used by "speakers only" routing rules). */
 export const setAgentLanguages = async (userId: string, languages: string[]) =>

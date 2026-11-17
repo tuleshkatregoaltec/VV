@@ -426,6 +426,9 @@ const liveCrm = {
 		release: backend.releaseToPool,
 		history: backend.leadAssignments,
 		workload: backend.teamWorkload,
+		/** Per-person lead analytics for managers (response and claim times, contacts). */
+		analytics: backend.teamAnalytics,
+		agentAnalytics: backend.agentAnalytics,
 		/** The languages a person speaks, as their manager records them; never inferred. */
 		setLanguages: backend.setAgentLanguages
 	},
