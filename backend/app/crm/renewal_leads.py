@@ -40,7 +40,7 @@ from app.crm.models import (
     CrmRenewalsResponse,
 )
 from app.crm.opportunities import _lead_from_row, get_lead_detail
-from app.crm.owner_assessment import get_owner_assessment
+from app.crm.owner_store import open_store
 
 logger = logging.getLogger(__name__)
 
@@ -295,14 +295,15 @@ async def _owners_by_candidate(
     """Manual owner fields override a single supported current imported identity."""
     if not candidate_keys:
         return {}
+    candidate_keys = sorted(set(candidate_keys))
     owners: dict[str, CrmRenewalOwner] = {}
-    # Only these units' claims: the whole-organization assessment is built from every claim.
-    snapshot = await get_owner_assessment(
-        db, organization_id=organization_id, unit_candidate_keys=sorted(set(candidate_keys))
-    )
+    rows = []
+    if await renewal_repository.has_imported_unit_keys(db, organization_id, candidate_keys):
+        store = await open_store(db, organization_id)
+        rows = await store.renewal_rows(candidate_keys)
     requested = set(candidate_keys)
     by_unit: dict[str, dict[str, list[dict]]] = {}
-    for row in snapshot.rows:
+    for row in rows:
         key = row.get("unit_candidate_key")
         if (
             key in requested
@@ -375,9 +376,15 @@ async def _owners_by_candidate(
             email=email,
             source="owner_import",
         )
-    workspaces = await workspace_repository.list_lead_workspaces_for_candidates(
-        db, candidate_keys, organization_id, user_id
-    )
+    workspaces = []
+    # The repository expands IN values into parameters; all imported units can exceed
+    # asyncpg's 32,767-parameter limit, even though only a few have saved workspaces.
+    for start in range(0, len(candidate_keys), 10_000):
+        workspaces.extend(
+            await workspace_repository.list_lead_workspaces_for_candidates(
+                db, candidate_keys[start : start + 10_000], organization_id, user_id
+            )
+        )
     for workspace in workspaces:
         is_manual = workspace.owner_source == "manual" or (
             workspace.owner_source is None and "Imported owner" not in (workspace.tags or [])

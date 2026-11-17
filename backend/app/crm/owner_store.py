@@ -651,6 +651,74 @@ class StoreReader:
         )
         return [profiles.row_from_json(value) for (value,) in result.all()]
 
+    async def renewal_rows(self, candidate_keys: list[str]) -> list[dict[str, Any]]:
+        """Renewal eligibility fields, retaining competing and tentative seller events.
+
+        Even the all-imported-units filter reads the published projection instead of
+        rebuilding it, without loading each claim's warehouse evidence into Python.
+        """
+        if not candidate_keys:
+            return []
+
+        async def require_current() -> None:
+            revision, warehouse = await _tokens(self.db, self.organization_id)
+            # open_store can serve an older generation while a replacement builds.
+            # Autofill and the known/unknown split must not trust old confirmed labels.
+            if self.state.warehouse_status == "unavailable" or not _is_current(
+                self.state, revision, warehouse
+            ):
+                raise HTTPException(
+                    status_code=503, detail="The ownership assessment is still being refreshed"
+                )
+
+        await require_current()
+        result = await self.db.exec(
+            text(
+                """
+                SELECT jsonb_build_object(
+                    'id', claim_id, 'canonical_owner_key', canonical_owner_key,
+                    'assessed_status', assessed_status, 'party_role', party_role,
+                    'lead_id', lead_id, 'property_identity', p.property_identity,
+                    'unit_candidate_key', p.unit_candidate_key,
+                    'event_assessed_status', CASE WHEN row ? 'event_assessed_status'
+                        THEN p.event_assessed_status ELSE to_jsonb(assessed_status) END,
+                    'sale_anchor_key', p.sale_anchor_key,
+                    'sale_anchor_date', p.sale_anchor_date,
+                    'transaction_date', p.transaction_date,
+                    'transaction_price_aed', p.transaction_price_aed,
+                    'contact_name', p.contact_name,
+                    'phone_primary', p.phone_primary,
+                    'phone_alternate', p.phone_alternate,
+                    'email_primary', p.email_primary
+                )
+                FROM crm_owner_assessed_claims
+                CROSS JOIN LATERAL jsonb_to_record(row) AS p(
+                    property_identity jsonb, unit_candidate_key jsonb,
+                    event_assessed_status jsonb, sale_anchor_key jsonb, sale_anchor_date jsonb,
+                    transaction_date jsonb, transaction_price_aed jsonb, contact_name jsonb,
+                    phone_primary jsonb, phone_alternate jsonb, email_primary jsonb
+                )
+                WHERE organization_id = :org AND generation = :gen
+                  AND assessed_status IN (
+                      'verified_current_owner', 'probable_current_owner', 'conflicting_claim'
+                  )
+                  AND (NOT (row ? 'event_assessed_status') OR row ->> 'event_assessed_status' IN (
+                      'verified_current_owner', 'probable_current_owner', 'conflicting_claim'
+                  ))
+                  AND row -> 'property_identity' <> 'null'::jsonb
+                  AND row ->> 'unit_candidate_key' = ANY(:keys)
+                """
+            ),
+            params={**self.scope, "keys": sorted(set(candidate_keys))},
+        )
+        latest = await read_state(self.db, self.organization_id)
+        if latest is None or latest.generation != self.state.generation:
+            raise HTTPException(
+                status_code=503, detail="The ownership assessment is still being refreshed"
+            )
+        await require_current()
+        return [profiles.row_from_json(value) for (value,) in result.all()]
+
     async def canonical_owners(self, owner_key: str) -> set[str]:
         """The identities a persisted or canonical owner key stands for."""
         result = await self.db.exec(
