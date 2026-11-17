@@ -14,7 +14,10 @@ let {
 	onnew,
 	onrename,
 	ondelete,
-	ontoggle
+	ontoggle,
+	hasMore,
+	loadingMore,
+	onmore
 }: {
 	conversations: AssistantConversationResponse[]
 	activeId: number | null
@@ -24,6 +27,9 @@ let {
 	onrename: (id: number, title: string) => void
 	ondelete: (conversation: AssistantConversationResponse) => void
 	ontoggle: () => void
+	hasMore: boolean
+	loadingMore: boolean
+	onmore: () => void
 } = $props()
 
 let editing = $state<number | null>(null)
@@ -94,6 +100,11 @@ function finishRename(id: number) {
 				<li class="none">No conversations yet.</li>
 			{/each}
 		</ul>
+		{#if hasMore}
+			<button type="button" class="btn ghost sm" disabled={loadingMore} onclick={onmore}>
+				{loadingMore ? 'Loading…' : 'Load older conversations'}
+			</button>
+		{/if}
 	{/if}
 </nav>
 

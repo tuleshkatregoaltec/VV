@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription, require_token_quota
+from app.crm.assistant import repository
 from app.crm.assistant.actions import cancel_action, confirm_action
 from app.crm.assistant.deps import AssistantDeps
 from app.crm.assistant.models import (
@@ -62,7 +63,7 @@ async def list_assistant_conversations(
     conversations = await list_conversations(db, user_id, organization_id, limit, offset)
     return AssistantConversationListResponse(
         conversations=[AssistantConversationResponse.model_validate(c) for c in conversations],
-        total=len(conversations),
+        total=await repository.count_conversations(db, user_id, organization_id),
     )
 
 
@@ -100,13 +101,14 @@ async def list_assistant_messages(
     conversation_id: int,
     context: AuthContext = Depends(require_active_subscription),
     limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db_session),
 ):
     user_id, organization_id = _auth_ids(context)
     if not await get_conversation(db, conversation_id, user_id, organization_id):
         raise HTTPException(status_code=404, detail="Conversation not found")
     return await get_messages_with_action_status(
-        db, conversation_id, user_id, organization_id, limit
+        db, conversation_id, user_id, organization_id, limit, offset
     )
 
 

@@ -15,7 +15,7 @@ from pydantic_ai import RunContext
 from app.crm import inbound_repository
 from app.crm.assistant.actions import create_pending_action, utcnow
 from app.crm.assistant.deps import AssistantDeps
-from app.crm.assistant.scope import lead_link, load_lead, org_member, org_members
+from app.crm.assistant.scope import lead_link, load_lead, org_member, org_members, today
 from app.crm.inbound import get_inbound_enquiry, list_inbound_enquiries
 from app.crm.inbound_models import (
     CrmInboundActivity,
@@ -116,19 +116,23 @@ def _lead_data(lead: InboundEnquiryResponse) -> str:
 
 
 async def _org_leads(deps: AssistantDeps, **filters: Any) -> list[InboundEnquiryResponse]:
-    result = await list_inbound_enquiries(
-        deps.db,
-        organization_id=deps.organization_id,
-        intent_group=None,
-        workspace=None,
-        status=filters.get("status"),
-        search=filters.get("search"),
-        limit=_FETCH_ALL,
-        offset=0,
-        within_days=filters.get("within_days"),
-        leads_only=True,
-    )
-    return result.enquiries
+    leads = []
+    while True:
+        result = await list_inbound_enquiries(
+            deps.db,
+            organization_id=deps.organization_id,
+            intent_group=None,
+            workspace=None,
+            status=filters.get("status"),
+            search=filters.get("search"),
+            limit=_FETCH_ALL,
+            offset=len(leads),
+            within_days=filters.get("within_days"),
+            leads_only=True,
+        )
+        leads.extend(result.enquiries)
+        if not result.enquiries or len(leads) >= result.total:
+            return leads
 
 
 # The Leads page also lists the agent's Vitevue lease leads (units whose lease is ending in the
@@ -172,13 +176,19 @@ def _lease_card(item: Any) -> dict[str, Any]:
 async def _unopened_lease_leads(deps: AssistantDeps) -> list[Any] | None:
     """The agent's lease leads that are not stored leads yet; None when the data is unavailable."""
     try:
-        result = await list_renewal_leads(
-            deps.db,
-            user_id=deps.user_id,
-            organization_id=deps.organization_id,
-            limit=_LEASE_FETCH,
-            offset=0,
-        )
+        items = []
+        while True:
+            result = await list_renewal_leads(
+                deps.db,
+                user_id=deps.user_id,
+                organization_id=deps.organization_id,
+                limit=_LEASE_FETCH,
+                offset=len(items),
+                as_of=today(),
+            )
+            items.extend(result.items)
+            if not result.items or len(items) >= result.total:
+                break
     except Exception as error:
         logger.warning(
             "assistant lease leads unavailable org=%s error=%s",
@@ -186,7 +196,7 @@ async def _unopened_lease_leads(deps: AssistantDeps) -> list[Any] | None:
             type(error).__name__,
         )
         return None
-    return [item for item in result.items if not item.lead_record_id]
+    return [item for item in items if not item.lead_record_id]
 
 
 async def search_leads(
@@ -213,13 +223,13 @@ async def search_leads(
     deps = ctx.deps
     _log("search_leads", deps)
     leads = await _org_leads(deps, status=status, search=query, within_days=within_days)
-    today = date.today()
+    anchor = today()
     if intent:
         leads = [lead for lead in leads if lead.intent == intent]
     if assigned_to_me:
         leads = [lead for lead in leads if lead.assigned_user_id == deps.user_id]
     if follow_up_due:
-        leads = [lead for lead in leads if lead.next_follow_up and lead.next_follow_up <= today]
+        leads = [lead for lead in leads if lead.next_follow_up and lead.next_follow_up <= anchor]
     cards = [lead_card(lead) for lead in leads]
 
     lease_items = await _unopened_lease_leads(deps)
@@ -286,7 +296,7 @@ async def lead_pipeline_summary(ctx: RunContext[AssistantDeps]) -> dict[str, Any
     leads = await _org_leads(deps)
     lease_items = await _unopened_lease_leads(deps)
     unopened = len(lease_items or [])
-    today = date.today()
+    anchor = today()
     by_status = Counter(lead.status for lead in leads)
     by_intent = Counter(lead.intent for lead in leads)
     by_assignee = Counter(lead.assigned_user_id or "unassigned" for lead in leads)
@@ -301,7 +311,7 @@ async def lead_pipeline_summary(ctx: RunContext[AssistantDeps]) -> dict[str, Any
         "by_assignee": dict(by_assignee),
         "lease_leads_not_opened": unopened,
         "overdue_follow_ups": sum(
-            1 for lead in leads if lead.next_follow_up and lead.next_follow_up < today
+            1 for lead in leads if lead.next_follow_up and lead.next_follow_up < anchor
         ),
     }
     if lease_items is None:

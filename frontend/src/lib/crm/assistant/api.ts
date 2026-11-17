@@ -14,9 +14,9 @@ export type { AssistantActionResult, AssistantConversationResponse, AssistantMes
 const BASE = '/api/v1/crm/assistant'
 
 export const assistant = {
-	listConversations: (limit = 50) =>
+	listConversations: (limit = 50, offset = 0) =>
 		client.get<AssistantConversationListResponse>(
-			client.withQuery(`${BASE}/conversations`, { limit, offset: 0 })
+			client.withQuery(`${BASE}/conversations`, { limit, offset })
 		),
 
 	createConversation: (title?: string) =>
@@ -27,9 +27,9 @@ export const assistant = {
 
 	deleteConversation: (id: number) => client.delete(`${BASE}/conversations/${id}`),
 
-	getMessages: (id: number) =>
+	getMessages: (id: number, offset = 0) =>
 		client.get<AssistantMessageResponse[]>(
-			client.withQuery(`${BASE}/conversations/${id}/messages`, { limit: 200 })
+			client.withQuery(`${BASE}/conversations/${id}/messages`, { limit: 200, offset })
 		),
 
 	/** Streams the reply as SSE data lines (see ./stream for the events). */

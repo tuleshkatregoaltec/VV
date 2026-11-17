@@ -7,6 +7,7 @@ from pydantic_ai.messages import FunctionToolResultEvent, ToolCallPart
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm.assistant import repository
+from app.crm.assistant.actions import proposed_payload
 from app.crm.assistant.agent import (
     assistant_agent,
     assistant_model_settings,
@@ -102,9 +103,16 @@ async def delete_conversation(
 
 
 async def list_messages(
-    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str, limit: int = 100
+    db: AsyncSession,
+    conversation_id: int,
+    user_id: str,
+    organization_id: str,
+    limit: int = 100,
+    offset: int = 0,
 ) -> list[CrmAssistantMessage]:
-    return await repository.list_messages(db, conversation_id, user_id, organization_id, limit)
+    return await repository.list_messages(
+        db, conversation_id, user_id, organization_id, limit, offset
+    )
 
 
 async def add_message(
@@ -138,10 +146,15 @@ async def add_message(
 
 
 async def get_messages_with_action_status(
-    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str, limit: int = 100
+    db: AsyncSession,
+    conversation_id: int,
+    user_id: str,
+    organization_id: str,
+    limit: int = 100,
+    offset: int = 0,
 ) -> list[AssistantMessageResponse]:
     """Stored turns, with each proposed action's status as it is now (confirmed, expired…)."""
-    messages = await list_messages(db, conversation_id, user_id, organization_id, limit)
+    messages = await list_messages(db, conversation_id, user_id, organization_id, limit, offset)
     action_ids = [
         item["action_id"]
         for message in messages
@@ -155,15 +168,17 @@ async def get_messages_with_action_status(
         expires_at = (
             row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
         )
-        current[row.id] = "expired" if row.status == "pending" and expires_at <= now else row.status
+        current[row.id] = {
+            **proposed_payload(row),
+            "status": "expired" if row.status == "pending" and expires_at <= now else row.status,
+        }
 
     responses = []
     for message in messages:
         meta_data = dict(message_meta(message))
         if meta_data.get("actions"):
             meta_data["actions"] = [
-                {**item, "status": current.get(item.get("action_id"), item.get("status"))}
-                for item in meta_data["actions"]
+                {**item, **current.get(item.get("action_id"), {})} for item in meta_data["actions"]
             ]
         response = AssistantMessageResponse(
             id=message.id,
@@ -210,7 +225,7 @@ async def stream_assistant_response(
         return
 
     await add_message(db, conversation_id, "user", user_message, **scope)
-    stored = await list_messages(db, conversation_id, **scope)
+    stored = await get_messages_with_action_status(db, conversation_id, **scope)
     history = history_to_model_messages(stored[:-1])  # the turn just saved is the prompt
     deps.conversation_id = conversation_id
 

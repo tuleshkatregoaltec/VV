@@ -143,16 +143,20 @@ class FakeLeads:
 
     async def lease_leads(self, db, *, user_id, organization_id, limit, offset, **kwargs):
         self.lease_calls.append((user_id, organization_id))
-        return SimpleNamespace(items=list(self.lease_items))
+        return SimpleNamespace(
+            items=list(self.lease_items)[offset : offset + limit], total=len(self.lease_items)
+        )
 
-    async def list(self, db, *, organization_id, leads_only, limit, **kwargs):
+    async def list(self, db, *, organization_id, leads_only, limit, offset=0, **kwargs):
         assert leads_only is True
         items = [
             self.responses[i]
             for i, row in self.rows.items()
             if row.organization_id == organization_id
         ]
-        return list_response(items[:limit])
+        return InboundEnquiryListResponse(
+            enquiries=items[offset : offset + limit], total=len(items), summary={}
+        )
 
 
 class FakeSession:

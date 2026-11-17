@@ -9,6 +9,8 @@ Two rules carried over:
    a no-op, so both can run, overlap and repeat without corrupting a send.
 """
 
+import hashlib
+import hmac
 import html
 import re
 from collections.abc import AsyncIterator
@@ -212,20 +214,25 @@ def text_to_plain(text: str) -> str:
 
 
 def reply_address(tag: str) -> str | None:
-    """reply+<send id>@<inbound domain> when inbound is set up, so a reply finds its send exactly."""
+    """Use an opaque authenticated token, never the sequential store id, for reply routing."""
     domain = (settings.BREVO_INBOUND_DOMAIN or "").strip().lower()
     if domain:
-        return f"reply+{tag}@{domain}"
+        token = hmac.new(
+            settings.SESSION_SECRET.encode(),
+            f"crm-email-reply:{tag}".encode(),
+            hashlib.sha256,
+        ).hexdigest()[:40]
+        return f"reply+{token}@{domain}"
     return settings.BREVO_REPLY_TO or None
 
 
-def send_id_from_address(address: str) -> int | None:
-    """The send id in reply+<id>@<inbound domain>; None for any other address."""
-    domain = (settings.BREVO_INBOUND_DOMAIN or "").strip().lower()
-    match = re.fullmatch(r"reply\+(\d+)@(.+)", (address or "").strip().lower())
-    if not match or not domain or match.group(2) != domain:
-        return None
-    return int(match.group(1))
+def matches_reply_address(address: str, send_id: int) -> bool:
+    if not settings.BREVO_INBOUND_DOMAIN:
+        return False
+    expected = reply_address(str(send_id))
+    return bool(
+        expected and hmac.compare_digest(address.strip().lower().encode(), expected.encode())
+    )
 
 
 def _headers() -> dict[str, str]:
@@ -326,7 +333,7 @@ class InboundEmail:
     in_reply_to: str | None
     from_email: str
     from_name: str | None
-    # Every To and Cc address, lower-case: a reply+<id> address may be either.
+    # Every To and Cc address, lower-case: our authenticated reply address may be either.
     recipients: list[str]
     subject: str
     body: str

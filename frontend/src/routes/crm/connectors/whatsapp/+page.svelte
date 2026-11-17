@@ -36,7 +36,7 @@ const me = createQuery(() => crmQueries.me())
 /* New messages and delivery statuses arrive without a reload while this page is open. */
 const queryClient = useQueryClient()
 $effect(() => {
-	if (WHATSAPP_DEMO) return
+	if (WHATSAPP_DEMO || !env.PUBLIC_API_BASE_URL) return
 	return connectWhatsAppLive({
 		url: liveUrl(env.PUBLIC_API_BASE_URL),
 		token: get_access_token,

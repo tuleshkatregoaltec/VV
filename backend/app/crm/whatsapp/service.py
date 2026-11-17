@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, delete, select
@@ -640,27 +640,36 @@ async def receive_webhook(db: AsyncSession, payload: dict[str, Any]) -> dict[str
     applied = 0
     known = [s for s in statuses if s.phone_number_id in numbers]
     if known:
-        sent = {
-            m.wamid: m
-            for m in (
-                await db.exec(
-                    select(CrmWhatsAppMessage).where(
-                        col(CrmWhatsAppMessage.wamid).in_({s.wamid for s in known})
-                    )
-                )
-            ).all()
-        }
         for s in sorted(known, key=lambda s: s.at):
-            message = sent.get(s.wamid)
-            if message is None or not meta.moves_forward(message.status, s.status):
-                continue
-            message.status = s.status
+            number = numbers[s.phone_number_id]
+            earlier = [
+                status for status in meta.STATUS_RANK if meta.moves_forward(status, s.status)
+            ]
+            values = {"status": s.status, "updated_at": _now()}
             if s.error:
-                message.error = s.error
-            message.updated_at = _now()
-            db.add(message)
-            applied += 1
-            touch(numbers[s.phone_number_id], message.wa_id)
+                values["error"] = s.error
+            # The rank predicate is checked by the database after competing writes,
+            # so two webhook workers cannot downgrade read to delivered.
+            result = await db.execute(
+                update(CrmWhatsAppMessage)
+                .where(
+                    CrmWhatsAppMessage.wamid == s.wamid,
+                    CrmWhatsAppMessage.number_id == number.id,
+                    CrmWhatsAppMessage.organization_id == number.organization_id,
+                    CrmWhatsAppMessage.direction == "out",
+                    or_(
+                        CrmWhatsAppMessage.status.is_(None),
+                        col(CrmWhatsAppMessage.status).in_(earlier),
+                    ),
+                )
+                .values(**values)
+                .returning(CrmWhatsAppMessage.wa_id)
+                .execution_options(synchronize_session=False)
+            )
+            wa_id = result.scalar_one_or_none()
+            if wa_id is not None:
+                applied += 1
+                touch(number, wa_id)
 
     await db.commit()
     for organization_id, changes in changed.items():

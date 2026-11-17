@@ -190,6 +190,26 @@ async def list_templates(client: httpx.AsyncClient) -> list[dict[str, str]]:
             category = CATEGORY.get(str(item.get("category", "")).upper())
             if not review or not category:
                 continue
+            # This sender supplies only BODY text parameters. Do not offer templates
+            # whose headers/buttons or newer component types require other arguments.
+            components = item.get("components") or []
+            unsupported = False
+            for component in components:
+                kind = str(component.get("type", "")).upper()
+                if kind == "HEADER":
+                    unsupported |= component.get("format") != "TEXT" or "{{" in component.get(
+                        "text", ""
+                    )
+                elif kind == "BUTTONS":
+                    unsupported |= any(
+                        button.get("type") not in {"QUICK_REPLY", "PHONE_NUMBER", "URL"}
+                        or "{{" in button.get("url", "")
+                        for button in component.get("buttons") or []
+                    )
+                elif kind not in {"BODY", "FOOTER"}:
+                    unsupported = True
+            if unsupported:
+                continue
             body = next(
                 (
                     c.get("text") or ""

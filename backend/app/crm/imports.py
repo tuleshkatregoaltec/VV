@@ -307,7 +307,7 @@ async def process_contact_import(
         await db.commit()
         _invalidate_owner_summary_cache(organization_id)
         await sync_after_ownership_change(db, organization_id=organization_id)
-        await _value_import(db, organization_id=organization_id, import_id=record.id)
+        await _value_import(db, organization_id=organization_id, import_id=record.id, record=record)
         return await _import_response(db, record)
     except HTTPException:
         raise
@@ -327,13 +327,17 @@ async def process_contact_import(
         raise HTTPException(status_code=422, detail=f"Import failed: {exc}") from exc
 
 
-async def _value_import(db: AsyncSession, *, organization_id: str, import_id: int | None) -> None:
+async def _value_import(
+    db: AsyncSession, *, organization_id: str, import_id: int | None, record: CrmContactImport
+) -> None:
     """Estimate today's value of the import's current owners; never fails the import."""
     try:
         await value_owner_claims(db, organization_id=organization_id, import_id=import_id)
     except Exception:
         logger.exception("Owner valuation after import failed", extra={"import_id": import_id})
         await db.rollback()
+        # Rollback expires even committed objects; reload before building the async response.
+        await db.refresh(record)
 
 
 async def _import_response(

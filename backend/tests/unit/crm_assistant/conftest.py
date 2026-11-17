@@ -1,7 +1,8 @@
 """Fixtures for CRM Assistant unit tests."""
 
 import pytest
-from assistant_helpers import FakeLeads
+
+from .assistant_helpers import FakeLeads
 
 
 @pytest.fixture

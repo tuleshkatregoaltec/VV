@@ -356,6 +356,7 @@ async def crm_move_calendar_event(
     if event is None:
         raise HTTPException(status_code=404, detail="Calendar event not found")
     original_date = event.event_date
+    original_time = event.event_time
     duration_days = (event.event_end_date or original_date) - original_date
     if (payload.date, payload.time) != (original_date, event.event_time):
         # A new list, so SQLAlchemy sees the JSON change.
@@ -371,14 +372,15 @@ async def crm_move_calendar_event(
         event.all_day = True
     else:
         original_start = datetime.combine(
-            original_date, time.fromisoformat(event.event_time or "10:00")
+            original_date, time.fromisoformat(original_time or "10:00")
         )
         original_end = datetime.combine(
             event.event_end_date or original_date,
             time.fromisoformat(event.event_end_time or "11:00"),
         )
         new_start = datetime.combine(payload.date, time.fromisoformat(payload.time))
-        new_end = new_start + max(original_end - original_start, timedelta(hours=1))
+        duration = original_end - original_start
+        new_end = new_start + (duration if duration > timedelta(0) else timedelta(hours=1))
         event.event_end_date = new_end.date()
         event.event_end_time = new_end.strftime("%H:%M")
         event.all_day = False

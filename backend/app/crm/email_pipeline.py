@@ -256,6 +256,7 @@ async def _send_one(
 ) -> CrmEmailSend:
     """Record the send (queued), call Brevo, then record how it went. Never raises for Brevo."""
     now = _now()
+    to_email = to_email.strip().lower()
     fill = {"name": to_name or to_email.split("@")[0], "email": to_email}
     async with email_store.edit() as data:
         send = CrmEmailSend(
@@ -270,8 +271,28 @@ async def _send_one(
             created_at=now,
             updated_at=now,
         )
+        # Import historical feedback too, including stores written before suppression existed.
+        suppressed = to_email in data.suppressed_addresses.get(organization_id, []) or any(
+            old.organization_id == organization_id
+            and old.to_email.strip().lower() == to_email
+            and any(
+                brevo.canonical_event(e.get("event")) in {"spam", "complaint", "unsubscribed"}
+                for e in old.events
+            )
+            for old in data.sends
+        )
+        if suppressed:
+            send.status, send.error = (
+                "failed",
+                "Email address suppressed by unsubscribe or spam feedback",
+            )
+            addresses = data.suppressed_addresses.setdefault(organization_id, [])
+            if to_email not in addresses:
+                addresses.append(to_email)
         # Stored before Brevo is called: its id is the tag events come back with.
         data.sends.append(send)
+    if send.error:
+        return send
 
     message_id = error = None
     try:
@@ -289,11 +310,12 @@ async def _send_one(
     async with email_store.edit() as data:
         stored = next(s for s in data.sends if s.id == send.id)
         if error is None:
-            stored.status = "sent"
+            brevo.apply_event(stored, "sent")
             stored.message_id = message_id
-            stored.sent_at = _now()
-        else:
-            stored.status = "failed"
+            stored.sent_at = stored.sent_at or _now()
+        elif stored.status == "queued":
+            # A provider callback is stronger evidence than a failed/lost HTTP response.
+            brevo.apply_event(stored, "error")
             stored.error = error
         stored.updated_at = _now()
     return stored
@@ -346,7 +368,10 @@ async def send_emails(
             )
             results.append(
                 EmailSendResult(
-                    enquiry_id=enquiry.id, email=email, ok=send.status == "sent", error=send.error
+                    enquiry_id=enquiry.id,
+                    email=email,
+                    ok=send.status not in {"queued", "failed"},
+                    error=send.error,
                 )
             )
     finally:
@@ -439,6 +464,12 @@ async def delete_send(*, organization_id: str, send_id: int) -> None:
         )
         if send is None:
             raise HTTPException(status_code=404, detail="Email not found")
+        # Backfill feedback from stores written before address suppression existed.
+        for event in send.events:
+            if brevo.canonical_event(event.get("event")) in {"spam", "complaint", "unsubscribed"}:
+                _apply_delivery_event(
+                    data, send, event.get("event"), event.get("at"), event.get("link")
+                )
         data.sends.remove(send)
         for m in data.inbound:
             if m.send_id == send_id:
@@ -495,9 +526,22 @@ async def sync_events(
             )
             if send is None:
                 unmatched += 1
-            elif brevo.apply_event(send, event.get("event"), event.get("date"), event.get("link")):
+            elif _apply_delivery_event(
+                data, send, event.get("event"), event.get("date"), event.get("link")
+            ):
                 applied += 1
     return EmailSyncResponse(fetched=len(events), applied=applied, unmatched=unmatched)
+
+
+def _apply_delivery_event(
+    data: EmailStoreData, send: CrmEmailSend, event: Any, at: Any = None, link: str | None = None
+) -> bool:
+    if brevo.canonical_event(event) in {"spam", "complaint", "unsubscribed"}:
+        addresses = data.suppressed_addresses.setdefault(send.organization_id, [])
+        address = send.to_email.strip().lower()
+        if address not in addresses:
+            addresses.append(address)
+    return brevo.apply_event(send, event, at, link)
 
 
 async def receive_webhook(*, secret: str | None, payload: Any) -> int:
@@ -516,7 +560,7 @@ async def receive_webhook(*, secret: str | None, payload: Any) -> int:
             )
             at = event.get("ts_event") or event.get("ts") or event.get("date")
             link = event.get("link") or event.get("URL")
-            if send and brevo.apply_event(send, event.get("event"), at, link):
+            if send and _apply_delivery_event(data, send, event.get("event"), at, link):
                 applied += 1
     return applied
 
@@ -525,15 +569,16 @@ async def receive_webhook(*, secret: str | None, payload: Any) -> int:
 
 
 def _send_for_reply(data: EmailStoreData, mail: brevo.InboundEmail) -> CrmEmailSend | None:
-    """The send this email answers: reply+<id> address first, then the thread header."""
+    """Route only authenticated addresses/thread headers from the original recipient."""
+    candidates = [
+        s for s in data.sends if s.to_email.strip().lower() == mail.from_email.strip().lower()
+    ]
     for address in mail.recipients:
-        send_id = brevo.send_id_from_address(address)
-        if send_id is not None:
-            send = next((s for s in data.sends if s.id == send_id), None)
-            if send is not None:
-                return send
+        send = next((s for s in candidates if brevo.matches_reply_address(address, s.id)), None)
+        if send is not None:
+            return send
     variants = set(brevo.message_id_variants(mail.in_reply_to))
-    return next((s for s in data.sends if variants and s.message_id in variants), None)
+    return next((s for s in candidates if variants and s.message_id in variants), None)
 
 
 async def _lead_for_sender(
@@ -556,7 +601,7 @@ async def _lead_for_sender(
 async def receive_inbound(db: AsyncSession, *, secret: str | None, payload: Any) -> int:
     """Store Brevo inbound parsing items. Returns how many were new.
 
-    Matching, in order: our reply+<send id> address, the In-Reply-To header, the sender's email
+    Matching, in order: our authenticated reply address, the In-Reply-To header, the sender's email
     on a lead. An unknown sender is kept without a lead (no lead is created: nothing is written
     to the database) and shows as such on the Inbox tab. A message id already stored is skipped.
     """

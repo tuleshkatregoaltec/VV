@@ -21,7 +21,7 @@ def _capture_queries(monkeypatch):
     return calls
 
 
-def test_owner_units_narrow_the_lease_query_before_ranking(monkeypatch):
+def test_owner_units_are_filtered_by_property_identity_after_ranking(monkeypatch):
     calls = _capture_queries(monkeypatch)
     asyncio.run(
         opportunity_queries.fetch_renewals(
@@ -40,6 +40,8 @@ def test_owner_units_narrow_the_lease_query_before_ranking(monkeypatch):
     )
     assert len(calls) == 2  # the page and its filter options
     for sql, params in calls:
+        assert "unit_keys" not in sql[: sql.index("ranked_unit AS")]
+        assert "property_identity_key IN (" in sql[sql.index("FROM leads") :]
         assert "unit_candidate_key IN {unit_keys:Array(String)}" in sql
         assert params["unit_keys"] == ["u1", "u2"]
 
@@ -65,8 +67,8 @@ def test_unknown_owner_leases_leave_out_the_owner_units(monkeypatch):
     )
     assert len(calls) == 2
     for sql, params in calls:
-        assert "unit_candidate_key NOT IN {unit_keys:Array(String)}" in sql
-        assert "unit_candidate_key IN {unit_keys" not in sql.replace("NOT IN", "")
+        assert "NOT (property_identity_key IN (" in sql
+        assert "unit_keys" not in sql[: sql.index("ranked_unit AS")]
         assert params["unit_keys"] == ["u1", "u2"]
 
 
@@ -168,3 +170,53 @@ def test_unknown_owner_without_owner_imports_is_every_lease(monkeypatch):
     res, seen = _owner_renewals(monkeypatch, [], [_lead("u7")], owner="unknown")
     assert not seen["unit_keys"]
     assert res.total == 1
+
+
+def test_new_contract_under_another_key_blocks_an_old_known_owner_vacancy():
+    import re
+    import sqlite3
+
+    db = sqlite3.connect(":memory:")
+    db.create_function("if", 3, lambda condition, yes, no: yes if condition else no)
+    db.create_function("lowerUTF8", 1, str.lower)
+    db.create_function("upperUTF8", 1, str.upper)
+    db.create_function("concat", -1, lambda *parts: "".join(parts))
+    db.create_function(
+        "replaceRegexpAll", 3, lambda value, pattern, repl: re.sub(pattern, repl, value)
+    )
+    # Execute the production identity and ranking SQL. Keys differ because lease attributes drift.
+    cte = opportunity_queries._LEAD_CTE
+    ranking = cte[cte.index("identified_unit AS (") : cte.index("lead_evidence AS (")].rstrip(",\n")
+    prefix = """WITH latest_unit AS (
+        SELECT 'old' AS unit_candidate_key, 'unique' AS unit_match_status,
+               '101' AS unit_number, 'Tower' AS building_name, '' AS project_name,
+               '' AS location_name, 'Marina' AS area_name, '2025-01-01' AS lease_start,
+               '2026-01-01' AS lease_end, '2026-11-01' AS last_scraped_at, 'a' AS event_key
+        UNION ALL
+        SELECT 'new', 'unique', '101', 'Tower', '', '', 'Marina',
+               '2026-01-01', '2027-01-01', '2026-11-02', 'b'
+    ), """
+    owner = opportunity_queries._OWNER_IDENTITIES.replace("{unit_keys:Array(String)}", "('old')")
+    try:
+        sql = (
+            prefix + ranking + " SELECT unit_candidate_key FROM ranked_unit WHERE identity_rank = 1"
+        )
+        assert db.execute(sql + " AND lease_end < '2026-11-03' AND " + owner).fetchall() == []
+        # The current lease belongs to the same known property, never the unknown-owner lane.
+        assert db.execute(sql + " AND " + owner).fetchall() == [("new",)]
+        assert db.execute(sql + " AND NOT (" + owner + ")").fetchall() == []
+    finally:
+        db.close()
+
+
+def test_changed_lease_key_keeps_the_known_owners_contact(monkeypatch):
+    owner = CrmRenewalOwner(name="Maya Example", phone="+971500000002", source="owner_import")
+
+    async def aliases(candidate_keys, owner_keys):
+        assert candidate_keys == ["new"] and owner_keys == ["old"]
+        return [{"candidate_key": "new", "owner_candidate_key": "old"}]
+
+    monkeypatch.setattr(opportunity_queries, "fetch_owner_unit_aliases", aliases)
+    res, seen = _owner_renewals(monkeypatch, ["old"], [_lead("new")], {"old": owner})
+    assert seen["owner_lookup"] == ["new", "old"]
+    assert res.owners == {"new": owner}

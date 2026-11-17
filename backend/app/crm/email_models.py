@@ -99,6 +99,8 @@ class EmailStoreData(BaseModel):
     inbound: list[CrmEmailInbound] = Field(default_factory=list)
     # Last id handed out per kind; ids are never reused, so a Brevo tag stays unique.
     last_ids: dict[str, int] = Field(default_factory=dict)
+    # Organization -> normalized addresses; independent of deletable send history.
+    suppressed_addresses: dict[str, list[str]] = Field(default_factory=dict)
 
     def next_id(self, kind: str) -> int:
         self.last_ids[kind] = self.last_ids.get(kind, 0) + 1

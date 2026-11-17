@@ -2,7 +2,7 @@
 """Value ready residential sale listings from DLD sales into `listing_valuations` (11 Nov 2026).
 
 --dry-run   value and print counts; create and write nothing
---limit N   value only the first N listings (for a quick check)
+--limit N   value only the first N listings; implies --dry-run (for a quick check)
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import argparse
 import asyncio
 from collections import Counter
 from datetime import date
+from uuid import uuid4
 
 from app.clickhouse.client import close_clickhouse, get_client, query
 from app.listings.queries import LISTINGS_TABLE, PRICE_VALUE_EXPR, SIZE_VALUE_EXPR
@@ -47,6 +48,8 @@ async def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit", type=int)
     args = parser.parse_args()
+    if args.limit is not None and args.limit <= 0:
+        parser.error("--limit must be positive")
     try:
         rows = await _rows(args.limit)
         results = await value_listing_rows(rows, date.today())
@@ -55,16 +58,23 @@ async def main() -> None:
         print("position:", dict(Counter(r["market_position"] for r in results)))
         print("confidence:", dict(Counter(r["confidence"] for r in results)))
         print("level:", dict(Counter(r["level"] for r in results)))
-        if args.dry_run or not results:
+        if args.dry_run or args.limit is not None or not results:
             return
         client = await get_client()
         await client.command(CREATE_TABLE)
-        # A full rewrite each run retires listings that dropped out since the last one.
-        await client.command(f"TRUNCATE TABLE {TABLE}")
+        # Keep the last publication visible through insert/validation failures. EXCHANGE is
+        # atomic in Atomic/Shared databases; unsupported engines fail without replacing data.
+        staging = f"{TABLE}_staging_{uuid4().hex}"
+        await client.command(f"CREATE TABLE {staging} AS {TABLE}")
         await client.insert(
-            TABLE, [[r[c] for c in COLUMNS] for r in results], column_names=list(COLUMNS)
+            staging, [[r[c] for c in COLUMNS] for r in results], column_names=list(COLUMNS)
         )
-        print(f"wrote {len(results)} rows to {TABLE}")
+        counts = await query(f"SELECT count() AS n, uniqExact(listing_id) AS ids FROM {staging}")
+        if not counts or counts[0]["n"] != len(results) or counts[0]["ids"] != len(results):
+            raise RuntimeError("Staged listing valuations failed row-count/unique-ID validation")
+        await client.command(f"EXCHANGE TABLES {TABLE} AND {staging}")
+        # Retain the previous publication for rollback, including an ambiguous exchange timeout.
+        print(f"wrote {len(results)} rows to {TABLE}; previous publication: {staging}")
     finally:
         await close_clickhouse()
 

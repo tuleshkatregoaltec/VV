@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-from assistant_helpers import ORG_A, ORG_B, USER, FakeSession, ctx, make_deps, make_lead
 from fastapi import HTTPException
 
 from app.crm.assistant import actions
@@ -21,6 +20,8 @@ from app.crm.email_models import (
     EmailThreadItem,
 )
 from app.crm.inbound_models import CrmInboundActivity
+
+from .assistant_helpers import ORG_A, ORG_B, USER, FakeSession, ctx, make_deps, make_lead
 
 NOW = datetime(2026, 11, 2, 9, 0, tzinfo=timezone.utc)
 

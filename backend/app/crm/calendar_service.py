@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import json
 import secrets
 from datetime import date, datetime, time, timedelta, timezone
 from urllib.parse import urlencode
@@ -9,7 +10,7 @@ import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from dateutil.rrule import DAILY, MONTHLY, WEEKLY, YEARLY, rrule
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from sqlalchemy import Text, and_, cast, or_
+from sqlalchemy import Text, and_, cast, func, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -253,6 +254,9 @@ def _event_payload(event: CrmCalendarEvent) -> dict:
             payload["conferenceData"] = None
     # Sync reads the kind back from here, so it must follow edits.
     payload["extendedProperties"] = {"private": {"crmEventId": str(event.id), "kind": event.kind}}
+    payload["extendedProperties"]["private"]["crmRevision"] = hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode()
+    ).hexdigest()
     return payload
 
 
@@ -278,7 +282,38 @@ async def _push_event(event: CrmCalendarEvent, *, token: str) -> None:
             event.meet_link = None
             event.meet_request_id = secrets.token_urlsafe(20) if event.meet else None
     if saved is None:
-        saved = await _google("POST", url, token=token, params=params, body=_event_payload(event))
+        if event.id is None:
+            raise ValueError("Persist calendar events before contacting Google")
+        # Committed CRM identity makes the insert id stable across timeouts and retries.
+        google_id = hashlib.sha256(
+            f"vv-calendar:{event.organization_id}:{event.user_id}:{event.id}".encode()
+        ).hexdigest()
+        body = {**_event_payload(event), "id": google_id}
+        try:
+            saved = await _google("POST", url, token=token, params=params, body=body)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 409:
+                raise
+            # An earlier insert may have succeeded even though its response was lost.
+            saved = await _google("GET", f"{url}/{google_id}", token=token)
+            if saved.get("status") == "cancelled" or (
+                (saved.get("extendedProperties") or {}).get("private", {}).get("crmEventId")
+                != str(event.id)
+            ):
+                raise RuntimeError("Google event identity conflict") from exc
+            if (saved.get("extendedProperties") or {}).get("private", {}).get("crmRevision") != (
+                body["extendedProperties"]["private"]["crmRevision"]
+            ):
+                # The local intent may have changed after the ambiguous insert.
+                # Reconcile that edit on the existing event, preserving its identity.
+                event.google_event_id = google_id
+                saved = await _google(
+                    "PATCH",
+                    f"{url}/{google_id}",
+                    token=token,
+                    params=params,
+                    body=_event_payload(event),
+                )
     event.google_event_id = saved["id"]
     event.etag = saved.get("etag")
     event.meet_link = saved.get("hangoutLink") or next(
@@ -320,19 +355,33 @@ def _google_repeat(event: dict) -> str:
 
 
 async def _store_google_event(
-    db: AsyncSession, *, event: dict, user_id: str, organization_id: str
+    db: AsyncSession,
+    *,
+    event: dict,
+    user_id: str,
+    organization_id: str,
+    sync_started_at: datetime | None = None,
 ) -> None:
     google_id = event.get("id")
     if not google_id:
         return
     existing = await db.exec(
-        select(CrmCalendarEvent).where(
+        select(CrmCalendarEvent)
+        .where(
             CrmCalendarEvent.organization_id == organization_id,
             CrmCalendarEvent.user_id == user_id,
             CrmCalendarEvent.google_event_id == google_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     row = existing.first()
+    # Local edits own the row until a successful push; stale Google pages must not erase them.
+    if row and (
+        row.google_sync_status in {"pending", "error"}
+        or (sync_started_at and row.updated_at.replace(tzinfo=timezone.utc) >= sync_started_at)
+    ):
+        return
     private = (event.get("extendedProperties") or {}).get("private") or {}
     recurring_event_id = event.get("recurringEventId")
     if not row and recurring_event_id:
@@ -421,6 +470,7 @@ async def _store_google_event(
 
 
 async def sync_google_events(db: AsyncSession, *, user_id: str, organization_id: str) -> None:
+    sync_started_at = datetime.now(timezone.utc)
     connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
     if not connection:
         return
@@ -440,7 +490,11 @@ async def sync_google_events(db: AsyncSession, *, user_id: str, organization_id:
             for event in page.get("items", []):
                 seen.update(filter(None, (event.get("id"), event.get("recurringEventId"))))
                 await _store_google_event(
-                    db, event=event, user_id=user_id, organization_id=organization_id
+                    db,
+                    event=event,
+                    user_id=user_id,
+                    organization_id=organization_id,
+                    sync_started_at=sync_started_at,
                 )
             if page.get("nextPageToken"):
                 params["pageToken"] = page["nextPageToken"]
@@ -458,13 +512,17 @@ async def sync_google_events(db: AsyncSession, *, user_id: str, organization_id:
         # Google drops purged events (and a previous account's events) from the list without a
         # "cancelled" entry, so a full sync removes synced rows it no longer returns.
         stale = await db.exec(
-            select(CrmCalendarEvent).where(
+            select(CrmCalendarEvent)
+            .where(
                 CrmCalendarEvent.organization_id == organization_id,
                 CrmCalendarEvent.user_id == user_id,
                 CrmCalendarEvent.google_sync_status == "synced",
+                CrmCalendarEvent.updated_at < sync_started_at,
                 CrmCalendarEvent.google_event_id.is_not(None),
                 CrmCalendarEvent.google_event_id.not_in(seen),
             )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         for row in stale.all():
             await db.delete(row)
@@ -473,7 +531,8 @@ async def sync_google_events(db: AsyncSession, *, user_id: str, organization_id:
 
 async def _sync_pending(db: AsyncSession, *, connection: CrmCalendarConnection, token: str) -> None:
     rows = await db.exec(
-        select(CrmCalendarEvent).where(
+        select(CrmCalendarEvent)
+        .where(
             CrmCalendarEvent.organization_id == connection.organization_id,
             CrmCalendarEvent.user_id == connection.user_id,
             or_(
@@ -482,11 +541,13 @@ async def _sync_pending(db: AsyncSession, *, connection: CrmCalendarConnection, 
                 & CrmCalendarEvent.google_event_id.is_(None),
             ),
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     for event in rows.all():
         try:
             await _push_event(event, token=token)
-        except (httpx.HTTPError, KeyError):
+        except (httpx.HTTPError, RuntimeError, KeyError):
             event.google_sync_status = "error"
             continue
     await db.commit()
@@ -549,7 +610,11 @@ async def list_events(
             or_(
                 and_(
                     CrmCalendarEvent.event_date <= end,
-                    or_(CrmCalendarEvent.event_date >= start, CrmCalendarEvent.repeat != "none"),
+                    or_(
+                        func.coalesce(CrmCalendarEvent.event_end_date, CrmCalendarEvent.event_date)
+                        >= start,
+                        CrmCalendarEvent.repeat != "none",
+                    ),
                 ),
                 # Moved out of the range, but its old slot is still drawn there (struck through).
                 cast(CrmCalendarEvent.rescheduled_from, Text) != "[]",
@@ -562,7 +627,7 @@ async def list_events(
     frequencies = {"daily": DAILY, "weekly": WEEKLY, "monthly": MONTHLY, "yearly": YEARLY}
     for row in rows.all():
         if row.repeat == "none":
-            in_range = start <= row.event_date <= end
+            in_range = row.event_date <= end and (row.event_end_date or row.event_date) >= start
             if in_range or any(
                 start.isoformat() <= slot["date"] <= end.isoformat()
                 for slot in row.rescheduled_from
@@ -571,11 +636,20 @@ async def list_events(
             continue
         frequency = frequencies.get(row.repeat)
         if frequency:
+            duration = (row.event_end_date or row.event_date) - row.event_date
             occurrences = rrule(
                 frequency, dtstart=datetime.combine(row.event_date, time.min)
-            ).between(datetime.combine(start, time.min), datetime.combine(end, time.max), inc=True)
+            ).between(
+                datetime.combine(start - duration, time.min),
+                datetime.combine(end, time.max),
+                inc=True,
+            )
             output.extend(
-                {**serialize_event(row), "date": occurrence.date().isoformat()}
+                {
+                    **serialize_event(row),
+                    "date": occurrence.date().isoformat(),
+                    "end_date": (occurrence.date() + duration).isoformat(),
+                }
                 for occurrence in occurrences
             )
     return sorted(output, key=lambda event: (event["date"], event["time"] or ""))
@@ -643,8 +717,7 @@ async def create_event(
     await db.refresh(event)
     if connection:
         try:
-            await _push_event(event, token=await _access_token(connection))
-            await db.commit()
+            await _sync_pending(db, connection=connection, token=await _access_token(connection))
         except (httpx.HTTPError, RuntimeError, KeyError):
             event.google_sync_status = "error"
             await db.commit()
@@ -673,8 +746,7 @@ async def update_event(
     await db.commit()
     if connection:
         try:
-            await _push_event(event, token=await _access_token(connection))
-            await db.commit()
+            await _sync_pending(db, connection=connection, token=await _access_token(connection))
         except (httpx.HTTPError, RuntimeError, KeyError):
             event.google_sync_status = "error"
             await db.commit()

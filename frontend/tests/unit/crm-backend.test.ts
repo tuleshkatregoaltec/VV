@@ -1042,7 +1042,6 @@ describe('CRM areas with no backend yet', () => {
 		const { crm } = await import('$lib/crm/api')
 		const get = vi.spyOn(client, 'get')
 		expect((await crm.deals.list('pipeline')).items).toEqual([])
-		expect(await crm.events.list('2026-10-01', '2026-10-31')).toEqual([])
 		expect((await crm.listings.list('mine')).items).toEqual([])
 		expect(await crm.notifications.list()).toEqual([])
 		expect(get).not.toHaveBeenCalled()
@@ -1057,9 +1056,6 @@ describe('CRM areas with no backend yet', () => {
 				value_aed: 1,
 				due_date: '2026-11-01'
 			} as never)
-		).rejects.toMatchObject({ status: 501 })
-		await expect(
-			crm.events.create({ title: 'Call', date: '2026-10-08', time: null, kind: 'call' })
 		).rejects.toMatchObject({ status: 501 })
 	})
 
@@ -1223,5 +1219,24 @@ describe('CRM marketing consent on a lead', () => {
 			})
 		})
 		expect((await backend.getLead(7)).consent).toBe('unknown')
+	})
+})
+
+describe('CRM calendar persists events through the backend', () => {
+	it('reads the visible interval and sends the full event instead of returning an empty local result', async () => {
+		const get = serve({ '/api/v1/crm/calendar/events': [{ id: 7, title: 'Viewing' }] })
+		const { crm } = await import('$lib/crm/api')
+		expect(await crm.events.list('2026-11-01', '2026-11-30')).toEqual([{ id: 7, title: 'Viewing' }])
+		expect(get).toHaveBeenCalledWith('/api/v1/crm/calendar/events?start=2026-11-01&end=2026-11-30')
+		const draft = {
+			title: 'Call',
+			date: '2026-11-17',
+			end_date: '2026-11-20',
+			time: null,
+			kind: 'call' as const
+		}
+		const post = vi.spyOn(client, 'post').mockResolvedValue({ id: 8, ...draft })
+		expect((await crm.events.create(draft)).data).toMatchObject({ id: 8, ...draft })
+		expect(post).toHaveBeenCalledWith('/api/v1/crm/calendar/events', draft)
 	})
 })

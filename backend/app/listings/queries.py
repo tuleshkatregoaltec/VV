@@ -18,6 +18,7 @@ from app.listings.policy import (
     _price_basis,
     _price_period,
 )
+from app.listings.valuation import PROPERTY_TYPES, READY_STATUSES, RESIDENTIAL_SALE_CATEGORY
 from app.market.reference import listing_area_terms
 
 
@@ -96,7 +97,7 @@ _VALUATION_JOIN = f"""
             FROM {VALUATIONS_TABLE} FINAL
         ) AS valuation ON listing_id = valuation.v_listing_id"""
 # One row per unit in a filtered view: the same home listed by several agents shows once.
-_SAME_UNIT = "building_key, bedrooms, round(log(size_sqft) * 100), asking_aed"
+_SAME_UNIT = "v_building_key, bedrooms, round(log({size}) * 100), v_asking_aed"
 _valuations_ready = False
 
 
@@ -168,7 +169,7 @@ async def fetch_valuation_counts(filters):
                 AS benchmarked_count
         FROM {LISTINGS_TABLE}
         {_VALUATION_JOIN}
-        WHERE {where}
+        WHERE {where} AND {_CURRENT_VALUATION}
         """,
         parameters,
     )
@@ -181,6 +182,17 @@ PRICE_PERIOD_EXPR = "lower(JSON_VALUE(price_json, '$.period'))"
 SIZE_VALUE_EXPR = "JSONExtractFloat(size_json, 'value')"
 
 PROPERTY_TYPE_EXPR = "JSON_VALUE(raw_property_json, '$.property_type')"
+
+# Keep filters, analytics and sorting aligned with the card's current ready-sale subject.
+_CURRENT_VALUATION = f"""(
+    category_id = {RESIDENTIAL_SALE_CATEGORY}
+    AND lower(JSON_VALUE(raw_property_json, '$.completion_status')) IN {tuple(sorted(READY_STATUSES))}
+    AND lower(trimBoth({PROPERTY_TYPE_EXPR})) IN {tuple(PROPERTY_TYPES)}
+    AND {SIZE_VALUE_EXPR} > 0
+    AND v_estimate_aed > 0
+    AND v_asking_aed > 0 AND v_asking_aed = {PRICE_VALUE_EXPR}
+)"""
+
 
 AREA_NAME_EXPR = "JSONExtract(listing_location_names_json, 'Array(String)')[2]"
 
@@ -317,11 +329,13 @@ def _where_sql(
     if market_position:
         clauses.append(
             f"""listing_id IN (
-                SELECT listing_id FROM {VALUATIONS_TABLE} FINAL
-                WHERE market_position = {{market_position:String}}
-                  AND listing_id IN (SELECT listing_id FROM {LISTINGS_TABLE} WHERE is_available = 1)
-                ORDER BY value_gap_pct ASC, listing_id
-                LIMIT 1 BY {_SAME_UNIT}
+                SELECT listing_id FROM {LISTINGS_TABLE}
+                {_VALUATION_JOIN}
+                WHERE {" AND ".join(clauses)}
+                  AND {_CURRENT_VALUATION}
+                  AND v_market_position = {{market_position:String}}
+                ORDER BY v_value_gap_pct ASC, listing_id
+                LIMIT 1 BY {_SAME_UNIT.format(size=SIZE_VALUE_EXPR)}
             )"""
         )
         params["market_position"] = market_position
@@ -499,7 +513,7 @@ async def fetch_listing_rows(
     # Only flagged listings whose price hasn't changed since valuation are ranked by their gap.
     gap_order = (
         "if(v_market_position IN ('below_market', 'near_market', 'above_market') "
-        f"AND v_asking_aed = {PRICE_VALUE_EXPR}, v_value_gap_pct, 999) ASC,"
+        f"AND {_CURRENT_VALUATION}, v_value_gap_pct, 999) ASC,"
         if with_valuations and sort == "value_gap"
         else ""
     )

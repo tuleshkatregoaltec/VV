@@ -155,7 +155,10 @@ async def test_templates_are_read_across_pages_and_unusable_states_are_dropped(c
                     "language": "en",
                     "status": "APPROVED",
                     "category": "UTILITY",
-                    "components": [{"type": "HEADER"}, {"type": "BODY", "text": "Hi {{1}}"}],
+                    "components": [
+                        {"type": "HEADER", "format": "TEXT", "text": "Vitevue"},
+                        {"type": "BODY", "text": "Hi {{1}}"},
+                    ],
                 },
                 {"name": "old", "language": "en", "status": "DISABLED", "category": "MARKETING"},
             ],

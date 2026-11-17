@@ -130,6 +130,7 @@ def world(monkeypatch):
     async def listings(**kwargs):
         return ListingListResponse(listings=[], total=0, limit=60, offset=0)
 
+    monkeypatch.setattr(matching, "_utcnow", lambda: NOW)
     monkeypatch.setattr(match_repository, "get_crm_inbound_enquiry", get_enquiry)
     monkeypatch.setattr(match_repository, "mark_refreshable_matches_stale", noop)
     monkeypatch.setattr(match_repository, "find_owner_candidates", owners)

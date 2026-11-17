@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, update
+from sqlalchemy import delete, func, update
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -35,11 +35,23 @@ async def list_conversations(
             CrmAssistantConversation.user_id == user_id,
             CrmAssistantConversation.organization_id == organization_id,
         )
-        .order_by(CrmAssistantConversation.updated_at.desc())
+        .order_by(CrmAssistantConversation.updated_at.desc(), CrmAssistantConversation.id.desc())
         .limit(limit)
         .offset(offset)
     )
     return list(result.all())
+
+
+async def count_conversations(db: AsyncSession, user_id: str, organization_id: str) -> int:
+    result = await db.exec(
+        select(func.count())
+        .select_from(CrmAssistantConversation)
+        .where(
+            CrmAssistantConversation.user_id == user_id,
+            CrmAssistantConversation.organization_id == organization_id,
+        )
+    )
+    return result.one()
 
 
 async def get_conversation(
@@ -56,7 +68,12 @@ async def get_conversation(
 
 
 async def list_messages(
-    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str, limit: int = 100
+    db: AsyncSession,
+    conversation_id: int,
+    user_id: str,
+    organization_id: str,
+    limit: int = 100,
+    offset: int = 0,
 ) -> list[CrmAssistantMessage]:
     result = await db.exec(
         select(CrmAssistantMessage)
@@ -65,10 +82,11 @@ async def list_messages(
                 _owned_conversation_ids(conversation_id, user_id, organization_id)
             )
         )
-        .order_by(CrmAssistantMessage.created_at.asc(), CrmAssistantMessage.id.asc())
+        .order_by(CrmAssistantMessage.created_at.desc(), CrmAssistantMessage.id.desc())
         .limit(limit)
+        .offset(offset)
     )
-    return list(result.all())
+    return list(reversed(result.all()))
 
 
 async def delete_conversation_records(
@@ -129,6 +147,17 @@ async def claim_action(db: AsyncSession, action_id: str) -> bool:
         update(CrmAssistantAction)
         .where(CrmAssistantAction.id == action_id, CrmAssistantAction.status == "pending")
         .values(status="confirmed", resolved_at=datetime.now(timezone.utc))
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount == 1
+
+
+async def resolve_pending_action(db: AsyncSession, action_id: str, status: str) -> bool:
+    """Cancel or expire only if no confirmation has claimed this action."""
+    result = await db.execute(
+        update(CrmAssistantAction)
+        .where(CrmAssistantAction.id == action_id, CrmAssistantAction.status == "pending")
+        .values(status=status, resolved_at=datetime.now(timezone.utc))
         .execution_options(synchronize_session=False)
     )
     return result.rowcount == 1

@@ -80,6 +80,8 @@ __all__ = [
     "CrmAssistantConversation",
     "CrmAssistantMessage",
     "CrmAssistantAction",
+    "CrmCalendarConnection",
+    "CrmCalendarEvent",
     "CrmWhatsAppNumber",
     "CrmWhatsAppMessage",
     "CrmWhatsAppOptOut",

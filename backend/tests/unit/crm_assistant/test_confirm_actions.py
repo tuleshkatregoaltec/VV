@@ -6,12 +6,13 @@ from types import SimpleNamespace
 from urllib.parse import quote
 
 import pytest
-from assistant_helpers import ORG_A, ORG_B, USER, FakeSession, make_deps, make_lead
 from fastapi import HTTPException
 
 from app.crm.assistant import actions, scope
 from app.crm.assistant.models import CrmAssistantAction
 from app.crm.inbound_models import CrmInboundActivity
+
+from .assistant_helpers import ORG_A, ORG_B, USER, FakeSession, make_deps, make_lead
 
 
 class FakeActionStore:
@@ -46,6 +47,14 @@ class FakeActionStore:
             return action
         return None
 
+    async def resolve_pending_action(self, db, action_id, status):
+        action = self.actions[action_id]
+        if action.status != "pending":
+            return False
+        action.status = status
+        action.resolved_at = datetime.now(timezone.utc)
+        return True
+
     async def claim_action(self, db, action_id):
         self.claims += 1
         action = self.actions[action_id]
@@ -60,6 +69,7 @@ def store(monkeypatch):
     fake = FakeActionStore()
     monkeypatch.setattr(actions.repository, "get_action", fake.get_action)
     monkeypatch.setattr(actions.repository, "claim_action", fake.claim_action)
+    monkeypatch.setattr(actions.repository, "resolve_pending_action", fake.resolve_pending_action)
     return fake
 
 

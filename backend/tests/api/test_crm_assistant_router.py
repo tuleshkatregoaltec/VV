@@ -44,11 +44,14 @@ async def test_cancel_uses_auth_context_ids(client, monkeypatch):
 async def test_conversation_list_is_scoped_to_the_signed_in_user(client, monkeypatch):
     service = AsyncMock(return_value=[])
     monkeypatch.setattr("app.crm.assistant.router.list_conversations", service)
+    monkeypatch.setattr(
+        "app.crm.assistant.router.repository.count_conversations", AsyncMock(return_value=51)
+    )
 
     response = await client.get("/api/v1/crm/assistant/conversations")
 
     assert response.status_code == 200
-    assert response.json() == {"conversations": [], "total": 0}
+    assert response.json() == {"conversations": [], "total": 51}
     assert service.await_args.args[1:3] == ("test-user-id", "1")
 
 
@@ -175,3 +178,16 @@ async def test_transcribe_requires_auth(client_no_auth):
         files={"audio": ("voice.wav", b"RIFF....WAVE", "audio/wav")},
     )
     assert response.status_code == 401
+
+
+async def test_earlier_messages_offset_reaches_the_scoped_service(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.crm.assistant.router.get_conversation", AsyncMock(return_value=object())
+    )
+    messages = AsyncMock(return_value=[])
+    monkeypatch.setattr("app.crm.assistant.router.get_messages_with_action_status", messages)
+    response = await client.get(
+        "/api/v1/crm/assistant/conversations/7/messages?limit=200&offset=200"
+    )
+    assert response.status_code == 200
+    assert messages.await_args.args[1:] == (7, "test-user-id", "1", 200, 200)

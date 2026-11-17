@@ -267,3 +267,49 @@ async def test_a_page_of_renewals_still_reports_the_full_total(install_serving, 
     renewals = await renewal_leads.list_renewals(**{**ALL_LEASES, "limit": 2})
 
     assert (len(renewals.leads), renewals.total) == (2, 5)
+
+
+async def test_known_owner_newer_candidate_never_resurrects_expired_lease(
+    install_serving, warehouse
+):
+    await _install(install_serving, warehouse)
+    await warehouse.insert(
+        "dxbi_rental_unit_candidates",
+        [
+            _lease("renewed-b", "new-b", JVC, 10, unit_number="U-unit-b"),
+            # The same unit number in another area must not inherit the agency's owner.
+            _lease("different-property", "other-b", "Dubai Marina", 10, unit_number="U-unit-b"),
+        ],
+        column_names=CANDIDATE_COLUMNS,
+    )
+    await warehouse.insert(
+        "dxbi_rental_sale_matches",
+        [[key, "U-unit-b", date(2020, 1, 1), "unique"] for key in ["new-b", "other-b"]],
+        column_names=["unit_candidate_key", "unit_number", "last_purchase_date", "match_status"],
+    )
+    options = dict(
+        status=None,
+        unlet_only=True,
+        expired_days=365,
+        area=None,
+        property_type=None,
+        project=None,
+        building=None,
+        limit=50,
+        offset=0,
+        unit_keys=["unit-b"],
+    )
+    rows, total, _ = await opportunity_queries.fetch_renewals(AS_OF, **options)
+    assert (rows, total) == ([], 0)
+    rows, total, _ = await opportunity_queries.fetch_renewals(
+        AS_OF, **{**options, "unlet_only": False}
+    )
+    assert [row["event_key"] for row in rows] == ["renewed-b"]
+    assert total == 1
+    unknown, _, _ = await opportunity_queries.fetch_renewals(
+        AS_OF, **{**options, "unlet_only": False, "exclude_units": True}
+    )
+    assert "renewed-b" not in {row["event_key"] for row in unknown}
+    assert "different-property" in {row["event_key"] for row in unknown}
+    aliases = await opportunity_queries.fetch_owner_unit_aliases(["new-b", "other-b"], ["unit-b"])
+    assert aliases == [{"candidate_key": "new-b", "owner_candidate_key": "unit-b"}]

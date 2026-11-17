@@ -85,7 +85,7 @@ def _apply_dld_valuation(row: dict[str, Any]) -> None:
         row.update(unflagged)
         return
     estimate = _float_or_none(row.get("v_estimate_aed")) or 0
-    if estimate <= 0 and listing_subject(listing, date.today()) is None:
+    if listing_subject(listing, date.today()) is None:
         return
     row["valuation_method"] = "dld_sales"
     row.update(unflagged)
@@ -93,7 +93,7 @@ def _apply_dld_valuation(row: dict[str, Any]) -> None:
         return
     position = row.get("v_market_position") or "insufficient_data"
     stored_asking = _int_or_none(row.get("v_asking_aed"))
-    price_changed = bool(stored_asking) and stored_asking != listing["price_aed"]
+    price_changed = not stored_asking or stored_asking != listing["price_aed"]
     gap = _float_or_none(row.get("v_value_gap_pct"))
     row.update(
         estimated_value_aed=estimate,

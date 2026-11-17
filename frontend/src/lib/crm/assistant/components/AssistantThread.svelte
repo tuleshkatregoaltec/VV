@@ -1,9 +1,10 @@
 <script lang="ts">
-import { createQuery, useQueryClient } from '@tanstack/svelte-query'
+import { createInfiniteQuery, useQueryClient } from '@tanstack/svelte-query'
 import DOMPurify from 'dompurify'
 import Mic from 'lucide-svelte/icons/mic'
 import Send from 'lucide-svelte/icons/send'
 import { Marked } from 'marked'
+import { onDestroy } from 'svelte'
 import { browser } from '$app/environment'
 import { type AssistantMessageResponse, assistant, assistantKeys } from '../api'
 import { applyEvent, type ProposedAction, parseEvent, type ThreadMessage } from '../stream'
@@ -52,9 +53,11 @@ function render(content: string): string {
 }
 
 const queryClient = useQueryClient()
-const messagesQuery = createQuery(() => ({
+const messagesQuery = createInfiniteQuery(() => ({
 	queryKey: assistantKeys.messages(conversationId ?? 0),
-	queryFn: () => assistant.getMessages(conversationId as number),
+	queryFn: ({ pageParam }) => assistant.getMessages(conversationId as number, pageParam),
+	initialPageParam: 0,
+	getNextPageParam: (lastPage, pages) => (lastPage.length === 200 ? pages.length * 200 : undefined),
 	enabled: conversationId !== null
 }))
 
@@ -66,6 +69,14 @@ let streaming = $state(false)
 let turnError = $state<string | null>(null)
 let stream: { close: () => void } | null = null
 let streamFor: number | null = null
+let generation = 0
+let destroyed = false
+onDestroy(() => {
+	destroyed = true
+	generation++
+	stream?.close()
+	stream = null
+})
 let endRef: HTMLDivElement | undefined = $state()
 let talking = $state(false)
 
@@ -78,15 +89,17 @@ const toThread = (rows: AssistantMessageResponse[]): ThreadMessage[] =>
 
 // Stored turns win whenever no reply is streaming in.
 $effect(() => {
-	const rows = messagesQuery.data
+	const rows = messagesQuery.data?.pages.slice().reverse().flat()
 	if (streaming) return
 	thread = conversationId === null ? [] : toThread(rows ?? [])
 })
 
 // Leaving a conversation stops its stream.
 $effect(() => {
-	if (stream && streamFor !== conversationId) {
-		stream.close()
+	if (streamFor !== null && streamFor !== conversationId) {
+		generation++
+		streamFor = null
+		stream?.close()
 		stream = null
 		streaming = false
 	}
@@ -98,18 +111,21 @@ $effect(() => {
 	endRef?.scrollIntoView({ behavior: 'smooth', block: 'end' })
 })
 
-async function finish(id: number) {
+async function finish(id: number, turn: number) {
+	if (destroyed || turn !== generation) return
 	stream = null
 	void queryClient.invalidateQueries({ queryKey: assistantKeys.conversations() })
 	// Keep showing the streamed reply until the stored turns are back; switching earlier would
 	// briefly show the cached history without it.
 	await queryClient.invalidateQueries({ queryKey: assistantKeys.messages(id) }).catch(() => {})
-	streaming = false
+	if (!destroyed && turn === generation) streaming = false
 }
 
 async function send(text = input) {
 	const message = text.trim()
 	if (!message || streaming) return
+	const turn = ++generation
+	streamFor = conversationId
 	input = ''
 	turnError = null
 	streaming = true
@@ -122,23 +138,37 @@ async function send(text = input) {
 	try {
 		id = conversationId ?? (await ensureConversation())
 	} catch {
+		if (destroyed || turn !== generation) return
 		turnError = 'Could not start a conversation. Try again.'
 		streaming = false
 		return
 	}
+	if (destroyed || turn !== generation) return
 	streamFor = id
-	stream = await assistant.sendMessage(id, message, (chunk) => {
-		const event = parseEvent(chunk)
-		if (!event || streamFor !== id) return
-		if (event.type === 'error') {
-			turnError =
-				event.error === 'token_limit_exceeded'
-					? 'You have used today’s assistant limit. Try again tomorrow.'
-					: 'The assistant could not answer. Try again in a moment.'
-		}
-		thread = applyEvent(thread, event)
-		if (event.type === 'done' || event.type === 'error') void finish(id)
-	})
+	let completed = false
+	try {
+		const opened = await assistant.sendMessage(id, message, (chunk) => {
+			const event = parseEvent(chunk)
+			if (!event || destroyed || turn !== generation || streamFor !== id) return
+			if (event.type === 'error') {
+				turnError =
+					event.error === 'token_limit_exceeded'
+						? 'You have used today’s assistant limit. Try again tomorrow.'
+						: 'The assistant could not answer. Try again in a moment.'
+			}
+			thread = applyEvent(thread, event)
+			if (event.type === 'done' || event.type === 'error') {
+				completed = true
+				void finish(id, turn)
+			}
+		})
+		if (destroyed || turn !== generation || completed) opened.close()
+		else stream = opened
+	} catch {
+		if (destroyed || turn !== generation) return
+		turnError = 'The assistant could not answer. Try again in a moment.'
+		streaming = false
+	}
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -151,6 +181,11 @@ function onKeydown(e: KeyboardEvent) {
 
 <section class="thread">
 	<div class="scroll">
+		{#if messagesQuery.hasNextPage}
+			<button type="button" class="btn ghost sm" disabled={streaming || messagesQuery.isFetchingNextPage} onclick={() => messagesQuery.fetchNextPage()}>
+				{messagesQuery.isFetchingNextPage ? 'Loading…' : 'Load earlier messages'}
+			</button>
+		{/if}
 		{#if messagesQuery.isError}
 			<p class="err" role="alert">Could not load this conversation.</p>
 		{/if}

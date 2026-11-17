@@ -5,13 +5,14 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
-from assistant_helpers import ORG_A, ORG_B, USER, FakeSession, ctx, make_deps, make_lead
 from fastapi import HTTPException
 
 from app.crm.assistant import actions
 from app.crm.assistant.models import CrmAssistantAction
 from app.crm.assistant.tools import calendar as tools
 from app.crm.inbound_models import CrmInboundActivity
+
+from .assistant_helpers import ORG_A, ORG_B, USER, FakeSession, ctx, make_deps, make_lead
 
 TOMORROW = date.today() + timedelta(days=1)
 

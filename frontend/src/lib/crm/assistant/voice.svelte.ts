@@ -97,6 +97,7 @@ export function createVoiceRecorder(deps: VoiceDeps) {
 		r.continuous = true
 		r.interimResults = true
 		r.onresult = (e) => {
+			if (id !== session) return
 			let pending = ''
 			for (let i = e.resultIndex; i < e.results.length; i++) {
 				const result = e.results[i]
@@ -124,8 +125,8 @@ export function createVoiceRecorder(deps: VoiceDeps) {
 	}
 
 	async function finish(id: number, chunks: Blob[], type: string) {
-		release()
 		if (id !== session) return
+		release()
 		state = 'transcribing'
 		try {
 			const wav = await toWav(new Blob(chunks, { type }))

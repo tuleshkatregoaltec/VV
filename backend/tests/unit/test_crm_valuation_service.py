@@ -179,21 +179,60 @@ async def test_import_scope_only_touches_that_import(world):
 
 
 async def test_import_completion_survives_valuation_failure(monkeypatch):
-    # A valuation outage (e.g. ClickHouse down) must never fail or roll back an owner import.
+    # A real rollback expires committed ORM state; the completed response must still be readable.
+    from sqlalchemy import inspect, text
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
     from app.crm import imports
+    from app.crm.import_models import CrmContactImport, CrmContactList
 
-    async def broken(*args, **kwargs):
-        raise RuntimeError("clickhouse unavailable")
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    tables = [
+        CrmContactImport.__table__,
+        CrmContactList.__table__,
+        CrmPropertyContactClaim.__table__,
+    ]
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(
+                lambda conn: CrmContactImport.metadata.create_all(conn, tables)
+            )
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            record = CrmContactImport(
+                organization_id="org",
+                created_by_user_id="user",
+                name="Completed import",
+                original_filename="owners.csv",
+                sha256="synthetic",
+                size_bytes=1,
+                status="completed",
+                created_at=NOW,
+                completed_at=NOW,
+            )
+            db.add(record)
+            await db.commit()
+            record_id = record.id
 
-    rolled_back = []
+            async def broken(db, **kwargs):
+                await db.execute(text("SELECT 1"))  # valuation's read transaction is active
+                raise RuntimeError("clickhouse unavailable")
 
-    class _Session:
-        async def rollback(self):
-            rolled_back.append(True)
-
-    monkeypatch.setattr(imports, "value_owner_claims", broken)
-    await imports._value_import(_Session(), organization_id="org", import_id=7)
-    assert rolled_back == [True]
+            monkeypatch.setattr(imports, "value_owner_claims", broken)
+            await imports._value_import(
+                db, organization_id="org", import_id=record_id, record=record
+            )
+            assert not inspect(record).expired
+            response = await imports._import_response(db, record)
+            assert (response.id, response.status, response.name) == (
+                record_id,
+                "completed",
+                "Completed import",
+            )
+            await db.refresh(record)
+            assert record.status == "completed"
+    finally:
+        await engine.dispose()
 
 
 def test_stats_row_carries_price_quartiles():

@@ -204,13 +204,15 @@ def test_template_types_are_ordered_and_all_five_means_every_type():
     assert pick(write(name="n", subject="s", body="b", lead_types=every)) == []
 
 
-def test_reply_address_carries_the_send_id_only_on_our_inbound_domain(monkeypatch):
+def test_reply_address_authenticates_the_send_only_on_our_inbound_domain(monkeypatch):
     monkeypatch.setattr(brevo.settings, "BREVO_INBOUND_DOMAIN", "reply.vitevue.ae")
-    assert brevo.reply_address("42") == "reply+42@reply.vitevue.ae"
-    assert brevo.send_id_from_address("Reply+42@Reply.Vitevue.ae") == 42
-    # Someone else's plus-address must not be read as one of our sends.
-    assert brevo.send_id_from_address("reply+42@gmail.com") is None
-    assert brevo.send_id_from_address("sara@reply.vitevue.ae") is None
+    address = brevo.reply_address("42")
+    assert address != "reply+42@reply.vitevue.ae"
+    assert brevo.matches_reply_address(address.upper(), 42)
+    assert not brevo.matches_reply_address(address, 43)
+    assert not brevo.matches_reply_address("reply+42@reply.vitevue.ae", 42)
+    assert not brevo.matches_reply_address(address.replace("reply.vitevue.ae", "gmail.com"), 42)
+    assert not brevo.matches_reply_address("sara@reply.vitevue.ae", 42)
 
 
 def test_without_inbound_domain_replies_go_to_the_configured_mailbox(monkeypatch):

@@ -91,9 +91,9 @@ async def _pending_action(deps: AssistantDeps, action_id: str) -> CrmAssistantAc
     if action.status != "pending":
         raise HTTPException(status_code=409, detail=f"Action already {action.status}")
     if _aware(action.expires_at) <= utcnow():
-        action.status = "expired"
-        action.resolved_at = utcnow()
-        repository.save(deps.db, action)
+        if not await repository.resolve_pending_action(deps.db, action.id, "expired"):
+            await deps.db.refresh(action)
+            raise HTTPException(status_code=409, detail=f"Action already {action.status}")
         await deps.db.commit()
         raise HTTPException(status_code=410, detail="Action expired")
     return action
@@ -246,8 +246,8 @@ async def confirm_action(
 
 async def cancel_action(deps: AssistantDeps, *, action_id: str) -> AssistantActionResult:
     action = await _pending_action(deps, action_id)
-    action.status = "cancelled"
-    action.resolved_at = utcnow()
-    repository.save(deps.db, action)
+    if not await repository.resolve_pending_action(deps.db, action.id, "cancelled"):
+        await deps.db.refresh(action)
+        raise HTTPException(status_code=409, detail=f"Action already {action.status}")
     await deps.db.commit()
     return AssistantActionResult(action_id=action.id, status="cancelled", lead_id=action.enquiry_id)

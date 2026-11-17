@@ -660,16 +660,12 @@ _AREA_LEAD_CTE = _LEAD_CTE.replace(
 )
 
 
-# Assets › Renewals (owner known): only the units the agency's owner imports tie to a current owner.
-# They are a few thousand of Dubai's leases, so they are picked before the joins and ranking.
-_UNIT_LEAD_CTE = _LEAD_CTE.replace(
-    _CANDIDATE_SOURCE,
-    """FROM (
-        SELECT *, event_key
-        FROM dxbi_rental_unit_candidates FINAL
-        WHERE unit_candidate_key IN {unit_keys:Array(String)}
-    ) AS c""",
-)
+# Rank all leases before restricting to an owner's units. Candidate keys can change between
+# contracts for the same resolved property, so an early key filter can resurrect an old lease.
+_OWNER_IDENTITIES = """property_identity_key IN (
+    SELECT property_identity_key FROM identified_unit
+    WHERE unit_candidate_key IN {unit_keys:Array(String)}
+)"""
 
 
 async def run_until_disconnected(is_disconnected, work):
@@ -749,10 +745,7 @@ async def fetch_renewals(
     Two queries instead of the dashboard's five. With an area picked, leases are narrowed to it
     before the per-unit work (the same narrowing as the agent's renewal leads).
     """
-    # unit_keys (owner known) narrows further than an area; the area filter still applies.
-    # With exclude_units (owner unknown) those units are left out of the usual leases instead.
-    narrow = bool(unit_keys) and not exclude_units
-    cte = _UNIT_LEAD_CTE if narrow else _AREA_LEAD_CTE if area else _LEAD_CTE
+    cte = _AREA_LEAD_CTE if area else _LEAD_CTE
     where, filter_params = _where_clause(
         status=status,
         priority=None,
@@ -773,9 +766,10 @@ async def fetch_renewals(
         search=None,
         unlet_only=unlet_only,
     )
-    if unit_keys and exclude_units:
-        where += " AND unit_candidate_key NOT IN {unit_keys:Array(String)}"
-        facet_where += " AND unit_candidate_key NOT IN {unit_keys:Array(String)}"
+    if unit_keys:
+        owner_filter = f"NOT ({_OWNER_IDENTITIES})" if exclude_units else _OWNER_IDENTITIES
+        where += f" AND {owner_filter}"
+        facet_where += f" AND {owner_filter}"
     base = {
         "as_of": anchor.isoformat(),
         "expired_days": expired_days,
@@ -826,6 +820,25 @@ async def fetch_renewals(
     )
     total = rows[0]["_window_total"] if rows else 0
     return rows, total, (facets[0] if facets else {})
+
+
+async def fetch_owner_unit_aliases(candidate_keys: list[str], owner_keys: list[str]):
+    """Map current lease keys to this agency's owner keys using the same resolved identity."""
+    identity_cte = _LEAD_CTE[: _LEAD_CTE.index("ranked_unit AS (")].rstrip(",\n")
+    return await query(
+        identity_cte
+        + """
+        SELECT DISTINCT target.unit_candidate_key AS candidate_key,
+                        owner.unit_candidate_key AS owner_candidate_key
+        FROM identified_unit AS target
+        INNER JOIN identified_unit AS owner
+            ON target.property_identity_key = owner.property_identity_key
+        WHERE target.unit_candidate_key IN {candidate_keys:Array(String)}
+          AND owner.unit_candidate_key IN {owner_keys:Array(String)}
+        ORDER BY candidate_key, owner_candidate_key
+        """,
+        {"candidate_keys": candidate_keys, "owner_keys": owner_keys},
+    )
 
 
 async def fetch_renewal_areas(anchor):

@@ -169,6 +169,7 @@ def world(monkeypatch):
     async def descriptions(ids):
         return {i: state["descriptions"].get(i, "") for i in ids}
 
+    monkeypatch.setattr(matching, "_utcnow", lambda: NOW)
     monkeypatch.setattr(match_repository, "get_crm_inbound_enquiry", get_enquiry)
     monkeypatch.setattr(match_repository, "mark_refreshable_matches_stale", noop)
     monkeypatch.setattr(match_repository, "find_owner_candidates", owners)

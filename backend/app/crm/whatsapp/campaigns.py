@@ -404,13 +404,26 @@ async def _send_one(
     now = service._now()
     # Someone can opt out between the campaign being made and their turn coming.
     contact = None
+    enquiry = None
     if r.enquiry_id is not None:
-        enquiry = await db.get(CrmInboundEnquiry, r.enquiry_id)
-        contact = await db.get(CrmInboundContact, enquiry.contact_id) if enquiry else None
-    if await service._opted_out(
-        db, organization_id=campaign.organization_id, wa_id=r.wa_id, contact=contact
-    ):
-        r.status, r.error = "skipped", "Opted out before sending"
+        enquiry = await db.get(CrmInboundEnquiry, r.enquiry_id, populate_existing=True)
+        if enquiry and enquiry.organization_id == campaign.organization_id:
+            contact = await db.get(CrmInboundContact, enquiry.contact_id, populate_existing=True)
+    if not contact or contact.organization_id != campaign.organization_id:
+        reason = "Lead or contact no longer available"
+    elif service._contact_wa_id(contact) != r.wa_id:
+        reason = "WhatsApp number changed before sending"
+    else:
+        opted_out = (
+            {r.wa_id}
+            if await service._opted_out(
+                db, organization_id=campaign.organization_id, wa_id=r.wa_id, contact=contact
+            )
+            else set()
+        )
+        reason = _why_not(contact, r.wa_id, opted_out)
+    if reason:
+        r.status, r.error = "skipped", reason
     else:
         first = service._first_name(None, r.name) or ""
         params = [first if p == FIRST_NAME else p for p in campaign.params]

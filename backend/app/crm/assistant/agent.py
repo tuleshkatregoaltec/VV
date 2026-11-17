@@ -120,7 +120,7 @@ def history_to_model_messages(messages: list[CrmAssistantMessage]) -> list[Model
             actions = message_meta(message).get("actions") or []
             if actions:
                 lines = "\n".join(
-                    f"- {item.get('summary')} (status when proposed: {item.get('status')})"
+                    f"- {item.get('summary')} (current status: {item.get('status')})"
                     for item in actions
                 )
                 content = f"{content}\n\n[Proposed on cards in this turn]\n{lines}"

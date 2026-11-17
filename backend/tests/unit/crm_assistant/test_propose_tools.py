@@ -5,12 +5,13 @@ from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-from assistant_helpers import ORG_A, ORG_B, FakeSession, ctx, make_deps, make_lead
 
 from app.crm.assistant import scope
 from app.crm.assistant.models import CrmAssistantAction
 from app.crm.assistant.tools import leads as tools
 from app.crm.inbound_models import CrmInboundActivity
+
+from .assistant_helpers import ORG_A, ORG_B, FakeSession, ctx, make_deps, make_lead
 
 
 @pytest.fixture

@@ -18,6 +18,7 @@ SALE_ROW = {
     "market_price_aed": 1_800_000,
     "size_sqft": 1000.0,
     "v_estimate_aed": 2_000_000,
+    "v_asking_aed": 1_800_000,
     "v_low_aed": 1_900_000,
     "v_high_aed": 2_100_000,
     "v_confidence": "high",
@@ -176,7 +177,7 @@ async def test_market_position_filter_and_value_gap_sort_sql(monkeypatch):
     )
     sql = captured["sql"]
     assert "LEFT JOIN" in sql and "listing_valuations FINAL" in sql
-    assert "LIMIT 1 BY building_key, bedrooms" in sql  # the same unit listed twice shows once
+    assert "LIMIT 1 BY v_building_key, bedrooms" in sql  # the same unit listed twice shows once
     assert sql.index("v_value_gap_pct") < sql.index("LIMIT {limit")
     assert captured["params"]["market_position"] == "below_market"
 
@@ -381,3 +382,113 @@ async def test_detail_evidence_uses_the_valuation_window(monkeypatch):
     monkeypatch.setattr(queries, "fetch_building_sales", sales)
     await service.get_listing_from_clickhouse("L1")
     assert (seen["since"], seen["until"]) == (date(2025, 6, 1), date(2026, 6, 2))
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        {"v_asking_aed": None},
+        {"category_id": 3},
+        {
+            "raw_property_json": '{"property_type":"apartment","completion_status":"under_construction"}'
+        },
+    ],
+)
+async def test_stored_valuation_requires_a_current_ready_sale_subject(api, changed):
+    api["rows"] = [{**SALE_ROW, **changed}]
+    card = (
+        await service.list_listings_from_clickhouse(mode="sale", include_filters=False)
+    ).listings[0]
+    assert card.market_position != "below_market"
+
+
+async def test_market_filter_deduplicates_only_after_all_requested_filters(monkeypatch):
+    filters = dict(
+        mode="sale",
+        search="REF-B",
+        area="Marina",
+        property_type="apartment",
+        bedrooms="2",
+        bedrooms_in=None,
+        price_min=1_000_000,
+        price_max=3_000_000,
+        market_position="below_market",
+    )
+    where, parameters = queries._where_sql(**filters)
+    inner = where[where.index("SELECT listing_id FROM") :]
+    for predicate in (
+        "reference, {search:String}",
+        "= {area:String}",
+        "= {property_type:String}",
+        "bedrooms = {bedrooms:String}",
+        ">= {price_min:Int64}",
+        "<= {price_max:Int64}",
+    ):
+        assert predicate in inner[: inner.index("LIMIT 1 BY")]
+    assert parameters["search"] == "REF-B"
+    assert queries._CURRENT_VALUATION in inner
+
+    captured = []
+
+    async def query(sql, params):
+        captured.append(sql)
+        return []
+
+    monkeypatch.setattr(queries, "query", query)
+    await queries.fetch_valuation_counts(filters)
+    await queries.fetch_listing_rows(
+        filters, limit=10, offset=0, sort="value_gap", with_valuations=True
+    )
+    assert all(queries._CURRENT_VALUATION in sql for sql in captured)
+    assert queries._CURRENT_VALUATION in captured[0][captured[0].rindex("WHERE") :]
+    assert queries._CURRENT_VALUATION in captured[1][captured[1].rindex("ORDER BY") :]
+
+
+def test_current_valuation_sql_rejects_changed_price_and_out_of_scope_listings():
+    import json
+    import sqlite3
+
+    db = sqlite3.connect(":memory:")
+    db.create_function(
+        "JSON_VALUE", 2, lambda raw, key: json.loads(raw).get(key.removeprefix("$."), "")
+    )
+    db.create_function("JSONExtractInt", 2, lambda raw, key: int(json.loads(raw).get(key, 0)))
+    db.create_function("JSONExtractFloat", 2, lambda raw, key: float(json.loads(raw).get(key, 0)))
+    db.create_function("trimBoth", 1, str.strip)
+    try:
+        for changes, expected in [
+            ({}, 1),
+            ({"price": 2_400_000}, 0),
+            ({"category": 2}, 0),
+            ({"status": "off_plan"}, 0),
+            ({"status": "under_construction"}, 0),
+            ({"asking": 0}, 0),
+            ({"estimate": 0}, 0),
+        ]:
+            values = dict(
+                category=1,
+                price=1_800_000,
+                asking=1_800_000,
+                estimate=2_000_000,
+                status="completed",
+            )
+            values.update(changes)
+            sql = (
+                """SELECT """
+                + queries._CURRENT_VALUATION
+                + """ FROM (
+                SELECT :category AS category_id, :raw AS raw_property_json,
+                       :price_json AS price_json, '{"value": 1000}' AS size_json,
+                       :asking AS v_asking_aed, :estimate AS v_estimate_aed
+            )"""
+            )
+            params = {
+                **values,
+                "raw": json.dumps(
+                    {"property_type": "apartment", "completion_status": values["status"]}
+                ),
+                "price_json": json.dumps({"value": values["price"]}),
+            }
+            assert db.execute(sql, params).fetchone() == (expected,)
+    finally:
+        db.close()

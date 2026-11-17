@@ -8,13 +8,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from assistant_helpers import ORG_A, USER, FakeSession, make_deps, make_lead
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.models.test import TestModel
 
 from app.crm.assistant import service
 from app.crm.assistant.agent import assistant_agent
 from app.crm.assistant.models import CrmAssistantAction, CrmAssistantMessage
+
+from .assistant_helpers import ORG_A, USER, FakeSession, make_deps, make_lead
 
 
 def scripted(*turns):
@@ -49,7 +50,7 @@ def stored(monkeypatch):
     monkeypatch.setattr(
         service, "get_conversation", AsyncMock(return_value=SimpleNamespace(id=3, title=None))
     )
-    monkeypatch.setattr(service, "list_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "get_messages_with_action_status", AsyncMock(return_value=[]))
     monkeypatch.setattr(service, "add_message", save)
     monkeypatch.setattr(service.token_usage_service, "record_usage", AsyncMock())
     return saved
@@ -143,7 +144,12 @@ async def test_messages_report_current_action_status(monkeypatch):
         content="Confirm below",
         meta_data={
             "actions": [
-                {"action_id": "a1", "status": "pending"},
+                {
+                    "action_id": "a1",
+                    "status": "pending",
+                    "summary": "Original subject",
+                    "after": {"subject": "Original subject", "message": "Original unsent message"},
+                },
                 {"action_id": "a2", "status": "pending"},
                 {"action_id": "a3", "status": "pending"},
             ]
@@ -151,9 +157,23 @@ async def test_messages_report_current_action_status(monkeypatch):
         created_at=now,
     )
     rows = [
-        SimpleNamespace(id="a1", status="confirmed", expires_at=now + timedelta(minutes=5)),
-        SimpleNamespace(id="a2", status="pending", expires_at=now - timedelta(minutes=1)),
-        SimpleNamespace(id="a3", status="pending", expires_at=now + timedelta(minutes=5)),
+        CrmAssistantAction(
+            id=key,
+            user_id=USER,
+            organization_id=ORG_A,
+            enquiry_id=1,
+            action_type="email_send",
+            summary="Edited subject",
+            after={"subject": "Edited subject", "message": "Edited sent message"},
+            status=status,
+            expires_at=expiry,
+            created_at=now,
+        )
+        for key, status, expiry in [
+            ("a1", "confirmed", now + timedelta(minutes=5)),
+            ("a2", "pending", now - timedelta(minutes=1)),
+            ("a3", "pending", now + timedelta(minutes=5)),
+        ]
     ]
     monkeypatch.setattr(service, "list_messages", AsyncMock(return_value=[message]))
     lookup = AsyncMock(return_value=rows)
@@ -167,6 +187,13 @@ async def test_messages_report_current_action_status(monkeypatch):
         "pending",
     ]
     assert lookup.await_args.args[2:] == (USER, ORG_A)
+    card = response.meta_data["actions"][0]
+    assert card["summary"] == "Edited subject"
+    assert card["after"] == {"subject": "Edited subject", "message": "Edited sent message"}
+    from app.crm.assistant.agent import history_to_model_messages
+
+    history = history_to_model_messages([response])
+    assert "Edited subject (current status: confirmed)" in history[0].parts[0].content
 
 
 async def test_messages_from_the_earlier_assistant_still_load(monkeypatch):

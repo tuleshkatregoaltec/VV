@@ -219,13 +219,28 @@ async def list_owner_renewals(
         as_of=as_of,
         unit_keys=keys,
     )
+    candidate_keys = [lead.unit_candidate_key for lead in res.leads]
+    changed_keys = sorted(set(candidate_keys) - set(keys))
+    aliases = (
+        await opportunity_queries.fetch_owner_unit_aliases(changed_keys, keys)
+        if changed_keys
+        else []
+    )
+    lookup_keys = list(
+        dict.fromkeys([*candidate_keys, *[row["owner_candidate_key"] for row in aliases]])
+    )
     owners = await _owners_by_candidate(
         db,
-        candidate_keys=[lead.unit_candidate_key for lead in res.leads],
+        candidate_keys=lookup_keys,
         user_id=user_id,
         organization_id=organization_id,
     )
-    return res.model_copy(update={"owners": owners})
+    for row in aliases:
+        if row["candidate_key"] not in owners and row["owner_candidate_key"] in owners:
+            owners[row["candidate_key"]] = owners[row["owner_candidate_key"]]
+    return res.model_copy(
+        update={"owners": {key: owners[key] for key in candidate_keys if key in owners}}
+    )
 
 
 async def _owners_by_candidate(

@@ -4,7 +4,7 @@ import ArrowLeft from 'lucide-svelte/icons/arrow-left'
 import ArrowRight from 'lucide-svelte/icons/arrow-right'
 import RefreshCw from 'lucide-svelte/icons/refresh-cw'
 import { crm } from '$lib/crm/api'
-import type { CalendarEvent } from '$lib/crm/api/types'
+import { calendarDays } from '$lib/crm/calendar'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
@@ -67,23 +67,17 @@ async function disconnectGoogleCalendar() {
 	})
 }
 
-const inMonth = $derived((events.data ?? []).filter((e) => monthOf(e.date) === month))
+const inMonth = $derived(
+	(events.data ?? []).filter(
+		(e) => monthOf(e.date) <= month && monthOf(e.end_date || e.date) >= month
+	)
+)
 const syncIssue = $derived(
 	googleCalendar.data?.connected &&
 		(events.data ?? []).some((event) => event.google_sync_status === 'error')
 )
 // A rescheduled event also leaves a struck-through entry on each slot it was moved from.
-type DayItem = { event: CalendarEvent; time: string | null; moved: boolean }
-const byDay = $derived.by(() => {
-	const m = new Map<string, DayItem[]>()
-	const add = (date: string, item: DayItem) => m.set(date, [...(m.get(date) ?? []), item])
-	for (const event of events.data ?? []) add(event.date, { event, time: event.time, moved: false })
-	for (const event of events.data ?? [])
-		for (const slot of event.rescheduled_from ?? [])
-			add(slot.date, { event, time: slot.time, moved: true })
-	for (const items of m.values()) items.sort((a, b) => Number(a.moved) - Number(b.moved))
-	return m
-})
+const byDay = $derived(calendarDays(events.data ?? [], grid[0] ?? '', grid[41] ?? ''))
 const agendaDays = $derived([...byDay.keys()].filter((d) => monthOf(d) === month).sort())
 
 const shift = (n: number) => (ui.calMonth = addMonths(month, n))
@@ -155,7 +149,7 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 						{dayLabel(date)}{date === today ? ' · today' : ''}
 					</div>
 					<div class="list">
-						{#each byDay.get(date) ?? [] as d (`${d.event.id}-${d.moved}-${d.time}`)}
+						{#each byDay.get(date) ?? [] as d (d.key)}
 							<EventItem event={d.event} movedFrom={d.moved ? d.time ?? 'Due' : null} />
 						{/each}
 					</div>
@@ -185,7 +179,7 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 									onclick={() => panel.open({ kind: 'new-task', date })}
 								></button>
 								<span class="dn">{dayOfMonth(date)}</span>
-								{#each evs.slice(0, 3) as d (`${d.event.id}-${d.moved}-${d.time}`)}
+								{#each evs.slice(0, 3) as d (d.key)}
 									<button
 										type="button"
 										class={['ev', d.moved && 'moved']}

@@ -4,10 +4,10 @@ or unmarked outside text to the model."""
 import json
 from datetime import date, timedelta
 
-from assistant_helpers import ORG_A, ORG_B, USER, ctx, list_response, make_deps, make_lead
-
 from app.crm.assistant import scope
 from app.crm.assistant.tools import leads as tools
+
+from .assistant_helpers import ORG_A, ORG_B, USER, ctx, list_response, make_deps, make_lead
 
 
 async def test_search_leads_passes_deps_org_and_clamps_limit(monkeypatch):
@@ -27,7 +27,7 @@ async def test_search_leads_passes_deps_org_and_clamps_limit(monkeypatch):
 
 
 async def test_assigned_to_me_and_follow_up_due_filters(fake_leads):
-    today = date.today()
+    today = scope.today()
     fake_leads.add(make_lead(1, assigned_user_id=USER, next_follow_up=today))
     fake_leads.add(make_lead(2, assigned_user_id="someone-else", next_follow_up=today))
     fake_leads.add(make_lead(3, assigned_user_id=USER, next_follow_up=today + timedelta(days=3)))
@@ -93,7 +93,7 @@ async def test_inbox_contact_is_not_a_lead(fake_leads):
 
 
 async def test_pipeline_summary_counts_this_org_only(fake_leads):
-    yesterday = date.today() - timedelta(days=1)
+    yesterday = scope.today() - timedelta(days=1)
     fake_leads.add(make_lead(1, status="new", assigned_user_id=USER, next_follow_up=yesterday))
     fake_leads.add(make_lead(2, status="new", intent="rent"))
     fake_leads.add(make_lead(3, status="won"), organization_id=ORG_B)
@@ -142,7 +142,7 @@ async def test_lease_lead_without_owner_is_named_by_its_unit(fake_leads):
 
 
 async def test_search_includes_unopened_lease_leads(fake_leads):
-    from assistant_helpers import lease_item
+    from .assistant_helpers import lease_item
 
     fake_leads.add(make_lead(1, name="Ashwin Vyas"))
     fake_leads.lease_items = [
@@ -163,7 +163,7 @@ async def test_search_includes_unopened_lease_leads(fake_leads):
 
 
 async def test_search_filters_lease_leads_like_stored_ones(fake_leads):
-    from assistant_helpers import lease_item
+    from .assistant_helpers import lease_item
 
     fake_leads.lease_items = [lease_item("L-1"), lease_item("L-2", building="Binghatti Avenue")]
 
@@ -176,7 +176,7 @@ async def test_search_filters_lease_leads_like_stored_ones(fake_leads):
 
 
 async def test_pipeline_summary_counts_unopened_lease_leads(fake_leads):
-    from assistant_helpers import lease_item
+    from .assistant_helpers import lease_item
 
     fake_leads.add(make_lead(1, status="qualified"))
     fake_leads.lease_items = [
@@ -203,3 +203,40 @@ async def test_lease_data_failure_still_answers_with_stored_leads(fake_leads, mo
     result = await tools.search_leads(ctx(make_deps()))
     assert result["total"] == 1
     assert result["lease_leads_unavailable"] is True
+
+
+async def test_filters_and_counts_include_leads_beyond_first_page(fake_leads):
+    for i in range(1, 1002):
+        fake_leads.add(
+            make_lead(
+                i,
+                assigned_user_id=USER if i == 1001 else "other",
+                next_follow_up=scope.today() if i == 1001 else None,
+            )
+        )
+    result = await tools.search_leads(ctx(make_deps()), assigned_to_me=True, follow_up_due=True)
+    assert [lead["id"] for lead in result["leads"]] == [1001]
+    assert (await tools.lead_pipeline_summary(ctx(make_deps())))["total"] == 1001
+
+
+async def test_lease_counts_include_unopened_leads_beyond_first_page(fake_leads):
+    from .assistant_helpers import lease_item
+
+    fake_leads.lease_items = [lease_item(f"L-{i}") for i in range(501)]
+    assert (await tools.lead_pipeline_summary(ctx(make_deps())))["lease_leads_not_opened"] == 501
+
+
+async def test_follow_up_filters_use_dubai_midnight(fake_leads, monkeypatch):
+    # UTC is still the previous day when agents in Dubai begin their next working day.
+    class Clock:
+        @classmethod
+        def now(cls, tz):
+            from datetime import datetime, timezone
+
+            return datetime(2026, 11, 17, 20, 30, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(scope, "datetime", Clock)
+    fake_leads.add(make_lead(1, next_follow_up=date(2026, 11, 18)))
+    fake_leads.add(make_lead(2, next_follow_up=date(2026, 11, 17)))
+    assert (await tools.search_leads(ctx(make_deps()), follow_up_due=True))["total"] == 2
+    assert (await tools.lead_pipeline_summary(ctx(make_deps())))["overdue_follow_ups"] == 1
