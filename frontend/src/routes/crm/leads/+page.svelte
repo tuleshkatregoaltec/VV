@@ -12,6 +12,7 @@ import type {
 	LeaseWindow,
 	Source
 } from '$lib/crm/api/types'
+import TeamAnalytics from '$lib/crm/components/manager/TeamAnalytics.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
@@ -43,6 +44,15 @@ import { clearLeadFilters, type LeadTab, ui } from '$lib/crm/stores/ui.svelte'
 import { errorText, write } from '$lib/crm/write'
 
 const me = createQuery(() => crmQueries.me())
+const scope = createQuery(() => crmQueries.assignmentScope())
+/** Managers and administrators also get a per-person view (Agents, 17 Nov 2026). */
+const canAssign = $derived(scope.data?.capabilities.can_assign ?? false)
+const viewItems = $derived([
+	{ id: 'list' as const, label: 'List' },
+	{ id: 'board' as const, label: 'Board' },
+	...(canAssign ? [{ id: 'agents' as const, label: 'Agents' }] : [])
+])
+const showAgents = $derived(canAssign && ui.leadView === 'agents')
 const feed = createQuery(() => crmQueries.feedSummary())
 
 // Search updates the rows as you type; only the rows re-render, the input keeps focus.
@@ -165,15 +175,15 @@ const typeLine = (l: LeadRow) =>
 		</button>
 		<Seg
 			label="View"
-			items={[
-				{ id: 'list', label: 'List' },
-				{ id: 'board', label: 'Board' }
-			]}
-			value={ui.leadView}
+			items={viewItems}
+			value={showAgents ? 'agents' : ui.leadView === 'agents' ? 'list' : ui.leadView}
 			onselect={(v) => (ui.leadView = v)}
 		/>
 	{/snippet}
 </PageHeader>
+{#if showAgents}
+	<TeamAnalytics />
+{:else}
 
 <div class="card feedstrip">
 	<span class="srcdot" style:--c="var(--l-vv)">
@@ -453,4 +463,5 @@ const typeLine = (l: LeadRow) =>
 	<div class="card"><ErrorLine message={errorText(leads.error)} onretry={() => leads.refetch()} /></div>
 {:else}
 	<div class="card"><Skeleton rows={6} /></div>
+{/if}
 {/if}
