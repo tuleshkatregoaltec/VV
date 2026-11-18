@@ -1,8 +1,10 @@
 import json
-from datetime import date
+import secrets
+from datetime import date, datetime, time, timedelta
 from typing import Literal
 from uuid import UUID, uuid4
 
+import httpx
 from fastapi import (
     APIRouter,
     Depends,
@@ -23,12 +25,23 @@ from app.crm import (
     agent_analytics,
     agent_languages,
     assignment,
+    calendar_service,
     oversight,
     owner_import_requests,
     routing,
 )
 from app.crm import collections as collection_service
 from app.crm.analytics_models import AgentAnalyticsDetail, AnalyticsWindow, TeamAnalyticsResponse
+from app.crm.calendar_models import (
+    CalendarEventCreate,
+    CalendarEventMove,
+    CalendarEventResponse,
+    CalendarViewingCreate,
+    CrmCalendarConnection,
+    GoogleCalendarComplete,
+    GoogleCalendarConnectResponse,
+    GoogleCalendarStatus,
+)
 from app.crm.collection_models import (
     CollectionCreate,
     CollectionDetailResponse,
@@ -105,6 +118,8 @@ from app.crm.inbound_imports import (
     process_inbound_import,
 )
 from app.crm.inbound_models import (
+    CrmInboundContact,
+    CrmInboundEnquiry,
     InboundActivityCreate,
     InboundEnquiryCreate,
     InboundEnquiryListResponse,
@@ -262,6 +277,323 @@ def _collection_actor(auth: AuthContext) -> collection_service.CollectionActor:
         name=name or auth.user.email,
         email=auth.user.email,
     )
+
+
+# ── Calendar (Google) ──
+# Events belong to the signed-in user. A lead linked to an event must be one this user may see
+# (lead assignment), so an agent cannot attach or book against another agent's lead.
+
+
+async def _visible_lead(db: AsyncSession, auth: AuthContext, lead_id: int) -> CrmInboundEnquiry:
+    user_id, organization_id = _auth_ids(auth)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return await assignment.load_visible(db, scope, lead_id)
+
+
+async def _own_event(db: AsyncSession, auth: AuthContext, event_id: int):
+    user_id, organization_id = _auth_ids(auth)
+    event = await calendar_service.get_event(
+        db, id=event_id, user_id=user_id, organization_id=organization_id
+    )
+    if event is None:
+        raise HTTPException(status_code=404, detail="Calendar event not found")
+    return event
+
+
+@router.get("/calendar/google", response_model=GoogleCalendarStatus, dependencies=LIGHT_LANE)
+async def crm_google_calendar_status(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    return await calendar_service.connection_status(
+        db, user_id=user_id, organization_id=organization_id
+    )
+
+
+@router.post(
+    "/calendar/google/connect",
+    response_model=GoogleCalendarConnectResponse,
+    dependencies=LIGHT_LANE,
+)
+async def crm_google_calendar_connect(context: AuthContext = Depends(require_active_subscription)):
+    """Start Google sign-in. The link's state is single-use and bound to this user."""
+    user_id, organization_id = _auth_ids(context)
+    try:
+        url = await calendar_service.authorization_url(user_id, organization_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"authorization_url": url}
+
+
+@router.post(
+    "/calendar/google/complete", response_model=GoogleCalendarStatus, dependencies=EXPENSIVE_LANE
+)
+async def crm_google_calendar_complete(
+    payload: GoogleCalendarComplete,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Finish Google sign-in: only the signed-in user who started it can complete it."""
+    user_id, organization_id = _auth_ids(context)
+    try:
+        await calendar_service.finish_connection(
+            db,
+            code=payload.code,
+            state=payload.state,
+            user_id=user_id,
+            organization_id=organization_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=502, detail="Google sign-in failed; try again") from exc
+    return await calendar_service.connection_status(
+        db, user_id=user_id, organization_id=organization_id
+    )
+
+
+@router.delete("/calendar/google", status_code=204, dependencies=EXPENSIVE_LANE)
+async def crm_google_calendar_disconnect(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    try:
+        await calendar_service.disconnect(db, user_id=user_id, organization_id=organization_id)
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail="Could not disconnect Google Calendar") from exc
+    return Response(status_code=204)
+
+
+@router.get(
+    "/calendar/events", response_model=list[CalendarEventResponse], dependencies=EXPENSIVE_LANE
+)
+async def crm_calendar_events(
+    start: date = Query(),
+    end: date = Query(),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    if end < start or (end - start).days > 370:
+        raise HTTPException(status_code=422, detail="Calendar range must be within 371 days")
+    user_id, organization_id = _auth_ids(context)
+    try:
+        return await calendar_service.list_events(
+            db, user_id=user_id, organization_id=organization_id, start=start, end=end
+        )
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail="Google Calendar sync failed") from exc
+
+
+@router.get(
+    "/calendar/events/{event_id}", response_model=CalendarEventResponse, dependencies=LIGHT_LANE
+)
+async def crm_calendar_event(
+    event_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return calendar_service.serialize_event(await _own_event(db, context, event_id))
+
+
+@router.post(
+    "/calendar/events",
+    response_model=CalendarEventResponse,
+    status_code=201,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_create_calendar_event(
+    payload: CalendarEventCreate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    if payload.lead_id is not None:
+        await _visible_lead(db, context, payload.lead_id)
+    return await calendar_service.create_event(
+        db,
+        user_id=user_id,
+        organization_id=organization_id,
+        title=payload.title.strip(),
+        event_date=payload.date,
+        event_time=payload.time,
+        kind=payload.kind,
+        detail=payload.detail.strip(),
+        lead_id=payload.lead_id,
+        listing_id=payload.listing_id,
+        end_date=payload.end_date or payload.date,
+        end_time=payload.end_time,
+        all_day=payload.all_day,
+        repeat=payload.repeat,
+        meet=payload.meet,
+        location=payload.location.strip(),
+        reminders=payload.reminders,
+        reminders_use_default=payload.reminders_use_default,
+        guests=payload.guests,
+        guests_can_modify=payload.guests_can_modify,
+        guests_can_invite_others=payload.guests_can_invite_others,
+        guests_can_see_other_guests=payload.guests_can_see_other_guests,
+        show_as=payload.show_as,
+        visibility=payload.visibility,
+    )
+
+
+@router.post(
+    "/calendar/viewings/{lead_id}",
+    response_model=CalendarEventResponse,
+    status_code=201,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_book_calendar_viewing(
+    payload: CalendarViewingCreate,
+    lead_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    lead = await _visible_lead(db, context, lead_id)
+    contact = await db.get(CrmInboundContact, lead.contact_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Lead contact not found")
+    details = [payload.note.strip()]
+    if payload.listing_id:
+        details.append(f"Listing reference: {payload.listing_id}")
+    return await calendar_service.create_event(
+        db,
+        user_id=user_id,
+        organization_id=organization_id,
+        title=f"Viewing · {contact.full_name}",
+        event_date=payload.date,
+        event_time=payload.time,
+        kind="viewing",
+        detail="\n".join(value for value in details if value),
+        lead_id=lead_id,
+        listing_id=payload.listing_id,
+    )
+
+
+@router.patch(
+    "/calendar/events/{event_id}", response_model=CalendarEventResponse, dependencies=EXPENSIVE_LANE
+)
+async def crm_move_calendar_event(
+    event_id: int,
+    payload: CalendarEventMove,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    event = await _own_event(db, context, event_id)
+    original_date = event.event_date
+    original_time = event.event_time
+    duration_days = (event.event_end_date or original_date) - original_date
+    if (payload.date, payload.time) != (original_date, event.event_time):
+        # A new list, so SQLAlchemy sees the JSON change.
+        event.rescheduled_from = [
+            *event.rescheduled_from,
+            {"date": original_date.isoformat(), "time": event.event_time},
+        ]
+    event.event_date = payload.date
+    event.event_time = payload.time
+    if payload.time is None:
+        event.event_end_date = payload.date + duration_days
+        event.event_end_time = None
+        event.all_day = True
+    else:
+        original_start = datetime.combine(
+            original_date, time.fromisoformat(original_time or "10:00")
+        )
+        original_end = datetime.combine(
+            event.event_end_date or original_date,
+            time.fromisoformat(event.event_end_time or "11:00"),
+        )
+        new_start = datetime.combine(payload.date, time.fromisoformat(payload.time))
+        duration = original_end - original_start
+        new_end = new_start + (duration if duration > timedelta(0) else timedelta(hours=1))
+        event.event_end_date = new_end.date()
+        event.event_end_time = new_end.strftime("%H:%M")
+        event.all_day = False
+    connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
+    return await calendar_service.update_event(db, event=event, connection=connection)
+
+
+@router.put(
+    "/calendar/events/{event_id}", response_model=CalendarEventResponse, dependencies=EXPENSIVE_LANE
+)
+async def crm_edit_calendar_event(
+    event_id: int,
+    payload: CalendarEventCreate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    event = await _own_event(db, context, event_id)
+    if payload.lead_id is not None and payload.lead_id != event.lead_id:
+        await _visible_lead(db, context, payload.lead_id)
+    if payload.meet and not event.meet:
+        # A fresh request id, or Google treats it as the earlier (removed) conference.
+        event.meet_request_id = secrets.token_urlsafe(20)
+    if not payload.meet:
+        event.meet_link = None
+        event.meet_request_id = None
+    event.title = payload.title.strip()
+    event.event_date = payload.date
+    event.event_time = None if payload.all_day else payload.time
+    event.event_end_date = payload.end_date or payload.date
+    event.event_end_time = None if payload.all_day else payload.end_time
+    event.all_day = payload.all_day or payload.time is None
+    event.repeat = payload.repeat
+    event.meet = payload.meet
+    event.location = payload.location.strip()
+    event.reminders = payload.reminders
+    event.reminders_use_default = payload.reminders_use_default
+    event.guests = payload.guests
+    event.guests_can_modify = payload.guests_can_modify
+    event.guests_can_invite_others = payload.guests_can_invite_others
+    event.guests_can_see_other_guests = payload.guests_can_see_other_guests
+    event.show_as = payload.show_as
+    event.visibility = payload.visibility
+    event.kind = payload.kind
+    event.detail = payload.detail.strip()
+    event.lead_id = payload.lead_id
+    event.listing_id = payload.listing_id
+    connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
+    return await calendar_service.update_event(db, event=event, connection=connection)
+
+
+@router.post(
+    "/calendar/events/{event_id}/done",
+    response_model=CalendarEventResponse,
+    dependencies=EXPENSIVE_LANE,
+)
+async def crm_complete_calendar_event(
+    event_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    event = await _own_event(db, context, event_id)
+    event.done = True
+    connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
+    return await calendar_service.update_event(db, event=event, connection=connection)
+
+
+@router.delete("/calendar/events/{event_id}", status_code=204, dependencies=EXPENSIVE_LANE)
+async def crm_delete_calendar_event(
+    event_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    event = await _own_event(db, context, event_id)
+    connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
+    try:
+        await calendar_service.delete_event(db, event=event, connection=connection)
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=502, detail="Could not delete the Google Calendar event"
+        ) from exc
+    return Response(status_code=204)
 
 
 @router.post(

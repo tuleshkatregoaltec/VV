@@ -1352,6 +1352,21 @@ export interface CalendarEvent {
 	id: number
 	date: string
 	time: string | null
+	end_date: string
+	end_time: string | null
+	all_day: boolean
+	repeat: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+	meet: boolean
+	meet_link: string | null
+	location: string
+	reminders: number[]
+	reminders_use_default: boolean
+	guests: string[]
+	guests_can_modify: boolean
+	guests_can_invite_others: boolean
+	guests_can_see_other_guests: boolean
+	show_as: 'busy' | 'free'
+	visibility: 'default' | 'public' | 'private' | 'confidential'
 	kind: EventKind
 	title: string
 	detail: string
@@ -1366,13 +1381,33 @@ export interface CalendarEvent {
 	record: { kind: RefKind; id: string; label: string } | null
 	/** Viewing outcome; "No outcome logged" for a past viewing without one. */
 	outcome: string | null
+	/** Earlier slots this event was rescheduled from, oldest first; shown struck through. */
+	rescheduled_from: { date: string; time: string | null }[]
+	google_sync_status: 'local' | 'pending' | 'synced' | 'error'
 }
 
 export interface EventCreate {
 	title: string
 	date: string
 	time: string | null
+	end_date?: string
+	end_time?: string | null
+	all_day?: boolean
+	repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+	meet?: boolean
+	location?: string
+	reminders?: number[]
+	reminders_use_default?: boolean
+	guests?: string[]
+	guests_can_modify?: boolean
+	guests_can_invite_others?: boolean
+	guests_can_see_other_guests?: boolean
+	show_as?: 'busy' | 'free'
+	visibility?: 'default' | 'public' | 'private' | 'confidential'
 	kind: EventKind
+	detail?: string
+	lead_id?: number | null
+	listing_id?: string | null
 }
 
 export interface OverdueItem {

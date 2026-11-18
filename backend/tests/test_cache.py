@@ -198,3 +198,34 @@ async def test_fill_lock_without_redis_lets_the_caller_proceed():
     cache.redis = None
 
     assert await cache.acquire_lock("k", ttl_seconds=30) == ""
+
+
+# ── put_new / take (single-use tokens) ───────────────────────────────────────────
+
+
+async def test_put_new_stores_only_new_keys_and_reports_it(cache):
+    cache.redis.set = AsyncMock(return_value=True)
+    assert await cache.put_new("k", {"a": 1}, expire=60) is True
+    cache.redis.set.assert_awaited_once_with("k", '{"a": 1}', ex=60, nx=True)
+    cache.redis.set = AsyncMock(return_value=None)  # NX refused: the key exists
+    assert await cache.put_new("k", {"a": 2}) is False
+
+
+async def test_put_new_is_false_when_redis_fails_or_is_missing(cache):
+    cache.redis.set = AsyncMock(side_effect=ConnectionError("down"))
+    assert await cache.put_new("k", 1) is False
+    cache.redis = None
+    assert await cache.put_new("k", 1) is False
+
+
+async def test_take_reads_and_deletes_atomically(cache):
+    cache.redis.getdel = AsyncMock(return_value='{"user_id": "omar"}')
+    assert await cache.take("k") == {"user_id": "omar"}
+    cache.redis.getdel.assert_awaited_once_with("k")
+    cache.redis.getdel = AsyncMock(return_value=None)
+    assert await cache.take("k") is None
+
+
+async def test_take_is_none_when_redis_fails(cache):
+    cache.redis.getdel = AsyncMock(side_effect=ConnectionError("down"))
+    assert await cache.take("k") is None

@@ -63,11 +63,13 @@ test.beforeEach(async ({ page, usePersona }) => {
     });
 });
 
+// Google Calendar was restored (guards/crm-calendar-email.spec.ts); the email and WhatsApp PR 50
+// prototypes stay redirects to the connector preview.
 for (const connector of ['email', 'whatsapp']) {
     test(`unfinished ${connector} prototype URL opens only the connector preview`, async ({ page }) => {
         const prototypeCalls: string[] = [];
         page.on('request', request => {
-            if (/\/api\/v1\/crm\/(email|whatsapp|assistant|calendar\/google)(?:\/|\?|$)/.test(request.url())) prototypeCalls.push(request.url());
+            if (/\/api\/v1\/crm\/(email|whatsapp|assistant)(?:\/|\?|$)/.test(request.url())) prototypeCalls.push(request.url());
         });
         await page.goto(`/crm/connectors/${connector}`);
         await expect(page).toHaveURL(/\/crm\/connectors$/);

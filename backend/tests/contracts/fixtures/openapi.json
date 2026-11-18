@@ -1997,6 +1997,444 @@
 				}
 			}
 		},
+		"/api/v1/crm/calendar/google": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Google Calendar Status",
+				"operationId": "crm-crm_google_calendar_status",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GoogleCalendarStatus"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Google Calendar Disconnect",
+				"operationId": "crm-crm_google_calendar_disconnect",
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					}
+				}
+			}
+		},
+		"/api/v1/crm/calendar/google/connect": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Google Calendar Connect",
+				"description": "Start Google sign-in. The link's state is single-use and bound to this user.",
+				"operationId": "crm-crm_google_calendar_connect",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GoogleCalendarConnectResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/calendar/google/complete": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Google Calendar Complete",
+				"description": "Finish Google sign-in: only the signed-in user who started it can complete it.",
+				"operationId": "crm-crm_google_calendar_complete",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GoogleCalendarComplete"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GoogleCalendarStatus"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/calendar/events": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Calendar Events",
+				"operationId": "crm-crm_calendar_events",
+				"parameters": [
+					{
+						"name": "start",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "date",
+							"title": "Start"
+						}
+					},
+					{
+						"name": "end",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "date",
+							"title": "End"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/CalendarEventResponse"
+									},
+									"title": "Response Crm-Crm Calendar Events"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Create Calendar Event",
+				"operationId": "crm-crm_create_calendar_event",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CalendarEventCreate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CalendarEventResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/calendar/events/{event_id}": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Calendar Event",
+				"operationId": "crm-crm_calendar_event",
+				"parameters": [
+					{
+						"name": "event_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Event Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CalendarEventResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"patch": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Move Calendar Event",
+				"operationId": "crm-crm_move_calendar_event",
+				"parameters": [
+					{
+						"name": "event_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Event Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CalendarEventMove"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CalendarEventResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"put": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Edit Calendar Event",
+				"operationId": "crm-crm_edit_calendar_event",
+				"parameters": [
+					{
+						"name": "event_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Event Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CalendarEventCreate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CalendarEventResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Delete Calendar Event",
+				"operationId": "crm-crm_delete_calendar_event",
+				"parameters": [
+					{
+						"name": "event_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Event Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/calendar/viewings/{lead_id}": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Book Calendar Viewing",
+				"operationId": "crm-crm_book_calendar_viewing",
+				"parameters": [
+					{
+						"name": "lead_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Lead Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CalendarViewingCreate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CalendarEventResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/calendar/events/{event_id}/done": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Complete Calendar Event",
+				"operationId": "crm-crm_complete_calendar_event",
+				"parameters": [
+					{
+						"name": "event_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Event Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CalendarEventResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/inbound/enquiries": {
 			"post": {
 				"tags": ["crm", "crm"],
@@ -16614,6 +17052,494 @@
 				"title": "BuildingUnitType",
 				"description": "Bedroom/type breakdown for a specific building"
 			},
+			"CalendarEventCreate": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 240,
+						"minLength": 1,
+						"title": "Title"
+					},
+					"date": {
+						"type": "string",
+						"format": "date",
+						"title": "Date"
+					},
+					"time": {
+						"anyOf": [
+							{
+								"type": "string",
+								"pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Time"
+					},
+					"end_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "End Date"
+					},
+					"end_time": {
+						"anyOf": [
+							{
+								"type": "string",
+								"pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "End Time"
+					},
+					"all_day": {
+						"type": "boolean",
+						"title": "All Day",
+						"default": false
+					},
+					"repeat": {
+						"type": "string",
+						"enum": ["none", "daily", "weekly", "monthly", "yearly"],
+						"title": "Repeat",
+						"default": "none"
+					},
+					"meet": {
+						"type": "boolean",
+						"title": "Meet",
+						"default": false
+					},
+					"location": {
+						"type": "string",
+						"maxLength": 500,
+						"title": "Location",
+						"default": ""
+					},
+					"reminders": {
+						"items": {
+							"type": "integer"
+						},
+						"type": "array",
+						"maxItems": 5,
+						"title": "Reminders"
+					},
+					"reminders_use_default": {
+						"type": "boolean",
+						"title": "Reminders Use Default",
+						"default": false
+					},
+					"guests": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 50,
+						"title": "Guests"
+					},
+					"guests_can_modify": {
+						"type": "boolean",
+						"title": "Guests Can Modify",
+						"default": false
+					},
+					"guests_can_invite_others": {
+						"type": "boolean",
+						"title": "Guests Can Invite Others",
+						"default": true
+					},
+					"guests_can_see_other_guests": {
+						"type": "boolean",
+						"title": "Guests Can See Other Guests",
+						"default": true
+					},
+					"show_as": {
+						"type": "string",
+						"enum": ["busy", "free"],
+						"title": "Show As",
+						"default": "busy"
+					},
+					"visibility": {
+						"type": "string",
+						"enum": ["default", "public", "private", "confidential"],
+						"title": "Visibility",
+						"default": "default"
+					},
+					"kind": {
+						"type": "string",
+						"enum": ["viewing", "call", "follow_up", "deal_date", "deadline"],
+						"title": "Kind"
+					},
+					"detail": {
+						"type": "string",
+						"maxLength": 2000,
+						"title": "Detail",
+						"default": ""
+					},
+					"lead_id": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Id"
+					},
+					"listing_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 160
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Listing Id"
+					}
+				},
+				"type": "object",
+				"required": ["title", "date", "kind"],
+				"title": "CalendarEventCreate"
+			},
+			"CalendarEventMove": {
+				"properties": {
+					"date": {
+						"type": "string",
+						"format": "date",
+						"title": "Date"
+					},
+					"time": {
+						"anyOf": [
+							{
+								"type": "string",
+								"pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Time"
+					}
+				},
+				"type": "object",
+				"required": ["date"],
+				"title": "CalendarEventMove"
+			},
+			"CalendarEventResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"date": {
+						"type": "string",
+						"title": "Date"
+					},
+					"time": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Time"
+					},
+					"end_date": {
+						"type": "string",
+						"title": "End Date"
+					},
+					"end_time": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "End Time"
+					},
+					"all_day": {
+						"type": "boolean",
+						"title": "All Day"
+					},
+					"repeat": {
+						"type": "string",
+						"enum": ["none", "daily", "weekly", "monthly", "yearly"],
+						"title": "Repeat"
+					},
+					"meet": {
+						"type": "boolean",
+						"title": "Meet"
+					},
+					"meet_link": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Meet Link"
+					},
+					"location": {
+						"type": "string",
+						"title": "Location"
+					},
+					"reminders": {
+						"items": {
+							"type": "integer"
+						},
+						"type": "array",
+						"title": "Reminders"
+					},
+					"reminders_use_default": {
+						"type": "boolean",
+						"title": "Reminders Use Default"
+					},
+					"guests": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Guests"
+					},
+					"guests_can_modify": {
+						"type": "boolean",
+						"title": "Guests Can Modify"
+					},
+					"guests_can_invite_others": {
+						"type": "boolean",
+						"title": "Guests Can Invite Others"
+					},
+					"guests_can_see_other_guests": {
+						"type": "boolean",
+						"title": "Guests Can See Other Guests"
+					},
+					"show_as": {
+						"type": "string",
+						"enum": ["busy", "free"],
+						"title": "Show As"
+					},
+					"visibility": {
+						"type": "string",
+						"enum": ["default", "public", "private", "confidential"],
+						"title": "Visibility"
+					},
+					"kind": {
+						"type": "string",
+						"enum": ["viewing", "call", "follow_up", "deal_date", "deadline"],
+						"title": "Kind"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"detail": {
+						"type": "string",
+						"title": "Detail"
+					},
+					"agent": {
+						"type": "string",
+						"title": "Agent"
+					},
+					"lead_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Id"
+					},
+					"deal_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Deal Id"
+					},
+					"listing_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Listing Id"
+					},
+					"owner_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Owner Id"
+					},
+					"context": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Context"
+					},
+					"record": {
+						"anyOf": [
+							{
+								"additionalProperties": true,
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Record"
+					},
+					"outcome": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Outcome"
+					},
+					"rescheduled_from": {
+						"items": {
+							"$ref": "#/components/schemas/CalendarSlot"
+						},
+						"type": "array",
+						"title": "Rescheduled From"
+					},
+					"google_sync_status": {
+						"type": "string",
+						"enum": ["local", "pending", "synced", "error"],
+						"title": "Google Sync Status"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"date",
+					"time",
+					"end_date",
+					"end_time",
+					"all_day",
+					"repeat",
+					"meet",
+					"meet_link",
+					"location",
+					"reminders",
+					"reminders_use_default",
+					"guests",
+					"guests_can_modify",
+					"guests_can_invite_others",
+					"guests_can_see_other_guests",
+					"show_as",
+					"visibility",
+					"kind",
+					"title",
+					"detail",
+					"agent",
+					"lead_id",
+					"deal_id",
+					"listing_id",
+					"owner_id",
+					"context",
+					"record",
+					"outcome",
+					"rescheduled_from",
+					"google_sync_status"
+				],
+				"title": "CalendarEventResponse"
+			},
+			"CalendarSlot": {
+				"properties": {
+					"date": {
+						"type": "string",
+						"title": "Date"
+					},
+					"time": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Time"
+					}
+				},
+				"type": "object",
+				"required": ["date", "time"],
+				"title": "CalendarSlot"
+			},
+			"CalendarViewingCreate": {
+				"properties": {
+					"date": {
+						"type": "string",
+						"format": "date",
+						"title": "Date"
+					},
+					"time": {
+						"type": "string",
+						"pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+						"title": "Time"
+					},
+					"listing_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 160
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Listing Id"
+					},
+					"note": {
+						"type": "string",
+						"maxLength": 2000,
+						"title": "Note",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"required": ["date", "time"],
+				"title": "CalendarViewingCreate"
+			},
 			"CancelViewing": {
 				"properties": {
 					"viewing_id": {
@@ -25734,6 +26660,63 @@
 				"required": ["coordinates"],
 				"title": "GeoPolygon",
 				"description": "Geographic polygon (area boundaries)"
+			},
+			"GoogleCalendarComplete": {
+				"properties": {
+					"code": {
+						"type": "string",
+						"maxLength": 2048,
+						"minLength": 1,
+						"title": "Code"
+					},
+					"state": {
+						"type": "string",
+						"maxLength": 128,
+						"minLength": 16,
+						"title": "State"
+					}
+				},
+				"type": "object",
+				"required": ["code", "state"],
+				"title": "GoogleCalendarComplete",
+				"description": "What Google handed back to the browser; the signed-in user posts it to finish sign-in."
+			},
+			"GoogleCalendarConnectResponse": {
+				"properties": {
+					"authorization_url": {
+						"type": "string",
+						"title": "Authorization Url"
+					}
+				},
+				"type": "object",
+				"required": ["authorization_url"],
+				"title": "GoogleCalendarConnectResponse"
+			},
+			"GoogleCalendarStatus": {
+				"properties": {
+					"configured": {
+						"type": "boolean",
+						"title": "Configured"
+					},
+					"connected": {
+						"type": "boolean",
+						"title": "Connected"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					}
+				},
+				"type": "object",
+				"required": ["configured", "connected"],
+				"title": "GoogleCalendarStatus"
 			},
 			"HTTPValidationError": {
 				"properties": {

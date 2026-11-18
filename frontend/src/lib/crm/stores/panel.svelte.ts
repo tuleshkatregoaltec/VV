@@ -41,6 +41,7 @@ export type PanelState =
 	| { kind: 'new-listing'; fromLeadId?: number }
 	| { kind: 'new-deal'; leadId?: number }
 	| { kind: 'new-task'; date?: string }
+	| { kind: 'edit-event'; id: number }
 	| { kind: 'new-owner' }
 	| { kind: 'new-import'; ownersOnly?: boolean; leadsOnly?: boolean }
 	| { kind: 'areas' }

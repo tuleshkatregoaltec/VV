@@ -5,6 +5,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
+from cryptography.fernet import Fernet
 from dotenv import dotenv_values
 from pydantic import (
     AnyUrl,
@@ -62,6 +63,14 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: AnyUrl  # configMap
     PUBLIC_API_BASE_URL: AnyUrl | None = None
+
+    # Google Calendar OAuth (CRM › Calendar). Leave unset to keep the integration disabled.
+    GOOGLE_CALENDAR_CLIENT_ID: str | None = None
+    GOOGLE_CALENDAR_CLIENT_SECRET: str | None = None
+    # Google sends the browser back here; it must match the OAuth client in Google Cloud.
+    GOOGLE_CALENDAR_REDIRECT_URI: AnyUrl | None = None
+    # One Fernet key encrypting stored Google refresh tokens.
+    GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY: str | None = None
 
     # Security
     SESSION_SECRET: str  # Bitwarden Secrets
@@ -258,6 +267,13 @@ class Settings(BaseSettings):
     def validate_service_api_key(cls, v: str) -> str:
         if len(v) < 32:
             raise ValueError("SERVICE_API_KEY must be at least 32 characters")
+        return v
+
+    @field_validator("GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY")
+    @classmethod
+    def validate_google_calendar_encryption_key(cls, v: str | None) -> str | None:
+        if v:
+            Fernet(v.encode())
         return v
 
     @field_validator("SESSION_SECRET")

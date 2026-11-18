@@ -1452,6 +1452,278 @@ export type BuildingUnitType = {
 };
 
 /**
+ * CalendarEventCreate
+ */
+export type CalendarEventCreate = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time?: string | null;
+    /**
+     * End Date
+     */
+    end_date?: string | null;
+    /**
+     * End Time
+     */
+    end_time?: string | null;
+    /**
+     * All Day
+     */
+    all_day?: boolean;
+    /**
+     * Repeat
+     */
+    repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+    /**
+     * Meet
+     */
+    meet?: boolean;
+    /**
+     * Location
+     */
+    location?: string;
+    /**
+     * Reminders
+     */
+    reminders?: Array<number>;
+    /**
+     * Reminders Use Default
+     */
+    reminders_use_default?: boolean;
+    /**
+     * Guests
+     */
+    guests?: Array<string>;
+    /**
+     * Guests Can Modify
+     */
+    guests_can_modify?: boolean;
+    /**
+     * Guests Can Invite Others
+     */
+    guests_can_invite_others?: boolean;
+    /**
+     * Guests Can See Other Guests
+     */
+    guests_can_see_other_guests?: boolean;
+    /**
+     * Show As
+     */
+    show_as?: 'busy' | 'free';
+    /**
+     * Visibility
+     */
+    visibility?: 'default' | 'public' | 'private' | 'confidential';
+    /**
+     * Kind
+     */
+    kind: 'viewing' | 'call' | 'follow_up' | 'deal_date' | 'deadline';
+    /**
+     * Detail
+     */
+    detail?: string;
+    /**
+     * Lead Id
+     */
+    lead_id?: number | null;
+    /**
+     * Listing Id
+     */
+    listing_id?: string | null;
+};
+
+/**
+ * CalendarEventMove
+ */
+export type CalendarEventMove = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time?: string | null;
+};
+
+/**
+ * CalendarEventResponse
+ */
+export type CalendarEventResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time: string | null;
+    /**
+     * End Date
+     */
+    end_date: string;
+    /**
+     * End Time
+     */
+    end_time: string | null;
+    /**
+     * All Day
+     */
+    all_day: boolean;
+    /**
+     * Repeat
+     */
+    repeat: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+    /**
+     * Meet
+     */
+    meet: boolean;
+    /**
+     * Meet Link
+     */
+    meet_link: string | null;
+    /**
+     * Location
+     */
+    location: string;
+    /**
+     * Reminders
+     */
+    reminders: Array<number>;
+    /**
+     * Reminders Use Default
+     */
+    reminders_use_default: boolean;
+    /**
+     * Guests
+     */
+    guests: Array<string>;
+    /**
+     * Guests Can Modify
+     */
+    guests_can_modify: boolean;
+    /**
+     * Guests Can Invite Others
+     */
+    guests_can_invite_others: boolean;
+    /**
+     * Guests Can See Other Guests
+     */
+    guests_can_see_other_guests: boolean;
+    /**
+     * Show As
+     */
+    show_as: 'busy' | 'free';
+    /**
+     * Visibility
+     */
+    visibility: 'default' | 'public' | 'private' | 'confidential';
+    /**
+     * Kind
+     */
+    kind: 'viewing' | 'call' | 'follow_up' | 'deal_date' | 'deadline';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Agent
+     */
+    agent: string;
+    /**
+     * Lead Id
+     */
+    lead_id: number | null;
+    /**
+     * Deal Id
+     */
+    deal_id: string | null;
+    /**
+     * Listing Id
+     */
+    listing_id: string | null;
+    /**
+     * Owner Id
+     */
+    owner_id: string | null;
+    /**
+     * Context
+     */
+    context: string | null;
+    /**
+     * Record
+     */
+    record: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Outcome
+     */
+    outcome: string | null;
+    /**
+     * Rescheduled From
+     */
+    rescheduled_from: Array<CalendarSlot>;
+    /**
+     * Google Sync Status
+     */
+    google_sync_status: 'local' | 'pending' | 'synced' | 'error';
+};
+
+/**
+ * CalendarSlot
+ */
+export type CalendarSlot = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time: string | null;
+};
+
+/**
+ * CalendarViewingCreate
+ */
+export type CalendarViewingCreate = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time: string;
+    /**
+     * Listing Id
+     */
+    listing_id?: string | null;
+    /**
+     * Note
+     */
+    note?: string;
+};
+
+/**
  * CancelViewing
  */
 export type CancelViewing = {
@@ -7014,6 +7286,50 @@ export type GeoPolygon = {
      * Coordinates
      */
     coordinates: Array<Array<number>>;
+};
+
+/**
+ * GoogleCalendarComplete
+ *
+ * What Google handed back to the browser; the signed-in user posts it to finish sign-in.
+ */
+export type GoogleCalendarComplete = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * State
+     */
+    state: string;
+};
+
+/**
+ * GoogleCalendarConnectResponse
+ */
+export type GoogleCalendarConnectResponse = {
+    /**
+     * Authorization Url
+     */
+    authorization_url: string;
+};
+
+/**
+ * GoogleCalendarStatus
+ */
+export type GoogleCalendarStatus = {
+    /**
+     * Configured
+     */
+    configured: boolean;
+    /**
+     * Connected
+     */
+    connected: boolean;
+    /**
+     * Email
+     */
+    email?: string | null;
 };
 
 /**
@@ -15773,6 +16089,320 @@ export type AssistantActionsCancelActionResponses = {
 };
 
 export type AssistantActionsCancelActionResponse = AssistantActionsCancelActionResponses[keyof AssistantActionsCancelActionResponses];
+
+export type CrmCrmGoogleCalendarDisconnectData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/calendar/google';
+};
+
+export type CrmCrmGoogleCalendarDisconnectResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmGoogleCalendarDisconnectResponse = CrmCrmGoogleCalendarDisconnectResponses[keyof CrmCrmGoogleCalendarDisconnectResponses];
+
+export type CrmCrmGoogleCalendarStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/calendar/google';
+};
+
+export type CrmCrmGoogleCalendarStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoogleCalendarStatus;
+};
+
+export type CrmCrmGoogleCalendarStatusResponse = CrmCrmGoogleCalendarStatusResponses[keyof CrmCrmGoogleCalendarStatusResponses];
+
+export type CrmCrmGoogleCalendarConnectData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/calendar/google/connect';
+};
+
+export type CrmCrmGoogleCalendarConnectResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoogleCalendarConnectResponse;
+};
+
+export type CrmCrmGoogleCalendarConnectResponse = CrmCrmGoogleCalendarConnectResponses[keyof CrmCrmGoogleCalendarConnectResponses];
+
+export type CrmCrmGoogleCalendarCompleteData = {
+    body: GoogleCalendarComplete;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/calendar/google/complete';
+};
+
+export type CrmCrmGoogleCalendarCompleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmGoogleCalendarCompleteError = CrmCrmGoogleCalendarCompleteErrors[keyof CrmCrmGoogleCalendarCompleteErrors];
+
+export type CrmCrmGoogleCalendarCompleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoogleCalendarStatus;
+};
+
+export type CrmCrmGoogleCalendarCompleteResponse = CrmCrmGoogleCalendarCompleteResponses[keyof CrmCrmGoogleCalendarCompleteResponses];
+
+export type CrmCrmCalendarEventsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Start
+         */
+        start: string;
+        /**
+         * End
+         */
+        end: string;
+    };
+    url: '/api/v1/crm/calendar/events';
+};
+
+export type CrmCrmCalendarEventsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCalendarEventsError = CrmCrmCalendarEventsErrors[keyof CrmCrmCalendarEventsErrors];
+
+export type CrmCrmCalendarEventsResponses = {
+    /**
+     * Response Crm-Crm Calendar Events
+     *
+     * Successful Response
+     */
+    200: Array<CalendarEventResponse>;
+};
+
+export type CrmCrmCalendarEventsResponse = CrmCrmCalendarEventsResponses[keyof CrmCrmCalendarEventsResponses];
+
+export type CrmCrmCreateCalendarEventData = {
+    body: CalendarEventCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/calendar/events';
+};
+
+export type CrmCrmCreateCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCreateCalendarEventError = CrmCrmCreateCalendarEventErrors[keyof CrmCrmCreateCalendarEventErrors];
+
+export type CrmCrmCreateCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    201: CalendarEventResponse;
+};
+
+export type CrmCrmCreateCalendarEventResponse = CrmCrmCreateCalendarEventResponses[keyof CrmCrmCreateCalendarEventResponses];
+
+export type CrmCrmDeleteCalendarEventData = {
+    body?: never;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/events/{event_id}';
+};
+
+export type CrmCrmDeleteCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDeleteCalendarEventError = CrmCrmDeleteCalendarEventErrors[keyof CrmCrmDeleteCalendarEventErrors];
+
+export type CrmCrmDeleteCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmDeleteCalendarEventResponse = CrmCrmDeleteCalendarEventResponses[keyof CrmCrmDeleteCalendarEventResponses];
+
+export type CrmCrmCalendarEventData = {
+    body?: never;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/events/{event_id}';
+};
+
+export type CrmCrmCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCalendarEventError = CrmCrmCalendarEventErrors[keyof CrmCrmCalendarEventErrors];
+
+export type CrmCrmCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    200: CalendarEventResponse;
+};
+
+export type CrmCrmCalendarEventResponse = CrmCrmCalendarEventResponses[keyof CrmCrmCalendarEventResponses];
+
+export type CrmCrmMoveCalendarEventData = {
+    body: CalendarEventMove;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/events/{event_id}';
+};
+
+export type CrmCrmMoveCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmMoveCalendarEventError = CrmCrmMoveCalendarEventErrors[keyof CrmCrmMoveCalendarEventErrors];
+
+export type CrmCrmMoveCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    200: CalendarEventResponse;
+};
+
+export type CrmCrmMoveCalendarEventResponse = CrmCrmMoveCalendarEventResponses[keyof CrmCrmMoveCalendarEventResponses];
+
+export type CrmCrmEditCalendarEventData = {
+    body: CalendarEventCreate;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/events/{event_id}';
+};
+
+export type CrmCrmEditCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmEditCalendarEventError = CrmCrmEditCalendarEventErrors[keyof CrmCrmEditCalendarEventErrors];
+
+export type CrmCrmEditCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    200: CalendarEventResponse;
+};
+
+export type CrmCrmEditCalendarEventResponse = CrmCrmEditCalendarEventResponses[keyof CrmCrmEditCalendarEventResponses];
+
+export type CrmCrmBookCalendarViewingData = {
+    body: CalendarViewingCreate;
+    path: {
+        /**
+         * Lead Id
+         */
+        lead_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/viewings/{lead_id}';
+};
+
+export type CrmCrmBookCalendarViewingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmBookCalendarViewingError = CrmCrmBookCalendarViewingErrors[keyof CrmCrmBookCalendarViewingErrors];
+
+export type CrmCrmBookCalendarViewingResponses = {
+    /**
+     * Successful Response
+     */
+    201: CalendarEventResponse;
+};
+
+export type CrmCrmBookCalendarViewingResponse = CrmCrmBookCalendarViewingResponses[keyof CrmCrmBookCalendarViewingResponses];
+
+export type CrmCrmCompleteCalendarEventData = {
+    body?: never;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/calendar/events/{event_id}/done';
+};
+
+export type CrmCrmCompleteCalendarEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCompleteCalendarEventError = CrmCrmCompleteCalendarEventErrors[keyof CrmCrmCompleteCalendarEventErrors];
+
+export type CrmCrmCompleteCalendarEventResponses = {
+    /**
+     * Successful Response
+     */
+    200: CalendarEventResponse;
+};
+
+export type CrmCrmCompleteCalendarEventResponse = CrmCrmCompleteCalendarEventResponses[keyof CrmCrmCompleteCalendarEventResponses];
 
 export type CrmCrmInboundEnquiriesData = {
     body?: never;

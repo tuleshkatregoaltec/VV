@@ -61,6 +61,10 @@ LIGHT_ROUTES = {
     ("GET", "/api/v1/crm/assignment/scope"),
     ("GET", "/api/v1/crm/inbound/enquiries/{enquiry_id}/assignments"),
     ("GET", "/api/v1/crm/contact-import-requests"),
+    # Calendar: no Google call, only a Postgres row or a Redis key. Syncing stays expensive.
+    ("GET", "/api/v1/crm/calendar/google"),
+    ("POST", "/api/v1/crm/calendar/google/connect"),
+    ("GET", "/api/v1/crm/calendar/events/{event_id}"),
 }
 
 

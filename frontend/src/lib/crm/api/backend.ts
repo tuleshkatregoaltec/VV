@@ -83,12 +83,14 @@ import {
 	STATUS_INFO
 } from '../ownerImportReport'
 import type {
+	CalendarEvent,
 	Chip,
 	CollectionListParams,
 	CompanyListingAgentInventory,
 	CompanyListingCompany,
 	CompanyListingFilter,
 	DocumentListParams,
+	EventCreate,
 	FeedArea,
 	FeedPreferences,
 	FeedSummary,
@@ -2773,3 +2775,38 @@ export const downloadDocument = (id: string) =>
 /** Same short-lived link, but the browser shows the PDF instead of saving it. */
 export const previewDocument = (id: string) =>
 	client.post<DocumentDownloadResponse>(`${CRM}/documents/${id}/download?inline=true`, {})
+
+/* ── Calendar (Google) ── */
+
+export interface GoogleCalendarStatus {
+	configured: boolean
+	connected: boolean
+	email: string | null
+}
+
+export const googleCalendarStatus = () => client.get<GoogleCalendarStatus>(`${CRM}/calendar/google`)
+/** Starts Google sign-in; the link's state is single-use and bound to the signed-in user. */
+export const connectGoogleCalendar = () =>
+	client.post<{ authorization_url: string }>(`${CRM}/calendar/google/connect`)
+/** Finishes sign-in with what Google handed back (see crm/calendar.ts `googleReturn`). */
+export const completeGoogleCalendar = (code: string, state: string) =>
+	client.post<GoogleCalendarStatus>(`${CRM}/calendar/google/complete`, { code, state })
+export const disconnectGoogleCalendar = () => client.delete<void>(`${CRM}/calendar/google`)
+export const listCalendarEvents = (from: string, to: string) =>
+	client.get<CalendarEvent[]>(`${CRM}/calendar/events?start=${from}&end=${to}`)
+export const getCalendarEvent = (id: number) =>
+	client.get<CalendarEvent>(`${CRM}/calendar/events/${id}`)
+export const createCalendarEvent = (body: EventCreate) =>
+	client.post<CalendarEvent>(`${CRM}/calendar/events`, body)
+export const bookCalendarViewing = (
+	leadId: number,
+	body: { date: string; time: string | null; listing_id?: string | null; note?: string }
+) => client.post<CalendarEvent>(`${CRM}/calendar/viewings/${leadId}`, body)
+export const moveCalendarEvent = (id: number, date: string, time: string | null) =>
+	client.patch<CalendarEvent>(`${CRM}/calendar/events/${id}`, { date, time })
+export const updateCalendarEvent = (id: number, body: EventCreate) =>
+	client.put<CalendarEvent>(`${CRM}/calendar/events/${id}`, body)
+export const completeCalendarEvent = (id: number) =>
+	client.post<CalendarEvent>(`${CRM}/calendar/events/${id}/done`)
+export const deleteCalendarEvent = (id: number) =>
+	client.delete<void>(`${CRM}/calendar/events/${id}`)

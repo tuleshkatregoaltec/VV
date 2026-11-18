@@ -78,6 +78,33 @@ class RedisCache:
         except Exception as e:
             logger.error("Failed to set cache for key %s: %s", key, str(e))
 
+    async def put_new(self, key: str, value: Any, expire: int | None = None) -> bool:
+        """Store a JSON value only if the key is new; False when it exists or Redis failed.
+
+        Unlike `set`, the caller learns whether the value was stored (single-use tokens).
+        """
+        if not self.redis:
+            return False
+        try:
+            payload = json.dumps(value, default=self._json_default, allow_nan=False)
+            return bool(
+                await self.redis.set(key, payload, ex=self._resolve_expire(expire), nx=True)
+            )
+        except Exception as e:
+            logger.error("Failed to store new key %s: %s", key, str(e))
+            return False
+
+    async def take(self, key: str) -> Any | None:
+        """Read and delete a JSON value in one atomic step (GETDEL); None if absent."""
+        if not self.redis:
+            return None
+        try:
+            value = await self.redis.getdel(key)
+        except Exception as e:
+            logger.error("Failed to take key %s: %s", key, str(e))
+            return None
+        return None if value is None else json.loads(value)
+
     async def delete(self, key: str) -> None:
         """Delete a cached key."""
         if not self.redis:

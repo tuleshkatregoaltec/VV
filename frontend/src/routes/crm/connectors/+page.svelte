@@ -9,6 +9,12 @@ import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 <PageHeader title="Connectors" facts="Email, calendar and WhatsApp" />
 <section class="card connector-preview">
 	<span class="chip green">Available</span>
+	<h2>Connect your Google Calendar.</h2>
+	<p>Viewings, calls and follow-ups you add in the CRM appear in your own Google Calendar, and changes made there come back.</p>
+	<a class="btn" href="/crm/calendar"><CalendarDays size={15} /> Open Calendar</a>
+</section>
+<section class="card connector-preview">
+	<span class="chip green">Available</span>
 	<h2>Connect your WhatsApp.</h2>
 	<p>Answer buyer enquiries from your own WhatsApp number. Choose who is never read, then turn replies on when you are ready.</p>
 	<a class="btn" href="/crm/whatsapp"><MessageCircle size={15} /> Connect WhatsApp</a>

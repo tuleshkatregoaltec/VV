@@ -13,6 +13,7 @@ from app.assistant_actions.models import (
 from app.billing.models import Subscription
 from app.chat.models import ChatTurnLease, Conversation, Message
 from app.crm.audit_models import CrmMutationAudit
+from app.crm.calendar_models import CrmCalendarConnection, CrmCalendarEvent
 from app.crm.collection_models import CrmCollection, CrmCollectionItem
 from app.crm.document_models import CrmGeneratedDocument, CrmListingDocumentInfo
 from app.crm.import_job_models import CrmImportJob
@@ -104,6 +105,8 @@ __all__ = [
     "CrmCompanyListingSource",
     "CrmListingDocumentInfo",
     "CrmGeneratedDocument",
+    "CrmCalendarConnection",
+    "CrmCalendarEvent",
     "CrmCollection",
     "CrmCollectionItem",
     "CrmContactImport",

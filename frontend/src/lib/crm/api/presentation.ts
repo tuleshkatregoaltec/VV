@@ -424,7 +424,24 @@ export function createPresentationCrm(live: CrmApi, today: string): CrmApi {
 			owner_id: null,
 			context: `${lead.lead_type} · ${lead.source_short}`,
 			record: { kind: 'lead', id: String(lead.id), label: lead.name },
-			outcome: day < 0 && i % 2 ? 'Shortlist confirmed; next viewing arranged' : null
+			outcome: day < 0 && i % 2 ? 'Shortlist confirmed; next viewing arranged' : null,
+			end_date: date(day),
+			end_time: `${11 + (i % 8)}:00`,
+			all_day: false,
+			repeat: 'none',
+			meet: false,
+			meet_link: null,
+			location: '',
+			reminders: [30],
+			reminders_use_default: false,
+			guests: [],
+			guests_can_modify: false,
+			guests_can_invite_others: true,
+			guests_can_see_other_guests: true,
+			show_as: 'busy',
+			visibility: 'default',
+			rescheduled_from: [],
+			google_sync_status: 'local'
 		}
 	})
 	const renewals: T.RenewalDetail[] = listings.slice(0, 18).map((l, i) => ({

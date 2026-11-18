@@ -2,6 +2,10 @@
 import { createQuery } from '@tanstack/svelte-query'
 import ArrowLeft from 'lucide-svelte/icons/arrow-left'
 import ArrowRight from 'lucide-svelte/icons/arrow-right'
+import RefreshCw from 'lucide-svelte/icons/refresh-cw'
+import { afterNavigate, replaceState } from '$app/navigation'
+import { crm } from '$lib/crm/api'
+import { calendarDays, googleReturn } from '$lib/crm/calendar'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
@@ -24,26 +28,76 @@ import {
 import { crmQueries } from '$lib/crm/queries'
 import { phone } from '$lib/crm/stores/media.svelte'
 import { openLead, panel } from '$lib/crm/stores/panel.svelte'
+import { toast } from '$lib/crm/stores/toast.svelte'
 import { ui } from '$lib/crm/stores/ui.svelte'
-import { errorText } from '$lib/crm/write'
+import { errorText, write } from '$lib/crm/write'
 
 const me = createQuery(() => crmQueries.me())
 const today = $derived(me.data?.today ?? '')
 const month = $derived(ui.calMonth || (today ? monthOf(today) : ''))
 const grid = $derived(month ? monthGrid(month) : [])
+const googleCalendar = createQuery(() => crmQueries.googleCalendar())
+// Loading events pulls Google's changes, so coming back to the tab picks up edits made there.
 const events = createQuery(() => ({
 	...crmQueries.events(grid[0] ?? '', grid[41] ?? ''),
-	enabled: grid.length > 0
+	enabled: grid.length > 0,
+	refetchOnWindowFocus: Boolean(googleCalendar.data?.connected)
 }))
 const side = createQuery(() => crmQueries.calendarSide())
 
-const inMonth = $derived((events.data ?? []).filter((e) => monthOf(e.date) === month))
-const byDay = $derived.by(() => {
-	const m = new Map<string, typeof inMonth>()
-	for (const e of events.data ?? []) m.set(e.date, [...(m.get(e.date) ?? []), e])
-	return m
+async function syncGoogleCalendar() {
+	const r = await events.refetch()
+	if (r.isError) toast.show(errorText(r.error), { tone: 'error' })
+	else toast.show('Synced with Google Calendar')
+}
+
+async function connectGoogleCalendar() {
+	const response = await write({
+		call: crm.googleCalendar.connect,
+		success: null,
+		undoable: false
+	})
+	if (response) window.location.assign(response.authorization_url)
+}
+
+// Back from Google: finish sign-in as the signed-in user, and drop the one-time code from the URL.
+// afterNavigate, not onMount: replaceState needs the router, which is not ready on a first load.
+afterNavigate(() => {
+	const back = googleReturn(window.location.hash)
+	if (!back) return
+	replaceState(`${window.location.pathname}${window.location.search}`, {})
+	if ('error' in back) {
+		toast.show('Google Calendar was not connected', { tone: 'error' })
+		return
+	}
+	void write({
+		call: () => crm.googleCalendar.complete(back.code, back.state),
+		success: (s) =>
+			s.email ? `Google Calendar connected (${s.email})` : 'Google Calendar connected',
+		undoable: false
+	})
 })
-const agendaDays = $derived([...new Set(inMonth.map((e) => e.date))].sort())
+
+async function disconnectGoogleCalendar() {
+	await write({
+		call: () => crm.googleCalendar.disconnect(),
+		success: 'Google Calendar disconnected',
+		undoable: false
+	})
+}
+
+const inMonth = $derived(
+	(events.data ?? []).filter(
+		(e) => monthOf(e.date) <= month && monthOf(e.end_date || e.date) >= month
+	)
+)
+const syncIssue = $derived(
+	googleCalendar.data?.connected &&
+		(events.data ?? []).some((event) => event.google_sync_status === 'error')
+)
+// A rescheduled event also leaves a struck-through entry on each slot it was moved from.
+const byDay = $derived(calendarDays(events.data ?? [], grid[0] ?? '', grid[41] ?? ''))
+const agendaDays = $derived([...byDay.keys()].filter((d) => monthOf(d) === month).sort())
 
 const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 </script>
@@ -58,6 +112,26 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 >
 	{#snippet right()}
 		<div class="flex gap-2">
+			{#if googleCalendar.data?.connected}
+				<span class="small muted" title={googleCalendar.data.email ?? ''}>Google connected</span>
+				<button
+					type="button"
+					class="btn ghost sm"
+					disabled={events.isFetching}
+					title="Pull the latest changes from Google Calendar"
+					onclick={syncGoogleCalendar}
+				>
+					<RefreshCw size={14} class={events.isFetching ? 'sync-spin' : ''} />
+					{events.isFetching ? 'Syncing…' : 'Sync'}
+				</button>
+				<button type="button" class="btn ghost sm" onclick={disconnectGoogleCalendar}>Disconnect</button>
+			{:else if googleCalendar.data?.configured}
+				<button type="button" class="btn ghost sm" onclick={connectGoogleCalendar}>
+					Connect Google Calendar
+				</button>
+			{:else}
+				<span class="small muted" title="Set Google OAuth credentials in backend environment">Google Calendar not configured</span>
+			{/if}
 			<button type="button" class="btn ghost sm" aria-label="Previous month" onclick={() => shift(-1)}>
 				<ArrowLeft size={14} />
 			</button>
@@ -68,6 +142,10 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 		</div>
 	{/snippet}
 </PageHeader>
+
+{#if syncIssue}
+	<ErrorLine message="Some calendar events haven't synced to Google yet." onretry={() => events.refetch()} bar />
+{/if}
 
 <div class="legend" aria-label="Legend">
 	{#each EVENT_KIND_ORDER as k (k)}
@@ -90,7 +168,9 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 						{dayLabel(date)}{date === today ? ' · today' : ''}
 					</div>
 					<div class="list">
-						{#each byDay.get(date) ?? [] as e (e.id)}<EventItem event={e} />{/each}
+						{#each byDay.get(date) ?? [] as d (d.key)}
+							<EventItem event={d.event} movedFrom={d.moved ? d.time ?? 'Due' : null} />
+						{/each}
 					</div>
 				{:else}
 					<Empty text="Nothing this month.">
@@ -118,15 +198,17 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 									onclick={() => panel.open({ kind: 'new-task', date })}
 								></button>
 								<span class="dn">{dayOfMonth(date)}</span>
-								{#each evs.slice(0, 3) as e (e.id)}
+								{#each evs.slice(0, 3) as d (d.key)}
 									<button
 										type="button"
-										class="ev"
-										style:--e={EVENT_KINDS[e.kind].color}
-										title={e.title}
-										onclick={() => openEvent(e)}
+										class={['ev', d.moved && 'moved']}
+										style:--e={EVENT_KINDS[d.event.kind].color}
+										title={d.moved
+											? `${d.event.title} · rescheduled to ${shortDate(d.event.date)}${d.event.time ? ` ${d.event.time}` : ''}`
+											: d.event.title}
+										onclick={() => openEvent(d.event)}
 									>
-										{e.time ? `${e.time} ` : ''}{e.title}
+										{d.time ? `${d.time} ` : ''}{d.event.title}
 									</button>
 								{/each}
 								{#if evs.length > 3}
@@ -189,3 +271,14 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 		</section>
 	</div>
 </div>
+
+<style>
+	:global(.sync-spin) {
+		animation: calendar-spin 0.9s linear infinite;
+	}
+	@keyframes calendar-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+</style>
