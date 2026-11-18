@@ -7,10 +7,6 @@ from conftest import get_app
 @pytest.mark.parametrize(
     "method,path",
     [
-        ("GET", "/api/v1/crm/email/status"),
-        ("POST", "/api/v1/crm/email/send"),
-        ("POST", "/api/v1/crm/email/brevo-webhook"),
-        ("POST", "/api/v1/crm/email/brevo-inbound"),
         ("GET", "/api/v1/crm/whatsapp/status"),
         ("POST", "/api/v1/crm/whatsapp/webhook"),
         ("GET", "/api/v1/crm/assistant/conversations"),
@@ -26,10 +22,9 @@ async def test_unfinished_connector_endpoints_are_unavailable_even_to_signed_in_
 
 
 def test_no_prototype_route_is_registered_even_if_hidden_from_openapi():
-    # Calendar was restored with a user-bound Google sign-in
-    # (tests/api/test_crm_calendar_email_routes.py); these prototypes stay out.
+    # Email and calendar were restored with lead-assignment scoping and a user-bound Google
+    # sign-in (tests/api/test_crm_calendar_email_routes.py); these prototypes stay out.
     forbidden = (
-        "/api/v1/crm/email",
         "/api/v1/crm/whatsapp",
         "/api/v1/crm/assistant",
     )

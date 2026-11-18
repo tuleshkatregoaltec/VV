@@ -26,6 +26,7 @@ from app.crm import (
     agent_languages,
     assignment,
     calendar_service,
+    email_store,
     oversight,
     owner_import_requests,
     routing,
@@ -75,6 +76,32 @@ from app.crm.documents import (
     get_document_info,
     list_documents,
     save_document_info,
+)
+from app.crm.email_models import (
+    EmailInboundListResponse,
+    EmailLeadListResponse,
+    EmailSendBatchResponse,
+    EmailSendCreate,
+    EmailSendListResponse,
+    EmailStatusResponse,
+    EmailSyncResponse,
+    EmailTemplateResponse,
+    EmailTemplateWrite,
+    EmailThreadItem,
+)
+from app.crm.email_pipeline import (
+    create_template,
+    delete_send,
+    delete_template,
+    email_status,
+    lead_thread,
+    list_email_leads,
+    list_inbound,
+    list_sends,
+    list_templates,
+    send_emails,
+    sync_events,
+    update_template,
 )
 from app.crm.execution import expensive_crm, light_crm
 from app.crm.import_models import (
@@ -594,6 +621,208 @@ async def crm_delete_calendar_event(
             status_code=502, detail="Could not delete the Google Calendar event"
         ) from exc
     return Response(status_code=204)
+
+
+# ── Connectors › Email (Brevo) ──
+# Templates are shared by the organization. Leads, sends, tracking, the inbox and a lead's
+# thread follow lead assignment: an agent sees mail about leads they may see.
+
+
+async def _email_scope(db: AsyncSession, auth: AuthContext) -> assignment.AssignmentScope:
+    user_id, organization_id = _auth_ids(auth)
+    return await assignment.load_scope(db, organization_id, user_id)
+
+
+async def _visible_mail_leads(
+    db: AsyncSession, scope: assignment.AssignmentScope
+) -> set[int] | None:
+    """The leads with mail this user may see; None for an administrator (no limit)."""
+    if scope.organization_admin:
+        return None
+    store = await email_store.read()
+    org = scope.organization_id
+    ids = {s.enquiry_id for s in store.sends if s.organization_id == org and s.enquiry_id}
+    ids |= {m.enquiry_id for m in store.inbound if m.organization_id == org and m.enquiry_id}
+    return await assignment.visible_ids(db, scope, ids)
+
+
+@router.get("/email/status", response_model=EmailStatusResponse, dependencies=LIGHT_LANE)
+async def crm_email_status(context: AuthContext = Depends(require_active_subscription)):
+    """Whether Brevo is configured on the server, and the sender leads see."""
+    return email_status()
+
+
+@router.get("/email/leads", response_model=EmailLeadListResponse, dependencies=EXPENSIVE_LANE)
+async def crm_email_leads(
+    search: str | None = Query(default=None, max_length=160),
+    intent: str | None = Query(default=None, pattern="^(unknown|buy|rent|sell|let)$"),
+    source: str | None = Query(default=None, max_length=120),
+    ids: list[int] | None = Query(default=None, max_length=100),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Leads this user may see whose contact has an email, each with its latest email status.
+
+    `ids` narrows to those leads (Compose showing who it will send to).
+    """
+    scope = await _email_scope(db, context)
+    return await list_email_leads(
+        db,
+        organization_id=scope.organization_id,
+        search=search,
+        intent=intent,
+        source=source,
+        limit=limit,
+        offset=offset,
+        ids=ids,
+        visible=assignment.visible_clause(scope),
+    )
+
+
+@router.get("/email/templates", response_model=list[EmailTemplateResponse], dependencies=LIGHT_LANE)
+async def crm_email_templates(context: AuthContext = Depends(require_active_subscription)):
+    """The organization's email templates, shared by every agent."""
+    _, organization_id = _auth_ids(context)
+    return await list_templates(organization_id=organization_id)
+
+
+@router.post(
+    "/email/templates",
+    response_model=EmailTemplateResponse,
+    status_code=201,
+    dependencies=LIGHT_LANE,
+)
+async def crm_create_email_template(
+    payload: EmailTemplateWrite,
+    context: AuthContext = Depends(require_active_subscription),
+):
+    user_id, organization_id = _auth_ids(context)
+    return await create_template(organization_id=organization_id, user_id=user_id, payload=payload)
+
+
+@router.put(
+    "/email/templates/{template_id}", response_model=EmailTemplateResponse, dependencies=LIGHT_LANE
+)
+async def crm_update_email_template(
+    template_id: int,
+    payload: EmailTemplateWrite,
+    context: AuthContext = Depends(require_active_subscription),
+):
+    user_id, organization_id = _auth_ids(context)
+    return await update_template(
+        organization_id=organization_id,
+        user_id=user_id,
+        template_id=template_id,
+        payload=payload,
+    )
+
+
+@router.delete("/email/templates/{template_id}", status_code=204, dependencies=LIGHT_LANE)
+async def crm_delete_email_template(
+    template_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+):
+    _, organization_id = _auth_ids(context)
+    await delete_template(organization_id=organization_id, template_id=template_id)
+    return Response(status_code=204)
+
+
+@router.post("/email/send", response_model=EmailSendBatchResponse, dependencies=EXPENSIVE_LANE)
+async def crm_send_email(
+    payload: EmailSendCreate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Send one personalised email per lead through Brevo; each lands on the lead's history.
+
+    Only leads this user may see; any other id is reported as not found.
+    """
+    scope = await _email_scope(db, context)
+    return await send_emails(
+        db,
+        organization_id=scope.organization_id,
+        user_id=scope.user_id,
+        payload=payload,
+        visible=assignment.visible_clause(scope),
+    )
+
+
+@router.get("/email/sends", response_model=EmailSendListResponse, dependencies=EXPENSIVE_LANE)
+async def crm_email_sends(
+    status: str | None = Query(default=None, max_length=40),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Tracking: sends to leads this user may see, newest first, with their delivery events."""
+    scope = await _email_scope(db, context)
+    return await list_sends(
+        organization_id=scope.organization_id,
+        status=status,
+        limit=limit,
+        offset=offset,
+        visible_lead_ids=await _visible_mail_leads(db, scope),
+    )
+
+
+@router.delete("/email/sends/{send_id}", status_code=204, dependencies=EXPENSIVE_LANE)
+async def crm_delete_email_send(
+    send_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Remove one sent email from Tracking (and from the lead's Conversation tab)."""
+    scope = await _email_scope(db, context)
+    await delete_send(
+        organization_id=scope.organization_id,
+        send_id=send_id,
+        visible_lead_ids=await _visible_mail_leads(db, scope),
+    )
+    return Response(status_code=204)
+
+
+@router.post("/email/tracking/sync", response_model=EmailSyncResponse, dependencies=EXPENSIVE_LANE)
+async def crm_sync_email_events(context: AuthContext = Depends(require_active_subscription)):
+    """Pull delivery events from Brevo (the webhook cannot reach localhost)."""
+    _, organization_id = _auth_ids(context)
+    return await sync_events(organization_id=organization_id)
+
+
+@router.get("/email/inbound", response_model=EmailInboundListResponse, dependencies=EXPENSIVE_LANE)
+async def crm_email_inbound(
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Received emails about leads this user may see, newest first."""
+    scope = await _email_scope(db, context)
+    return await list_inbound(
+        db,
+        organization_id=scope.organization_id,
+        limit=limit,
+        offset=offset,
+        visible_lead_ids=await _visible_mail_leads(db, scope),
+    )
+
+
+@router.get(
+    "/email/leads/{enquiry_id}/thread",
+    response_model=list[EmailThreadItem],
+    dependencies=LIGHT_LANE,
+)
+async def crm_email_lead_thread(
+    enquiry_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Every email sent to and received from one lead, oldest first."""
+    await _visible_lead(db, context, enquiry_id)
+    _, organization_id = _auth_ids(context)
+    return await lead_thread(organization_id=organization_id, enquiry_id=enquiry_id)
 
 
 @router.post(

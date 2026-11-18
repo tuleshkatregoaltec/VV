@@ -72,6 +72,20 @@ class Settings(BaseSettings):
     # One Fernet key encrypting stored Google refresh tokens.
     GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY: str | None = None
 
+    # Brevo (CRM › Connectors › Email). One Vitevue account. Leave unset to keep it disabled.
+    BREVO_API_KEY: str | None = None
+    BREVO_SENDER_EMAIL: str | None = None  # must be a verified sender in Brevo
+    BREVO_SENDER_NAME: str | None = None
+    BREVO_REPLY_TO: str | None = None
+    BREVO_WEBHOOK_SECRET: str | None = None  # POST /api/v1/crm/email/brevo-webhook?secret=...
+    # Inbound parsing: mail to this subdomain (MX → Brevo) is posted to /email/brevo-inbound.
+    BREVO_INBOUND_DOMAIN: str | None = None
+    # Phase 1 has one company: an email from an unknown sender becomes its lead.
+    BREVO_INBOUND_ORGANIZATION_ID: str | None = None
+    # Sends, templates and received emails live in this local JSON file (no tables yet): one
+    # backend process only, not for a multi-worker deployment.
+    CRM_EMAIL_STORE_PATH: str | None = None
+
     # Security
     SESSION_SECRET: str  # Bitwarden Secrets
     SERVICE_API_KEY: str  # Bitwarden Secrets

@@ -90,6 +90,17 @@ import type {
 	CompanyListingCompany,
 	CompanyListingFilter,
 	DocumentListParams,
+	EmailInboundList,
+	EmailLeadList,
+	EmailLeadParams,
+	EmailSendBatch,
+	EmailSendList,
+	EmailSendStatus,
+	EmailStatus,
+	EmailSync,
+	EmailTemplate,
+	EmailTemplateInput,
+	EmailThreadItem,
 	EventCreate,
 	FeedArea,
 	FeedPreferences,
@@ -2810,3 +2821,43 @@ export const completeCalendarEvent = (id: number) =>
 	client.post<CalendarEvent>(`${CRM}/calendar/events/${id}/done`)
 export const deleteCalendarEvent = (id: number) =>
 	client.delete<void>(`${CRM}/calendar/events/${id}`)
+
+/* ── Connectors › Email (Brevo) ── */
+
+export const emailStatus = () => client.get<EmailStatus>(`${CRM}/email/status`)
+
+export function emailLeads(p: EmailLeadParams = {}) {
+	const params = new URLSearchParams()
+	if (p.search?.trim()) params.set('search', p.search.trim())
+	if (p.intent) params.set('intent', p.intent)
+	if (p.source) params.set('source', p.source)
+	for (const id of p.ids ?? []) params.append('ids', String(id))
+	const q = params.toString()
+	return client.get<EmailLeadList>(`${CRM}/email/leads${q ? `?${q}` : ''}`)
+}
+
+export const sendEmails = (body: { enquiry_ids: number[]; subject: string; body: string }) =>
+	client.post<EmailSendBatch>(`${CRM}/email/send`, body)
+
+export const emailSends = (status: EmailSendStatus | '' = '') =>
+	client.get<EmailSendList>(`${CRM}/email/sends${status ? `?status=${status}` : ''}`)
+
+export const syncEmailEvents = () => client.post<EmailSync>(`${CRM}/email/tracking/sync`, {})
+
+export const emailTemplates = () => client.get<EmailTemplate[]>(`${CRM}/email/templates`)
+
+export const createEmailTemplate = (body: EmailTemplateInput) =>
+	client.post<EmailTemplate>(`${CRM}/email/templates`, body)
+
+export const updateEmailTemplate = (id: number, body: EmailTemplateInput) =>
+	client.put<EmailTemplate>(`${CRM}/email/templates/${id}`, body)
+
+export const deleteEmailTemplate = (id: number) =>
+	client.delete<void>(`${CRM}/email/templates/${id}`)
+
+export const emailInbound = () => client.get<EmailInboundList>(`${CRM}/email/inbound`)
+
+export const emailThread = (enquiryId: number) =>
+	client.get<EmailThreadItem[]>(`${CRM}/email/leads/${enquiryId}/thread`)
+
+export const deleteEmailSend = (id: number) => client.delete<void>(`${CRM}/email/sends/${id}`)

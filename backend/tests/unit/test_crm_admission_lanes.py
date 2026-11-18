@@ -61,10 +61,17 @@ LIGHT_ROUTES = {
     ("GET", "/api/v1/crm/assignment/scope"),
     ("GET", "/api/v1/crm/inbound/enquiries/{enquiry_id}/assignments"),
     ("GET", "/api/v1/crm/contact-import-requests"),
-    # Calendar: no Google call, only a Postgres row or a Redis key. Syncing stays expensive.
+    # Calendar and email: no Google or Brevo call, only a Postgres row, a Redis key or the
+    # local email store. Anything that syncs, sends or lists many leads stays expensive.
     ("GET", "/api/v1/crm/calendar/google"),
     ("POST", "/api/v1/crm/calendar/google/connect"),
     ("GET", "/api/v1/crm/calendar/events/{event_id}"),
+    ("GET", "/api/v1/crm/email/status"),
+    ("GET", "/api/v1/crm/email/templates"),
+    ("POST", "/api/v1/crm/email/templates"),
+    ("PUT", "/api/v1/crm/email/templates/{template_id}"),
+    ("DELETE", "/api/v1/crm/email/templates/{template_id}"),
+    ("GET", "/api/v1/crm/email/leads/{enquiry_id}/thread"),
 }
 
 

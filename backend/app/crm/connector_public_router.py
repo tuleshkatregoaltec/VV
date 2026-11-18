@@ -1,12 +1,13 @@
-"""Public endpoint the calendar connector is called back on.
+"""Public endpoints the calendar and email connectors are called back on.
 
-It carries no CRM session, so it lives outside the CRM router (whose every route
+None of these carry a CRM session, so they live outside the CRM router (whose every route
 requires a subscription and a request lane):
 
-Google sends the browser back to `/calendar/google/callback`. That request is not trusted to
+- Google sends the browser back to `/calendar/google/callback`. That request is not trusted to
   say whose sign-in it is, so nothing is exchanged here: the code and state are handed to the
   CRM page in the URL fragment (never sent to a server, never in access logs), and the signed-in
   page posts them to `/calendar/google/complete`, which checks the state belongs to that user.
+- Brevo posts delivery events and inbound mail; the shared secret in the query string is the gate.
 """
 
 from __future__ import annotations
@@ -15,10 +16,13 @@ import logging
 import re
 from urllib.parse import urlencode
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
+from app.crm.email_pipeline import receive_inbound, receive_webhook
+from app.postgres import get_db_session
 
 router = APIRouter(prefix="/api/v1/crm")
 
@@ -45,8 +49,34 @@ async def crm_google_calendar_callback(
     return _calendar_page({"google_code": code, "google_state": state})
 
 
-# Google's one-time code/state arrive in the query string; keep them out of uvicorn's access log.
-_SECRET_PARAM = re.compile(r"([?&](?:code|state)=)[^&\s\"']*")
+async def _json(request: Request):
+    try:
+        return await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from None
+
+
+@router.post("/email/brevo-webhook", include_in_schema=False)
+async def crm_brevo_webhook(request: Request, secret: str | None = Query(default=None)):
+    """Brevo pushes delivery events here."""
+    applied = await receive_webhook(secret=secret, payload=await _json(request))
+    return {"ok": True, "applied": applied}
+
+
+@router.post("/email/brevo-inbound", include_in_schema=False)
+async def crm_brevo_inbound(
+    request: Request,
+    secret: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Brevo inbound parsing posts received emails here."""
+    stored = await receive_inbound(db, secret=secret, payload=await _json(request))
+    return {"ok": True, "stored": stored}
+
+
+# Webhook secrets and Google's one-time code/state arrive in the query string; keep them out of
+# uvicorn's access log.
+_SECRET_PARAM = re.compile(r"([?&](?:secret|code|state)=)[^&\s\"']*")
 
 
 def _redact(value):

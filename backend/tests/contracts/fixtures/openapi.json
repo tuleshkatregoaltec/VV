@@ -2435,6 +2435,560 @@
 				}
 			}
 		},
+		"/api/v1/crm/email/status": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Email Status",
+				"description": "Whether Brevo is configured on the server, and the sender leads see.",
+				"operationId": "crm-crm_email_status",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/EmailStatusResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/email/leads": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Email Leads",
+				"description": "Leads this user may see whose contact has an email, each with its latest email status.\n\n`ids` narrows to those leads (Compose showing who it will send to).",
+				"operationId": "crm-crm_email_leads",
+				"parameters": [
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					},
+					{
+						"name": "intent",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"pattern": "^(unknown|buy|rent|sell|let)$"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Intent"
+						}
+					},
+					{
+						"name": "source",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Source"
+						}
+					},
+					{
+						"name": "ids",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "array",
+									"items": {
+										"type": "integer"
+									},
+									"maxItems": 100
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Ids"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 1000,
+							"minimum": 1,
+							"default": 200,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/EmailLeadListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/email/templates": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Email Templates",
+				"description": "The organization's email templates, shared by every agent.",
+				"operationId": "crm-crm_email_templates",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/EmailTemplateResponse"
+									},
+									"type": "array",
+									"title": "Response Crm-Crm Email Templates"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Create Email Template",
+				"operationId": "crm-crm_create_email_template",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/EmailTemplateWrite"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/EmailTemplateResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/email/templates/{template_id}": {
+			"put": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Update Email Template",
+				"operationId": "crm-crm_update_email_template",
+				"parameters": [
+					{
+						"name": "template_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Template Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/EmailTemplateWrite"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/EmailTemplateResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Delete Email Template",
+				"operationId": "crm-crm_delete_email_template",
+				"parameters": [
+					{
+						"name": "template_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Template Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/email/send": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Send Email",
+				"description": "Send one personalised email per lead through Brevo; each lands on the lead's history.\n\nOnly leads this user may see; any other id is reported as not found.",
+				"operationId": "crm-crm_send_email",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/EmailSendCreate"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/EmailSendBatchResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/email/sends": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Email Sends",
+				"description": "Tracking: sends to leads this user may see, newest first, with their delivery events.",
+				"operationId": "crm-crm_email_sends",
+				"parameters": [
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 40
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Status"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 1000,
+							"minimum": 1,
+							"default": 200,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/EmailSendListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/email/sends/{send_id}": {
+			"delete": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Delete Email Send",
+				"description": "Remove one sent email from Tracking (and from the lead's Conversation tab).",
+				"operationId": "crm-crm_delete_email_send",
+				"parameters": [
+					{
+						"name": "send_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Send Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/email/tracking/sync": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Sync Email Events",
+				"description": "Pull delivery events from Brevo (the webhook cannot reach localhost).",
+				"operationId": "crm-crm_sync_email_events",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/EmailSyncResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/email/inbound": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Email Inbound",
+				"description": "Received emails about leads this user may see, newest first.",
+				"operationId": "crm-crm_email_inbound",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 1000,
+							"minimum": 1,
+							"default": 200,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/EmailInboundListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/email/leads/{enquiry_id}/thread": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Email Lead Thread",
+				"description": "Every email sent to and received from one lead, oldest first.",
+				"operationId": "crm-crm_email_lead_thread",
+				"parameters": [
+					{
+						"name": "enquiry_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Enquiry Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/EmailThreadItem"
+									},
+									"title": "Response Crm-Crm Email Lead Thread"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/inbound/enquiries": {
 			"post": {
 				"tags": ["crm", "crm"],
@@ -25106,6 +25660,711 @@
 				"type": "object",
 				"title": "DocumentFields",
 				"description": "Everything the Documents tab collects for one listing (all optional until a template needs it)."
+			},
+			"EmailEvent": {
+				"properties": {
+					"event": {
+						"type": "string",
+						"title": "Event"
+					},
+					"at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "At"
+					},
+					"link": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Link"
+					}
+				},
+				"type": "object",
+				"required": ["event", "at"],
+				"title": "EmailEvent"
+			},
+			"EmailInboundListResponse": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/EmailInboundResponse"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					}
+				},
+				"type": "object",
+				"required": ["items", "total"],
+				"title": "EmailInboundListResponse"
+			},
+			"EmailInboundResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"enquiry_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Enquiry Id"
+					},
+					"lead_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Name"
+					},
+					"send_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Send Id"
+					},
+					"from_email": {
+						"type": "string",
+						"title": "From Email"
+					},
+					"from_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "From Name"
+					},
+					"subject": {
+						"type": "string",
+						"title": "Subject"
+					},
+					"body": {
+						"type": "string",
+						"title": "Body"
+					},
+					"attachments": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Attachments"
+					},
+					"created_lead": {
+						"type": "boolean",
+						"title": "Created Lead"
+					},
+					"received_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Received At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"enquiry_id",
+					"lead_name",
+					"send_id",
+					"from_email",
+					"from_name",
+					"subject",
+					"body",
+					"attachments",
+					"created_lead",
+					"received_at"
+				],
+				"title": "EmailInboundResponse"
+			},
+			"EmailLeadListResponse": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/EmailLeadResponse"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"sources": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Sources"
+					}
+				},
+				"type": "object",
+				"required": ["items", "total", "sources"],
+				"title": "EmailLeadListResponse"
+			},
+			"EmailLeadResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"intent": {
+						"type": "string",
+						"title": "Intent"
+					},
+					"source": {
+						"type": "string",
+						"title": "Source"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"do_not_contact": {
+						"type": "boolean",
+						"title": "Do Not Contact"
+					},
+					"last_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Status"
+					},
+					"last_sent_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Sent At"
+					},
+					"sends": {
+						"type": "integer",
+						"title": "Sends"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"email",
+					"phone",
+					"intent",
+					"source",
+					"status",
+					"do_not_contact",
+					"last_status",
+					"last_sent_at",
+					"sends"
+				],
+				"title": "EmailLeadResponse",
+				"description": "A lead whose contact has an email, with how emailing it has gone so far."
+			},
+			"EmailSendBatchResponse": {
+				"properties": {
+					"sent": {
+						"type": "integer",
+						"title": "Sent"
+					},
+					"failed": {
+						"type": "integer",
+						"title": "Failed"
+					},
+					"results": {
+						"items": {
+							"$ref": "#/components/schemas/EmailSendResult"
+						},
+						"type": "array",
+						"title": "Results"
+					}
+				},
+				"type": "object",
+				"required": ["sent", "failed", "results"],
+				"title": "EmailSendBatchResponse"
+			},
+			"EmailSendCreate": {
+				"properties": {
+					"enquiry_ids": {
+						"items": {
+							"type": "integer"
+						},
+						"type": "array",
+						"maxItems": 100,
+						"minItems": 1,
+						"title": "Enquiry Ids"
+					},
+					"subject": {
+						"type": "string",
+						"maxLength": 300,
+						"minLength": 1,
+						"title": "Subject"
+					},
+					"body": {
+						"type": "string",
+						"maxLength": 20000,
+						"minLength": 1,
+						"title": "Body"
+					}
+				},
+				"type": "object",
+				"required": ["enquiry_ids", "subject", "body"],
+				"title": "EmailSendCreate"
+			},
+			"EmailSendListResponse": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/EmailSendResponse"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"counts": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Counts"
+					}
+				},
+				"type": "object",
+				"required": ["items", "counts"],
+				"title": "EmailSendListResponse"
+			},
+			"EmailSendResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"enquiry_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Enquiry Id"
+					},
+					"to_email": {
+						"type": "string",
+						"title": "To Email"
+					},
+					"to_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "To Name"
+					},
+					"subject": {
+						"type": "string",
+						"title": "Subject"
+					},
+					"body": {
+						"type": "string",
+						"title": "Body"
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"queued",
+							"sent",
+							"deferred",
+							"delivered",
+							"opened",
+							"clicked",
+							"bounced",
+							"spam",
+							"unsubscribed",
+							"failed",
+							"replied"
+						],
+						"title": "Status"
+					},
+					"error": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Error"
+					},
+					"sent_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sent At"
+					},
+					"delivered_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Delivered At"
+					},
+					"opened_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Opened At"
+					},
+					"clicked_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Clicked At"
+					},
+					"bounced_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bounced At"
+					},
+					"opens": {
+						"type": "integer",
+						"title": "Opens"
+					},
+					"clicks": {
+						"type": "integer",
+						"title": "Clicks"
+					},
+					"events": {
+						"items": {
+							"$ref": "#/components/schemas/EmailEvent"
+						},
+						"type": "array",
+						"title": "Events"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"enquiry_id",
+					"to_email",
+					"to_name",
+					"subject",
+					"body",
+					"status",
+					"error",
+					"sent_at",
+					"delivered_at",
+					"opened_at",
+					"clicked_at",
+					"bounced_at",
+					"opens",
+					"clicks",
+					"events",
+					"created_at"
+				],
+				"title": "EmailSendResponse"
+			},
+			"EmailSendResult": {
+				"properties": {
+					"enquiry_id": {
+						"type": "integer",
+						"title": "Enquiry Id"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"ok": {
+						"type": "boolean",
+						"title": "Ok"
+					},
+					"error": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Error"
+					}
+				},
+				"type": "object",
+				"required": ["enquiry_id", "email", "ok"],
+				"title": "EmailSendResult"
+			},
+			"EmailStatusResponse": {
+				"properties": {
+					"configured": {
+						"type": "boolean",
+						"title": "Configured"
+					},
+					"sender_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sender Name"
+					},
+					"sender_email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sender Email"
+					},
+					"webhook_configured": {
+						"type": "boolean",
+						"title": "Webhook Configured"
+					}
+				},
+				"type": "object",
+				"required": ["configured", "sender_name", "sender_email", "webhook_configured"],
+				"title": "EmailStatusResponse"
+			},
+			"EmailSyncResponse": {
+				"properties": {
+					"fetched": {
+						"type": "integer",
+						"title": "Fetched"
+					},
+					"applied": {
+						"type": "integer",
+						"title": "Applied"
+					},
+					"unmatched": {
+						"type": "integer",
+						"title": "Unmatched"
+					}
+				},
+				"type": "object",
+				"required": ["fetched", "applied", "unmatched"],
+				"title": "EmailSyncResponse"
+			},
+			"EmailTemplateResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"subject": {
+						"type": "string",
+						"title": "Subject"
+					},
+					"body": {
+						"type": "string",
+						"title": "Body"
+					},
+					"lead_types": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Lead Types"
+					},
+					"updated_by_user_id": {
+						"type": "string",
+						"title": "Updated By User Id"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"subject",
+					"body",
+					"lead_types",
+					"updated_by_user_id",
+					"updated_at"
+				],
+				"title": "EmailTemplateResponse"
+			},
+			"EmailTemplateWrite": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Name"
+					},
+					"subject": {
+						"type": "string",
+						"maxLength": 300,
+						"minLength": 1,
+						"title": "Subject"
+					},
+					"body": {
+						"type": "string",
+						"maxLength": 20000,
+						"minLength": 1,
+						"title": "Body"
+					},
+					"lead_types": {
+						"items": {
+							"type": "string",
+							"enum": ["unknown", "buy", "rent", "sell", "let"]
+						},
+						"type": "array",
+						"maxItems": 5,
+						"title": "Lead Types"
+					}
+				},
+				"type": "object",
+				"required": ["name", "subject", "body"],
+				"title": "EmailTemplateWrite"
+			},
+			"EmailThreadItem": {
+				"properties": {
+					"direction": {
+						"type": "string",
+						"enum": ["out", "in"],
+						"title": "Direction"
+					},
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"subject": {
+						"type": "string",
+						"title": "Subject"
+					},
+					"body": {
+						"type": "string",
+						"title": "Body"
+					},
+					"at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "At"
+					},
+					"status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Status"
+					},
+					"counterpart": {
+						"type": "string",
+						"title": "Counterpart"
+					}
+				},
+				"type": "object",
+				"required": ["direction", "id", "subject", "body", "at", "counterpart"],
+				"title": "EmailThreadItem",
+				"description": "One email on a lead, either way: `out` is a send from Vitevue, `in` a received email."
 			},
 			"FeasibilityAssumptions": {
 				"properties": {

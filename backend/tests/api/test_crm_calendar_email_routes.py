@@ -1,7 +1,7 @@
-"""Calendar routes: who may reach them, and that lead assignment holds at the route.
+"""Calendar and email routes: who may reach them, and that lead assignment holds at the route.
 
-Google and the assignment lookups are stubbed; the sign-in service is covered by
-test_crm_calendar_oauth.
+Google, Brevo and the assignment lookups are stubbed; the services themselves are covered by
+test_crm_calendar_oauth, test_crm_email_visibility and test_crm_brevo.
 """
 
 import logging
@@ -14,8 +14,11 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 import app.postgres.models  # noqa: F401 - registers every table
-from app.crm import assignment, calendar_service, connector_public_router
+from app.config import settings
+from app.crm import assignment, calendar_service, connector_public_router, email_pipeline
+from app.crm import router as crm_router
 from app.crm.assignment import AssignmentScope
+from app.crm.email_models import EmailSendListResponse
 from app.organization.models import Organization
 from app.postgres import get_db_session
 
@@ -99,7 +102,30 @@ def calls(monkeypatch):
     monkeypatch.setattr(calendar_service, "finish_connection", record("finish"))
     monkeypatch.setattr(calendar_service, "connection_status", record("status", status))
     monkeypatch.setattr(calendar_service, "create_event", record("create_event"))
+    empty = EmailSendListResponse(items=[], total=0, counts={})
+    monkeypatch.setattr(crm_router, "list_sends", record("list_sends", empty))
+    monkeypatch.setattr(crm_router, "delete_send", record("delete_send"))
+    monkeypatch.setattr(crm_router, "lead_thread", record("lead_thread", []))
+
+    async def no_store():
+        return email_pipeline.EmailStoreData(
+            sends=[_send(1, 7), _send(2, 8)],
+        )
+
+    monkeypatch.setattr(crm_router.email_store, "read", no_store)
     return seen
+
+
+def _send(i: int, lead: int):
+    from datetime import datetime, timezone
+
+    from app.crm.email_models import CrmEmailSend
+
+    now = datetime(2026, 11, 18, tzinfo=timezone.utc)
+    return CrmEmailSend(
+        id=i, organization_id=ORG, enquiry_id=lead, to_email=f"l{lead}@example.com",
+        subject="s", body="b", sent_by_user_id=USER, created_at=now, updated_at=now,
+    )  # fmt: skip
 
 
 # ── who may reach them ──
@@ -113,9 +139,14 @@ def calls(monkeypatch):
         ("POST", "/api/v1/crm/calendar/google/complete"),
         ("GET", "/api/v1/crm/calendar/events?start=2026-11-01&end=2026-11-30"),
         ("POST", "/api/v1/crm/calendar/events"),
+        ("GET", "/api/v1/crm/email/status"),
+        ("GET", "/api/v1/crm/email/leads"),
+        ("POST", "/api/v1/crm/email/send"),
+        ("GET", "/api/v1/crm/email/sends"),
+        ("GET", "/api/v1/crm/email/inbound"),
     ],
 )
-async def test_calendar_requires_sign_in(client_no_auth, method, path):
+async def test_calendar_and_email_require_sign_in(client_no_auth, method, path):
     assert (await client_no_auth.request(method, path, json={})).status_code in {401, 403}
 
 
@@ -195,7 +226,60 @@ async def test_a_viewing_cannot_be_booked_for_a_lead_outside_the_scope(client, d
     assert not [c for c in calls if c[0] == "create_event"]
 
 
-def test_google_codes_are_kept_out_of_the_access_log():
+async def test_a_lead_thread_outside_the_scope_is_not_found(client, db, agent, calls):
+    assert (await client.get("/api/v1/crm/email/leads/8/thread")).status_code == 404
+    assert (await client.get("/api/v1/crm/email/leads/7/thread")).status_code == 200
+    assert [c[1]["enquiry_id"] for c in calls if c[0] == "lead_thread"] == [7]
+
+
+async def test_tracking_and_delete_are_limited_to_the_agents_leads(client, db, agent, calls):
+    assert (await client.get("/api/v1/crm/email/sends")).status_code == 200
+    assert (await client.delete("/api/v1/crm/email/sends/2")).status_code == 204
+    by_name = dict(calls)
+    assert by_name["list_sends"]["visible_lead_ids"] == {7}
+    assert by_name["delete_send"]["visible_lead_ids"] == {7}
+
+
+async def test_an_administrator_is_not_limited(client, db, calls, monkeypatch):
+    async def admin(db, organization_id, user_id):
+        return _scope(admin=True)
+
+    monkeypatch.setattr(assignment, "load_scope", admin)
+    assert (await client.get("/api/v1/crm/email/sends")).status_code == 200
+    assert dict(calls)["list_sends"]["visible_lead_ids"] is None
+
+
+# ── Brevo webhooks ──
+
+
+async def test_brevo_webhook_refuses_without_a_configured_secret(client_no_auth, monkeypatch):
+    monkeypatch.setattr(settings, "BREVO_WEBHOOK_SECRET", None)
+    response = await client_no_auth.post("/api/v1/crm/email/brevo-webhook?secret=x", json={})
+    assert response.status_code == 503
+
+
+async def test_brevo_webhook_refuses_a_wrong_secret(client_no_auth, monkeypatch):
+    monkeypatch.setattr(settings, "BREVO_WEBHOOK_SECRET", "right-secret")
+    for query in ("", "?secret=wrong"):
+        response = await client_no_auth.post(f"/api/v1/crm/email/brevo-webhook{query}", json={})
+        assert response.status_code == 401
+
+
+async def test_brevo_webhook_accepts_the_right_secret(client_no_auth, monkeypatch):
+    monkeypatch.setattr(settings, "BREVO_WEBHOOK_SECRET", "right-secret")
+
+    async def receive(*, secret, payload):
+        email_pipeline._check_secret(secret)
+        return 0
+
+    monkeypatch.setattr(connector_public_router, "receive_webhook", receive)
+    response = await client_no_auth.post(
+        "/api/v1/crm/email/brevo-webhook?secret=right-secret", json={"event": "delivered"}
+    )
+    assert response.status_code == 200 and response.json() == {"ok": True, "applied": 0}
+
+
+def test_secrets_and_google_codes_are_kept_out_of_the_access_log():
     record = logging.LogRecord(
         "uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d', None, None
     )

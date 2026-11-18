@@ -21,6 +21,9 @@ import type {
 	DealTab,
 	DealType,
 	DocumentUploadResult,
+	EmailLeadParams,
+	EmailSendStatus,
+	EmailTemplateInput,
 	EventCreate,
 	FeedArea,
 	FeedPreferences,
@@ -453,6 +456,24 @@ const liveCrm = {
 		connect: backend.connectGoogleCalendar,
 		complete: backend.completeGoogleCalendar,
 		disconnect: backend.disconnectGoogleCalendar
+	},
+
+	/** Connectors › Email: the Brevo pipeline (Leads, Tracking, Templates, Inbox). Every list
+	 * follows lead assignment on the server: an agent sees mail about leads they may see. */
+	email: {
+		status: backend.emailStatus,
+		leads: (p: EmailLeadParams = {}) => backend.emailLeads(p),
+		send: (body: { enquiry_ids: number[]; subject: string; body: string }) =>
+			backend.sendEmails(body),
+		sends: (status: EmailSendStatus | '' = '') => backend.emailSends(status),
+		sync: backend.syncEmailEvents,
+		removeSend: (id: number) => backend.deleteEmailSend(id),
+		templates: backend.emailTemplates,
+		inbound: backend.emailInbound,
+		thread: (enquiryId: number) => backend.emailThread(enquiryId),
+		createTemplate: (body: EmailTemplateInput) => backend.createEmailTemplate(body),
+		updateTemplate: (id: number, body: EmailTemplateInput) => backend.updateEmailTemplate(id, body),
+		removeTemplate: (id: number) => backend.deleteEmailTemplate(id)
 	},
 
 	search: (q: string): Promise<SearchResults> => backend.search(q),

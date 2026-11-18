@@ -9,6 +9,12 @@ import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 <PageHeader title="Connectors" facts="Email, calendar and WhatsApp" />
 <section class="card connector-preview">
 	<span class="chip green">Available</span>
+	<h2>Email your leads.</h2>
+	<p>Send marketing, reports and updates through Brevo, with delivery, opens and clicks tracked. You see only the leads assigned to you or your teams.</p>
+	<a class="btn" href="/crm/connectors/email"><Mail size={15} /> Open Email</a>
+</section>
+<section class="card connector-preview">
+	<span class="chip green">Available</span>
 	<h2>Connect your Google Calendar.</h2>
 	<p>Viewings, calls and follow-ups you add in the CRM appear in your own Google Calendar, and changes made there come back.</p>
 	<a class="btn" href="/crm/calendar"><CalendarDays size={15} /> Open Calendar</a>

@@ -56,3 +56,29 @@ describe('calendar events', () => {
 		await expect(crm.events.remove(9)).rejects.toThrow('Google down')
 	})
 })
+
+describe('email', () => {
+	it('asks for the leads with search, type, source and ids', async () => {
+		const get = vi.spyOn(client, 'get').mockResolvedValue({ items: [], total: 0, sources: [] })
+		await backend.emailLeads({ search: ' sara ', intent: 'buy', source: 'Bayut', ids: [1, 2] })
+		expect(get).toHaveBeenCalledWith(
+			'/api/v1/crm/email/leads?search=sara&intent=buy&source=Bayut&ids=1&ids=2'
+		)
+	})
+
+	it('filters tracking by status only when one is chosen', async () => {
+		const get = vi.spyOn(client, 'get').mockResolvedValue({ items: [], counts: {} })
+		await backend.emailSends()
+		await backend.emailSends('bounced')
+		expect(get.mock.calls.map((c) => c[0])).toEqual([
+			'/api/v1/crm/email/sends',
+			'/api/v1/crm/email/sends?status=bounced'
+		])
+	})
+
+	it("reads one lead's thread", async () => {
+		const get = vi.spyOn(client, 'get').mockResolvedValue([])
+		await backend.emailThread(7)
+		expect(get).toHaveBeenCalledWith('/api/v1/crm/email/leads/7/thread')
+	})
+})

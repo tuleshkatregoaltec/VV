@@ -10,6 +10,8 @@ import type {
 	DealTab,
 	DealType,
 	DocumentListParams,
+	EmailLeadParams,
+	EmailSendStatus,
 	ImportRequest,
 	ImportStatus,
 	InboxFilter,
@@ -141,6 +143,13 @@ export const crmKeys = {
 	event: (id: number) => [...crmScopeKey(), 'event', id] as const,
 	calendarSide: () => [...crmScopeKey(), 'calendar-side'] as const,
 	googleCalendar: () => [...crmScopeKey(), 'google-calendar'] as const,
+	emailStatus: () => [...crmScopeKey(), 'email', 'status'] as const,
+	emailLeads: (p: EmailLeadParams) => [...crmScopeKey(), 'email', 'leads', p] as const,
+	emailSends: (status: EmailSendStatus | '') =>
+		[...crmScopeKey(), 'email', 'sends', status] as const,
+	emailTemplates: () => [...crmScopeKey(), 'email', 'templates'] as const,
+	emailInbound: () => [...crmScopeKey(), 'email', 'inbound'] as const,
+	emailThread: (id: number) => [...crmScopeKey(), 'lead', id, 'email-thread'] as const,
 	search: (q: string) => [...crmScopeKey(), 'search', q] as const,
 	notifications: () => [...crmScopeKey(), 'notifications'] as const,
 	connections: () => [...crmScopeKey(), 'connections'] as const,
@@ -449,6 +458,38 @@ export const crmQueries = {
 		enabled: crmIdentityKnown(),
 		queryKey: crmKeys.googleCalendar(),
 		queryFn: crm.googleCalendar.status
+	}),
+	emailStatus: () => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.emailStatus(),
+		queryFn: crm.email.status
+	}),
+	emailLeads: (p: EmailLeadParams = {}) => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.emailLeads(p),
+		queryFn: () => crm.email.leads(p),
+		placeholderData: crmPreviousData
+	}),
+	emailTemplates: () => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.emailTemplates(),
+		queryFn: crm.email.templates
+	}),
+	emailInbound: () => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.emailInbound(),
+		queryFn: crm.email.inbound
+	}),
+	emailThread: (id: number) => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.emailThread(id),
+		queryFn: () => crm.email.thread(id)
+	}),
+	emailSends: (status: EmailSendStatus | '') => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.emailSends(status),
+		queryFn: () => crm.email.sends(status),
+		placeholderData: crmPreviousData
 	}),
 	search: (q: string) => ({
 		queryKey: crmKeys.search(q),

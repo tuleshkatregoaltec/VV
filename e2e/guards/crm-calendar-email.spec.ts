@@ -3,9 +3,9 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from '../fixtures/guards';
 
 /**
- * Calendar (Google) in the browser with the CRM API mocked. The server's own rules (whose
- * sign-in it is) are covered by backend tests; this checks what the screen sends and that
- * Google's one-time code leaves the address bar.
+ * Calendar (Google) and Email (Brevo) in the browser with the CRM API mocked. The server's own
+ * rules (whose sign-in it is, which leads an agent may email) are covered by backend tests;
+ * this checks what the screens send and that Google's one-time code leaves the address bar.
  */
 
 const json = (route: Route, body: unknown, status = 200) =>
@@ -25,6 +25,15 @@ async function mockCrm(page: Page, calls: Call[], google = { configured: true, c
 			return json(route, google);
 		}
 		if (path === '/calendar/events') return json(route, []);
+		if (path === '/email/status') return json(route, { configured: true, sender_name: 'Agency', sender_email: 'hello@agency.example', webhook_configured: true });
+		if (path === '/email/leads') return json(route, {
+			items: [{ id: 7, name: 'Sara Khan', email: 'sara@example.com', phone: null, intent: 'buy', source: 'Property Finder', status: 'new', do_not_contact: false, last_status: null, last_sent_at: null, sends: 0 }],
+			total: 1,
+			sources: ['Property Finder']
+		});
+		if (path === '/email/templates') return json(route, []);
+		if (path === '/email/inbound') return json(route, { items: [], total: 0 });
+		if (path === '/email/sends') return json(route, { items: [], total: 0, counts: {} });
 		if (path === '/assignment/scope') return route.fallback();
 		return json(route, { detail: 'Not found' }, 404);
 	});
@@ -56,4 +65,17 @@ test('a cancelled Google sign-in posts nothing and says so', async ({ page, useP
 	await expect(page.getByText('Google Calendar was not connected', { exact: true })).toBeVisible({ timeout: 15_000 });
 	expect(calls.some((c) => c.path === '/calendar/google/complete')).toBe(false);
 	await expect(page.getByRole('button', { name: 'Connect Google Calendar' })).toBeVisible();
+});
+
+test('the email connector lists the leads the server returns', async ({ page, usePersona }) => {
+	const calls: Call[] = [];
+	await usePersona('active-member');
+	await mockCrm(page, calls);
+
+	await page.goto('/crm/connectors/email');
+
+	await expect(page).toHaveURL(/\/crm\/connectors\/email$/);
+	await expect(page.getByRole('button', { name: 'Sara Khan', exact: true })).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByText('sara@example.com', { exact: true })).toBeVisible();
+	expect(calls.some((c) => c.method === 'GET' && c.path === '/email/leads')).toBe(true);
 });

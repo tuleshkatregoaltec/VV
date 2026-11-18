@@ -16,12 +16,12 @@ def test_removed_prototypes_cannot_shadow_the_shared_assistant_or_register_table
 
     assert Path(assistant.__file__).name == "assistant.py"
     assert callable(assistant.query_my_records)
-    # Calendar was restored (user-bound Google sign-in, migration f2b4d6e8a0c1); the assistant,
-    # WhatsApp and email prototypes stay removed.
+    # Calendar and email were restored (lead-assignment scoped, user-bound Google sign-in,
+    # migration f2b4d6e8a0c1); the assistant and WhatsApp prototypes stay removed.
     assert not any(
         table.startswith(("crm_assistant_", "crm_whatsapp_")) for table in SQLModel.metadata.tables
     )
-    for name in ("assistant", "whatsapp", "email_pipeline.py", "email_store.py"):
+    for name in ("assistant", "whatsapp"):
         source = BACKEND / "app" / "crm" / name
         assert not source.is_file()
         assert not list(source.rglob("*.py"))

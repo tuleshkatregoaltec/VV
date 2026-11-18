@@ -45,6 +45,10 @@ export type PanelState =
 	| { kind: 'new-owner' }
 	| { kind: 'new-import'; ownersOnly?: boolean; leadsOnly?: boolean }
 	| { kind: 'areas' }
+	| { kind: 'email-compose'; leadIds: number[] }
+	| { kind: 'email-send'; id: number }
+	| { kind: 'email-inbound'; id: number }
+	| { kind: 'email-template'; id?: number }
 	| { kind: 'owner-lead'; id: string }
 	| { kind: 'add-record'; ownerId: string }
 	| { kind: 'send'; target: 'listing' | 'market'; id: string }

@@ -1604,3 +1604,149 @@ export type ImportAssignment =
 	/** Every new lead waits in the team's shared pool; the first agent to log contact takes it. */
 	| { mode: 'team'; team_id?: string }
 	| { mode: 'unassigned'; team_id?: string }
+
+/* ── Connectors › Email (Brevo) ── */
+
+export interface EmailStatus {
+	configured: boolean
+	sender_name: string | null
+	sender_email: string | null
+	webhook_configured: boolean
+}
+
+/** A lead of any type whose contact has an email (Connectors › Email › Leads). */
+export interface EmailLead {
+	/** The lead (enquiry) id, the same id the Leads page opens. */
+	id: number
+	name: string
+	email: string
+	phone: string | null
+	intent: 'unknown' | 'buy' | 'rent' | 'sell' | 'let'
+	/** The backend source name, e.g. "Property Finder" or "Owner file · recently sold". */
+	source: string
+	status: string
+	do_not_contact: boolean
+	last_status: EmailSendStatus | null
+	last_sent_at: string | null
+	sends: number
+}
+
+export interface EmailLeadList {
+	items: EmailLead[]
+	total: number
+	sources: string[]
+}
+
+export interface EmailLeadParams {
+	search?: string
+	intent?: EmailLead['intent'] | ''
+	source?: string
+	ids?: number[]
+}
+
+export interface EmailTemplate {
+	id: number
+	name: string
+	subject: string
+	body: string
+	/** Lead types it suits; empty means every type. */
+	lead_types: EmailLead['intent'][]
+	updated_by_user_id: string
+	updated_at: string
+}
+
+export interface EmailTemplateInput {
+	name: string
+	subject: string
+	body: string
+	lead_types: EmailLead['intent'][]
+}
+
+export type EmailSendStatus =
+	| 'queued'
+	| 'sent'
+	| 'deferred'
+	| 'delivered'
+	| 'opened'
+	| 'clicked'
+	| 'bounced'
+	| 'spam'
+	| 'unsubscribed'
+	| 'failed'
+	| 'replied'
+
+export interface EmailEvent {
+	event: string
+	at: string
+	link: string | null
+}
+
+export interface EmailSend {
+	id: number
+	enquiry_id: number | null
+	to_email: string
+	to_name: string | null
+	subject: string
+	body: string
+	status: EmailSendStatus
+	error: string | null
+	sent_at: string | null
+	delivered_at: string | null
+	opened_at: string | null
+	clicked_at: string | null
+	bounced_at: string | null
+	opens: number
+	clicks: number
+	events: EmailEvent[]
+	created_at: string
+}
+
+export interface EmailSendList {
+	items: EmailSend[]
+	counts: Partial<Record<EmailSendStatus, number>>
+}
+
+export interface EmailSendBatch {
+	sent: number
+	failed: number
+	results: { enquiry_id: number; email: string; ok: boolean; error: string | null }[]
+}
+
+/** An email received through Brevo inbound parsing (Email › Inbox). */
+export interface EmailInbound {
+	id: number
+	enquiry_id: number | null
+	lead_name: string | null
+	/** The send it replies to, when known. */
+	send_id: number | null
+	from_email: string
+	from_name: string | null
+	subject: string
+	body: string
+	attachments: string[]
+	/** True when the sender was unknown and this email created the lead. */
+	created_lead: boolean
+	received_at: string
+}
+
+export interface EmailInboundList {
+	items: EmailInbound[]
+	total: number
+}
+
+/** One email on a lead's Conversation tab: `out` sent from Vitevue, `in` received. */
+export interface EmailThreadItem {
+	direction: 'out' | 'in'
+	id: number
+	subject: string
+	body: string
+	at: string
+	status: EmailSendStatus | null
+	counterpart: string
+}
+
+export interface EmailSync {
+	fetched: number
+	applied: number
+	unmatched: number
+}
