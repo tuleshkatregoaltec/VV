@@ -1548,6 +1548,211 @@ export type ChunkedUploadResponse = {
 };
 
 /**
+ * CollectionCreate
+ */
+export type CollectionCreate = {
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * CollectionDetailResponse
+ */
+export type CollectionDetailResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Sharing Enabled
+     */
+    sharing_enabled: boolean;
+    /**
+     * Item Count
+     */
+    item_count: number;
+    /**
+     * Created By User Id
+     */
+    created_by_user_id: string;
+    /**
+     * Agent Name
+     */
+    agent_name: string;
+    /**
+     * Agent Email
+     */
+    agent_email: string | null;
+    /**
+     * Agent Phone
+     */
+    agent_phone: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Cover Photos
+     */
+    cover_photos?: Array<string>;
+    /**
+     * Items
+     */
+    items: Array<CollectionItemResponse>;
+};
+
+/**
+ * CollectionItemAdd
+ */
+export type CollectionItemAdd = {
+    /**
+     * Source
+     */
+    source: 'property_finder';
+    /**
+     * Listing Key
+     */
+    listing_key: string;
+};
+
+/**
+ * CollectionItemResponse
+ */
+export type CollectionItemResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Listing Key
+     */
+    listing_key: string;
+    /**
+     * Listing Title
+     */
+    listing_title: string;
+    /**
+     * Added At
+     */
+    added_at: string;
+    listing?: CrmCompanyListingDetail | null;
+};
+
+/**
+ * CollectionListResponse
+ */
+export type CollectionListResponse = {
+    /**
+     * Items
+     */
+    items: Array<CollectionResponse>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+};
+
+/**
+ * CollectionResponse
+ *
+ * Management view. Deliberately has no token field; see ShareLinkResponse.
+ */
+export type CollectionResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Sharing Enabled
+     */
+    sharing_enabled: boolean;
+    /**
+     * Item Count
+     */
+    item_count: number;
+    /**
+     * Created By User Id
+     */
+    created_by_user_id: string;
+    /**
+     * Agent Name
+     */
+    agent_name: string;
+    /**
+     * Agent Email
+     */
+    agent_email: string | null;
+    /**
+     * Agent Phone
+     */
+    agent_phone: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Cover Photos
+     */
+    cover_photos?: Array<string>;
+};
+
+/**
+ * CollectionUpdate
+ */
+export type CollectionUpdate = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Sharing Enabled
+     */
+    sharing_enabled?: boolean | null;
+    /**
+     * Agent Name
+     */
+    agent_name?: string | null;
+    /**
+     * Agent Email
+     */
+    agent_email?: string | null;
+    /**
+     * Agent Phone
+     */
+    agent_phone?: string | null;
+};
+
+/**
  * ComparableData
  */
 export type ComparableData = {
@@ -2217,6 +2422,10 @@ export type CrmCompanyListingDetail = {
      */
     listed_at: string;
     /**
+     * Photos
+     */
+    photos?: Array<string>;
+    /**
      * Listing Key
      */
     listing_key: string;
@@ -2232,6 +2441,14 @@ export type CrmCompanyListingDetail = {
      * Managed
      */
     managed: boolean;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Updated At
+     */
+    updated_at?: string | null;
 };
 
 /**
@@ -2296,6 +2513,10 @@ export type CrmCompanyListingResponse = {
      * Listed At
      */
     listed_at: string;
+    /**
+     * Photos
+     */
+    photos?: Array<string>;
 };
 
 /**
@@ -7029,7 +7250,7 @@ export type InboundEnquiryResponse = {
     /**
      * Status
      */
-    status: 'new' | 'needs_review' | 'assigned' | 'attempted' | 'contacted' | 'qualified' | 'viewing' | 'valuation' | 'signed' | 'active' | 'won' | 'nurture' | 'closed_lost' | 'disqualified';
+    status: 'new' | 'needs_review' | 'assigned' | 'attempted' | 'contacted' | 'qualified' | 'viewing' | 'offer' | 'valuation' | 'signed' | 'active' | 'won' | 'nurture' | 'closed_lost' | 'disqualified';
     /**
      * Assigned User Id
      */
@@ -7187,7 +7408,7 @@ export type InboundEnquiryUpdate = {
     /**
      * Status
      */
-    status?: 'new' | 'needs_review' | 'assigned' | 'attempted' | 'contacted' | 'qualified' | 'viewing' | 'valuation' | 'signed' | 'active' | 'won' | 'nurture' | 'closed_lost' | 'disqualified' | null;
+    status?: 'new' | 'needs_review' | 'assigned' | 'attempted' | 'contacted' | 'qualified' | 'viewing' | 'offer' | 'valuation' | 'signed' | 'active' | 'won' | 'nurture' | 'closed_lost' | 'disqualified' | null;
     /**
      * Record Kind
      */
@@ -11665,6 +11886,117 @@ export type PropertyTypeBreakdown = {
 };
 
 /**
+ * PublicCollectionAgent
+ */
+export type PublicCollectionAgent = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+};
+
+/**
+ * PublicCollectionItem
+ *
+ * What a client sees for one property. An unavailable item carries no other fields.
+ */
+export type PublicCollectionItem = {
+    /**
+     * Status
+     */
+    status: 'available' | 'unavailable';
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Area Name
+     */
+    area_name?: string | null;
+    /**
+     * Building Name
+     */
+    building_name?: string | null;
+    /**
+     * Property Type
+     */
+    property_type?: string | null;
+    /**
+     * Bedrooms
+     */
+    bedrooms?: number | null;
+    /**
+     * Size Sqft
+     */
+    size_sqft?: number | null;
+    /**
+     * Price Aed
+     */
+    price_aed?: number | null;
+    /**
+     * Mode
+     */
+    mode?: string | null;
+    /**
+     * Rent Period
+     */
+    rent_period?: 'yearly' | null;
+    /**
+     * Photos
+     */
+    photos?: Array<string>;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Source Label
+     */
+    source_label?: string;
+    /**
+     * Updated At
+     */
+    updated_at?: string | null;
+};
+
+/**
+ * PublicCollectionResponse
+ */
+export type PublicCollectionResponse = {
+    /**
+     * Name
+     */
+    name: string;
+    agent: PublicCollectionAgent;
+    /**
+     * Items
+     */
+    items: Array<PublicCollectionItem>;
+    /**
+     * Fetched At
+     */
+    fetched_at: string;
+};
+
+/**
+ * PublicError
+ */
+export type PublicError = {
+    /**
+     * Detail
+     */
+    detail: string;
+};
+
+/**
  * PublishListing
  */
 export type PublishListing = {
@@ -12643,6 +12975,16 @@ export type SendMessageRequest = {
      * Message
      */
     message: string;
+};
+
+/**
+ * ShareLinkResponse
+ */
+export type ShareLinkResponse = {
+    /**
+     * Url
+     */
+    url: string;
 };
 
 /**
@@ -13854,7 +14196,7 @@ export type UpdateLead = {
     /**
      * Status
      */
-    status?: 'new' | 'needs_review' | 'assigned' | 'attempted' | 'contacted' | 'qualified' | 'viewing' | 'valuation' | 'signed' | 'active' | 'won' | 'nurture' | 'closed_lost' | 'disqualified' | null;
+    status?: 'new' | 'needs_review' | 'assigned' | 'attempted' | 'contacted' | 'qualified' | 'viewing' | 'offer' | 'valuation' | 'signed' | 'active' | 'won' | 'nurture' | 'closed_lost' | 'disqualified' | null;
     /**
      * Intent
      */
@@ -16220,6 +16562,279 @@ export type CrmCrmCompanyListingsResponses = {
 
 export type CrmCrmCompanyListingsResponse = CrmCrmCompanyListingsResponses[keyof CrmCrmCompanyListingsResponses];
 
+export type CrmCrmCollectionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/collections';
+};
+
+export type CrmCrmCollectionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCollectionsError = CrmCrmCollectionsErrors[keyof CrmCrmCollectionsErrors];
+
+export type CrmCrmCollectionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CollectionListResponse;
+};
+
+export type CrmCrmCollectionsResponse = CrmCrmCollectionsResponses[keyof CrmCrmCollectionsResponses];
+
+export type CrmCrmCreateCollectionData = {
+    body: CollectionCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/collections';
+};
+
+export type CrmCrmCreateCollectionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCreateCollectionError = CrmCrmCreateCollectionErrors[keyof CrmCrmCreateCollectionErrors];
+
+export type CrmCrmCreateCollectionResponses = {
+    /**
+     * Successful Response
+     */
+    201: CollectionResponse;
+};
+
+export type CrmCrmCreateCollectionResponse = CrmCrmCreateCollectionResponses[keyof CrmCrmCreateCollectionResponses];
+
+export type CrmCrmDeleteCollectionData = {
+    body?: never;
+    path: {
+        /**
+         * Collection Id
+         */
+        collection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/collections/{collection_id}';
+};
+
+export type CrmCrmDeleteCollectionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDeleteCollectionError = CrmCrmDeleteCollectionErrors[keyof CrmCrmDeleteCollectionErrors];
+
+export type CrmCrmDeleteCollectionResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmDeleteCollectionResponse = CrmCrmDeleteCollectionResponses[keyof CrmCrmDeleteCollectionResponses];
+
+export type CrmCrmCollectionData = {
+    body?: never;
+    path: {
+        /**
+         * Collection Id
+         */
+        collection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/collections/{collection_id}';
+};
+
+export type CrmCrmCollectionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCollectionError = CrmCrmCollectionErrors[keyof CrmCrmCollectionErrors];
+
+export type CrmCrmCollectionResponses = {
+    /**
+     * Successful Response
+     */
+    200: CollectionDetailResponse;
+};
+
+export type CrmCrmCollectionResponse = CrmCrmCollectionResponses[keyof CrmCrmCollectionResponses];
+
+export type CrmCrmUpdateCollectionData = {
+    body: CollectionUpdate;
+    path: {
+        /**
+         * Collection Id
+         */
+        collection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/collections/{collection_id}';
+};
+
+export type CrmCrmUpdateCollectionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmUpdateCollectionError = CrmCrmUpdateCollectionErrors[keyof CrmCrmUpdateCollectionErrors];
+
+export type CrmCrmUpdateCollectionResponses = {
+    /**
+     * Successful Response
+     */
+    200: CollectionResponse;
+};
+
+export type CrmCrmUpdateCollectionResponse = CrmCrmUpdateCollectionResponses[keyof CrmCrmUpdateCollectionResponses];
+
+export type CrmCrmAddCollectionItemData = {
+    body: CollectionItemAdd;
+    path: {
+        /**
+         * Collection Id
+         */
+        collection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/collections/{collection_id}/items';
+};
+
+export type CrmCrmAddCollectionItemErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmAddCollectionItemError = CrmCrmAddCollectionItemErrors[keyof CrmCrmAddCollectionItemErrors];
+
+export type CrmCrmAddCollectionItemResponses = {
+    /**
+     * Successful Response
+     */
+    200: CollectionItemResponse;
+};
+
+export type CrmCrmAddCollectionItemResponse = CrmCrmAddCollectionItemResponses[keyof CrmCrmAddCollectionItemResponses];
+
+export type CrmCrmRemoveCollectionItemData = {
+    body?: never;
+    path: {
+        /**
+         * Collection Id
+         */
+        collection_id: string;
+        /**
+         * Item Id
+         */
+        item_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/collections/{collection_id}/items/{item_id}';
+};
+
+export type CrmCrmRemoveCollectionItemErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRemoveCollectionItemError = CrmCrmRemoveCollectionItemErrors[keyof CrmCrmRemoveCollectionItemErrors];
+
+export type CrmCrmRemoveCollectionItemResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmRemoveCollectionItemResponse = CrmCrmRemoveCollectionItemResponses[keyof CrmCrmRemoveCollectionItemResponses];
+
+export type CrmCrmCollectionShareLinkData = {
+    body?: never;
+    path: {
+        /**
+         * Collection Id
+         */
+        collection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/collections/{collection_id}/share-link';
+};
+
+export type CrmCrmCollectionShareLinkErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCollectionShareLinkError = CrmCrmCollectionShareLinkErrors[keyof CrmCrmCollectionShareLinkErrors];
+
+export type CrmCrmCollectionShareLinkResponses = {
+    /**
+     * Successful Response
+     */
+    200: ShareLinkResponse;
+};
+
+export type CrmCrmCollectionShareLinkResponse = CrmCrmCollectionShareLinkResponses[keyof CrmCrmCollectionShareLinkResponses];
+
+export type CrmCrmRotateCollectionShareLinkData = {
+    body?: never;
+    path: {
+        /**
+         * Collection Id
+         */
+        collection_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/collections/{collection_id}/share-link/rotate';
+};
+
+export type CrmCrmRotateCollectionShareLinkErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRotateCollectionShareLinkError = CrmCrmRotateCollectionShareLinkErrors[keyof CrmCrmRotateCollectionShareLinkErrors];
+
+export type CrmCrmRotateCollectionShareLinkResponses = {
+    /**
+     * Successful Response
+     */
+    200: ShareLinkResponse;
+};
+
+export type CrmCrmRotateCollectionShareLinkResponse = CrmCrmRotateCollectionShareLinkResponses[keyof CrmCrmRotateCollectionShareLinkResponses];
+
 export type CrmCrmCompanyListingData = {
     body?: never;
     path: {
@@ -17876,6 +18491,52 @@ export type CrmCrmDeleteSavedLeadResponses = {
 };
 
 export type CrmCrmDeleteSavedLeadResponse = CrmCrmDeleteSavedLeadResponses[keyof CrmCrmDeleteSavedLeadResponses];
+
+export type PublicPublicCollectionData = {
+    body?: never;
+    path: {
+        /**
+         * Token
+         */
+        token: string;
+    };
+    query?: never;
+    url: '/api/v1/public/collections/{token}';
+};
+
+export type PublicPublicCollectionErrors = {
+    /**
+     * Not Found
+     */
+    404: PublicError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: PublicError;
+    /**
+     * Internal Server Error
+     */
+    500: PublicError;
+    /**
+     * Service Unavailable
+     */
+    503: PublicError;
+};
+
+export type PublicPublicCollectionError = PublicPublicCollectionErrors[keyof PublicPublicCollectionErrors];
+
+export type PublicPublicCollectionResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublicCollectionResponse;
+};
+
+export type PublicPublicCollectionResponse = PublicPublicCollectionResponses[keyof PublicPublicCollectionResponses];
 
 export type FiltersGetSalesFilterOptionsData = {
     body?: never;

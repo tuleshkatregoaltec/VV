@@ -189,6 +189,28 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 		expect((await backend.listLeads({ lost: true })).items.map((l) => l.id)).toEqual([3])
 	})
 
+	it("gives the board its lost leads, so a lead moved to Lost shows in the board's Lost column", async () => {
+		// 11 Nov: a lead moved to Lost vanished from the board, whose Lost column could never fill.
+		serve({
+			'/api/v1/crm/inbound/enquiries': {
+				enquiries: [
+					enquiry({ id: 1, intent: 'buy', status: 'contacted' }),
+					enquiry({ id: 2, intent: 'buy', status: 'closed_lost' })
+				],
+				total: 2,
+				summary: {}
+			}
+		})
+		const res = await backend.listLeads({ include_lost: true })
+		expect(res.items.map((l) => [l.id, l.stage])).toEqual([
+			[1, 'contacted'],
+			[2, 'lost']
+		])
+		// The tab counts are unchanged: All still leaves lost leads out.
+		expect(res.counts.all).toBe(1)
+		expect(res.counts.lost).toBe(1)
+	})
+
 	it('reads criteria into the buyer brief the Leads table shows', async () => {
 		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry() })
 		const lead = await backend.getLead(7)
@@ -207,13 +229,50 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 		expect(lead.deal).toBeNull()
 	})
 
-	it('refuses the Offer stage instead of reporting a move the backend cannot store', async () => {
-		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry() })
-		const patch = vi.spyOn(client, 'patch')
-		await expect(backend.moveLeadStage(7, { stage: 'offer' })).rejects.toMatchObject({
-			status: 501
+	it('saves the Offer stage, with the amount and unit as a note on the lead', async () => {
+		// The backend stores an "offer" status (11 Nov): Move to Offer used to fail with a
+		// misleading "server had a problem" before anything was sent.
+		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry({ status: 'viewing' }) })
+		const patch = vi.spyOn(client, 'patch').mockResolvedValue(enquiry({ status: 'offer' }))
+		const post = vi.spyOn(client, 'post').mockResolvedValue(enquiry({ status: 'offer' }))
+		const r = await backend.moveLeadStage(7, {
+			stage: 'offer',
+			offer: { amount_aed: 225_000, listing_id: 'L-9', unit: 'Metro | Lake View' }
 		})
-		expect(patch).not.toHaveBeenCalled()
+		expect(patch.mock.calls[0][1]).toMatchObject({ status: 'offer' })
+		expect(post.mock.calls[0][1]).toEqual({ body: 'Offer AED 225,000 · Metro | Lake View' })
+		expect(r.data.stage).toBe('offer')
+	})
+
+	it('saves a buyer at Won with the agreed price, unit and target date as a note', async () => {
+		// Deals have no backend yet (11 Nov): Offer → Won used to try to open a deal and fail with
+		// "Creating a deal isn't available". The lead's own status records the win instead.
+		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry({ status: 'offer' }) })
+		const patch = vi.spyOn(client, 'patch').mockResolvedValue(enquiry({ status: 'won' }))
+		const post = vi.spyOn(client, 'post').mockResolvedValue(enquiry({ status: 'won' }))
+		const r = await backend.moveLeadStage(7, {
+			stage: 'won',
+			won: { value_aed: 225_000, unit: 'Metro | Lake View', due_date: '2026-12-02' }
+		})
+		expect(patch.mock.calls[0][1]).toMatchObject({ status: 'won' })
+		expect(post.mock.calls[0][1]).toEqual({
+			body: 'Won AED 225,000 · Metro | Lake View · target 2026-12-02'
+		})
+		expect(r.data.stage).toBe('won')
+	})
+
+	it("notes who a seller's offer came from", async () => {
+		serve({ '/api/v1/crm/inbound/enquiries/7': enquiry({ intent: 'sell', status: 'signed' }) })
+		vi.spyOn(client, 'patch').mockResolvedValue(enquiry({ intent: 'sell', status: 'offer' }))
+		const post = vi
+			.spyOn(client, 'post')
+			.mockResolvedValue(enquiry({ intent: 'sell', status: 'offer' }))
+		const r = await backend.moveLeadStage(7, {
+			stage: 'offer',
+			offer: { amount_aed: 2_100_000, from: 'Buyer agent' }
+		})
+		expect(post.mock.calls[0][1]).toEqual({ body: 'Offer AED 2,100,000 · from Buyer agent' })
+		expect(r.data.stage).toBe('offer')
 	})
 
 	it('gives the Edit form the saved areas, so the area matching uses can be seen and changed', async () => {

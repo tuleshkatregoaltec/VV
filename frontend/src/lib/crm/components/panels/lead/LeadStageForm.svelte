@@ -314,6 +314,12 @@ function onPicked() {
 				{#each units as x (x.id)}<option value={x.id}>{x.unit}</option>{/each}
 			</select>
 		</div>
+	{:else if stage === 'won'}
+		<div class="small muted">
+			{lead.own_listing
+				? 'The listing is signed. The deal is made with the buyer or tenant who takes it.'
+				: 'Signed with us. Listings are not stored yet, so the listing details stay in the notes.'}
+		</div>
 	{:else if stage === 'lost'}
 		<div class="fld">
 			<label for="sf-why">Why</label>

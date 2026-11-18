@@ -27,6 +27,8 @@ InboundStatus = Literal[
     "contacted",
     "qualified",
     "viewing",
+    # An offer is on the table (11 Nov 2026): between Viewing and Won in the CRM stage bar.
+    "offer",
     "valuation",
     "signed",
     "active",

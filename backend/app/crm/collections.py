@@ -1,0 +1,470 @@
+"""Shareable property collections: who may manage them, their membership and their share link.
+
+A collection belongs to an organization. Its creator manages it, and so do the organization's
+owners; to everyone else it does not exist (404). The share token is never logged or returned
+outside `share_url` / `rotate_token`.
+"""
+
+from __future__ import annotations
+
+import logging
+import secrets
+from datetime import datetime, timezone
+from typing import NamedTuple
+from uuid import UUID, uuid4
+
+from clickhouse_connect.driver.exceptions import ClickHouseError
+from fastapi import HTTPException
+from sqlalchemy import delete, func, update
+from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.config import settings
+from app.crm.collection_models import (
+    MAX_COLLECTION_ITEMS,
+    CollectionCreate,
+    CollectionDetailResponse,
+    CollectionItemAdd,
+    CollectionItemResponse,
+    CollectionListResponse,
+    CollectionResponse,
+    CollectionUpdate,
+    CrmCollection,
+    CrmCollectionItem,
+    PublicCollectionAgent,
+    PublicCollectionItem,
+    PublicCollectionResponse,
+    ShareLinkResponse,
+)
+from app.crm.company_listings import listings_by_keys
+from app.crm.documents import managed_listing
+from app.crm.models import CrmCompanyListingDetail
+from app.organization.models import Organization
+
+logger = logging.getLogger(__name__)
+
+COLLECTION_NOT_FOUND = "collection_not_found"
+COLLECTION_FULL = "collection_full"
+SHARING_DISABLED = "sharing_disabled"
+COLLECTION_UNAVAILABLE = "collection_unavailable"
+LISTINGS_UNAVAILABLE = "listings_unavailable"
+# Anything that means "the warehouse could not be read" (driver errors, connection failures).
+WAREHOUSE_ERRORS = (ClickHouseError, OSError)
+PUBLIC_SUBSCRIPTION_STATUSES = ("active", "trialing")
+
+
+class CollectionActor(NamedTuple):
+    user_id: str
+    organization_id: str
+    is_owner: bool
+    name: str
+    email: str
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _log(action: str, collection_id: UUID, actor: CollectionActor) -> None:
+    # Identifiers only: never the share token.
+    logger.info(
+        "crm.collection.%s",
+        action,
+        extra={
+            "collection_id": str(collection_id),
+            "organization_id": actor.organization_id,
+            "user_id": actor.user_id,
+        },
+    )
+
+
+def _visible(actor: CollectionActor):
+    clause = CrmCollection.organization_id == actor.organization_id
+    if actor.is_owner:
+        return clause
+    return clause & (CrmCollection.created_by_user_id == actor.user_id)
+
+
+async def _get(
+    db: AsyncSession, actor: CollectionActor, collection_id: UUID, *, lock: bool = False
+) -> CrmCollection:
+    statement = select(CrmCollection).where(CrmCollection.id == collection_id, _visible(actor))
+    if lock:
+        statement = statement.with_for_update()
+    row = (await db.exec(statement)).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail=COLLECTION_NOT_FOUND)
+    return row
+
+
+async def _item_count(db: AsyncSession, collection_id: UUID) -> int:
+    return (
+        await db.exec(
+            select(func.count())
+            .select_from(CrmCollectionItem)
+            .where(CrmCollectionItem.collection_id == collection_id)
+        )
+    ).one()
+
+
+def _response(row: CrmCollection, item_count: int) -> CollectionResponse:
+    return CollectionResponse(
+        id=row.id,
+        name=row.name,
+        sharing_enabled=row.sharing_enabled,
+        item_count=item_count,
+        created_by_user_id=row.created_by_user_id,
+        agent_name=row.agent_name,
+        agent_email=row.agent_email,
+        agent_phone=row.agent_phone,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _item_response(item: CrmCollectionItem, listing=None) -> CollectionItemResponse:
+    return CollectionItemResponse(
+        id=item.id,
+        source=item.source,
+        listing_key=item.listing_key,
+        listing_title=item.listing_title,
+        added_at=item.added_at,
+        listing=listing,
+    )
+
+
+async def list_collections(
+    db: AsyncSession, *, actor: CollectionActor, limit: int, offset: int
+) -> CollectionListResponse:
+    total = (
+        await db.exec(select(func.count()).select_from(CrmCollection).where(_visible(actor)))
+    ).one()
+    counts = (
+        select(CrmCollectionItem.collection_id, func.count().label("n"))
+        .group_by(CrmCollectionItem.collection_id)
+        .subquery()
+    )
+    rows = (
+        await db.exec(
+            select(CrmCollection, func.coalesce(counts.c.n, 0))
+            .outerjoin(counts, counts.c.collection_id == CrmCollection.id)
+            .where(_visible(actor))
+            .order_by(col(CrmCollection.updated_at).desc(), col(CrmCollection.id))
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+    covers = await _cover_photos(db, actor.organization_id, [row.id for row, _ in rows])
+    return CollectionListResponse(
+        items=[
+            _response(row, int(count)).model_copy(update={"cover_photos": covers.get(row.id, [])})
+            for row, count in rows
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+COVER_PHOTOS = 3
+
+
+async def _cover_photos(
+    db: AsyncSession, organization_id: str, collection_ids: list[UUID]
+) -> dict[UUID, list[str]]:
+    """First photo of each of the first COVER_PHOTOS items per collection, in one warehouse query.
+
+    Covers are decoration: if the warehouse is unavailable the list still loads, without them.
+    """
+    if not collection_ids:
+        return {}
+    first = (
+        select(
+            CrmCollectionItem.collection_id,
+            CrmCollectionItem.listing_key,
+            func.row_number()
+            .over(
+                partition_by=CrmCollectionItem.collection_id,
+                order_by=(col(CrmCollectionItem.added_at), col(CrmCollectionItem.id)),
+            )
+            .label("n"),
+        )
+        .where(
+            col(CrmCollectionItem.collection_id).in_(collection_ids),
+            CrmCollectionItem.organization_id == organization_id,
+        )
+        .subquery()
+    )
+    picks = (
+        await db.exec(
+            select(first.c.collection_id, first.c.listing_key)
+            .where(first.c.n <= COVER_PHOTOS)
+            .order_by(first.c.collection_id, first.c.n)
+        )
+    ).all()
+    if not picks:
+        return {}
+    try:
+        current = await listings_by_keys(db, organization_id, list({key for _, key in picks}))
+    except WAREHOUSE_ERRORS:
+        logger.warning("crm.collection.covers_unavailable")
+        return {}
+    covers: dict[UUID, list[str]] = {}
+    for collection_id, key in picks:
+        listing = current.get(key)
+        if listing and listing.managed and listing.photos:
+            covers.setdefault(collection_id, []).append(listing.photos[0])
+    return covers
+
+
+async def create_collection(
+    db: AsyncSession, *, actor: CollectionActor, payload: CollectionCreate
+) -> CollectionResponse:
+    now = _now()
+    row = CrmCollection(
+        organization_id=actor.organization_id,
+        created_by_user_id=actor.user_id,
+        name=payload.name,
+        share_token=secrets.token_urlsafe(32),
+        sharing_enabled=False,
+        agent_name=actor.name,
+        agent_email=actor.email or None,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(row)
+    await db.commit()
+    _log("create", row.id, actor)
+    return _response(row, 0)
+
+
+async def get_collection(
+    db: AsyncSession, *, actor: CollectionActor, collection_id: UUID
+) -> CollectionDetailResponse:
+    row = await _get(db, actor, collection_id)
+    items = (
+        await db.exec(
+            select(CrmCollectionItem)
+            .where(CrmCollectionItem.collection_id == collection_id)
+            .order_by(col(CrmCollectionItem.added_at), col(CrmCollectionItem.id))
+        )
+    ).all()
+    current = await listings_by_keys(
+        db, actor.organization_id, [item.listing_key for item in items]
+    )
+    return CollectionDetailResponse(
+        **_response(row, len(items)).model_dump(),
+        items=[
+            _item_response(
+                item,
+                found if (found := current.get(item.listing_key)) and found.managed else None,
+            )
+            for item in items
+        ],
+    )
+
+
+async def update_collection(
+    db: AsyncSession, *, actor: CollectionActor, collection_id: UUID, payload: CollectionUpdate
+) -> CollectionResponse:
+    row = await _get(db, actor, collection_id)
+    # Only fields the client sent: an explicit null clears the optional contact fields.
+    for field in payload.model_fields_set:
+        setattr(row, field, getattr(payload, field))
+    row.updated_at = _now()
+    db.add(row)
+    await db.commit()
+    _log("update", row.id, actor)
+    return _response(row, await _item_count(db, row.id))
+
+
+async def delete_collection(
+    db: AsyncSession, *, actor: CollectionActor, collection_id: UUID
+) -> None:
+    row = await _get(db, actor, collection_id)
+    await db.delete(row)  # items go with it (ON DELETE CASCADE)
+    await db.commit()
+    _log("delete", collection_id, actor)
+
+
+def _insert_item(db: AsyncSession, values: dict):
+    dialect = postgresql if db.get_bind().dialect.name == "postgresql" else sqlite
+    return (
+        dialect.insert(CrmCollectionItem)
+        .values(**values)
+        .on_conflict_do_nothing(index_elements=["collection_id", "source", "listing_key"])
+        .returning(CrmCollectionItem.id)
+    )
+
+
+async def _existing_item(
+    db: AsyncSession, collection_id: UUID, payload: CollectionItemAdd
+) -> CrmCollectionItem | None:
+    return (
+        await db.exec(
+            select(CrmCollectionItem).where(
+                CrmCollectionItem.collection_id == collection_id,
+                CrmCollectionItem.source == payload.source,
+                CrmCollectionItem.listing_key == payload.listing_key,
+            )
+        )
+    ).first()
+
+
+async def _item(db: AsyncSession, item_id: UUID) -> CrmCollectionItem:
+    return (await db.exec(select(CrmCollectionItem).where(CrmCollectionItem.id == item_id))).one()
+
+
+async def add_item(
+    db: AsyncSession, *, actor: CollectionActor, collection_id: UUID, payload: CollectionItemAdd
+) -> tuple[CollectionItemResponse, bool]:
+    listing = await managed_listing(db, actor.organization_id, payload.listing_key)
+    # The row lock serializes concurrent adds, so the count below cannot go stale.
+    row = await _get(db, actor, collection_id, lock=True)
+    existing = await _existing_item(db, row.id, payload)
+    if existing is not None:
+        response = _item_response(existing, listing)
+        await db.rollback()  # release the lock; rollback expires loaded rows
+        return response, False
+    if await _item_count(db, row.id) >= MAX_COLLECTION_ITEMS:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail=COLLECTION_FULL)
+
+    now = _now()
+    item_id = uuid4()
+    inserted = (
+        await db.exec(
+            _insert_item(
+                db,
+                {
+                    "id": item_id,
+                    "collection_id": row.id,
+                    "organization_id": row.organization_id,
+                    "source": payload.source,
+                    "listing_key": payload.listing_key,
+                    "listing_title": listing.title,
+                    "added_by_user_id": actor.user_id,
+                    "added_at": now,
+                },
+            )
+        )
+    ).first()
+    if inserted is None:  # Lost a race the lock should have prevented: report the existing row.
+        await db.rollback()
+        return _item_response(await _existing_item(db, row.id, payload), listing), False
+    await db.exec(update(CrmCollection).where(CrmCollection.id == row.id).values(updated_at=now))
+    await db.commit()
+    _log("add_item", row.id, actor)
+    return _item_response(await _item(db, item_id), listing), True
+
+
+async def remove_item(
+    db: AsyncSession, *, actor: CollectionActor, collection_id: UUID, item_id: UUID
+) -> None:
+    row = await _get(db, actor, collection_id)
+    result = await db.exec(
+        delete(CrmCollectionItem).where(
+            CrmCollectionItem.id == item_id, CrmCollectionItem.collection_id == row.id
+        )
+    )
+    if result.rowcount:
+        await db.exec(
+            update(CrmCollection).where(CrmCollection.id == row.id).values(updated_at=_now())
+        )
+        _log("remove_item", row.id, actor)
+    await db.commit()
+
+
+def _share_link(token: str) -> ShareLinkResponse:
+    base = str(settings.FRONTEND_URL).rstrip("/")
+    return ShareLinkResponse(url=f"{base}/collections/{token}")
+
+
+async def share_url(
+    db: AsyncSession, *, actor: CollectionActor, collection_id: UUID
+) -> ShareLinkResponse:
+    row = await _get(db, actor, collection_id)
+    if not row.sharing_enabled:
+        raise HTTPException(status_code=409, detail=SHARING_DISABLED)
+    return _share_link(row.share_token)
+
+
+async def rotate_token(
+    db: AsyncSession, *, actor: CollectionActor, collection_id: UUID
+) -> ShareLinkResponse:
+    row = await _get(db, actor, collection_id)
+    row.share_token = secrets.token_urlsafe(32)
+    row.updated_at = _now()
+    db.add(row)
+    await db.commit()
+    _log("rotate_token", row.id, actor)
+    return _share_link(row.share_token)
+
+
+def _public_item(listing: CrmCompanyListingDetail | None) -> PublicCollectionItem:
+    if listing is None or not listing.managed:
+        return PublicCollectionItem(status="unavailable")
+    return PublicCollectionItem(
+        status="available",
+        title=listing.title,
+        area_name=listing.area_name,
+        building_name=listing.building_name,
+        property_type=listing.property_type,
+        bedrooms=listing.bedrooms,
+        size_sqft=listing.size_sqft,
+        price_aed=listing.price_aed,
+        mode=listing.mode,
+        rent_period="yearly" if listing.mode == "rent" else None,
+        photos=[url for url in listing.photos if url.startswith("https://")],
+        description=listing.description,
+        updated_at=listing.updated_at,
+    )
+
+
+async def public_collection(db: AsyncSession, token: str) -> PublicCollectionResponse:
+    """The client view of one collection, resolved against current inventory.
+
+    Unknown token, sharing off and a non-paying organization are indistinguishable (404).
+    A warehouse failure is 503, never an empty list.
+    """
+    unavailable = HTTPException(status_code=404, detail=COLLECTION_UNAVAILABLE)
+    try:
+        row = (
+            await db.exec(select(CrmCollection).where(CrmCollection.share_token == token))
+        ).first()
+        if row is None or not row.sharing_enabled:
+            raise unavailable
+        organization = await db.get(Organization, row.organization_id)
+        if (
+            organization is None
+            or organization.subscription_status not in PUBLIC_SUBSCRIPTION_STATUSES
+        ):
+            raise unavailable
+        items = (
+            await db.exec(
+                select(CrmCollectionItem)
+                .where(CrmCollectionItem.collection_id == row.id)
+                .order_by(col(CrmCollectionItem.added_at), col(CrmCollectionItem.id))
+            )
+        ).all()
+    except SQLAlchemyError:
+        # Fixed message only: the driver error text embeds the bound parameters, i.e. the token.
+        logger.error("crm.collection.public_db_unavailable")
+        # `from None` for the same reason.
+        raise HTTPException(status_code=503, detail=LISTINGS_UNAVAILABLE) from None
+    try:
+        current = await listings_by_keys(
+            db, row.organization_id, [item.listing_key for item in items]
+        )
+    except WAREHOUSE_ERRORS as exc:
+        raise HTTPException(status_code=503, detail=LISTINGS_UNAVAILABLE) from exc
+    return PublicCollectionResponse(
+        name=row.name,
+        agent=PublicCollectionAgent(
+            name=row.agent_name, email=row.agent_email, phone=row.agent_phone
+        ),
+        items=[_public_item(current.get(item.listing_key)) for item in items],
+        fetched_at=_now(),
+    )

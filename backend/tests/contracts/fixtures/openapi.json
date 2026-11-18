@@ -3291,6 +3291,401 @@
 				}
 			}
 		},
+		"/api/v1/crm/collections": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Collections",
+				"description": "Collections the signed-in user manages (own; all of the organization's for owners).",
+				"operationId": "crm-crm_collections",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"default": 50,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CollectionListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Create Collection",
+				"operationId": "crm-crm_create_collection",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CollectionCreate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CollectionResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/collections/{collection_id}": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Collection",
+				"description": "The collection with its items resolved against current inventory.\n\n503 `listings_unavailable` when the warehouse cannot be read.",
+				"operationId": "crm-crm_collection",
+				"parameters": [
+					{
+						"name": "collection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Collection Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CollectionDetailResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"patch": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Update Collection",
+				"operationId": "crm-crm_update_collection",
+				"parameters": [
+					{
+						"name": "collection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Collection Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CollectionUpdate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CollectionResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Delete Collection",
+				"operationId": "crm-crm_delete_collection",
+				"parameters": [
+					{
+						"name": "collection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Collection Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/collections/{collection_id}/items": {
+			"put": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Add Collection Item",
+				"description": "201 when added, 200 when the listing was already in the collection.",
+				"operationId": "crm-crm_add_collection_item",
+				"parameters": [
+					{
+						"name": "collection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Collection Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CollectionItemAdd"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CollectionItemResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/collections/{collection_id}/items/{item_id}": {
+			"delete": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Remove Collection Item",
+				"operationId": "crm-crm_remove_collection_item",
+				"parameters": [
+					{
+						"name": "collection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Collection Id"
+						}
+					},
+					{
+						"name": "item_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Item Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/collections/{collection_id}/share-link": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Collection Share Link",
+				"description": "The public URL; 409 `sharing_disabled` until sharing is switched on.",
+				"operationId": "crm-crm_collection_share_link",
+				"parameters": [
+					{
+						"name": "collection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Collection Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ShareLinkResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/collections/{collection_id}/share-link/rotate": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Rotate Collection Share Link",
+				"description": "Replace the URL; the previous one stops working.",
+				"operationId": "crm-crm_rotate_collection_share_link",
+				"parameters": [
+					{
+						"name": "collection_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Collection Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ShareLinkResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/company-listings/{listing_key}": {
 			"get": {
 				"tags": ["crm", "crm"],
@@ -6211,6 +6606,86 @@
 				"responses": {
 					"204": {
 						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/public/collections/{token}": {
+			"get": {
+				"tags": ["public"],
+				"summary": "Public Collection",
+				"operationId": "public-public_collection",
+				"parameters": [
+					{
+						"name": "token",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Token"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublicCollectionResponse"
+								}
+							}
+						}
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublicError"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"429": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublicError"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublicError"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"503": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublicError"
+								}
+							}
+						},
+						"description": "Service Unavailable"
 					},
 					"422": {
 						"description": "Validation Error",
@@ -16304,6 +16779,345 @@
 				"required": ["status"],
 				"title": "ChunkedUploadResponse"
 			},
+			"CollectionCreate": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Name"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["name"],
+				"title": "CollectionCreate"
+			},
+			"CollectionDetailResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"sharing_enabled": {
+						"type": "boolean",
+						"title": "Sharing Enabled"
+					},
+					"item_count": {
+						"type": "integer",
+						"title": "Item Count"
+					},
+					"created_by_user_id": {
+						"type": "string",
+						"title": "Created By User Id"
+					},
+					"agent_name": {
+						"type": "string",
+						"title": "Agent Name"
+					},
+					"agent_email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Email"
+					},
+					"agent_phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Phone"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					},
+					"cover_photos": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Cover Photos"
+					},
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/CollectionItemResponse"
+						},
+						"type": "array",
+						"title": "Items"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"sharing_enabled",
+					"item_count",
+					"created_by_user_id",
+					"agent_name",
+					"agent_email",
+					"agent_phone",
+					"created_at",
+					"updated_at",
+					"items"
+				],
+				"title": "CollectionDetailResponse"
+			},
+			"CollectionItemAdd": {
+				"properties": {
+					"source": {
+						"type": "string",
+						"const": "property_finder",
+						"title": "Source"
+					},
+					"listing_key": {
+						"type": "string",
+						"pattern": "^[A-Za-z0-9]{1,40}$",
+						"title": "Listing Key"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["source", "listing_key"],
+				"title": "CollectionItemAdd"
+			},
+			"CollectionItemResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid",
+						"title": "Id"
+					},
+					"source": {
+						"type": "string",
+						"title": "Source"
+					},
+					"listing_key": {
+						"type": "string",
+						"title": "Listing Key"
+					},
+					"listing_title": {
+						"type": "string",
+						"title": "Listing Title"
+					},
+					"added_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Added At"
+					},
+					"listing": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmCompanyListingDetail"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				"type": "object",
+				"required": ["id", "source", "listing_key", "listing_title", "added_at"],
+				"title": "CollectionItemResponse"
+			},
+			"CollectionListResponse": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/CollectionResponse"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": ["items", "total", "limit", "offset"],
+				"title": "CollectionListResponse"
+			},
+			"CollectionResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"sharing_enabled": {
+						"type": "boolean",
+						"title": "Sharing Enabled"
+					},
+					"item_count": {
+						"type": "integer",
+						"title": "Item Count"
+					},
+					"created_by_user_id": {
+						"type": "string",
+						"title": "Created By User Id"
+					},
+					"agent_name": {
+						"type": "string",
+						"title": "Agent Name"
+					},
+					"agent_email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Email"
+					},
+					"agent_phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Phone"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					},
+					"cover_photos": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Cover Photos"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"sharing_enabled",
+					"item_count",
+					"created_by_user_id",
+					"agent_name",
+					"agent_email",
+					"agent_phone",
+					"created_at",
+					"updated_at"
+				],
+				"title": "CollectionResponse",
+				"description": "Management view. Deliberately has no token field; see ShareLinkResponse."
+			},
+			"CollectionUpdate": {
+				"properties": {
+					"name": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 120,
+								"minLength": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Name"
+					},
+					"sharing_enabled": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sharing Enabled"
+					},
+					"agent_name": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200,
+								"minLength": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Name"
+					},
+					"agent_email": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "email"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Email"
+					},
+					"agent_phone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200,
+								"minLength": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Phone"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "CollectionUpdate"
+			},
 			"ComparableData": {
 				"properties": {
 					"project_id": {
@@ -17372,6 +18186,14 @@
 						"format": "date-time",
 						"title": "Listed At"
 					},
+					"photos": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Photos",
+						"default": []
+					},
 					"listing_key": {
 						"type": "string",
 						"title": "Listing Key"
@@ -17387,6 +18209,29 @@
 					"managed": {
 						"type": "boolean",
 						"title": "Managed"
+					},
+					"description": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Description"
+					},
+					"updated_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Updated At"
 					}
 				},
 				"type": "object",
@@ -17506,6 +18351,14 @@
 						"type": "string",
 						"format": "date-time",
 						"title": "Listed At"
+					},
+					"photos": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Photos",
+						"default": []
 					}
 				},
 				"type": "object",
@@ -25278,6 +26131,7 @@
 							"contacted",
 							"qualified",
 							"viewing",
+							"offer",
 							"valuation",
 							"signed",
 							"active",
@@ -25589,6 +26443,7 @@
 									"contacted",
 									"qualified",
 									"viewing",
+									"offer",
 									"valuation",
 									"signed",
 									"active",
@@ -33425,6 +34280,224 @@
 				"required": ["property_type", "count", "avg_price", "pct_of_total"],
 				"title": "PropertyTypeBreakdown"
 			},
+			"PublicCollectionAgent": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					},
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					}
+				},
+				"type": "object",
+				"required": ["name"],
+				"title": "PublicCollectionAgent"
+			},
+			"PublicCollectionItem": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": ["available", "unavailable"],
+						"title": "Status"
+					},
+					"title": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Title"
+					},
+					"area_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Name"
+					},
+					"building_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building Name"
+					},
+					"property_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Property Type"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"size_sqft": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Sqft"
+					},
+					"price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Aed"
+					},
+					"mode": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Mode"
+					},
+					"rent_period": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "yearly"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Rent Period"
+					},
+					"photos": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Photos"
+					},
+					"description": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Description"
+					},
+					"source_label": {
+						"type": "string",
+						"title": "Source Label",
+						"default": "Property Finder"
+					},
+					"updated_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": ["status"],
+				"title": "PublicCollectionItem",
+				"description": "What a client sees for one property. An unavailable item carries no other fields."
+			},
+			"PublicCollectionResponse": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"agent": {
+						"$ref": "#/components/schemas/PublicCollectionAgent"
+					},
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/PublicCollectionItem"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"fetched_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Fetched At"
+					}
+				},
+				"type": "object",
+				"required": ["name", "agent", "items", "fetched_at"],
+				"title": "PublicCollectionResponse"
+			},
+			"PublicError": {
+				"properties": {
+					"detail": {
+						"type": "string",
+						"title": "Detail"
+					}
+				},
+				"type": "object",
+				"required": ["detail"],
+				"title": "PublicError"
+			},
 			"PublishListing": {
 				"properties": {
 					"listing_id": {
@@ -35003,6 +36076,17 @@
 				"required": ["message"],
 				"title": "SendMessageRequest",
 				"description": "Request model for sending a message in a conversation"
+			},
+			"ShareLinkResponse": {
+				"properties": {
+					"url": {
+						"type": "string",
+						"title": "Url"
+					}
+				},
+				"type": "object",
+				"required": ["url"],
+				"title": "ShareLinkResponse"
 			},
 			"SignupComplete": {
 				"properties": {
@@ -37077,6 +38161,7 @@
 									"contacted",
 									"qualified",
 									"viewing",
+									"offer",
 									"valuation",
 									"signed",
 									"active",

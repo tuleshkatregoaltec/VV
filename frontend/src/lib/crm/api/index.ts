@@ -309,6 +309,19 @@ const liveCrm = {
 		preview: backend.previewDocument
 	},
 
+	/** Shareable property collections (managed listings shared by a public link). */
+	collections: {
+		list: backend.listCollections,
+		get: backend.getCollection,
+		create: backend.createCollection,
+		update: backend.updateCollection,
+		remove: backend.deleteCollection,
+		addItem: backend.addCollectionItem,
+		removeItem: backend.removeCollectionItem,
+		shareLink: backend.getCollectionShareLink,
+		rotateLink: backend.rotateCollectionShareLink
+	},
+
 	portfolio: {
 		get: async (): Promise<PortfolioResponse> => ({
 			clients: [],

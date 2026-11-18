@@ -16,6 +16,10 @@ LOGGING_CONFIG: Dict[str, Any] = {
             "use_colors": True,
         },
     },
+    "filters": {
+        # Share tokens are bearer secrets; the engine logs bound parameters at INFO.
+        "redact_sql_params": {"()": "app.core.log_redaction.RedactSqlParameters"},
+    },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
@@ -36,6 +40,7 @@ LOGGING_CONFIG: Dict[str, Any] = {
             "class": "logging.handlers.RotatingFileHandler",
             "formatter": "default",
             "level": "INFO",  # SQLAlchemy logs queries at INFO level
+            "filters": ["redact_sql_params"],
             "filename": "logs/sql.log",
             "maxBytes": 5 * 1024 * 1024,
             "backupCount": 3,

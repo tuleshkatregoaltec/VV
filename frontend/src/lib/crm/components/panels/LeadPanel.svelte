@@ -125,7 +125,7 @@ function logCall(name: string) {
 					</button>
 				{/if}
 			{:else if l.stage !== 'won' && l.stage !== 'lost'}
-				<button type="button" class="btn ghost" onclick={() => panel.setTab('stage:won')}>Move to deal</button>
+				<button type="button" class="btn ghost" onclick={() => panel.setTab('stage:won')}>Move to Won</button>
 			{/if}
 			<button type="button" class="btn ghost" onclick={() => logCall(l.name)}>Log a call</button>
 			{/if}

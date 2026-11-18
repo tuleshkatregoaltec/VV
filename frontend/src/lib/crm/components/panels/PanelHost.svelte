@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { PanelState } from '../../stores/panel.svelte'
 import AddRecordPanel from './AddRecordPanel.svelte'
+import AgentPanel from './AgentPanel.svelte'
 import AreasPanel from './AreasPanel.svelte'
 import ClientPanel from './ClientPanel.svelte'
 import DayPanel from './DayPanel.svelte'
@@ -112,5 +113,7 @@ const key = $derived.by(() => {
 		<OwnerReportPanel id={p.id} />
 	{:else if p.kind === 'which-doc'}
 		<WhichDocPanel dealId={p.dealId} files={p.files} index={p.index} />
+	{:else if p.kind === 'agent'}
+		<AgentPanel id={p.id} view={p.view} />
 	{/if}
 {/key}

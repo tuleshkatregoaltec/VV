@@ -26,6 +26,7 @@ from app.config import settings
 from app.core.logging_config import LOGGING_CONFIG
 from app.core.observability import Middleware as ObservabilityMiddleware
 from app.core.observability import configure as configure_observability
+from app.crm.collection_public_router import router as crm_collection_public_router
 from app.crm.router import router as crm_router
 from app.feasibility.router import router as feasibility_router
 from app.filters.router import router as filters_router
@@ -130,6 +131,7 @@ app.include_router(area_router, tags=["areas"])
 app.include_router(chat_router, tags=["chat"])
 app.include_router(assistant_actions_router, tags=["assistant_actions"])
 app.include_router(crm_router, tags=["crm"])
+app.include_router(crm_collection_public_router, tags=["public"])
 app.include_router(filters_router, tags=["filters"])
 app.include_router(listings_router, tags=["listings"])
 app.include_router(news_router, tags=["news"])

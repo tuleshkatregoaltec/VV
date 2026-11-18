@@ -16,6 +16,13 @@ import type {
 	AssignmentEventResponse,
 	AssignmentScopeResponse,
 	AuthMeResponse,
+	CollectionCreate,
+	CollectionDetailResponse,
+	CollectionItemAdd,
+	CollectionItemResponse,
+	CollectionListResponse,
+	CollectionResponse,
+	CollectionUpdate,
 	CrmAreaPreferencesResponse,
 	CrmCompanyListingDetail,
 	CrmContactImportPreview,
@@ -57,6 +64,7 @@ import type {
 	RoutingRuleResponse,
 	RoutingRuleUpdate,
 	RoutingRuleWrite,
+	ShareLinkResponse,
 	TeamAnalyticsResponse,
 	WorkloadResponse
 } from '$lib/api/generated/hey-api/types.gen'
@@ -76,6 +84,7 @@ import {
 } from '../ownerImportReport'
 import type {
 	Chip,
+	CollectionListParams,
 	CompanyListingAgentInventory,
 	CompanyListingCompany,
 	CompanyListingFilter,
@@ -280,6 +289,8 @@ function stageOf(status: Status, type: LeadType): LeadStage {
 			return 'qualified'
 		case 'viewing':
 			return groupOf(type) === 'sl' ? 'qualified' : 'viewing'
+		case 'offer':
+			return 'offer'
 		case 'signed':
 		case 'active':
 			return groupOf(type) === 'sl' ? 'listed' : 'qualified'
@@ -295,8 +306,6 @@ function stageOf(status: Status, type: LeadType): LeadStage {
 
 function statusOf(stage: LeadStage): Status {
 	switch (stage) {
-		case 'offer':
-			throw notSaved('The Offer stage')
 		case 'listed':
 			return 'signed'
 		case 'lost':
@@ -630,7 +639,9 @@ export async function listLeads(p: LeadListParams): Promise<LeadListResponse> {
 	for (const t of Object.keys(LEAD_TYPES) as LeadType[])
 		counts[t] = open.filter(({ row }) => row.lead_type === t).length
 
-	const items = (p.lost ? matching.filter(({ row }) => row.stage === 'lost') : open)
+	const items = (
+		p.lost ? matching.filter(({ row }) => row.stage === 'lost') : p.include_lost ? matching : open
+	)
 		.map(({ row }) => row)
 		.filter((row) => !p.lead_type || row.lead_type === p.lead_type)
 	return {
@@ -712,8 +723,9 @@ const contactType = (outcome?: string) =>
 	outcome === 'No answer' ? 'contact_attempt' : outcome?.includes('WhatsApp') ? 'whatsapp' : 'call'
 
 /**
- * A stage move is a status change plus what the form collected. The backend has no calendar or
- * own listings yet, so a viewing's date and a listing's details are kept as a note on the lead.
+ * A stage move is a status change plus what the form collected. A viewing is booked in the
+ * calendar and noted on the lead; the backend has no own listings yet, so a listing's details are
+ * kept as a note on the lead.
  */
 export async function moveLeadStage(id: number, body: LeadStageMove): Promise<Written<LeadDetail>> {
 	const status = statusOf(body.stage)
@@ -730,6 +742,24 @@ export async function moveLeadStage(id: number, body: LeadStageMove): Promise<Wr
 			`Viewing ${body.viewing.date}${body.viewing.time ? ` ${body.viewing.time}` : ''}`,
 		body.listing &&
 			`Listing: ${body.listing.unit}, ${body.listing.area} · ${aed(body.listing.price_aed)} · ${body.listing.status}`,
+		// The backend keeps the stage only; the offer itself goes on the lead as a note.
+		body.offer &&
+			[
+				`Offer ${aed(body.offer.amount_aed)}`,
+				body.offer.unit,
+				body.offer.from && `from ${body.offer.from}`
+			]
+				.filter(Boolean)
+				.join(' · '),
+		// Deals have no backend yet: the lead's "won" status records the win, the terms go in a note.
+		body.won &&
+			[
+				`Won ${aed(body.won.value_aed)}`,
+				body.won.unit,
+				body.won.due_date && `target ${body.won.due_date}`
+			]
+				.filter(Boolean)
+				.join(' · '),
 		body.note
 	].filter(Boolean) as string[]
 	if (body.stage === 'contacted') {
@@ -2572,6 +2602,7 @@ interface CompanyListingResponse {
 	unit_number: string | null
 	status: string
 	listed_at: string
+	photos?: string[]
 }
 
 interface CompanyListingsResponse {
@@ -2611,7 +2642,8 @@ function companyCard(r: CompanyListingResponse): ListingCard {
 		form_a_expires: null,
 		form_a_chip: null,
 		comparables_note: '',
-		from_lead_id: null
+		from_lead_id: null,
+		photos: r.photos ?? []
 	}
 }
 
@@ -2655,6 +2687,37 @@ export async function selectCompanyListingSource(broker_id: string) {
 }
 
 /* ── listing documents (/company-listings/{key}, /listing-document-info, /documents) ── */
+
+export function listCollections(p: CollectionListParams = {}) {
+	const params = new URLSearchParams()
+	if (p.limit) params.set('limit', String(p.limit))
+	if (p.offset) params.set('offset', String(p.offset))
+	const q = params.toString()
+	return client.get<CollectionListResponse>(`${CRM}/collections${q ? `?${q}` : ''}`)
+}
+
+export const getCollection = (id: string) =>
+	client.get<CollectionDetailResponse>(`${CRM}/collections/${id}`)
+
+export const createCollection = (body: CollectionCreate) =>
+	client.post<CollectionResponse>(`${CRM}/collections`, body)
+
+export const updateCollection = (id: string, body: CollectionUpdate) =>
+	client.patch<CollectionResponse>(`${CRM}/collections/${id}`, body)
+
+export const deleteCollection = (id: string) => client.delete<void>(`${CRM}/collections/${id}`)
+
+export const addCollectionItem = (id: string, body: CollectionItemAdd) =>
+	client.put<CollectionItemResponse>(`${CRM}/collections/${id}/items`, body)
+
+export const removeCollectionItem = (id: string, itemId: string) =>
+	client.delete<void>(`${CRM}/collections/${id}/items/${itemId}`)
+
+export const getCollectionShareLink = (id: string) =>
+	client.post<ShareLinkResponse>(`${CRM}/collections/${id}/share-link`)
+
+export const rotateCollectionShareLink = (id: string) =>
+	client.post<ShareLinkResponse>(`${CRM}/collections/${id}/share-link/rotate`)
 
 /** A company card's id is `PF-<Property Finder listing id>`; documents use the bare id. */
 export const listingKeyOf = (id: string): string | null =>

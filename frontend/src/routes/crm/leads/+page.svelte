@@ -12,6 +12,7 @@ import type {
 	LeaseWindow,
 	Source
 } from '$lib/crm/api/types'
+import { canDrop, columnTotal, initials, needLine } from '$lib/crm/board'
 import TeamAnalytics from '$lib/crm/components/manager/TeamAnalytics.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
@@ -80,6 +81,8 @@ function pickLeaseWindow(w: LeaseWindow) {
 const params = $derived<LeadListParams>({
 	lead_type: tabType ?? '',
 	lost: ui.leadTab === 'lost' ? true : undefined,
+	// The board has a Lost column: give it the lost leads the list view keeps under the Lost tab.
+	include_lost: ui.leadView === 'board' ? true : undefined,
 	source: ui.source,
 	stage: ui.stage,
 	area: ui.area,
@@ -144,6 +147,30 @@ async function open(l: LeadRow) {
 		success: `${l.lease.unit} is now a lead`
 	})
 	if (r) openLead(r.data.id)
+}
+
+/** Board drag and drop: the card being dragged and the column under it. */
+let dragging = $state<LeadRow | null>(null)
+let over = $state<LeadStage | null>(null)
+
+/**
+ * A drop asks for what the stage needs: back to New saves at once (it needs nothing); any other
+ * stage opens the lead on that stage's form, and the card moves once the form is saved.
+ */
+function dropOn(to: LeadStage) {
+	const l = dragging
+	dragging = null
+	over = null
+	if (!l || !canDrop(l, to)) return
+	if (to === 'new') {
+		write({
+			call: () => crm.leads.moveStage(l.id, { stage: 'new' }),
+			success: `${l.name} → New`,
+			event: 'lead_stage_changed'
+		})
+		return
+	}
+	openLead(l.id, `stage:${to}`)
 }
 
 const rowKey = (l: LeadRow) => (l.id ? String(l.id) : `lease:${l.lease?.id}`)
@@ -361,17 +388,63 @@ const typeLine = (l: LeadRow) =>
 			<div class="lboard">
 				{#each boardStages as s (s.id)}
 					{@const cards = grows.filter((l) => l.stage === s.id)}
-					<section class="col" aria-label="{s.label}, {cards.length} leads">
+					{@const total = columnTotal(cards)}
+					{@const ok = dragging ? canDrop(dragging, s.id) : false}
+					<section
+						class={[
+							'col',
+							dragging && ok && 'drop-ok',
+							dragging && !ok && dragging.stage !== s.id && 'drop-no',
+							over === s.id && 'drop-over'
+						]}
+						aria-label="{s.label}, {cards.length} leads{total ? `, ${total}` : ''}"
+						ondragover={(e) => {
+							if (!dragging || !canDrop(dragging, s.id)) return
+							e.preventDefault()
+							if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+							over = s.id
+						}}
+						ondragleave={(e) => {
+							if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null) && over === s.id) over = null
+						}}
+						ondrop={(e) => {
+							e.preventDefault()
+							dropOn(s.id)
+						}}
+					>
 						<div class="colh"><span>{s.label}</span><span>{cards.length}</span></div>
+						{#if total}<div class="colt">{total}</div>{/if}
 						{#each cards as l (rowKey(l))}
+							{@const need = needLine(l)}
 							<button
 								type="button"
-								class="bcard cl"
+								class={['bcard', 'cl', 'lcard', dragging === l && 'lifted']}
 								style:--c={SOURCES[l.source].color}
+								draggable={l.id ? 'true' : 'false'}
+								title={l.id ? 'Drag to another stage, or click to open' : undefined}
 								onclick={() => open(l)}
+								ondragstart={(e) => {
+									dragging = l
+									if (e.dataTransfer) {
+										e.dataTransfer.effectAllowed = 'move'
+										e.dataTransfer.setData('text/plain', String(l.id))
+									}
+								}}
+								ondragend={() => {
+									dragging = null
+									over = null
+								}}
 							>
-								<span class="t">{l.name}</span>
-								<span class="d">{LEAD_TYPES[l.lead_type].label} · {SOURCES[l.source].label}</span>
+								<span class="lc-top">
+									<span class="lc-av" aria-hidden="true">{initials(l.name)}</span>
+									<span class="lc-who">
+										<span class="t lc-name">{l.name}</span>
+										<span class="d">{LEAD_TYPES[l.lead_type].label} · {l.source_short || SOURCES[l.source].label}</span>
+									</span>
+									<ScoreChip score={l.score} />
+								</span>
+								{#if need}<span class="lc-need">{need}</span>{/if}
+								{#if l.next_action}<span class="lc-next">↳ {l.next_action}</span>{/if}
 								<span class="d">{l.agent ?? 'Unassigned'} · {l.received_label}</span>
 								{#if l.gated}<Chip tone="amber">No prior deal</Chip>{/if}
 							</button>
@@ -465,3 +538,164 @@ const typeLine = (l: LeadRow) =>
 	<div class="card"><Skeleton rows={6} /></div>
 {/if}
 {/if}
+
+<style>
+	/* ── Leads board ── */
+	.colt {
+		margin-top: -4px;
+		padding: 0 4px 2px;
+		font-size: 12px;
+		color: var(--text3);
+		font-variant-numeric: tabular-nums;
+	}
+	.col {
+		transition:
+			opacity 0.12s,
+			box-shadow 0.12s,
+			background 0.12s;
+	}
+	.col.drop-ok {
+		box-shadow: inset 0 0 0 1px var(--sep);
+	}
+	.col.drop-over {
+		box-shadow: inset 0 0 0 2px var(--accent);
+		background: color-mix(in srgb, var(--accent) 8%, var(--sunk));
+	}
+	.col.drop-no {
+		opacity: 0.45;
+	}
+	.lcard {
+		gap: 4px;
+		padding: 8px 9px;
+		cursor: grab;
+	}
+	.lcard:active {
+		cursor: grabbing;
+	}
+	.lcard.lifted {
+		opacity: 0.4;
+	}
+	.lc-top {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		align-items: start;
+		gap: 8px;
+	}
+	.lc-av {
+		width: 26px;
+		height: 26px;
+		border-radius: 50%;
+		display: grid;
+		place-items: center;
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--c);
+		background: color-mix(in srgb, var(--c) 18%, transparent);
+	}
+	.lc-who {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
+	}
+	.lc-name {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		overflow-wrap: anywhere;
+	}
+	.lc-need {
+		font-size: 12px;
+		color: var(--text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.lc-next {
+		font-size: 12px;
+		color: var(--text2);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.lease {
+		display: grid;
+		grid-template-columns: auto auto minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 12px 24px;
+		padding: 12px 16px;
+	}
+	.lease-head {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.lease-title {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--text);
+	}
+	.lease-window {
+		font-size: 12px;
+		color: var(--text2);
+		padding-left: 13px;
+	}
+	.lease-stats {
+		display: flex;
+		gap: 24px;
+		margin: 0;
+		padding-left: 24px;
+		border-left: 1px solid var(--sep);
+	}
+	.lease-stats div {
+		display: flex;
+		flex-direction: column-reverse;
+		gap: 1px;
+	}
+	.lease-stats dt {
+		font-size: 12px;
+		color: var(--text2);
+	}
+	.lease-stats dd {
+		margin: 0;
+		font-size: 17px;
+		font-weight: 600;
+		color: var(--text);
+		font-variant-numeric: tabular-nums;
+	}
+	.lease-areas {
+		margin: 0;
+		min-width: 0;
+		font-size: 13px;
+		color: var(--text2);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.lease-count {
+		font-weight: 600;
+		color: var(--text);
+		margin-right: 6px;
+	}
+	@media (max-width: 900px) {
+		.lease {
+			grid-template-columns: minmax(0, 1fr) auto;
+		}
+		.lease-stats {
+			grid-column: 1 / -1;
+			grid-row: 2;
+			padding-left: 0;
+			border-left: 0;
+		}
+		.lease-areas {
+			grid-column: 1 / -1;
+			white-space: normal;
+		}
+		.lease-btn {
+			grid-row: 1;
+			grid-column: 2;
+		}
+	}
+</style>

@@ -26,7 +26,10 @@ const CODE_TEXT: Record<string, string> = {
 export function errorText(e: unknown): string {
 	if (e instanceof ApiError) {
 		if (e.code && CODE_TEXT[e.code]) return CODE_TEXT[e.code]
-		if (e.code === 'not_connected') return e.message || 'This is not available yet.'
+		// A part of the CRM not connected to live data yet: the API says what to do instead.
+		if (e.code === 'not_connected') return e.message || 'This part of the CRM is not connected yet.'
+		// Not supported yet (501): say what, rather than "server problem, try again".
+		if (e.code === 'not_supported' && e.message) return e.message
 		// stage_blocked, invalid, exists…: the API's own message names what to do.
 		if (e.message && e.status > 0 && e.status < 500) return e.message
 		if (e.status >= 500) return 'The server had a problem. Try again in a moment.'

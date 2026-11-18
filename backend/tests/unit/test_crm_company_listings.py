@@ -1,3 +1,6 @@
+import json
+from datetime import datetime, timezone
+
 import pytest
 
 from app.crm import company_listings
@@ -181,3 +184,95 @@ async def test_listing_no_longer_published_returns_none(monkeypatch):
     _patch_detail(monkeypatch, [], _source("B1"))
 
     assert await company_listings.get_company_listing(None, "org-1", "123") is None
+
+
+def _keys_row(key: str, broker_id: str = "B1") -> dict:
+    return {
+        **_pf_row(broker_id),
+        "listing_id": key,
+        "images_json": '[{"medium": "https://img/a.jpg", "small": "https://img/s.jpg"}, {"nope": 1}, {"small": "https://img/b.jpg"}]',
+        "description": " Sea view ",
+        "scraped_at_dt": datetime(2026, 11, 10, 8, 0),
+    }
+
+
+@pytest.mark.asyncio
+async def test_listings_by_keys_single_query(monkeypatch):
+    calls = []
+
+    async def fake_query(sql, parameters):
+        calls.append((sql, parameters))
+        return [_keys_row("1"), _keys_row("3", "B2")]
+
+    async def fake_source(db, organization_id):
+        return _source("B1")
+
+    monkeypatch.setattr(company_listings, "query", fake_query)
+    monkeypatch.setattr(company_listings, "_selected_source", fake_source)
+    found = await company_listings.listings_by_keys(None, "org", ["1", "2", "3", "1"])
+
+    assert len(calls) == 1
+    assert "listing_id IN {keys:Array(String)}" in calls[0][0] and "is_available = 1" in calls[0][0]
+    assert calls[0][1] == {"keys": ["1", "2", "3"]}
+    assert set(found) == {"1", "3"}  # "2" is not published
+    assert found["1"].managed and not found["3"].managed
+    assert found["1"].photos == ["https://img/a.jpg", "https://img/b.jpg"]
+    assert found["1"].description == "Sea view"
+    assert found["1"].updated_at == datetime(2026, 11, 10, 8, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_listings_by_keys_empty_input_skips_query(monkeypatch):
+    async def fail(*args, **kwargs):
+        raise AssertionError("no query expected")
+
+    monkeypatch.setattr(company_listings, "query", fail)
+    assert await company_listings.listings_by_keys(None, "org", []) == {}
+
+
+# Company listing cards show a photo slider. Photos come from a second, small query for just
+# the page's listings, so the big paged query never reads the heavy images column.
+@pytest.mark.asyncio
+async def test_page_photos_come_from_one_small_query_and_are_capped(monkeypatch):
+    calls: list[tuple[str, dict]] = []
+    images = json.dumps([{"medium": f"https://p/{i}.jpg"} for i in range(9)])
+
+    async def fake_query(sql, parameters):
+        calls.append((sql, parameters))
+        return [
+            {"listing_id": "1", "images_json": images},
+            {"listing_id": "2", "images_json": "[]"},
+        ]
+
+    monkeypatch.setattr(company_listings, "query", fake_query)
+    photos = await company_listings._page_photos(["1", "2", "1"])
+
+    assert len(calls) == 1
+    assert calls[0][1]["keys"] == ["1", "2"]
+    assert photos["1"] == [f"https://p/{i}.jpg" for i in range(company_listings.CARD_PHOTOS)]
+    assert photos["2"] == []
+
+
+@pytest.mark.asyncio
+async def test_page_photos_failing_never_breaks_the_listing_grid(monkeypatch):
+    async def down(sql, parameters):
+        raise OSError("warehouse unreachable")
+
+    monkeypatch.setattr(company_listings, "query", down)
+    assert await company_listings._page_photos(["1"]) == {}
+
+
+@pytest.mark.asyncio
+async def test_page_photos_skip_the_query_for_an_empty_page(monkeypatch):
+    async def fail(sql, parameters):
+        raise AssertionError("no query expected")
+
+    monkeypatch.setattr(company_listings, "query", fail)
+    assert await company_listings._page_photos([]) == {}
+
+
+def test_paged_listing_query_never_reads_the_images_column():
+    import inspect
+
+    source = inspect.getsource(company_listings._company_rows)
+    assert "EXCEPT (images_json, description)" in source

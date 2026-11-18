@@ -21,11 +21,13 @@ import type {
 import { onCrmIdentityChange } from '../identity.svelte'
 
 export type LeadTab = 'all' | LeadType | 'lost'
-export type AssetTab = 'mine' | 'company' | 'portfolio' | 'renewals' | 'market'
+export type AssetTab = 'mine' | 'company' | 'collections' | 'portfolio' | 'renewals' | 'market'
 export type HomeTodo = 'gaps' | 'file'
 export type MatchTabId = 'ready' | 'offplan' | 'sell'
 
 const defaults = {
+	/** The listing whose Add-to-collection menu is open; only one menu is open at a time. */
+	addMenuFor: null as string | null,
 	leadTab: 'all' as LeadTab,
 	/** Managers also get 'agents': per-person lead analytics (17 Nov). */
 	leadView: 'list' as 'list' | 'board' | 'agents',
@@ -49,6 +51,8 @@ const defaults = {
 	cvType: '' as DealType | '',
 	cvSel: '',
 	assetTab: 'mine' as AssetTab,
+	/** Assets › Collections: the collection being edited, or null for the list. */
+	openCollectionId: null as string | null,
 	assetStatus: 'live' as ListingStatus,
 	/** Assets › Renewals opens on vacant units of the last 60 days. */
 	renewalWindow: 'vacant' as RenewalWindow,

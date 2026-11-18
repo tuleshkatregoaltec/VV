@@ -7,6 +7,7 @@
  */
 import { replaceState } from '$app/navigation'
 import type { LeadStage, LeadType } from '../api/types'
+import type { ViewAs } from '../mock/manager'
 
 export type LeadPanelTab =
 	| 'overview'
@@ -48,6 +49,8 @@ export type PanelState =
 	| { kind: 'send'; target: 'listing' | 'market'; id: string }
 	| { kind: 'owner-report'; id: string }
 	| { kind: 'which-doc'; dealId: string; files: File[]; index: number }
+	/** Manager view mockup: one agent's drawer, shown as the View-as toggle allows. */
+	| { kind: 'agent'; id: number; view: ViewAs }
 
 const RECORD_PARAMS = ['lead', 'deal', 'listing', 'owner', 'tab'] as const
 

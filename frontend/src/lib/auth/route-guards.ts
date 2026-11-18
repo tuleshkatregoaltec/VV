@@ -8,6 +8,7 @@ const PUBLIC_PATHS = [
 	'/',
 	'/landing-v2',
 	'/invite',
+	'/collections',
 	'/terms',
 	'/privacy',
 	'/data-deletion',

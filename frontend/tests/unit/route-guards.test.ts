@@ -36,6 +36,11 @@ describe('getRouteCategory', () => {
 		}
 	})
 
+	it('classifies shared collection pages as public, CRM still protected', () => {
+		expect(getRouteCategory('/collections/abc')).toBe('public')
+		expect(getRouteCategory('/crm')).toBe('protected')
+	})
+
 	it('classifies auth and protected paths', () => {
 		expect(getRouteCategory('/auth')).toBe('auth')
 		expect(getRouteCategory('/dashboard')).toBe('protected')
