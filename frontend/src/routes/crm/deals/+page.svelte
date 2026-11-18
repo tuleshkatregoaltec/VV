@@ -2,10 +2,12 @@
 import { createQuery } from '@tanstack/svelte-query'
 import type { DealRow, DealTab } from '$lib/crm/api/types'
 import ConveyancingView from '$lib/crm/components/deals/ConveyancingView.svelte'
+import TeamDeals from '$lib/crm/components/manager/TeamDeals.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
+import Seg from '$lib/crm/components/ui/Seg.svelte'
 import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
 import Tabs from '$lib/crm/components/ui/Tabs.svelte'
 import { INVOICE } from '$lib/crm/config'
@@ -16,6 +18,10 @@ import { ui } from '$lib/crm/stores/ui.svelte'
 import { errorText } from '$lib/crm/write'
 
 const me = createQuery(() => crmQueries.me())
+const scope = createQuery(() => crmQueries.assignmentScope())
+/** Managers and administrators also see each agent's deals (as on Leads). */
+const canOversee = $derived(scope.data?.capabilities.can_assign ?? false)
+const showAgents = $derived(canOversee && ui.dealView === 'agents')
 const deals = createQuery(() => ({
 	...crmQueries.deals(ui.dealTab),
 	// The conveyancing view loads its own list (with the All / Sale / Rent filter).
@@ -47,8 +53,25 @@ const value = (x: DealRow) =>
 <PageHeader
 	title="Deals"
 	facts={c ? `${c.counts.open} in progress · ${short(c.open_value_aed)} in value` : ''}
-/>
+>
+	{#snippet right()}
+		{#if canOversee}
+			<Seg
+				label="View"
+				items={[
+					{ id: 'mine', label: 'Deals' },
+					{ id: 'agents', label: 'Agents' }
+				]}
+				value={ui.dealView}
+				onselect={(v) => (ui.dealView = v)}
+			/>
+		{/if}
+	{/snippet}
+</PageHeader>
 
+{#if showAgents}
+	<TeamDeals />
+{:else}
 <Tabs label="Deals" items={tabs} value={ui.dealTab} onselect={(t) => (ui.dealTab = t)} />
 
 {#if ui.dealTab === 'conveyancing'}
@@ -191,4 +214,5 @@ const value = (x: DealRow) =>
 			{/if}
 		</div>
 	</div>
+{/if}
 {/if}

@@ -46,27 +46,43 @@ const facts = $derived.by(() => {
 			<span class="n">{c.viewings_week.next ?? 'None left'}</span>
 		</a>
 		<a
-			class={['kpi', c.expiring_14.count && 'amber']}
+			class={['kpi', c.expiring_14?.count && 'amber']}
 			href="/crm/assets"
 			onclick={() => (ui.assetTab = 'mine')}
 		>
 			<span class="lbl">Expiring in 14 days</span>
-			<span class="v">{c.expiring_14.count}</span>
-			<span class="n">{plural(c.expiring_14.permits, 'permit')} · {c.expiring_14.form_a} Form A</span>
+			{#if c.expiring_14}
+				<span class="v">{c.expiring_14.count}</span>
+				<span class="n">{plural(c.expiring_14.permits, 'permit')} · {c.expiring_14.form_a} Form A</span>
+			{:else}
+				<span class="v">—</span>
+				<span class="n">Listing permits · coming soon</span>
+			{/if}
 		</a>
-		<a class="kpi" href="/crm/assets" onclick={() => (ui.assetTab = 'market')}>
-			<span class="lbl">Market · {c.market?.area ?? 'pick an area'}</span>
-			<span class="v">
-				{#if c.market}AED {fmt(c.market.psf_aed)}<small> /sqft</small>{:else}—{/if}
-			</span>
-			<span class="n">
-				{c.market ? `rent median ${short(c.market.rent_median_aed)} · yield ${c.market.yield_pct}%` : ''}
-			</span>
-		</a>
+		{#if c.market}
+			<a class="kpi" href="/crm/assets" onclick={() => (ui.assetTab = 'market')}>
+				<span class="lbl">Market · {c.market.area}</span>
+				<span class="v">AED {fmt(c.market.psf_aed)}<small> /sqft</small></span>
+				<span class="n">
+					rent median {short(c.market.rent_median_aed)} · yield {c.market.yield_pct}% · last 12 months
+				</span>
+			</a>
+		{:else}
+			<button type="button" class="kpi" onclick={() => panel.open({ kind: 'areas' })}>
+				<span class="lbl">Market · pick an area</span>
+				<span class="v">—</span>
+				<span class="n">Choose your areas to see prices, rents and yield</span>
+			</button>
+		{/if}
 		<a class="kpi green" href="/crm/deals" onclick={() => (ui.dealTab = 'commission')}>
 			<span class="lbl">Commission</span>
-			<span class="v">{short(c.commission.received_aed)}</span>
-			<span class="n">received · {short(c.commission.due_aed)} due</span>
+			{#if c.commission}
+				<span class="v">{short(c.commission.received_aed)}</span>
+				<span class="n">received · {short(c.commission.due_aed)} due</span>
+			{:else}
+				<span class="v">—</span>
+				<span class="n">Deals · coming soon</span>
+			{/if}
 		</a>
 	</div>
 	{#if home.isError}

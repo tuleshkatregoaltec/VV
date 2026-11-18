@@ -102,6 +102,7 @@ export const crmKeys = {
 	deals: (tab: DealTab, type: DealType | '' = '') =>
 		[...crmScopeKey(), 'deals', tab, type] as const,
 	deal: (id: string) => [...crmScopeKey(), 'deal', id] as const,
+	dealOversight: () => [...crmScopeKey(), 'deals', 'oversight'] as const,
 	dealForm: (id: string, code: string) => [...crmScopeKey(), 'deal', id, 'form', code] as const,
 	listings: (
 		scope: ListingScope,
@@ -163,6 +164,20 @@ export const crmKeys = {
 	teams: () => [...crmScopeKey(), 'teams'] as const
 }
 
+/**
+ * Lists that change without this user doing anything (a portal or email lead arrives, a colleague
+ * assigns one, the rotation hands one on) refresh while visible: on returning to the tab and on a
+ * short poll. The backend has no push channel for leads, so this is the "live" view. Polling
+ * pauses in a background tab (TanStack's default).
+ */
+const LIVE_LIST = {
+	staleTime: 15_000,
+	refetchOnWindowFocus: true,
+	refetchInterval: 30_000
+} as const
+/** Home also syncs the visible week with Google, so it polls less often. */
+const LIVE_HOME = { ...LIVE_LIST, refetchInterval: 60_000 } as const
+
 /** Query option factories, same pattern as the main app's `$lib/queries/*`. */
 export const crmQueries = {
 	me: () => ({
@@ -171,18 +186,25 @@ export const crmQueries = {
 		queryFn: crm.me,
 		staleTime: Number.POSITIVE_INFINITY
 	}),
-	counts: () => ({ enabled: crmIdentityKnown(), queryKey: crmKeys.counts(), queryFn: crm.counts }),
+	counts: () => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.counts(),
+		queryFn: crm.counts,
+		...LIVE_LIST
+	}),
 	home: (day: string) => ({
 		enabled: crmIdentityKnown(),
 		queryKey: crmKeys.home(day),
 		queryFn: () => crm.home(day),
-		placeholderData: crmPreviousData
+		placeholderData: crmPreviousData,
+		...LIVE_HOME
 	}),
 	leads: (p: LeadListParams) => ({
 		enabled: crmIdentityKnown(),
 		queryKey: crmKeys.leads(p),
 		queryFn: () => crm.leads.list(p),
-		placeholderData: crmPreviousData
+		placeholderData: crmPreviousData,
+		...LIVE_LIST
 	}),
 	lead: (id: number) => ({
 		enabled: crmIdentityKnown(),
@@ -246,7 +268,15 @@ export const crmQueries = {
 		enabled: crmIdentityKnown(),
 		queryKey: crmKeys.deals(tab, type),
 		queryFn: () => crm.deals.list(tab, type),
-		placeholderData: crmPreviousData
+		placeholderData: crmPreviousData,
+		...LIVE_LIST
+	}),
+	/** Managers: each agent's deals (count, value, stages, origins), refreshed like lead lists. */
+	dealOversight: () => ({
+		enabled: crmIdentityKnown(),
+		queryKey: crmKeys.dealOversight(),
+		queryFn: crm.deals.oversight,
+		...LIVE_LIST
 	}),
 	deal: (id: string) => ({
 		enabled: crmIdentityKnown(),

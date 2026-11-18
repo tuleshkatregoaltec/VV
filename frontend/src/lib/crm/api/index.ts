@@ -3,6 +3,7 @@
  */
 import { env } from '$env/dynamic/public'
 import { ApiError } from '$lib/api/client'
+import { homeCalendar } from '../calendar'
 import { addDays } from '../format'
 import * as backend from './backend'
 import { createPresentationCrm } from './presentation'
@@ -17,6 +18,7 @@ import type {
 	DealCreate,
 	DealDetail,
 	DealListResponse,
+	DealRow,
 	DealStages,
 	DealTab,
 	DealType,
@@ -113,30 +115,83 @@ function weekOf(day: string): string[] {
 	return Array.from({ length: 7 }, (_, i) => addDays(monday, i))
 }
 
-/** Home: new leads are real; events, deals and commission have no backend yet and read as none. */
+/** The week's events for Home; Home still renders (without them) if the calendar is unavailable. */
+async function weekEvents(week: string[]): Promise<CalendarEvent[]> {
+	try {
+		return await backend.listCalendarEvents(week[0], week[6])
+	} catch {
+		return []
+	}
+}
+
+/** The first of the agent's areas (up to three tried) that has market figures; null without. */
+async function homeMarket(): Promise<HomeResponse['counters']['market']> {
+	try {
+		const { areas } = await backend.getFeedPreferences()
+		for (const area of areas.slice(0, 3)) {
+			const market = await backend.areaMarket(area)
+			if (market) return market
+		}
+	} catch {
+		// Home still renders; the card asks for an area.
+	}
+	return null
+}
+
+/** Open deals for Home's Conveyancing board (the same list as Deals › Conveyancing). */
+async function homeDeals(): Promise<DealRow[]> {
+	try {
+		return (await backend.listDeals('conveyancing')).items
+	} catch {
+		return [] // Home still renders without them
+	}
+}
+
+/** The device's current day and minute, "YYYY-MM-DD HH:MM", for "next viewing". */
+function nowStamp(): string {
+	const d = new Date()
+	const pad = (n: number) => String(n).padStart(2, '0')
+	return `${backend.localToday()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** Home: new leads, To do (gaps and owner-file leads), the calendar (the same events as the
+ * Calendar page), the market figures for the agent's area and open deals (Conveyancing) are real.
+ * Own listings (permits, Form A) and commission have no backend yet: those counters are null so
+ * Home shows "—" rather than a made-up 0. */
 async function home(day: string): Promise<HomeResponse> {
 	const date = day || backend.localToday()
-	const leads = await backend.listLeads({ stage: 'new' })
+	const week = weekOf(date)
+	const [leads, events, market, todo, deals] = await Promise.all([
+		backend.listLeads({ stage: 'new' }),
+		weekEvents(week),
+		homeMarket(),
+		backend.homeTodo(),
+		homeDeals()
+	])
 	const fresh = [...leads.items].sort((a, b) => b.score - a.score)
+	const cal = homeCalendar(events, week, date, backend.localToday(), nowStamp())
 	return {
 		limited: leads.limited,
 		date,
-		facts: { events_today: 0, conveyancing: 0, permits_under_14: 0 },
+		facts: { events_today: cal.events_today, conveyancing: deals.length, permits_under_14: 0 },
 		counters: {
-			viewings_week: { count: 0, next: null },
-			expiring_14: { count: 0, permits: 0, form_a: 0 },
-			market: null,
-			commission: { received_aed: 0, due_aed: 0 },
+			viewings_week: cal.viewings_week,
+			expiring_14: null,
+			market,
+			commission: null,
 			new_leads: fresh.length,
 			overdue: 0,
-			conveyancing: { count: 0, value_aed: 0 }
+			conveyancing: {
+				count: deals.length,
+				value_aed: deals.reduce((n, d) => n + (d.value_aed || 0), 0)
+			}
 		},
-		week: weekOf(date).map((d) => ({ date: d, kinds: [] })),
-		day: [],
-		conveyancing: [],
+		week: cal.week,
+		day: cal.day,
+		conveyancing: deals,
 		new_leads: fresh,
-		gaps: [],
-		file_leads: []
+		gaps: todo.gaps,
+		file_leads: todo.file_leads
 	}
 }
 
@@ -233,22 +288,23 @@ const liveCrm = {
 
 	deals: {
 		stages: async (): Promise<DealStages> => DEAL_STAGES,
-		list: async (_tab: DealTab, _dealType?: DealType | ''): Promise<DealListResponse> => ({
-			items: [],
-			counts: { open: 0, missing_documents: 0, closed: 0, sale: 0, rent: 0 },
-			open_value_aed: 0,
-			totals: { gross: 0, agent: 0, agency: 0 }
-		}),
-		get: (_id: string) => notOnBackend<DealDetail>('Deals'),
+		/** Deals on leads, scoped like leads (own / teams / organization). */
+		list: (tab: DealTab, dealType: DealType | '' = ''): Promise<DealListResponse> =>
+			backend.listDeals(tab, dealType),
+		get: (id: string): Promise<DealDetail> => backend.getDeal(id),
 		check: (_id: string, _key: string, _done: boolean) =>
 			notOnBackend<Written<DealDetail>>('The deal checklist'),
 		commissionPreview: (_id: string, _body: CommissionPatch) =>
 			notOnBackend<CommissionAmounts>('Commission'),
-		create: (_body: DealCreate) => notOnBackend<Written<DealDetail>>('Creating a deal'),
-		move: (_id: string, _direction: 'next' | 'back') =>
-			notOnBackend<Written<DealDetail>>('Moving a deal'),
-		patch: (_id: string, _body: { dld_transaction_id?: string }) =>
-			notOnBackend<Written<DealDetail>>('Editing a deal'),
+		create: (body: DealCreate) => backend.createDeal(body),
+		/** One step on or back; completing the last step closes the deal as won. */
+		move: (id: string, direction: 'next' | 'back', expectedStageIndex: number) =>
+			backend.moveDeal(id, direction, expectedStageIndex),
+		patch: (id: string, body: { dld_transaction_id?: string }) => backend.updateDeal(id, body),
+		close: (id: string, outcome: 'lost' | 'reopen', reason?: string) =>
+			backend.closeDeal(id, outcome, reason),
+		/** Per agent overseen: open deals, value, stages and origins. */
+		oversight: backend.dealOversight,
 		upload: (_id: string, _file: File, _docType?: string | null) =>
 			notOnBackend<Written<DocumentUploadResult>>('Deal documents'),
 		removeDocument: (_id: string, _docId: number) =>

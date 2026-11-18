@@ -85,6 +85,30 @@ def test_deterministic_extraction_understands_common_campaign_message():
     assert _normalize_intent("", "Looking to buy a 2 bedroom in JBR") == "buy"
 
 
+@pytest.mark.parametrize(
+    ("column", "intent"),
+    [
+        ("Buy", "buy"),
+        ("buying", "buy"),
+        (" RENT ", "rent"),
+        ("Tenant", "rent"),
+        ("Sell", "sell"),
+        ("seller.", "sell"),
+        ("Let", "let"),
+        ("Landlord", "let"),
+    ],
+)
+def test_a_plain_intent_column_is_read(column, intent):
+    # Portal and CRM exports put one word in the Intent column; it must not file the lead as
+    # an unqualified contact (hidden from Leads).
+    assert _normalize_intent(column, "") == intent
+
+
+def test_a_plain_word_in_free_text_notes_still_does_not_force_intent():
+    assert _normalize_intent("", "buy") is None
+    assert _normalize_intent("Maybe", "") is None
+
+
 def test_ambiguous_message_does_not_force_intent():
     assert (
         _normalize_intent(

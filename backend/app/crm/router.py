@@ -26,6 +26,7 @@ from app.crm import (
     agent_languages,
     assignment,
     calendar_service,
+    deals,
     email_store,
     oversight,
     owner_import_requests,
@@ -58,6 +59,16 @@ from app.crm.company_listings import (
     get_company_listing,
     list_company_listings,
     select_company_source,
+)
+from app.crm.deal_models import (
+    DealCloseRequest,
+    DealCreateRequest,
+    DealEventResponse,
+    DealListResponse,
+    DealMoveRequest,
+    DealOversightResponse,
+    DealResponse,
+    DealUpdateRequest,
 )
 from app.crm.document_models import (
     LISTING_KEY_PATTERN,
@@ -304,6 +315,99 @@ def _collection_actor(auth: AuthContext) -> collection_service.CollectionActor:
         name=name or auth.user.email,
         email=auth.user.email,
     )
+
+
+# ── Deals ──
+# Deals follow lead assignment: an agent their own, a manager their teams', an administrator
+# the organization's. Each read and write is one bounded Postgres query, so all run light.
+
+
+async def _deal_scope(db: AsyncSession, auth: AuthContext) -> assignment.AssignmentScope:
+    user_id, organization_id = _auth_ids(auth)
+    return await assignment.load_scope(db, organization_id, user_id)
+
+
+@router.get("/deals", response_model=DealListResponse, dependencies=LIGHT_LANE)
+async def crm_list_deals(
+    tab: Literal[
+        "pipeline", "conveyancing", "missing_documents", "commission", "closed", "lost"
+    ] = ("pipeline"),
+    deal_type: Literal["sale", "rent"] | None = None,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await deals.list_deals(db, await _deal_scope(db, context), tab=tab, deal_type=deal_type)
+
+
+@router.post("/deals", response_model=DealResponse, status_code=201, dependencies=LIGHT_LANE)
+async def crm_create_deal(
+    payload: DealCreateRequest,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Open a deal on a lead this user may work on; its origin comes from the lead's source."""
+    return await deals.create_deal(db, await _deal_scope(db, context), payload)
+
+
+@router.get("/deals/oversight", response_model=DealOversightResponse, dependencies=LIGHT_LANE)
+async def crm_deal_oversight(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Per agent overseen: open deals, value, stages and origins (own deals for an agent)."""
+    return await deals.oversight(db, await _deal_scope(db, context))
+
+
+@router.get("/deals/{deal_id}", response_model=DealResponse, dependencies=LIGHT_LANE)
+async def crm_get_deal(
+    deal_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await deals.get_deal(db, await _deal_scope(db, context), deal_id)
+
+
+@router.patch("/deals/{deal_id}", response_model=DealResponse, dependencies=LIGHT_LANE)
+async def crm_update_deal(
+    deal_id: int,
+    payload: DealUpdateRequest,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await deals.update_deal(db, await _deal_scope(db, context), deal_id, payload)
+
+
+@router.post("/deals/{deal_id}/move", response_model=DealResponse, dependencies=LIGHT_LANE)
+async def crm_move_deal(
+    deal_id: int,
+    payload: DealMoveRequest,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Next or back one conveyancing step; completing the last step closes the deal as won."""
+    return await deals.move_deal(db, await _deal_scope(db, context), deal_id, payload)
+
+
+@router.post("/deals/{deal_id}/close", response_model=DealResponse, dependencies=LIGHT_LANE)
+async def crm_close_deal(
+    deal_id: int,
+    payload: DealCloseRequest,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Mark a deal lost, or reopen a closed one."""
+    return await deals.close_deal(db, await _deal_scope(db, context), deal_id, payload)
+
+
+@router.get(
+    "/deals/{deal_id}/history", response_model=list[DealEventResponse], dependencies=LIGHT_LANE
+)
+async def crm_deal_history(
+    deal_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await deals.deal_history(db, await _deal_scope(db, context), deal_id)
 
 
 # ── Calendar (Google) ──

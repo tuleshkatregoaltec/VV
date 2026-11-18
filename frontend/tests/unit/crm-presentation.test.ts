@@ -29,7 +29,7 @@ describe('isolated CRM presentation', () => {
 		const demo = make()
 		for (const action of [
 			() => demo.leads.addNote(900001, 'Never persist this'),
-			() => demo.deals.move('PD-1001', 'next'),
+			() => demo.deals.move('PD-1001', 'next', 0),
 			() => demo.owners.sendMarketUpdate('PO-1'),
 			() => demo.imports.removeOwners(950001),
 			() => demo.events.remove(910001),

@@ -111,6 +111,21 @@
       "CREATE INDEX ix_crm_contact_lists_source_import_id ON crm_contact_lists (source_import_id)"
     ]
   },
+  "crm_deal_events": {
+    "ddl": "\nCREATE TABLE crm_deal_events (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tdeal_id INTEGER NOT NULL, \n\tactor_user_id VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tfrom_stage INTEGER, \n\tto_stage INTEGER, \n\tdetail JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(deal_id) REFERENCES crm_deals (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_deal_events_deal_id ON crm_deal_events (deal_id)",
+      "CREATE INDEX ix_crm_deal_events_org_actor_at ON crm_deal_events (organization_id, actor_user_id, created_at)"
+    ]
+  },
+  "crm_deals": {
+    "ddl": "\nCREATE TABLE crm_deals (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tlead_id INTEGER, \n\tassigned_user_id VARCHAR, \n\tteam_id VARCHAR, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tdeal_type VARCHAR NOT NULL, \n\tunit VARCHAR NOT NULL, \n\tclient VARCHAR NOT NULL, \n\tcounterparty VARCHAR NOT NULL, \n\tvalue_aed BIGINT, \n\tdue_date DATE, \n\tlisting_id VARCHAR, \n\torigin VARCHAR NOT NULL, \n\torigin_source VARCHAR NOT NULL, \n\tstage_index INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tdld_transaction_id VARCHAR, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tclosed_at TIMESTAMP WITH TIME ZONE, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(lead_id) REFERENCES crm_inbound_enquiries (id) ON DELETE SET NULL\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_deals_lead_id ON crm_deals (lead_id)",
+      "CREATE INDEX ix_crm_deals_org_agent_status ON crm_deals (organization_id, assigned_user_id, status)",
+      "CREATE INDEX ix_crm_deals_org_team ON crm_deals (organization_id, team_id)"
+    ]
+  },
   "crm_generated_documents": {
     "ddl": "\nCREATE TABLE crm_generated_documents (\n\tid UUID NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tinfo_id UUID NOT NULL, \n\tsource VARCHAR NOT NULL, \n\tlisting_key VARCHAR NOT NULL, \n\tlisting_title VARCHAR NOT NULL, \n\tdoc_type VARCHAR NOT NULL, \n\ttemplate_version VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tinput_revision INTEGER NOT NULL, \n\tidempotency_key UUID NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tobject_key VARCHAR, \n\tsize_bytes INTEGER, \n\tsha256 VARCHAR, \n\tfailure_code VARCHAR, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_generated_document_idempotency UNIQUE (organization_id, idempotency_key), \n\tCONSTRAINT ck_crm_generated_document_type CHECK (doc_type IN ('noc', 'brochure', 'lease', 'a2a')), \n\tCONSTRAINT ck_crm_generated_document_status CHECK (status IN ('generating', 'ready', 'failed')), \n\tFOREIGN KEY(organization_id) REFERENCES organizations (id) ON DELETE CASCADE, \n\tFOREIGN KEY(info_id) REFERENCES crm_listing_document_info (id) ON DELETE CASCADE\n)\n\n",
     "indexes": [

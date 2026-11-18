@@ -1104,6 +1104,10 @@
 			gap: 3px;
 			text-align: left;
 			width: 100%;
+			/* Narrow columns (Home) must not let the unit, client or due chip spill out. */
+			min-width: 0;
+			overflow: hidden;
+			overflow-wrap: anywhere;
 			color: var(--text);
 		}
 		.bcard:hover {
@@ -1120,10 +1124,18 @@
 		}
 		.bcard .f {
 			display: flex;
+			flex-wrap: wrap;
 			justify-content: space-between;
 			align-items: center;
 			gap: 0.3rem;
 			margin-top: 0.15rem;
+			min-width: 0;
+		}
+		.bcard .f .d {
+			white-space: nowrap;
+		}
+		.bcard .f .chip {
+			max-width: 100%;
 		}
 		.prog {
 			height: 4px;

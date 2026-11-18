@@ -35,6 +35,15 @@ const TABS = [
 function move(d: DealDetail, direction: 'next' | 'back') {
 	const index = d.stage_index + (direction === 'next' ? 1 : -1)
 	const stage = d.stages[index]
+	if (stage === undefined) {
+		// Completing the last step closes the deal as won (the server decides; no optimistic move).
+		write({
+			call: () => crm.deals.move(d.id, direction, d.stage_index),
+			success: `${d.id} completed · closed as won`,
+			event: 'deal_stage_changed'
+		})
+		return
+	}
 	write({
 		optimistic: () =>
 			patchCache<DealDetail>(crmKeys.deal(d.id), (x) => ({
@@ -43,8 +52,16 @@ function move(d: DealDetail, direction: 'next' | 'back') {
 				stage,
 				next_stage: x.stages[index + 1] ?? null
 			})),
-		call: () => crm.deals.move(d.id, direction),
+		call: () => crm.deals.move(d.id, direction, d.stage_index),
 		success: direction === 'next' ? `${d.id} → ${stage}` : `${d.id} back to ${stage}`,
+		event: 'deal_stage_changed'
+	})
+}
+
+function close(d: DealDetail, outcome: 'lost' | 'reopen') {
+	write({
+		call: () => crm.deals.close(d.id, outcome),
+		success: outcome === 'lost' ? `${d.id} marked lost` : `${d.id} reopened`,
 		event: 'deal_stage_changed'
 	})
 }
@@ -93,13 +110,22 @@ async function requestMissing(d: DealDetail) {
 		{/if}
 
 		{#snippet footer()}
-			{#if d.next_stage}
-				<button type="button" class="btn" onclick={() => move(d, 'next')}>
-					Move to {d.next_stage}
-				</button>
-			{/if}
-			{#if d.stage_index > 0}
-				<button type="button" class="btn ghost" onclick={() => move(d, 'back')}>Back a stage</button>
+			{#if d.closed}
+				<button type="button" class="btn ghost" onclick={() => close(d, 'reopen')}>Reopen deal</button>
+			{:else}
+				{#if d.next_stage}
+					<button type="button" class="btn" onclick={() => move(d, 'next')}>
+						Move to {d.next_stage}
+					</button>
+				{:else}
+					<button type="button" class="btn" onclick={() => move(d, 'next')}>
+						Complete {d.stage} · close as won
+					</button>
+				{/if}
+				{#if d.stage_index > 0}
+					<button type="button" class="btn ghost" onclick={() => move(d, 'back')}>Back a stage</button>
+				{/if}
+				<button type="button" class="btn ghost" onclick={() => close(d, 'lost')}>Mark lost</button>
 			{/if}
 			{#if d.missing.length}
 				<button type="button" class="btn ghost" onclick={() => requestMissing(d)}>

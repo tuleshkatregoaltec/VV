@@ -75,9 +75,12 @@ function edit() {
 	<Kv k="Value" v={price(deal.deal_type, deal.value_aed)} />
 	<Kv k="Due" v="{dayLabel(deal.due_date)} · {deal.next_step}" />
 	<Kv k="Agent" v={deal.agent} />
+	{#if deal.origin}<Kv k="Came from" v={deal.origin} />{/if}
 	<Kv k="Approval">
 		{#if deal.approval === 'pending'}
 			<Chip tone="amber">Waiting for manager</Chip>
+		{:else if deal.approval === 'none'}
+			<span class="muted">Not set up yet</span>
 		{:else}
 			<Chip tone="green">Approved</Chip>
 		{/if}

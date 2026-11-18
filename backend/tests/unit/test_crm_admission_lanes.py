@@ -72,6 +72,15 @@ LIGHT_ROUTES = {
     ("PUT", "/api/v1/crm/email/templates/{template_id}"),
     ("DELETE", "/api/v1/crm/email/templates/{template_id}"),
     ("GET", "/api/v1/crm/email/leads/{enquiry_id}/thread"),
+    # Deals: each read or write is one bounded Postgres query on the scoped deals.
+    ("GET", "/api/v1/crm/deals"),
+    ("POST", "/api/v1/crm/deals"),
+    ("GET", "/api/v1/crm/deals/oversight"),
+    ("GET", "/api/v1/crm/deals/{deal_id}"),
+    ("PATCH", "/api/v1/crm/deals/{deal_id}"),
+    ("POST", "/api/v1/crm/deals/{deal_id}/move"),
+    ("POST", "/api/v1/crm/deals/{deal_id}/close"),
+    ("GET", "/api/v1/crm/deals/{deal_id}/history"),
 }
 
 

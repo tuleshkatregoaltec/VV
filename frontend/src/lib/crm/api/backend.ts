@@ -13,6 +13,7 @@ import { ApiError, client } from '$lib/api/client'
 import type {
 	AgentAnalyticsDetail,
 	AgentLanguagesResponse,
+	DealListResponse as ApiDealList,
 	AssignmentEventResponse,
 	AssignmentScopeResponse,
 	AuthMeResponse,
@@ -42,6 +43,8 @@ import type {
 	CrmRenewalOwner,
 	CrmRenewalsResponse,
 	CrmWorkspaceResponse,
+	DealOversightResponse,
+	DealResponse,
 	DocumentDownloadResponse,
 	GenerateDocumentRequest,
 	GeneratedDocumentListResponse,
@@ -71,7 +74,8 @@ import type {
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { currentUser } from '$lib/stores/user.svelte'
 import { groupOf, LEAD_TYPES, ownerPropertyKind, PROPERTY_TYPES, SOURCE_OPTIONS } from '../config'
-import { aed, dayLabel, fmt, fullDate, ISO_DAY, plural, short } from '../format'
+import { addDays, aed, dayLabel, fmt, fullDate, ISO_DAY, plural, short } from '../format'
+import { leadTodo } from '../homeTodo'
 import { crmScopeKey, onCrmIdentityChange } from '../identity.svelte'
 import { IMPORT_STATUS } from '../importStatus'
 import {
@@ -89,6 +93,12 @@ import type {
 	CompanyListingAgentInventory,
 	CompanyListingCompany,
 	CompanyListingFilter,
+	DealCreate,
+	DealDetail,
+	DealListResponse,
+	DealRow,
+	DealTab,
+	DealType,
 	DocumentListParams,
 	EmailInboundList,
 	EmailLeadList,
@@ -105,6 +115,7 @@ import type {
 	FeedArea,
 	FeedPreferences,
 	FeedSummary,
+	Gap,
 	ImportAssignment,
 	ImportPreview,
 	ImportRequest,
@@ -2861,3 +2872,236 @@ export const emailThread = (enquiryId: number) =>
 	client.get<EmailThreadItem[]>(`${CRM}/email/leads/${enquiryId}/thread`)
 
 export const deleteEmailSend = (id: number) => client.delete<void>(`${CRM}/email/sends/${id}`)
+
+/* ── Home › Market: one area's 12-month figures (/api/v1/areas, DLD sales and Ejari rents) ── */
+
+export interface AreaMarket {
+	area: string
+	psf_aed: number
+	rent_median_aed: number
+	yield_pct: number
+}
+
+/** null when the area is unknown to the market data or has no 12-month sales price. */
+export async function areaMarket(area: string): Promise<AreaMarket | null> {
+	try {
+		const d = await client.get<{
+			area_name: string
+			avg_sale_price_sqft_12m: number | null
+			median_annual_rent: number | null
+			gross_yield_pct: number | null
+		}>(`/api/v1/areas/${encodeURIComponent(area)}`)
+		if (d.avg_sale_price_sqft_12m == null) return null
+		return {
+			area: d.area_name,
+			psf_aed: Math.round(d.avg_sale_price_sqft_12m),
+			rent_median_aed: Math.round(d.median_annual_rent ?? 0),
+			yield_pct: Math.round((d.gross_yield_pct ?? 0) * 10) / 10
+		}
+	} catch (e) {
+		if (e instanceof ApiError && e.status === 404) return null
+		throw e
+	}
+}
+
+/* ── Home › To do (Gaps, Owner file) from the agent's leads ── */
+
+/** The same enquiry read as the Leads list (shared while in flight), turned into To do lines. */
+export async function homeTodo(): Promise<{ gaps: Gap[]; file_leads: LeadRow[] }> {
+	const [res, u] = await Promise.all([
+		sharedRead<InboundEnquiryListResponse>(
+			client.withQuery(`${CRM}/inbound/enquiries`, {
+				search: undefined,
+				leads_only: true,
+				limit: LIST_LIMIT
+			})
+		),
+		whoAmI()
+	])
+	const leads = res.enquiries
+		.filter((e) => e.intent !== 'unknown')
+		.map((e) => ({ e, row: leadRow(e, u) }))
+	return leadTodo(leads, localToday())
+}
+
+/* ── Deals (/api/v1/crm/deals): real deals on leads; paperwork is not tracked yet ── */
+
+type ApiDeal = DealResponse
+
+/** "D-12" on screen, 12 in the API. */
+export const dealNumber = (id: string | number): number => Number(String(id).replace(/^D-/, ''))
+
+/** Who holds each deal: names from the assignment scope (the people this user can see). */
+async function peopleNames(): Promise<Map<string, string>> {
+	try {
+		const scope = await sharedRead<AssignmentScopeResponse>(`${CRM}/assignment/scope`)
+		return new Map(scope.people.map((p) => [p.user_id, p.name]))
+	} catch {
+		return new Map()
+	}
+}
+
+const NO_COMMISSION = {
+	rate_pct: 0,
+	cobroker_pct: 0,
+	referral_pct: 0,
+	agent_pct: 0,
+	invoice_status: 'not_invoiced' as const,
+	cobroker_name: null,
+	referral_name: null,
+	amounts: { gross: 0, cobroker: 0, referral: 0, net: 0, agent: 0, agency: 0, vat: 0 }
+}
+
+function dueChip(d: ApiDeal): Chip {
+	if (d.status === 'won') return { tone: 'green', label: 'Completed' }
+	if (d.status === 'lost') return { tone: 'neutral', label: 'Lost' }
+	if (!d.due_date) return { tone: 'neutral', label: 'No due date' }
+	const today = localToday()
+	if (d.due_date < today) return { tone: 'red', label: `Overdue · ${dayLabel(d.due_date)}` }
+	return {
+		tone: d.due_date <= addDays(today, 7) ? 'amber' : 'neutral',
+		label: `Due ${dayLabel(d.due_date)}`
+	}
+}
+
+function dealRow(d: ApiDeal, names: Map<string, string>, me: AuthMeResponse): DealRow {
+	const agent = d.agent_user_id
+		? d.agent_user_id === me.id
+			? fullName(me)
+			: (names.get(d.agent_user_id) ?? 'Another agent')
+		: 'Unassigned'
+	const closedOn = d.closed_at ? d.closed_at.slice(0, 10) : null
+	return {
+		id: d.reference,
+		deal_type: d.deal_type,
+		unit: d.unit,
+		client: d.client,
+		counterparty: d.counterparty,
+		value_aed: d.value_aed ?? 0,
+		agent,
+		lead_id: d.lead_id ?? null,
+		listing_id: d.listing_id ?? null,
+		due_date: closedOn ?? d.due_date ?? d.created_at.slice(0, 10),
+		next_step:
+			d.status === 'won'
+				? 'Completed'
+				: d.status === 'lost'
+					? 'Lost'
+					: d.next_stage
+						? `Next: ${d.next_stage}`
+						: 'Last step: complete it to close the deal',
+		approval: 'none',
+		dld_transaction_id: d.dld_transaction_id ?? null,
+		stages: d.stages,
+		stage_index: d.stage_index,
+		stage: d.stage,
+		next_stage: d.next_stage ?? null,
+		closed: d.status !== 'open',
+		docs_received: 0,
+		docs_required: 0,
+		missing: [],
+		due_chip: dueChip(d),
+		commission: NO_COMMISSION,
+		origin: d.origin_label
+	}
+}
+
+function dealDetail(d: ApiDeal, names: Map<string, string>, me: AuthMeResponse): DealDetail {
+	const row = dealRow(d, names, me)
+	return {
+		...row,
+		documents: { required: [], received: [] },
+		compliance: {
+			due_diligence: 'pending',
+			screening: 'not_run',
+			cash_aed: 0,
+			goaml_required: false
+		},
+		listing: d.listing_id ? { id: d.listing_id, label: d.listing_id } : null,
+		lead: d.lead_id ? { id: String(d.lead_id), label: d.client } : null,
+		forms: [],
+		checklist: d.stages.map((name, index) => {
+			const done = d.status === 'won' || index < d.stage_index
+			const now = d.status === 'open' && index === d.stage_index
+			return {
+				index,
+				name,
+				who: '',
+				state: done ? 'done' : now ? 'now' : 'next',
+				chip: done
+					? { tone: 'green', label: 'Done' }
+					: now
+						? { tone: 'blue', label: 'In progress' }
+						: { tone: 'neutral', label: 'Next' },
+				items: []
+			}
+		})
+	}
+}
+
+async function withNames<T>(load: Promise<T>) {
+	const [value, names, me] = await Promise.all([load, peopleNames(), whoAmI()])
+	return { value, names, me }
+}
+
+export async function listDeals(
+	tab: DealTab,
+	dealType: DealType | '' = ''
+): Promise<DealListResponse> {
+	const { value, names, me } = await withNames(
+		client.get<ApiDealList>(
+			client.withQuery(`${CRM}/deals`, { tab, deal_type: dealType || undefined })
+		)
+	)
+	return {
+		items: value.items.map((d) => dealRow(d, names, me)),
+		counts: {
+			open: value.counts.open ?? 0,
+			missing_documents: value.counts.missing_documents ?? 0,
+			closed: value.counts.closed ?? 0,
+			sale: value.counts.sale ?? 0,
+			rent: value.counts.rent ?? 0
+		},
+		open_value_aed: value.open_value_aed,
+		totals: { gross: 0, agent: 0, agency: 0 }
+	}
+}
+
+export async function getDeal(id: string): Promise<DealDetail> {
+	const { value, names, me } = await withNames(
+		client.get<ApiDeal>(`${CRM}/deals/${dealNumber(id)}`)
+	)
+	return dealDetail(value, names, me)
+}
+
+async function writeDeal(call: Promise<ApiDeal>): Promise<Written<DealDetail>> {
+	const { value, names, me } = await withNames(call)
+	return done(dealDetail(value, names, me))
+}
+
+export const createDeal = (body: DealCreate) =>
+	writeDeal(client.post<ApiDeal>(`${CRM}/deals`, body))
+
+/** One step on; the stage the screen showed is sent so a stale move is refused. */
+export const moveDeal = (id: string, direction: 'next' | 'back', expectedStageIndex: number) =>
+	writeDeal(
+		client.post<ApiDeal>(`${CRM}/deals/${dealNumber(id)}/move`, {
+			direction,
+			expected_stage_index: expectedStageIndex
+		})
+	)
+
+export const updateDeal = (
+	id: string,
+	body: {
+		value_aed?: number | null
+		due_date?: string | null
+		counterparty?: string
+		dld_transaction_id?: string
+	}
+) => writeDeal(client.patch<ApiDeal>(`${CRM}/deals/${dealNumber(id)}`, body))
+
+export const closeDeal = (id: string, outcome: 'lost' | 'reopen', reason?: string) =>
+	writeDeal(client.post<ApiDeal>(`${CRM}/deals/${dealNumber(id)}/close`, { outcome, reason }))
+
+export const dealOversight = () => client.get<DealOversightResponse>(`${CRM}/deals/oversight`)

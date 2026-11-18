@@ -73,7 +73,7 @@ function onPicked() {
 function move(d: DealDetail, direction: 'next' | 'back') {
 	const index = d.stage_index + (direction === 'next' ? 1 : -1)
 	write({
-		call: () => crm.deals.move(d.id, direction),
+		call: () => crm.deals.move(d.id, direction, d.stage_index),
 		success:
 			direction === 'next' ? `${d.id} → ${d.stages[index]}` : `${d.id} back to ${d.stages[index]}`,
 		event: 'deal_stage_changed'

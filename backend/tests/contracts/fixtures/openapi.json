@@ -1997,6 +1997,364 @@
 				}
 			}
 		},
+		"/api/v1/crm/deals": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm List Deals",
+				"operationId": "crm-crm_list_deals",
+				"parameters": [
+					{
+						"name": "tab",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": [
+								"pipeline",
+								"conveyancing",
+								"missing_documents",
+								"commission",
+								"closed",
+								"lost"
+							],
+							"type": "string",
+							"default": "pipeline",
+							"title": "Tab"
+						}
+					},
+					{
+						"name": "deal_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"enum": ["sale", "rent"],
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Deal Type"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DealListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Create Deal",
+				"description": "Open a deal on a lead this user may work on; its origin comes from the lead's source.",
+				"operationId": "crm-crm_create_deal",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DealCreateRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DealResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/deals/oversight": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Deal Oversight",
+				"description": "Per agent overseen: open deals, value, stages and origins (own deals for an agent).",
+				"operationId": "crm-crm_deal_oversight",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DealOversightResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/deals/{deal_id}": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Get Deal",
+				"operationId": "crm-crm_get_deal",
+				"parameters": [
+					{
+						"name": "deal_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Deal Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DealResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"patch": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Update Deal",
+				"operationId": "crm-crm_update_deal",
+				"parameters": [
+					{
+						"name": "deal_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Deal Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DealUpdateRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DealResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/deals/{deal_id}/move": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Move Deal",
+				"description": "Next or back one conveyancing step; completing the last step closes the deal as won.",
+				"operationId": "crm-crm_move_deal",
+				"parameters": [
+					{
+						"name": "deal_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Deal Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DealMoveRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DealResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/deals/{deal_id}/close": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Close Deal",
+				"description": "Mark a deal lost, or reopen a closed one.",
+				"operationId": "crm-crm_close_deal",
+				"parameters": [
+					{
+						"name": "deal_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Deal Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DealCloseRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DealResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/deals/{deal_id}/history": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Deal History",
+				"operationId": "crm-crm_deal_history",
+				"parameters": [
+					{
+						"name": "deal_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Deal Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/DealEventResponse"
+									},
+									"title": "Response Crm-Crm Deal History"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/calendar/google": {
 			"get": {
 				"tags": ["crm", "crm"],
@@ -15887,6 +16245,80 @@
 				"title": "AgentConnectionStatus",
 				"description": "State of the signed-in agent's WhatsApp number.\n\nstate: not_configured (Meta setup missing on the server), not_connected,\nconnected, disconnected."
 			},
+			"AgentDealSummary": {
+				"properties": {
+					"user_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "User Id"
+					},
+					"open": {
+						"type": "integer",
+						"title": "Open"
+					},
+					"won_30d": {
+						"type": "integer",
+						"title": "Won 30D"
+					},
+					"lost_30d": {
+						"type": "integer",
+						"title": "Lost 30D"
+					},
+					"open_value_aed": {
+						"type": "integer",
+						"title": "Open Value Aed"
+					},
+					"average_value_aed": {
+						"type": "integer",
+						"title": "Average Value Aed"
+					},
+					"by_stage": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "By Stage"
+					},
+					"by_origin": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "By Origin"
+					},
+					"last_activity_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Activity At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"user_id",
+					"open",
+					"won_30d",
+					"lost_30d",
+					"open_value_aed",
+					"average_value_aed",
+					"by_stage",
+					"by_origin",
+					"last_activity_at"
+				],
+				"title": "AgentDealSummary"
+			},
 			"AgentLanguagesResponse": {
 				"properties": {
 					"user_id": {
@@ -25127,6 +25559,500 @@
 				"required": ["key", "label", "source"],
 				"title": "DataSourceAsOf",
 				"description": "How current one input of a study is: DXBI is current, DLD ends where its feed ends."
+			},
+			"DealCloseRequest": {
+				"properties": {
+					"outcome": {
+						"type": "string",
+						"enum": ["lost", "reopen"],
+						"title": "Outcome"
+					},
+					"reason": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 500
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reason"
+					}
+				},
+				"type": "object",
+				"required": ["outcome"],
+				"title": "DealCloseRequest"
+			},
+			"DealCreateRequest": {
+				"properties": {
+					"lead_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Lead Id"
+					},
+					"listing_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 120
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Listing Id"
+					},
+					"value_aed": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 100000000000.0,
+								"minimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Value Aed"
+					},
+					"due_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Due Date"
+					},
+					"counterparty": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Counterparty"
+					},
+					"unit": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Unit"
+					}
+				},
+				"type": "object",
+				"required": ["lead_id"],
+				"title": "DealCreateRequest"
+			},
+			"DealEventResponse": {
+				"properties": {
+					"kind": {
+						"type": "string",
+						"title": "Kind"
+					},
+					"actor_user_id": {
+						"type": "string",
+						"title": "Actor User Id"
+					},
+					"from_stage": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "From Stage"
+					},
+					"to_stage": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "To Stage"
+					},
+					"detail": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Detail"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					}
+				},
+				"type": "object",
+				"required": ["kind", "actor_user_id", "from_stage", "to_stage", "detail", "created_at"],
+				"title": "DealEventResponse"
+			},
+			"DealListResponse": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/DealResponse"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"counts": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Counts"
+					},
+					"open_value_aed": {
+						"type": "integer",
+						"title": "Open Value Aed"
+					}
+				},
+				"type": "object",
+				"required": ["items", "counts", "open_value_aed"],
+				"title": "DealListResponse"
+			},
+			"DealMoveRequest": {
+				"properties": {
+					"direction": {
+						"type": "string",
+						"enum": ["next", "back"],
+						"title": "Direction"
+					},
+					"expected_stage_index": {
+						"type": "integer",
+						"minimum": 0.0,
+						"title": "Expected Stage Index"
+					}
+				},
+				"type": "object",
+				"required": ["direction", "expected_stage_index"],
+				"title": "DealMoveRequest"
+			},
+			"DealOversightResponse": {
+				"properties": {
+					"scope": {
+						"type": "string",
+						"enum": ["own", "teams", "organization"],
+						"title": "Scope"
+					},
+					"agents": {
+						"items": {
+							"$ref": "#/components/schemas/AgentDealSummary"
+						},
+						"type": "array",
+						"title": "Agents"
+					},
+					"totals": {
+						"$ref": "#/components/schemas/AgentDealSummary"
+					},
+					"origin_labels": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Origin Labels"
+					}
+				},
+				"type": "object",
+				"required": ["scope", "agents", "totals", "origin_labels"],
+				"title": "DealOversightResponse",
+				"description": "Deals of the agents this user oversees (own only for an agent)."
+			},
+			"DealResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"reference": {
+						"type": "string",
+						"title": "Reference"
+					},
+					"deal_type": {
+						"type": "string",
+						"enum": ["sale", "rent"],
+						"title": "Deal Type"
+					},
+					"unit": {
+						"type": "string",
+						"title": "Unit"
+					},
+					"client": {
+						"type": "string",
+						"title": "Client"
+					},
+					"counterparty": {
+						"type": "string",
+						"title": "Counterparty"
+					},
+					"value_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Value Aed"
+					},
+					"due_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Due Date"
+					},
+					"listing_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Listing Id"
+					},
+					"lead_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Id"
+					},
+					"agent_user_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent User Id"
+					},
+					"team_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Team Id"
+					},
+					"origin": {
+						"type": "string",
+						"enum": [
+							"listing",
+							"owner_outreach",
+							"renewal",
+							"portal",
+							"ads",
+							"own_contact",
+							"agent_to_agent",
+							"inbound"
+						],
+						"title": "Origin"
+					},
+					"origin_label": {
+						"type": "string",
+						"title": "Origin Label"
+					},
+					"origin_source": {
+						"type": "string",
+						"title": "Origin Source"
+					},
+					"stages": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Stages"
+					},
+					"stage_index": {
+						"type": "integer",
+						"title": "Stage Index"
+					},
+					"stage": {
+						"type": "string",
+						"title": "Stage"
+					},
+					"next_stage": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Next Stage"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["open", "won", "lost"],
+						"title": "Status"
+					},
+					"dld_transaction_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Dld Transaction Id"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					},
+					"closed_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Closed At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"reference",
+					"deal_type",
+					"unit",
+					"client",
+					"counterparty",
+					"value_aed",
+					"due_date",
+					"listing_id",
+					"lead_id",
+					"agent_user_id",
+					"team_id",
+					"origin",
+					"origin_label",
+					"origin_source",
+					"stages",
+					"stage_index",
+					"stage",
+					"next_stage",
+					"status",
+					"dld_transaction_id",
+					"created_at",
+					"updated_at",
+					"closed_at"
+				],
+				"title": "DealResponse"
+			},
+			"DealUpdateRequest": {
+				"properties": {
+					"value_aed": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 100000000000.0,
+								"minimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Value Aed"
+					},
+					"due_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Due Date"
+					},
+					"counterparty": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Counterparty"
+					},
+					"unit": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200,
+								"minLength": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Unit"
+					},
+					"dld_transaction_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 80
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Dld Transaction Id"
+					}
+				},
+				"type": "object",
+				"title": "DealUpdateRequest"
 			},
 			"DeleteReminder": {
 				"properties": {

@@ -1,5 +1,5 @@
-import type { CalendarEvent } from './api/types'
-import { addDays } from './format'
+import type { CalendarEvent, EventKind } from './api/types'
+import { addDays, dayLabel } from './format'
 
 export type DayItem = { event: CalendarEvent; time: string | null; moved: boolean; key: string }
 
@@ -42,4 +42,46 @@ export function googleReturn(hash: string): GoogleReturn {
 	const code = params.get('google_code')
 	const state = params.get('google_state')
 	return code && state ? { code, state } : null
+}
+
+/** Whether an event covers a day (a multi-day event covers every day it spans). */
+const covers = (e: CalendarEvent, day: string) => e.date <= day && (e.end_date || e.date) >= day
+
+/** All-day first, then by start time. */
+const byTime = (a: CalendarEvent, b: CalendarEvent) =>
+	(a.time ?? '').localeCompare(b.time ?? '') || a.id - b.id
+
+/**
+ * Home's calendar parts from the same events the Calendar page shows: the week strip's dots, the
+ * selected day's list, its count, and this week's viewings with the next one still to come.
+ * `now` is "YYYY-MM-DD HH:MM" on this device.
+ */
+export function homeCalendar(
+	events: CalendarEvent[],
+	week: string[],
+	selected: string,
+	today: string,
+	now: string
+) {
+	const day = events.filter((e) => covers(e, selected)).sort(byTime)
+	const viewings = events
+		.filter((e) => e.kind === 'viewing' && week.some((d) => covers(e, d)))
+		.sort((a, b) => a.date.localeCompare(b.date) || byTime(a, b))
+	const next = viewings.find((e) => e.outcome !== 'Done' && `${e.date} ${e.time ?? '23:59'}` >= now)
+	const when = next ? (next.date === today ? 'Today' : dayLabel(next.date)) : null
+	return {
+		week: week.map((date) => ({
+			date,
+			kinds: events
+				.filter((e) => covers(e, date))
+				.sort(byTime)
+				.map((e): EventKind => e.kind)
+		})),
+		day,
+		events_today: day.length,
+		viewings_week: {
+			count: viewings.length,
+			next: next ? (next.time ? `${when} · ${next.time}` : `${when} · all day`) : null
+		}
+	}
 }

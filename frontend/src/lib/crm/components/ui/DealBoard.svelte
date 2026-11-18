@@ -25,11 +25,16 @@ const stages = $derived(ofType[0]?.stages ?? stageSets.data?.[type] ?? [])
 				<button type="button" class="bcard" onclick={() => openDeal(d.id)}>
 					<span class="t">{d.unit}</span>
 					<span class="d">{d.client}</span>
-					<div class="prog" aria-hidden="true">
-						<i style:width="{(d.docs_received / d.docs_required) * 100}%"></i>
-					</div>
+					<!-- Documents are shown only once a deal has some to collect (not tracked yet). -->
+					{#if d.docs_required > 0}
+						<div class="prog" aria-hidden="true">
+							<i style:width="{(d.docs_received / d.docs_required) * 100}%"></i>
+						</div>
+					{/if}
 					<div class="f">
-						<span class="d">{d.docs_received}/{d.docs_required} docs</span>
+						{#if d.docs_required > 0}
+							<span class="d">{d.docs_received}/{d.docs_required} docs</span>
+						{/if}
 						<Chip chip={d.due_chip} />
 					</div>
 				</button>

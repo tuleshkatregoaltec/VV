@@ -1134,7 +1134,6 @@ describe('CRM areas with no backend yet', () => {
 	it('read as empty instead of showing records nobody stored', async () => {
 		const { crm } = await import('$lib/crm/api')
 		const get = vi.spyOn(client, 'get')
-		expect((await crm.deals.list('pipeline')).items).toEqual([])
 		expect((await crm.listings.list('mine')).items).toEqual([])
 		expect(await crm.notifications.list()).toEqual([])
 		expect(get).not.toHaveBeenCalled()
@@ -1142,14 +1141,6 @@ describe('CRM areas with no backend yet', () => {
 
 	it('refuse writes with a 501 so no screen reports a save that did not happen', async () => {
 		const { crm } = await import('$lib/crm/api')
-		await expect(
-			crm.deals.create({
-				lead_id: 1,
-				listing_id: null,
-				value_aed: 1,
-				due_date: '2026-11-01'
-			} as never)
-		).rejects.toMatchObject({ status: 501 })
 		await expect(
 			crm.listings.create({ address: 'JVC', price_aed: 1 } as never)
 		).rejects.toMatchObject({ status: 501 })

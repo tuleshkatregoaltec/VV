@@ -45,7 +45,8 @@ export type OwnerSource = 'agent_contact' | 'agency_import' | 'dld_event'
 export type EventKind = 'viewing' | 'call' | 'follow_up' | 'deal_date' | 'deadline'
 export type Origin = 'human' | 'rule' | 'model' | 'voice'
 export type InvoiceStatus = 'not_invoiced' | 'due' | 'received' | 'overdue'
-export type Approval = 'pending' | 'approved'
+/** `none`: manager approvals are not set up yet (which steps need one is still being decided). */
+export type Approval = 'pending' | 'approved' | 'none'
 export type Tone = 'neutral' | 'green' | 'amber' | 'red' | 'blue' | 'pink' | 'dark' | 'outline'
 
 /** A status chip decided by the backend: colour and words always travel together. */
@@ -560,6 +561,8 @@ export interface DealRow {
 	missing: string[]
 	due_chip: Chip
 	commission: Commission
+	/** Where the deal came from (the lead's source or its listing), for the manager view. */
+	origin?: string
 }
 
 export interface DealForm {
@@ -1437,9 +1440,12 @@ export interface HomeResponse {
 	/** 1 Oct (proposal): Viewings this week · Expiring in 14 days · Market · {area} · Commission. */
 	counters: {
 		viewings_week: { count: number; next: string | null }
-		expiring_14: { count: number; permits: number; form_a: number }
+		/** null while own listings (permits, Form A) have no backend: shown as "—", not 0. */
+		expiring_14: { count: number; permits: number; form_a: number } | null
+		/** The first of the agent's areas with 12-month DLD figures; null without areas. */
 		market: { area: string; psf_aed: number; rent_median_aed: number; yield_pct: number } | null
-		commission: { received_aed: number; due_aed: number }
+		/** null while deals have no backend. */
+		commission: { received_aed: number; due_aed: number } | null
 		new_leads: number
 		overdue: number
 		conveyancing: { count: number; value_aed: number }

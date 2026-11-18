@@ -15,6 +15,7 @@ from app.chat.models import ChatTurnLease, Conversation, Message
 from app.crm.audit_models import CrmMutationAudit
 from app.crm.calendar_models import CrmCalendarConnection, CrmCalendarEvent
 from app.crm.collection_models import CrmCollection, CrmCollectionItem
+from app.crm.deal_models import CrmDeal, CrmDealEvent
 from app.crm.document_models import CrmGeneratedDocument, CrmListingDocumentInfo
 from app.crm.import_job_models import CrmImportJob
 from app.crm.import_models import (
@@ -108,6 +109,8 @@ __all__ = [
     "CrmCalendarConnection",
     "CrmCalendarEvent",
     "CrmCollection",
+    "CrmDeal",
+    "CrmDealEvent",
     "CrmCollectionItem",
     "CrmContactImport",
     "CrmOwnerImportRequest",

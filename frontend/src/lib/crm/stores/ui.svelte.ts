@@ -46,6 +46,8 @@ const defaults = {
 	budget: '' as BudgetBand | '',
 	/** Conveyancing is the default Deals view (1 Oct). */
 	dealTab: 'conveyancing' as DealTab,
+	/** Managers: their own deals, or each agent's (Deals › Agents). */
+	dealView: 'mine' as 'mine' | 'agents',
 	convType: 'sale' as DealType,
 	/** Deals → Conveyancing: All / Sale / Rent and the selected deal. */
 	cvType: '' as DealType | '',

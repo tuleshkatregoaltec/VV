@@ -3,6 +3,7 @@ import { createQuery } from '@tanstack/svelte-query'
 import { crm } from '$lib/crm/api'
 import type { HandoutMode } from '$lib/crm/api/types'
 import TeamAnalytics from '$lib/crm/components/manager/TeamAnalytics.svelte'
+import TeamDeals from '$lib/crm/components/manager/TeamDeals.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
@@ -47,6 +48,10 @@ function onkeydown(e: KeyboardEvent, i: number) {
 <PageHeader title="Manager view" />
 <section class="mv-team" aria-label="Your team">
 	<TeamAnalytics />
+</section>
+<section class="mv-team" aria-labelledby="mv-deals-h">
+	<h2 id="mv-deals-h" class="mv-h">Team deals</h2>
+	<TeamDeals />
 </section>
 
 {#if handout.data}
@@ -114,3 +119,14 @@ function onkeydown(e: KeyboardEvent, i: number) {
 {:else}
 	<div class="card"><Skeleton rows={4} /></div>
 {/if}
+
+<style>
+	.mv-team + .mv-team {
+		margin-top: 24px;
+	}
+	.mv-h {
+		font-size: 15px;
+		font-weight: 600;
+		margin: 0 0 10px;
+	}
+</style>

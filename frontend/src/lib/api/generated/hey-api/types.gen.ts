@@ -395,6 +395,52 @@ export type AgentConnectionStatus = {
 };
 
 /**
+ * AgentDealSummary
+ */
+export type AgentDealSummary = {
+    /**
+     * User Id
+     */
+    user_id: string | null;
+    /**
+     * Open
+     */
+    open: number;
+    /**
+     * Won 30D
+     */
+    won_30d: number;
+    /**
+     * Lost 30D
+     */
+    lost_30d: number;
+    /**
+     * Open Value Aed
+     */
+    open_value_aed: number;
+    /**
+     * Average Value Aed
+     */
+    average_value_aed: number;
+    /**
+     * By Stage
+     */
+    by_stage: {
+        [key: string]: number;
+    };
+    /**
+     * By Origin
+     */
+    by_origin: {
+        [key: string]: number;
+    };
+    /**
+     * Last Activity At
+     */
+    last_activity_at: string | null;
+};
+
+/**
  * AgentLanguagesResponse
  */
 export type AgentLanguagesResponse = {
@@ -5888,6 +5934,267 @@ export type DataSourceAsOf = {
      * Note
      */
     note?: string | null;
+};
+
+/**
+ * DealCloseRequest
+ */
+export type DealCloseRequest = {
+    /**
+     * Outcome
+     */
+    outcome: 'lost' | 'reopen';
+    /**
+     * Reason
+     */
+    reason?: string | null;
+};
+
+/**
+ * DealCreateRequest
+ */
+export type DealCreateRequest = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Listing Id
+     */
+    listing_id?: string | null;
+    /**
+     * Value Aed
+     */
+    value_aed?: number | null;
+    /**
+     * Due Date
+     */
+    due_date?: string | null;
+    /**
+     * Counterparty
+     */
+    counterparty?: string | null;
+    /**
+     * Unit
+     */
+    unit?: string | null;
+};
+
+/**
+ * DealEventResponse
+ */
+export type DealEventResponse = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Actor User Id
+     */
+    actor_user_id: string;
+    /**
+     * From Stage
+     */
+    from_stage: string | null;
+    /**
+     * To Stage
+     */
+    to_stage: string | null;
+    /**
+     * Detail
+     */
+    detail: {
+        [key: string]: unknown;
+    };
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * DealListResponse
+ */
+export type DealListResponse = {
+    /**
+     * Items
+     */
+    items: Array<DealResponse>;
+    /**
+     * Counts
+     */
+    counts: {
+        [key: string]: number;
+    };
+    /**
+     * Open Value Aed
+     */
+    open_value_aed: number;
+};
+
+/**
+ * DealMoveRequest
+ */
+export type DealMoveRequest = {
+    /**
+     * Direction
+     */
+    direction: 'next' | 'back';
+    /**
+     * Expected Stage Index
+     */
+    expected_stage_index: number;
+};
+
+/**
+ * DealOversightResponse
+ *
+ * Deals of the agents this user oversees (own only for an agent).
+ */
+export type DealOversightResponse = {
+    /**
+     * Scope
+     */
+    scope: 'own' | 'teams' | 'organization';
+    /**
+     * Agents
+     */
+    agents: Array<AgentDealSummary>;
+    totals: AgentDealSummary;
+    /**
+     * Origin Labels
+     */
+    origin_labels: {
+        [key: string]: string;
+    };
+};
+
+/**
+ * DealResponse
+ */
+export type DealResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Reference
+     */
+    reference: string;
+    /**
+     * Deal Type
+     */
+    deal_type: 'sale' | 'rent';
+    /**
+     * Unit
+     */
+    unit: string;
+    /**
+     * Client
+     */
+    client: string;
+    /**
+     * Counterparty
+     */
+    counterparty: string;
+    /**
+     * Value Aed
+     */
+    value_aed: number | null;
+    /**
+     * Due Date
+     */
+    due_date: string | null;
+    /**
+     * Listing Id
+     */
+    listing_id: string | null;
+    /**
+     * Lead Id
+     */
+    lead_id: number | null;
+    /**
+     * Agent User Id
+     */
+    agent_user_id: string | null;
+    /**
+     * Team Id
+     */
+    team_id: string | null;
+    /**
+     * Origin
+     */
+    origin: 'listing' | 'owner_outreach' | 'renewal' | 'portal' | 'ads' | 'own_contact' | 'agent_to_agent' | 'inbound';
+    /**
+     * Origin Label
+     */
+    origin_label: string;
+    /**
+     * Origin Source
+     */
+    origin_source: string;
+    /**
+     * Stages
+     */
+    stages: Array<string>;
+    /**
+     * Stage Index
+     */
+    stage_index: number;
+    /**
+     * Stage
+     */
+    stage: string;
+    /**
+     * Next Stage
+     */
+    next_stage: string | null;
+    /**
+     * Status
+     */
+    status: 'open' | 'won' | 'lost';
+    /**
+     * Dld Transaction Id
+     */
+    dld_transaction_id: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Closed At
+     */
+    closed_at: string | null;
+};
+
+/**
+ * DealUpdateRequest
+ */
+export type DealUpdateRequest = {
+    /**
+     * Value Aed
+     */
+    value_aed?: number | null;
+    /**
+     * Due Date
+     */
+    due_date?: string | null;
+    /**
+     * Counterparty
+     */
+    counterparty?: string | null;
+    /**
+     * Unit
+     */
+    unit?: string | null;
+    /**
+     * Dld Transaction Id
+     */
+    dld_transaction_id?: string | null;
 };
 
 /**
@@ -16525,6 +16832,233 @@ export type AssistantActionsCancelActionResponses = {
 };
 
 export type AssistantActionsCancelActionResponse = AssistantActionsCancelActionResponses[keyof AssistantActionsCancelActionResponses];
+
+export type CrmCrmListDealsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Tab
+         */
+        tab?: 'pipeline' | 'conveyancing' | 'missing_documents' | 'commission' | 'closed' | 'lost';
+        /**
+         * Deal Type
+         */
+        deal_type?: 'sale' | 'rent' | null;
+    };
+    url: '/api/v1/crm/deals';
+};
+
+export type CrmCrmListDealsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmListDealsError = CrmCrmListDealsErrors[keyof CrmCrmListDealsErrors];
+
+export type CrmCrmListDealsResponses = {
+    /**
+     * Successful Response
+     */
+    200: DealListResponse;
+};
+
+export type CrmCrmListDealsResponse = CrmCrmListDealsResponses[keyof CrmCrmListDealsResponses];
+
+export type CrmCrmCreateDealData = {
+    body: DealCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/deals';
+};
+
+export type CrmCrmCreateDealErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCreateDealError = CrmCrmCreateDealErrors[keyof CrmCrmCreateDealErrors];
+
+export type CrmCrmCreateDealResponses = {
+    /**
+     * Successful Response
+     */
+    201: DealResponse;
+};
+
+export type CrmCrmCreateDealResponse = CrmCrmCreateDealResponses[keyof CrmCrmCreateDealResponses];
+
+export type CrmCrmDealOversightData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/deals/oversight';
+};
+
+export type CrmCrmDealOversightResponses = {
+    /**
+     * Successful Response
+     */
+    200: DealOversightResponse;
+};
+
+export type CrmCrmDealOversightResponse = CrmCrmDealOversightResponses[keyof CrmCrmDealOversightResponses];
+
+export type CrmCrmGetDealData = {
+    body?: never;
+    path: {
+        /**
+         * Deal Id
+         */
+        deal_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/deals/{deal_id}';
+};
+
+export type CrmCrmGetDealErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmGetDealError = CrmCrmGetDealErrors[keyof CrmCrmGetDealErrors];
+
+export type CrmCrmGetDealResponses = {
+    /**
+     * Successful Response
+     */
+    200: DealResponse;
+};
+
+export type CrmCrmGetDealResponse = CrmCrmGetDealResponses[keyof CrmCrmGetDealResponses];
+
+export type CrmCrmUpdateDealData = {
+    body: DealUpdateRequest;
+    path: {
+        /**
+         * Deal Id
+         */
+        deal_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/deals/{deal_id}';
+};
+
+export type CrmCrmUpdateDealErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmUpdateDealError = CrmCrmUpdateDealErrors[keyof CrmCrmUpdateDealErrors];
+
+export type CrmCrmUpdateDealResponses = {
+    /**
+     * Successful Response
+     */
+    200: DealResponse;
+};
+
+export type CrmCrmUpdateDealResponse = CrmCrmUpdateDealResponses[keyof CrmCrmUpdateDealResponses];
+
+export type CrmCrmMoveDealData = {
+    body: DealMoveRequest;
+    path: {
+        /**
+         * Deal Id
+         */
+        deal_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/deals/{deal_id}/move';
+};
+
+export type CrmCrmMoveDealErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmMoveDealError = CrmCrmMoveDealErrors[keyof CrmCrmMoveDealErrors];
+
+export type CrmCrmMoveDealResponses = {
+    /**
+     * Successful Response
+     */
+    200: DealResponse;
+};
+
+export type CrmCrmMoveDealResponse = CrmCrmMoveDealResponses[keyof CrmCrmMoveDealResponses];
+
+export type CrmCrmCloseDealData = {
+    body: DealCloseRequest;
+    path: {
+        /**
+         * Deal Id
+         */
+        deal_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/deals/{deal_id}/close';
+};
+
+export type CrmCrmCloseDealErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCloseDealError = CrmCrmCloseDealErrors[keyof CrmCrmCloseDealErrors];
+
+export type CrmCrmCloseDealResponses = {
+    /**
+     * Successful Response
+     */
+    200: DealResponse;
+};
+
+export type CrmCrmCloseDealResponse = CrmCrmCloseDealResponses[keyof CrmCrmCloseDealResponses];
+
+export type CrmCrmDealHistoryData = {
+    body?: never;
+    path: {
+        /**
+         * Deal Id
+         */
+        deal_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/deals/{deal_id}/history';
+};
+
+export type CrmCrmDealHistoryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDealHistoryError = CrmCrmDealHistoryErrors[keyof CrmCrmDealHistoryErrors];
+
+export type CrmCrmDealHistoryResponses = {
+    /**
+     * Response Crm-Crm Deal History
+     *
+     * Successful Response
+     */
+    200: Array<DealEventResponse>;
+};
+
+export type CrmCrmDealHistoryResponse = CrmCrmDealHistoryResponses[keyof CrmCrmDealHistoryResponses];
 
 export type CrmCrmGoogleCalendarDisconnectData = {
     body?: never;

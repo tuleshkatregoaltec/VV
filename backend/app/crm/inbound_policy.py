@@ -108,7 +108,29 @@ def _parse_datetime(value: Any) -> datetime:
     return _utcnow()
 
 
+# An Intent column holding one word ("Buy", "Rent") is an explicit answer. In free-text notes the
+# same word is too weak ("whether they want to buy, sell or rent"), so only the column uses this.
+_INTENT_WORDS = {
+    "buy": "buy",
+    "buying": "buy",
+    "buyer": "buy",
+    "purchase": "buy",
+    "rent": "rent",
+    "renting": "rent",
+    "tenant": "rent",
+    "sell": "sell",
+    "selling": "sell",
+    "seller": "sell",
+    "let": "let",
+    "letting": "let",
+    "landlord": "let",
+}
+
+
 def _normalize_intent(value: Any, notes: str = "") -> str | None:
+    word = re.sub(r"[^a-z]", "", _text(value).lower())
+    if word in _INTENT_WORDS:
+        return _INTENT_WORDS[word]
     raw = f"{_text(value)} {notes}".lower()
     if any(word in raw for word in ("landlord", "list for rent", "rent out", "to let")):
         return "let"
