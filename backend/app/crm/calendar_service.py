@@ -10,7 +10,7 @@ import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from dateutil.rrule import DAILY, MONTHLY, WEEKLY, YEARLY, rrule
 from sqlalchemy import Text, and_, cast, func, or_
-from sqlmodel import select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
@@ -683,6 +683,28 @@ async def list_events(
                 for occurrence in occurrences
             )
     return sorted(output, key=lambda event: (event["date"], event["time"] or ""))
+
+
+async def events_between(
+    db: AsyncSession, *, user_id: str, organization_id: str, start: date, end: date, limit: int
+) -> list[CrmCalendarEvent]:
+    """Stored events touching [start, end], oldest first; no Google call."""
+    event = CrmCalendarEvent
+    return list(
+        (
+            await db.exec(
+                select(event)
+                .where(
+                    col(event.organization_id) == organization_id,
+                    col(event.user_id) == user_id,
+                    col(event.event_date) <= end,
+                    func.coalesce(col(event.event_end_date), col(event.event_date)) >= start,
+                )
+                .order_by(col(event.event_date), col(event.event_time))
+                .limit(limit)
+            )
+        ).all()
+    )
 
 
 async def create_event(

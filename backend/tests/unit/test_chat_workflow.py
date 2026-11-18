@@ -39,9 +39,15 @@ async def test_orchestrator_delegates_with_shared_identity_without_market_tools(
 
 
 def test_specialists_have_narrow_tools_and_no_execution_capability():
-    assert set(crm_agent._function_toolset.tools) == {"query_my_crm_records"}
+    # Calendar and lead-email tools only read stored rows; proposing stays the one write path.
+    assert set(crm_agent._function_toolset.tools) == {
+        "query_my_crm_records",
+        "query_my_calendar",
+        "query_my_lead_emails",
+    }
     assert set(action_agent._function_toolset.tools) == {
         "query_my_crm_records",
+        "query_my_calendar",
         "propose_crm_action",
         "find_assignment_colleagues",
     }

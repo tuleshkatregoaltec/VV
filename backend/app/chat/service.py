@@ -11,6 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.chat import admission, repository
 from app.chat.agent import _convert_to_pydantic_messages, agent
 from app.chat.budget import turn_limits
+from app.chat.connector_tools import CONNECTOR_EVIDENCE, evidence_still_accessible
 from app.chat.dependencies import ChatDependencies
 from app.chat.events import encode_sse as _sse
 from app.chat.models import Conversation, Message
@@ -103,6 +104,12 @@ async def _evidence_accessible(db, evidence, user_id, organization_id) -> bool:
         return False
     for reference in evidence:
         try:
+            if reference.get("type") in CONNECTOR_EVIDENCE:
+                if not await evidence_still_accessible(
+                    db, reference, user_id=user_id, organization_id=organization_id
+                ):
+                    return False
+                continue
             if reference.get("type") == "assignee_lookup":
                 from app.assistant_actions.service import lookup_assignees
 

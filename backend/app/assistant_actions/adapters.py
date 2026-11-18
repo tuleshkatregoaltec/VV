@@ -1,66 +1,31 @@
-"""Typed future connector boundary; no live adapter or dispatcher is configured.
+"""Connector boundary for confirmed external actions; the live adapters are in connectors.py.
 
-Adapters must use the proposal ID as the provider idempotency key. A caller must
-persist an outbox claim as ``unknown`` *before* dispatch. An ambiguous outcome
-must be reconciled with the provider; automatically retrying could send twice.
+The primitives live in delivery.py so the actions service can dispatch without importing this
+module (which imports the service for dispatch_queued).
 """
 
-import asyncio
-from typing import Literal, Protocol
+from app.assistant_actions.delivery import (
+    DeliveryOutcome,
+    ExternalActionAdapter,
+    ExternalPayload,
+    dispatch_claimed,
+)
 
-from pydantic import BaseModel, ConfigDict
-
-from app.assistant_actions.models import PublishListing, ScheduleViewing, SendMessage
-
-ExternalPayload = SendMessage | PublishListing | ScheduleViewing
-
-
-class DeliveryOutcome(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    status: Literal["succeeded", "failed", "unknown", "not_connected"]
-
-
-class ExternalActionAdapter(Protocol):
-    async def dispatch(self, *, payload: ExternalPayload, idempotency_key: str) -> DeliveryOutcome:
-        """A configured adapter resolves destinations from authorized server-side records."""
-        ...
-
-
-async def dispatch_claimed(
-    adapter: ExternalActionAdapter,
-    *,
-    payload: ExternalPayload,
-    idempotency_key: str,
-) -> DeliveryOutcome:
-    """One bounded call only. This is deliberately not wired to an application entrypoint."""
-    try:
-        async with asyncio.timeout(10):
-            return await adapter.dispatch(payload=payload, idempotency_key=idempotency_key)
-    except Exception:
-        # A timeout/error after provider acceptance is not proof of failure.
-        return DeliveryOutcome(status="unknown")
+__all__ = [
+    "DeliveryOutcome",
+    "ExternalActionAdapter",
+    "ExternalPayload",
+    "dispatch_claimed",
+    "dispatch_queued",
+]
 
 
 async def dispatch_queued(
     db, *, user_id, organization_id, action_id, adapter: ExternalActionAdapter
 ):
-    """Dormant worker integration; no endpoint, configuration, or live adapter installs it."""
-    from app.assistant_actions.service import claim_external_dispatch, record_external_outcome
+    """Claim once, dispatch once, record the outcome (service.dispatch_confirmed)."""
+    from app.assistant_actions.service import dispatch_confirmed
 
-    payload = await claim_external_dispatch(
-        db,
-        user_id=user_id,
-        organization_id=organization_id,
-        action_id=action_id,
+    return await dispatch_confirmed(
+        db, user_id=user_id, organization_id=organization_id, action_id=action_id, adapter=adapter
     )
-    if payload is None:
-        return None
-    outcome = await dispatch_claimed(adapter, payload=payload, idempotency_key=action_id)
-    await record_external_outcome(
-        db,
-        user_id=user_id,
-        organization_id=organization_id,
-        action_id=action_id,
-        status=outcome.status,
-    )
-    return outcome

@@ -38298,6 +38298,19 @@
 						"maxLength": 4000,
 						"minLength": 1,
 						"title": "Body"
+					},
+					"subject": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 300,
+								"minLength": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Subject"
 					}
 				},
 				"additionalProperties": false,

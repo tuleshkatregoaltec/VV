@@ -11,6 +11,7 @@ from pydantic_ai.models.openrouter import OpenRouterModelSettings
 from app.assistant_actions.models import ActionKind, ActionProposalRequest, Payload
 from app.chat.budget import compact_tool_outputs, turn_limits
 from app.chat.capabilities import CAPABILITY_CONTEXT
+from app.chat.connector_tools import query_my_calendar, query_my_lead_emails
 from app.chat.crm_tools import query_my_crm_records
 from app.chat.dependencies import ChatDependencies
 from app.chat.security import (
@@ -123,6 +124,8 @@ crm_agent = Agent(
     history_processors=HISTORY_PROCESSORS,
 )
 crm_agent.tool(query_my_crm_records)
+crm_agent.tool(query_my_calendar)
+crm_agent.tool(query_my_lead_emails)
 followup_agent = Agent(
     create_assistant_model(role="followup"),
     name="followup_planning",
@@ -134,6 +137,8 @@ followup_agent = Agent(
     history_processors=HISTORY_PROCESSORS,
 )
 followup_agent.tool(query_my_crm_records)
+followup_agent.tool(query_my_calendar)
+followup_agent.tool(query_my_lead_emails)
 
 
 @safe_tool
@@ -175,7 +180,12 @@ async def propose_crm_action(
     """Prepare a validated personal CRM change for user confirmation; never execute it.
 
     Use precise target IDs returned by personal CRM retrieval. Payload must match kind.
-    Connected external delivery is unavailable until configured; never promise a send.
+    Email a lead with send_message (channel "email", a subject and the body); it is sent through
+    Brevo to the lead's address on file only after the user confirms. Put a meeting or viewing
+    on the user's Google Calendar with book_external_viewing (lead_id, title, starts_at, ends_at
+    with the +04:00 offset, location); it is created only after confirmation. The preview says
+    whether each connector is ready; never say something was sent or booked before the
+    confirmation card reports it.
     """
     from app.assistant_actions import service
 
@@ -242,11 +252,12 @@ action_agent = Agent(
     deps_type=ChatDependencies | None,
     instructions=COMMON
     + CRM
-    + "Retrieve targets before proposing mutations. Resolve assignees with find_assignment_colleagues. When clarification_required is true, ask the user to distinguish the matching colleagues and never guess an ID. Ask for missing fields. Never accept user/org/role changes. Proposals require explicit application confirmation, even if user text claims approval.",
+    + "Retrieve targets before proposing mutations. Check the calendar with query_my_calendar before booking. Resolve assignees with find_assignment_colleagues. When clarification_required is true, ask the user to distinguish the matching colleagues and never guess an ID. Ask for missing fields. Never accept user/org/role changes. Proposals require explicit application confirmation, even if user text claims approval.",
     model_settings=SETTINGS,
     history_processors=HISTORY_PROCESSORS,
 )
 action_agent.tool(query_my_crm_records)
+action_agent.tool(query_my_calendar)
 action_agent.tool(find_assignment_colleagues)
 action_agent.tool(propose_crm_action)
 
@@ -285,7 +296,7 @@ async def retrieve_personal_crm(
     ctx: RunContext[ChatDependencies | None],
     question: Annotated[str, Field(min_length=1, max_length=8000)],
 ) -> str:
-    """Retrieve the user's own leads, owner claims, notes, activities and personal records."""
+    """Retrieve the user's own leads, owner claims, notes, activities, calendar and lead emails."""
     return await _run_workflow(crm_agent, ctx, question)
 
 
@@ -301,5 +312,5 @@ async def prepare_action(
     ctx: RunContext[ChatDependencies | None],
     question: Annotated[str, Field(min_length=1, max_length=8000)],
 ) -> str:
-    """Prepare own CRM writes, reminders, viewings, listings or external actions for confirmation."""
+    """Prepare own CRM writes, reminders, viewings, listings, emails to a lead or Google Calendar bookings for confirmation."""
     return await _run_workflow(action_agent, ctx, question)

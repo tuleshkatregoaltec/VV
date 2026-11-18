@@ -7,7 +7,8 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 
-from app.assistant_actions import repository
+from app.assistant_actions import connectors, repository
+from app.assistant_actions.delivery import dispatch_claimed
 from app.assistant_actions.models import (
     ActionKind,
     ActionProposalRequest,
@@ -219,7 +220,19 @@ async def propose_action(
         if name:
             preview["assignee"] = name
     if request.kind in EXTERNAL_KINDS:
-        preview["delivery"] = "No connector configured; nothing will be sent or published"
+        ready, delivery, consequence = await connectors.readiness(
+            db,
+            request.kind,
+            request.payload,
+            user_id=user_id,
+            organization_id=organization_id,
+            contact=resources.get("contact"),
+        )
+        preview["delivery"] = delivery
+        if ready and consequence:
+            preview["consequence"] = consequence
+        if ready and request.kind == ActionKind.SEND_MESSAGE:
+            preview["recipient"] = resources["contact"].email.strip()
     elif request.kind in {ActionKind.SCHEDULE_VIEWING, ActionKind.CANCEL_VIEWING}:
         preview["delivery"] = "Internal calendar record only; no invitations will be sent"
     elif request.kind in {ActionKind.CREATE_REMINDER, ActionKind.UPDATE_REMINDER}:
@@ -380,16 +393,44 @@ async def confirm_action(db, *, user_id, organization_id, action_id):
         row.result = {"message": error.detail}
     else:
         # A savepoint prevents a partial mutation from being committed on execution failure.
+        ready = False
+        if request.kind in EXTERNAL_KINDS:
+            ready, _, _ = await connectors.readiness(
+                db,
+                request.kind,
+                request.payload,
+                user_id=user_id,
+                organization_id=organization_id,
+                contact=resources.get("contact"),
+            )
         async with db.begin_nested():
-            row.result = await _execute(db, row, request, resources)
-        row.status = "not_connected" if request.kind in EXTERNAL_KINDS else "succeeded"
-    row.completed_at = _now()
+            row.result = await _execute(db, row, request, resources, queue=ready)
+        if request.kind not in EXTERNAL_KINDS:
+            row.status = "succeeded"
+        else:
+            row.status = "queued" if ready else "not_connected"
+    if row.status != "queued":
+        row.completed_at = _now()
     response = await _visible_response(db, row, user_id, organization_id)
     await db.commit()
+    if response.status == "queued":
+        # The claim marks it unknown before the network call; a crash can never send twice.
+        await dispatch_confirmed(
+            db,
+            user_id=user_id,
+            organization_id=organization_id,
+            action_id=action_id,
+            adapter=connectors.adapter_for(
+                db, request.kind, user_id=user_id, organization_id=organization_id
+            ),
+        )
+        return await get_action(
+            db, user_id=user_id, organization_id=organization_id, action_id=action_id
+        )
     return response
 
 
-async def _execute(db, row, request, resources):
+async def _execute(db, row, request, resources, *, queue=False):
     kind, payload, now = request.kind, request.payload, _now()
     owner = {"user_id": row.user_id, "organization_id": row.organization_id}
     if kind in EXTERNAL_KINDS:
@@ -398,10 +439,13 @@ async def _execute(db, row, request, resources):
                 action_id=row.id,
                 **owner,
                 kind=kind.value,
+                status="queued" if queue else "not_connected",
                 payload=row.payload,
                 created_at=now,
             )
         )
+        if queue:
+            return {"message": "Confirmed; sending now."}
         return {"message": "No connector configured. Nothing was sent, published, or booked."}
     if kind == ActionKind.CREATE_LEAD:
         contact = CrmInboundContact(
@@ -570,7 +614,28 @@ async def claim_external_dispatch(db, *, user_id, organization_id, action_id):
     return request.payload
 
 
-async def record_external_outcome(db, *, user_id, organization_id, action_id, status):
+async def dispatch_confirmed(db, *, user_id, organization_id, action_id, adapter):
+    """Claim once, dispatch once, record the outcome; None when nothing is claimable."""
+    payload = await claim_external_dispatch(
+        db, user_id=user_id, organization_id=organization_id, action_id=action_id
+    )
+    if payload is None:
+        return None
+    outcome = await dispatch_claimed(adapter, payload=payload, idempotency_key=action_id)
+    await record_external_outcome(
+        db,
+        user_id=user_id,
+        organization_id=organization_id,
+        action_id=action_id,
+        status=outcome.status,
+        message=outcome.message,
+    )
+    return outcome
+
+
+async def record_external_outcome(
+    db, *, user_id, organization_id, action_id, status, message: str | None = None
+):
     """Persist only a claim's safe outcome, including after offboarding during delivery."""
     if status not in {"succeeded", "failed", "unknown", "not_connected"}:
         raise ValueError("Invalid delivery outcome")
@@ -588,7 +653,7 @@ async def record_external_outcome(db, *, user_id, organization_id, action_id, st
     )
     if row and outbox and outbox.claimed_at and row.status == outbox.status == "unknown":
         row.status = outbox.status = status
-        row.result = {"message": f"External action outcome: {status}"}
+        row.result = {"message": message or f"External action outcome: {status}"}
         row.completed_at = _now()
     await db.commit()
 

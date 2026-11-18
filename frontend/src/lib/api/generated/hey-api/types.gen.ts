@@ -13711,6 +13711,10 @@ export type SendMessage = {
      * Body
      */
     body: string;
+    /**
+     * Subject
+     */
+    subject?: string | null;
 };
 
 /**

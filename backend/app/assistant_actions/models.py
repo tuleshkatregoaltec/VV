@@ -128,6 +128,8 @@ class UpdateListingDraft(CreateListingDraft):
 class SendMessage(LeadTarget):
     channel: Literal["email", "sms", "whatsapp"]
     body: str = Field(min_length=1, max_length=4000)
+    # Email only; a plain default is used when omitted.
+    subject: str | None = Field(default=None, min_length=1, max_length=300)
 
 
 class PublishListing(StrictPayload):

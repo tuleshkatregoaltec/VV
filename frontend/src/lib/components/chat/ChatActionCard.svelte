@@ -74,6 +74,9 @@ async function decide(confirm: boolean) {
 	{:else if action}
 		<h3 class="font-semibold text-fg-1">{action.title}</h3>
 		<p class="mt-1 text-xs text-fg-3" role="status">{status ? labels[status] : 'Status unavailable'}</p>
+		{#if action.status !== 'awaiting_confirmation' && typeof action.result?.message === 'string'}
+			<p class="mt-1 text-sm text-fg-2">{action.result.message}</p>
+		{/if}
 		<dl class="my-3 space-y-2">
 			{#each Object.entries(action.preview) as [field, value] (field)}
 				<div>
