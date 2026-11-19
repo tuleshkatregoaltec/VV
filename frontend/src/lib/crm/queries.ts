@@ -555,18 +555,22 @@ export const crmQueries = {
 	workload: () => ({
 		enabled: crmIdentityKnown(),
 		queryKey: crmKeys.workload(),
-		queryFn: crm.assignment.workload
+		queryFn: crm.assignment.workload,
+		...LIVE_LIST
 	}),
+	/** Manager view: each agent's lead figures, live like the lists they are counted from. */
 	teamAnalytics: (days: AnalyticsDays) => ({
 		enabled: crmIdentityKnown(),
 		queryKey: crmKeys.analytics(days),
-		queryFn: () => crm.assignment.analytics(days)
+		queryFn: () => crm.assignment.analytics(days),
+		...LIVE_LIST
 	}),
 	agentAnalytics: (userId: string, days: AnalyticsDays) => ({
 		enabled: crmIdentityKnown() && Boolean(userId),
 		queryKey: crmKeys.agentAnalytics(userId, days),
 		queryFn: () => crm.assignment.agentAnalytics(userId, days),
-		retry: false
+		retry: false,
+		...LIVE_LIST
 	}),
 	teams: () => ({
 		enabled: crmIdentityKnown(),
