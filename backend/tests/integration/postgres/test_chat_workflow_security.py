@@ -65,7 +65,9 @@ async def test_notes_and_history_disappear_after_assignment_revocation(pg_sessio
     await pg_session.commit()
     for resource in ("lead_notes", "lead_activities"):
         data = await query_my_records(pg_session, CrmAssistantQuery(resource=resource), **scope)
-        assert data.total == 1 and user in data.records[0]["body"]
+        # Every author's entries on a lead the user holds, as on the CRM lead page.
+        assert data.total == 2
+        assert {row["author"] for row in data.records} == {"you", "colleague"}
     request = CrmAssistantQuery(resource="leads", record_id=lead.id)
     data = await query_my_records(pg_session, request, **scope)
     payload = safe_data(data.model_dump(mode="json"))
@@ -309,3 +311,46 @@ async def test_confirmed_update_keeps_only_reauthorized_followup_handle(pg_sessi
     )
     assert "_retrieval_context" not in revoked[0].meta_data
     assert _convert_to_pydantic_messages(revoked) == []
+
+
+async def test_manager_answer_withheld_after_losing_supervisor_role(pg_session):
+    """A team answer given to a manager is private evidence of that role: once they are an
+    agent again, history must not keep showing it."""
+    import sqlalchemy as sa
+    from crm_role_support import agency, lead
+
+    from app.organization.models import OrganizationTeamMember
+
+    ids = await agency(pg_session)
+    await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    scope = {"user_id": ids["nadia"], "organization_id": ids["org"]}
+    request = CrmAssistantQuery(resource="leads", summary_only=True)
+    data = await query_my_records(pg_session, request, **scope)
+    assert data.total == 1
+    payload = safe_data(data.model_dump(mode="json"))
+    payload["source"] = "Your CRM records"
+    conversation = await service.create_conversation(pg_session, **scope)
+    await service.add_message(
+        pg_session,
+        conversation.id,
+        "assistant",
+        "Your team has 1 lead",
+        {
+            "guardrail_version": 1,
+            "private": True,
+            "evidence": [
+                {"query": request.model_dump(mode="json"), "fingerprint": fingerprint(payload)}
+            ],
+        },
+        **scope,
+    )
+    visible = await service.get_conversation_messages(pg_session, conversation.id, **scope)
+    assert visible[0].content == "Your team has 1 lead"
+    await pg_session.execute(
+        sa.update(OrganizationTeamMember)
+        .where(OrganizationTeamMember.user_id == ids["nadia"])
+        .values(role="agent")
+    )
+    await pg_session.commit()
+    visible = await service.get_conversation_messages(pg_session, conversation.id, **scope)
+    assert visible[0].content == RESTRICTED_HISTORY

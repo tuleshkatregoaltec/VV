@@ -1,6 +1,6 @@
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.crm import assistant_repository
+from app.crm import assignment, assistant_repository
 from app.crm.assistant_models import CrmAssistantQuery, CrmAssistantResult
 
 
@@ -20,13 +20,21 @@ async def query_my_records(
         return result
     if not await has_current_access(db, user_id=user_id, organization_id=organization_id):
         raise PermissionError("Current organization access is required")
+    scope = await assignment.load_scope(db, organization_id, user_id)
     (
         result.total,
         result.counts_by_status,
         result.records,
-    ) = await assistant_repository.query_records(
-        db, request, user_id=user_id, organization_id=organization_id
-    )
+    ) = await assistant_repository.query_records(db, request, scope=scope)
+    # Raw identifiers never reach the model; say whose record it is instead.
+    for row in result.records:
+        if "user_id" in row:
+            row["author"] = "you" if row.pop("user_id") == user_id else "colleague"
+        if "assigned_user_id" in row:
+            holder = row.pop("assigned_user_id")
+            row["assigned_to"] = (
+                "unassigned" if holder is None else "you" if holder == user_id else "colleague"
+            )
     if request.resource == "renewals":
         from app.crm.opportunities import get_lead_detail
 
@@ -69,8 +77,8 @@ async def query_my_records(
         )
     if request.resource == "leads":
         result.limitations.append(
-            "Visible leads are assigned to you, or unassigned and created by you. "
-            "Notes and activities authored by other agents are not included."
+            "Visible leads follow your CRM role: your own, your teams' leads if you manage a team, "
+            "or all leads if you are an organization administrator."
         )
     if request.resource == "owner_properties":
         result.limitations.append(

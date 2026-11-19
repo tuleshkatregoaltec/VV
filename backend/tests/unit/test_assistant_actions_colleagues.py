@@ -165,3 +165,40 @@ async def test_assignment_tool_accepts_only_fresh_unique_resolved_member(monkeyp
     assert result["confirmation_required"] is True
     assert proposal.call_args.kwargs["request"].payload.assignee_id == "member"
     assert len(deps.proposals) == 1
+
+
+@pytest.mark.parametrize(
+    ("status", "detail", "reason"),
+    [
+        (
+            409,
+            {"code": "LEAD_IN_POOL", "message": "This lead is waiting in your team's pool."},
+            "This lead is waiting in your team's pool.",
+        ),
+        (403, "You cannot reassign this lead", "You cannot reassign this lead"),
+        (422, {"code": "TEAM_REQUIRED", "message": "Choose the team."}, "Choose the team."),
+    ],
+)
+async def test_role_refusal_reaches_the_user_with_its_reason(monkeypatch, status, detail, reason):
+    """A user told only "unavailable" cannot act on a pool lead or ask the right person."""
+    from fastapi import HTTPException
+
+    from app.assistant_actions.models import ActionKind, AddNote
+
+    async def database():
+        yield "session"
+
+    monkeypatch.setattr(workflows, "get_db_session", database)
+    monkeypatch.setattr(
+        service, "propose_action", AsyncMock(side_effect=HTTPException(status, detail))
+    )
+    deps = ChatDependencies(
+        user_id="trusted-user", organization_id="trusted-org", conversation_id=1
+    )
+    result = await workflows.propose_crm_action(
+        SimpleNamespace(deps=deps, tool_call_id="test"),
+        ActionKind.ADD_NOTE,
+        AddNote(lead_id=1, body="Called"),
+    )
+    assert result == {"available": False, "reason": reason}
+    assert deps.proposals == []

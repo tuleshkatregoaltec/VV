@@ -94,11 +94,11 @@ async def test_lead_emails_refuse_a_lead_the_caller_does_not_hold(monkeypatch):
         raise AssertionError("must not read another agent's mail")
 
     install(monkeypatch, Db())
-    monkeypatch.setattr(repository, "own_lead", not_mine)
+    monkeypatch.setattr(repository, "visible_lead", not_mine)
     monkeypatch.setattr(email_pipeline, "lead_thread", thread)
     c = ctx()
     result = await connector_tools.query_my_lead_emails(c, 8)
-    assert result == {"available": False, "reason": "Own lead not found"}
+    assert result == {"available": False, "reason": "Lead not found"}
     assert c.deps.evidence == []
 
 
@@ -126,7 +126,7 @@ async def test_lead_emails_show_the_newest_ten(monkeypatch):
         ]
 
     install(monkeypatch, Db())
-    monkeypatch.setattr(repository, "own_lead", mine)
+    monkeypatch.setattr(repository, "visible_lead", mine)
     monkeypatch.setattr(email_pipeline, "lead_thread", thread)
     c = ctx()
     result = await connector_tools.query_my_lead_emails(c, 7)
@@ -143,7 +143,7 @@ async def test_evidence_is_rechecked_by_access(monkeypatch):
     async def own(db, **kwargs):
         return holder["lead"]
 
-    monkeypatch.setattr(repository, "own_lead", own)
+    monkeypatch.setattr(repository, "visible_lead", own)
     check = connector_tools.evidence_still_accessible
     owner = {"user_id": "omar", "organization_id": "org"}
     assert await check(None, {"type": "calendar_lookup"}, **owner)

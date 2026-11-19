@@ -13,22 +13,26 @@ from app.postgres import get_db_session
 async def query_my_crm_records(
     ctx: RunContext[ChatDependencies | None], request: CrmAssistantQuery
 ) -> dict:
-    """Read only the authenticated agent's private CRM records in their current organization.
+    """Read the CRM records the authenticated user's role allows in their current organization.
 
-    Resources: leads (current assignee, or creator when unassigned), owner_properties (claims
+    Resources: leads (by CRM role: an agent's own and their team pool, a manager's teams, an
+    organization administrator's whole organization), owner_properties (claims
     from your own imports/lists), saved_leads, lead_workspaces, owner_workspaces, deals
-    (unavailable until persisted). The server supplies identity; you cannot choose an agent
-    or organization. No role, including organization owner, can widen this scope.
+    (unavailable until persisted). The server supplies identity and role; you cannot choose
+    an agent, role or organization.
 
-    Use summary_only for counts and status breakdowns. Counts cover all matches; records are
+    Lead and renewal rows say assigned_to "you", "colleague" or "unassigned"; use assignment
+    ("mine", "colleagues", "unassigned") when the user asks about their own leads, their
+    colleagues' or unassigned ones. Use summary_only for counts and status breakdowns. Counts cover all matches; records are
     paged. Use search for names/locations on leads or owner properties, and identifiers on
     saved leads/workspaces. Use record_id for a specific returned record, status for a stored
     status, and follow_up_before (inclusive) for due leads/workspaces. Request phone/email
-    with include_contact_details only when needed to answer the user's question. Use renewals for your currently accessible opened renewal leads (record_id retrieves
+    with include_contact_details only when needed to answer the user's question. Use renewals for opened renewal leads you can currently see (record_id retrieves
     current lease evidence without owner enrichment). Use reminders, viewings and listing_drafts
-    for your own stored workflow records. Use lead_notes, lead_activities, workspace_notes or owner_notes for your authored
-    text on currently accessible parents. Search is bounded literal text matching. Matching
-    and deals are explicitly unavailable. Never substitute organization-wide CRM data.
+    for your own stored workflow records. Use lead_notes or lead_activities for every author's entries on
+    leads you can see (each row's author is "you" or "colleague"), and workspace_notes or owner_notes
+    for your own text on your workspaces. Search is bounded literal text matching. Matching
+    and deals are explicitly unavailable. Never go beyond what the tool returns.
     """
     if ctx.deps is None:
         return {"available": False, "reason": "Authenticated CRM context is required"}

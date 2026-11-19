@@ -34,7 +34,7 @@
     }
   },
   "retrieve_personal_crm": {
-    "description": "Retrieve the user's own leads, owner claims, notes, activities, calendar and lead emails.",
+    "description": "Retrieve the leads the user's CRM role lets them see, their owner claims, notes, activities, calendar and lead emails.",
     "schema": {
       "additionalProperties": false,
       "properties": {
@@ -68,7 +68,7 @@
     }
   },
   "prepare_action": {
-    "description": "Prepare own CRM writes, reminders, viewings, listings, emails to a lead or Google Calendar bookings for confirmation.",
+    "description": "Prepare CRM writes the user's role allows, reminders, viewings, listings, emails to a lead or Google Calendar bookings for confirmation.",
     "schema": {
       "additionalProperties": false,
       "properties": {

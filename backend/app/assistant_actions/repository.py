@@ -1,6 +1,5 @@
 """Database access only; authorization decisions live in service.py."""
 
-from sqlalchemy import and_, or_
 from sqlmodel import select
 
 from app.assistant_actions.models import AssistantAction
@@ -8,7 +7,6 @@ from app.chat import models as chat_models
 from app.crm.inbound_models import (
     CrmInboundActivity,
     CrmInboundContact,
-    CrmInboundEnquiry,
     CrmInboundMatch,
     CrmInboundNote,
 )
@@ -100,24 +98,17 @@ async def actions(db, *, user_id, organization_id, conversation_id):
     ).all()
 
 
-async def own_lead(db, *, user_id, organization_id, lead_id):
-    return (
-        await db.exec(
-            _locked(
-                select(CrmInboundEnquiry).where(
-                    CrmInboundEnquiry.id == lead_id,
-                    CrmInboundEnquiry.organization_id == organization_id,
-                    or_(
-                        CrmInboundEnquiry.assigned_user_id == user_id,
-                        and_(
-                            CrmInboundEnquiry.assigned_user_id.is_(None),
-                            CrmInboundEnquiry.created_by_user_id == user_id,
-                        ),
-                    ),
-                )
-            )
-        )
-    ).first()
+async def visible_lead(db, *, user_id, organization_id, lead_id, lock=False):
+    """The lead when the user's CRM role lets them see it (crm/assignment.py), else None."""
+    from fastapi import HTTPException
+
+    from app.crm import assignment
+
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    try:
+        return await assignment.load_visible(db, scope, lead_id, lock=lock)
+    except HTTPException:
+        return None
 
 
 async def own_record(db, model, *, user_id, organization_id, record_id):
@@ -146,6 +137,21 @@ async def records(db, model, *, user_id, organization_id):
             .limit(100)
         )
     ).all()
+
+
+async def has_others_assignment_history(db, *, lead_id, user_id) -> bool:
+    from app.crm.inbound_models import CrmInboundAssignmentEvent
+
+    return (
+        await db.exec(
+            select(CrmInboundAssignmentEvent.id)
+            .where(
+                CrmInboundAssignmentEvent.enquiry_id == lead_id,
+                CrmInboundAssignmentEvent.actor_user_id != user_id,
+            )
+            .limit(1)
+        )
+    ).first() is not None
 
 
 async def lead_dependents(db, *, lead_id):

@@ -89,11 +89,11 @@ async def query_my_lead_emails(
     ctx: RunContext[ChatDependencies | None],
     lead_id: Annotated[int, Field(gt=0)],
 ) -> dict:
-    """Emails sent to and received from one of your own leads, newest first (at most 10).
+    """Emails sent to and received from a lead you can see, newest first (at most 10).
 
     Use the lead id from personal CRM retrieval. Shows subject, direction (out = sent from the
-    CRM, in = the lead's reply), time, delivery status and the text. Leads you do not hold
-    return nothing.
+    CRM, in = the lead's reply), time, delivery status and the text. Leads your CRM role
+    does not let you see return nothing.
     """
     from app.assistant_actions import repository
     from app.crm import brevo, email_pipeline
@@ -102,11 +102,11 @@ async def query_my_lead_emails(
         return {"available": False, "reason": "Authenticated CRM context is required"}
     user_id, organization_id = ctx.deps.user_id, ctx.deps.organization_id
     async with asynccontextmanager(get_db_session)() as db:
-        lead = await repository.own_lead(
+        lead = await repository.visible_lead(
             db, user_id=user_id, organization_id=organization_id, lead_id=lead_id
         )
         if lead is None:
-            return {"available": False, "reason": "Own lead not found"}
+            return {"available": False, "reason": "Lead not found"}
     thread = await email_pipeline.lead_thread(organization_id=organization_id, enquiry_id=lead_id)
     ctx.deps.evidence.append({"private": True, "type": "lead_email_thread", "lead_id": lead_id})
     newest = sorted(thread, key=lambda item: item.at, reverse=True)[:MAX_EMAILS]
@@ -136,7 +136,7 @@ async def evidence_still_accessible(db, reference: dict, *, user_id, organizatio
         from app.assistant_actions import repository
 
         return (
-            await repository.own_lead(
+            await repository.visible_lead(
                 db,
                 user_id=user_id,
                 organization_id=organization_id,

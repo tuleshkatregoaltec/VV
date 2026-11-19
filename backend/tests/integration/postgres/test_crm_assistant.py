@@ -93,7 +93,8 @@ async def private_records(pg_session):
         other_org=other_org,
         assigned=assigned,
         unassigned=unassigned,
-        hidden=[reassigned, others, transferred],
+        # Unassigned and unpooled: the CRM shows it to no agent, so neither does the assistant.
+        hidden=[unassigned, reassigned, others, transferred],
         now=now,
     )
 
@@ -113,8 +114,8 @@ async def test_assistant_enforces_current_assignment_on_counts_search_and_guesse
         )
 
     result = await query(limit=1)
-    assert result.total == 2 and len(result.records) == 1
-    assert result.counts_by_status == {"new": 1, "qualified": 1}
+    assert result.total == 1 and len(result.records) == 1
+    assert result.counts_by_status == {"qualified": 1}
     assert "phone" not in result.records[0] and "email" not in result.records[0]
     for hidden in p.hidden:
         by_id = await query(record_id=hidden.id, include_contact_details=True)
@@ -131,7 +132,7 @@ async def test_assistant_enforces_current_assignment_on_counts_search_and_guesse
     pg_session.add(p.assigned)
     await pg_session.commit()
     assert (await query(record_id=p.assigned.id)).total == 0
-    assert (await query(summary_only=True)).total == 1
+    assert (await query(summary_only=True)).total == 0
 
 
 @pytest.mark.parametrize("resource", ["saved_leads", "lead_workspaces", "owner_workspaces"])
@@ -243,9 +244,166 @@ async def test_registered_crm_tool_passes_only_private_evidence_to_model(
         for part in message.parts
         if isinstance(part, ToolReturnPart) and part.tool_name == "query_my_crm_records"
     ]
-    assert len(evidence) == 1 and evidence[0]["total"] == 2
-    assert {row["contact_name"] for row in evidence[0]["records"]} == {
-        "AssignedToMe",
-        "MyUnassigned",
-    }
+    # An unassigned, unpooled lead is not an agent's, even if they created it (CRM visibility).
+    assert len(evidence) == 1 and evidence[0]["total"] == 1
+    assert {row["contact_name"] for row in evidence[0]["records"]} == {"AssignedToMe"}
     assert all("phone" not in row for row in evidence[0]["records"])
+
+
+# --- Assistant reads follow the CRM role (agent / manager / organization admin) ---
+
+
+async def _count(db, ids, person, resource="leads"):
+    result = await query_my_records(
+        db,
+        CrmAssistantQuery(resource=resource, summary_only=True),
+        user_id=ids[person],
+        organization_id=ids["org"],
+    )
+    return result.total
+
+
+async def test_manager_reads_every_lead_their_team_owns(pg_session):
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    await lead(pg_session, ids, "SaraLead", team="north", assignee="sara")
+    await lead(pg_session, ids, "LinaLead", team="south", assignee="lina")
+    # Managers see what the CRM pages show them, not just leads assigned to themselves.
+    assert await _count(pg_session, ids, "nadia") == 2
+    assert await _count(pg_session, ids, "karim") == 1
+    assert await _count(pg_session, ids, "owner") == 3
+    assert await _count(pg_session, ids, "omar") == 1
+
+
+async def test_agent_sees_team_pool_but_not_unpooled_unassigned_leads(pg_session):
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    pooled = await lead(pg_session, ids, "Pooled", team="north", assignee=None, pooled=True)
+    await lead(pg_session, ids, "Held", team="north", assignee=None, creator="omar")
+    result = await query_my_records(
+        pg_session,
+        CrmAssistantQuery(resource="leads"),
+        user_id=ids["omar"],
+        organization_id=ids["org"],
+    )
+    assert [row["id"] for row in result.records] == [pooled.id]
+
+
+async def test_notes_on_visible_leads_include_colleague_authors(pg_session):
+    from crm_role_support import agency, lead
+
+    from app.crm.inbound_models import CrmInboundNote
+
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    now = datetime.now(UTC)
+    for author in ("omar", "nadia"):
+        pg_session.add(
+            CrmInboundNote(
+                enquiry_id=target.id,
+                organization_id=ids["org"],
+                user_id=ids[author],
+                body=f"note by {author}",
+                created_at=now,
+            )
+        )
+    await pg_session.commit()
+    result = await query_my_records(
+        pg_session,
+        CrmAssistantQuery(resource="lead_notes"),
+        user_id=ids["nadia"],
+        organization_id=ids["org"],
+    )
+    # The manager reads the whole history of a team lead, attributed to each author.
+    assert sorted(row["author"] for row in result.records) == ["colleague", "you"]
+    assert await _count(pg_session, ids, "lina", "lead_notes") == 0
+
+
+async def test_personal_resources_stay_personal_for_managers(pg_session):
+    from crm_role_support import agency, lead
+
+    from app.assistant_actions.models import AssistantReminder
+
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    now = datetime.now(UTC)
+    pg_session.add(
+        AssistantReminder(
+            user_id=ids["omar"],
+            organization_id=ids["org"],
+            lead_id=target.id,
+            title="Call back",
+            due_at=now,
+            updated_at=now,
+        )
+    )
+    await pg_session.commit()
+    assert await _count(pg_session, ids, "omar", "reminders") == 1
+    assert await _count(pg_session, ids, "nadia", "reminders") == 0
+
+
+async def test_note_rows_say_who_wrote_them_after_privacy_filtering(pg_session):
+    """Identifiers are stripped before the model; attribution must survive that."""
+    from crm_role_support import agency, lead
+
+    from app.chat.security import safe_data
+    from app.crm.inbound_models import CrmInboundNote
+
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    now = datetime.now(UTC)
+    for author in ("omar", "nadia"):
+        pg_session.add(
+            CrmInboundNote(
+                enquiry_id=target.id,
+                organization_id=ids["org"],
+                user_id=ids[author],
+                body=f"note by {author}",
+                created_at=now,
+            )
+        )
+    await pg_session.commit()
+    result = await query_my_records(
+        pg_session,
+        CrmAssistantQuery(resource="lead_notes"),
+        user_id=ids["nadia"],
+        organization_id=ids["org"],
+    )
+    rows = safe_data(result.model_dump(mode="json"))["records"]
+    assert {(row["body"], row["author"]) for row in rows} == {
+        ("note by nadia", "you"),
+        ("note by omar", "colleague"),
+    }
+
+
+async def test_leads_say_whose_they_are_and_can_be_narrowed_to_mine(pg_session):
+    """A manager asking "my new leads" must not get the whole team's pipeline."""
+    from crm_role_support import agency, lead
+
+    from app.chat.security import safe_data
+
+    ids = await agency(pg_session)
+    await lead(pg_session, ids, "NadiaLead", team="north", assignee="nadia")
+    await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    await lead(pg_session, ids, "Pooled", team="north", assignee=None, pooled=True)
+
+    async def query(**fields):
+        return await query_my_records(
+            pg_session,
+            CrmAssistantQuery(resource="leads", **fields),
+            user_id=ids["nadia"],
+            organization_id=ids["org"],
+        )
+
+    rows = safe_data((await query()).model_dump(mode="json"))["records"]
+    assert {(row["contact_name"], row["assigned_to"]) for row in rows} == {
+        ("NadiaLead", "you"),
+        ("OmarLead", "colleague"),
+        ("Pooled", "unassigned"),
+    }
+    assert (await query(assignment="mine", summary_only=True)).total == 1
+    assert (await query(assignment="colleagues", summary_only=True)).total == 1
+    assert (await query(assignment="unassigned", summary_only=True)).total == 1

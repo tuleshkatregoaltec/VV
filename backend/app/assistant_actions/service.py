@@ -23,12 +23,23 @@ from app.assistant_actions.models import (
     ViewingResponse,
 )
 from app.auth.service import get_user_by_id
+from app.crm import assignment
 from app.crm.inbound_models import CrmInboundContact, CrmInboundEnquiry, CrmInboundNote
 from app.organization.service import get_organization_members
 
 EXTERNAL_KINDS = {
     ActionKind.SEND_MESSAGE,
     ActionKind.PUBLISH_LISTING,
+    ActionKind.BOOK_EXTERNAL_VIEWING,
+}
+# Changes to a lead itself: a pooled lead stays read-only to agents until they claim it.
+EDIT_KINDS = {
+    ActionKind.UPDATE_LEAD,
+    ActionKind.DELETE_LEAD,
+    ActionKind.ADD_NOTE,
+    ActionKind.SCHEDULE_VIEWING,
+    ActionKind.CANCEL_VIEWING,
+    ActionKind.SEND_MESSAGE,
     ActionKind.BOOK_EXTERNAL_VIEWING,
 }
 
@@ -86,18 +97,12 @@ async def _authorize(db, user_id, organization_id, conversation_id=None):
 async def _resources(db, request, user_id, organization_id):
     """Lock every target and take a versioned snapshot used again on confirmation."""
     payload = request.payload
-    resources = {}
+    # Lead authority is the CRM's own (crm/assignment.py): agent, manager or administrator.
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    resources = {"scope": scope}
     lead_id = getattr(payload, "lead_id", None)
     if lead_id is not None:
-        lead = await repository.own_lead(
-            db,
-            user_id=user_id,
-            organization_id=organization_id,
-            lead_id=lead_id,
-        )
-        if lead is None:
-            raise HTTPException(404, "Own lead not found")
-        resources["lead"] = lead
+        resources["lead"] = await assignment.load_visible(db, scope, lead_id, lock=True)
     for key, model in (
         ("reminder", AssistantReminder),
         ("viewing", AssistantViewing),
@@ -118,15 +123,7 @@ async def _resources(db, request, user_id, organization_id):
             # A linked task never grants access to a reassigned lead.
             linked_lead = getattr(record, "lead_id", None)
             if linked_lead is not None:
-                lead = await repository.own_lead(
-                    db,
-                    user_id=user_id,
-                    organization_id=organization_id,
-                    lead_id=linked_lead,
-                )
-                if lead is None:
-                    raise HTTPException(404, "Own lead not found")
-                resources["lead"] = lead
+                resources["lead"] = await assignment.load_visible(db, scope, linked_lead, lock=True)
     if "lead" in resources:
         contact = await repository.lead_contact(
             db,
@@ -134,17 +131,29 @@ async def _resources(db, request, user_id, organization_id):
             contact_id=resources["lead"].contact_id,
         )
         if contact is None:
-            raise HTTPException(404, "Own lead contact not found")
+            raise HTTPException(404, "Lead contact not found")
         resources["contact"] = contact
+        if request.kind in EDIT_KINDS:
+            assignment.require_edit(scope, resources["lead"])
     if request.kind == ActionKind.ASSIGN_LEAD:
-        if not await repository.membership(
-            db,
-            user_id=payload.assignee_id,
-            organization_id=organization_id,
-        ):
-            raise HTTPException(404, "Organization member not found")
+        if not scope.may_reassign(resources["lead"]):
+            raise HTTPException(403, "You cannot reassign this lead")
+        # Raises when the assignee is not in a team this user may assign into.
+        assignment.assignable_team(scope, payload.assignee_id, None, resources["lead"].team_id)
     if request.kind == ActionKind.DELETE_LEAD:
+        lead = resources["lead"]
+        if lead.assigned_user_id != user_id and not scope.organization_admin:
+            raise HTTPException(
+                403, "Only the lead's assignee or an organization administrator can delete it"
+            )
         dependents = await repository.lead_dependents(db, lead_id=payload.lead_id)
+        # Deleting cascades the lead's assignment history: refuse when others wrote it.
+        if await repository.has_others_assignment_history(
+            db, lead_id=payload.lead_id, user_id=user_id
+        ):
+            raise HTTPException(
+                409, "Lead has assignment history recorded by others; deletion refused"
+            )
         # Matches have no individual owner; deleting them could destroy another agent's work.
         if any(getattr(item, "user_id", None) != user_id for item in dependents):
             raise HTTPException(
@@ -153,6 +162,8 @@ async def _resources(db, request, user_id, organization_id):
         resources["dependents"] = dependents
     snapshot = {}
     for key, record in resources.items():
+        if key == "scope":
+            continue
         if key == "dependents":
             snapshot[key] = sorted(f"{type(item).__name__}:{item.id}" for item in record)
         else:
@@ -172,7 +183,7 @@ def _target_preview(request, resources):
             preview["target"] = f"{record.title[:200]} ({key} #{record.id})"
     consequences = {
         ActionKind.UPDATE_LEAD: "Updates this lead's enquiry fields; retains its shared contact details.",
-        ActionKind.ASSIGN_LEAD: "Assigns this lead to the selected organization member. You lose assistant access if it is assigned to someone else.",
+        ActionKind.ASSIGN_LEAD: "Assigns this lead to the selected team member and records it in the lead's assignment history.",
         ActionKind.DELETE_LEAD: "Permanently deletes this lead enquiry and your notes and activities on it. The shared contact is retained. This cannot be undone.",
         ActionKind.ADD_NOTE: "Adds this note to the selected lead's enquiry history.",
         ActionKind.CREATE_REMINDER: "Saves a reminder in your list; notification delivery is not configured.",
@@ -302,7 +313,7 @@ async def _visible_response(db, row, user_id, organization_id):
         # Create requests have no input target; their result becomes the protected resource.
         if row.status == "succeeded" and row.result:
             if row.kind == ActionKind.CREATE_LEAD:
-                target = await repository.own_lead(
+                target = await repository.visible_lead(
                     db,
                     user_id=user_id,
                     organization_id=organization_id,
@@ -462,7 +473,6 @@ async def _execute(db, row, request, resources, *, queue=False):
             organization_id=row.organization_id,
             contact_id=contact.id,
             created_by_user_id=row.user_id,
-            assigned_user_id=row.user_id,
             intent=payload.intent,
             raw_notes=payload.notes,
             source="Assistant",
@@ -472,14 +482,28 @@ async def _execute(db, row, request, resources, *, queue=False):
         )
         db.add(lead)
         await db.flush()
+        # As in the CRM: the creator holds it, in their team, with an assignment history entry.
+        team = await assignment.check_new_assignee(db, resources["scope"], row.user_id)
+        assignment.record_assignment(
+            db,
+            lead,
+            row.user_id,
+            actor_user_id=row.user_id,
+            reason="created",
+            now=now,
+            team_id=team,
+        )
         return {"lead_id": lead.id, "message": "Lead created"}
     if kind in {ActionKind.UPDATE_LEAD, ActionKind.ASSIGN_LEAD}:
         lead = resources["lead"]
         if kind == ActionKind.ASSIGN_LEAD:
-            lead.assigned_user_id = payload.assignee_id
-        else:
-            for key, value in payload.model_dump(exclude_unset=True, exclude={"lead_id"}).items():
-                setattr(lead, key, value)
+            # The CRM's authorized reassignment: history, owning team, pool and rotation.
+            await assignment.reassign(
+                db, resources["scope"], [lead.id], payload.assignee_id, reason="manual"
+            )
+            return {"lead_id": lead.id, "message": "Lead assigned"}
+        for key, value in payload.model_dump(exclude_unset=True, exclude={"lead_id"}).items():
+            setattr(lead, key, value)
         lead.updated_at = now
         return {"lead_id": lead.id, "message": "Lead updated"}
     if kind == ActionKind.DELETE_LEAD:
@@ -542,7 +566,7 @@ async def _list_records(db, model, response_model, user_id, organization_id):
     result = []
     for row in rows:
         lead_id = getattr(row, "lead_id", None)
-        if lead_id is not None and not await repository.own_lead(
+        if lead_id is not None and not await repository.visible_lead(
             db,
             user_id=user_id,
             organization_id=organization_id,
@@ -664,11 +688,19 @@ def _display_name(first_name, last_name):
 
 
 async def lookup_assignees(db, *, user_id: str, organization_id: str, search: str):
-    """Bounded business-name lookup within the actor's current organization only."""
+    """Bounded business-name lookup of the people this user may assign a lead to."""
     if not isinstance(search, str) or not 2 <= len(search.strip()) <= 80:
         raise HTTPException(422, "Enter between 2 and 80 characters of a member's name")
     prefix = " ".join(search.split()).casefold()
     await _authorize(db, user_id, organization_id)
+    # Same authority as the CRM: managers assign into their teams, administrators into all.
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    if not scope.can_assign:
+        await db.commit()
+        return {
+            "available": False,
+            "reason": "Only managers and organization administrators can assign leads",
+        }
     organization = await repository.organization(db, organization_id)
     # Release database locks while the existing public directory adapter fetches profiles.
     await db.commit()
@@ -684,7 +716,11 @@ async def lookup_assignees(db, *, user_id: str, organization_id: str, search: st
             "reason": "Organization member names are temporarily unavailable",
         }
     await _authorize(db, user_id, organization_id)
-    current_ids = await repository.member_ids(db, organization_id=organization_id)
+    # Teams may have changed during the directory call: re-read who is assignable now.
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    current_ids = (
+        await repository.member_ids(db, organization_id=organization_id)
+    ) & scope.eligible_user_ids
     matches = []
     for member in members:
         if member["id"] not in current_ids:

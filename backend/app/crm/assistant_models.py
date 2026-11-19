@@ -29,6 +29,8 @@ class CrmAssistantQuery(BaseModel):
     search: str | None = Field(default=None, min_length=1, max_length=120)
     status: str | None = Field(default=None, min_length=1, max_length=40)
     follow_up_before: date | None = None
+    # Leads/renewals only: narrow a manager's or administrator's wider view.
+    assignment: Literal["mine", "colleagues", "unassigned"] | None = None
     record_id: int | None = Field(default=None, ge=1)
     summary_only: bool = False
     include_contact_details: bool = False
@@ -43,6 +45,8 @@ class CrmAssistantQuery(BaseModel):
             "owner_workspaces",
         }:
             raise ValueError("This resource does not store follow-up dates")
+        if self.assignment and self.resource not in {"leads", "renewals"}:
+            raise ValueError("Only leads and renewals can be filtered by assignment")
         if self.status and self.resource in {
             "saved_leads",
             "deals",
@@ -63,7 +67,7 @@ class CrmAssistantResult(BaseModel):
     resource: CrmAssistantResource
     source: str = "Your CRM records (PostgreSQL)"
     available: bool = True
-    scope: str = "Only your records in your current organization"
+    scope: str = "Records your CRM role lets you see in your current organization"
     total: int | None = None
     counts_by_status: dict[str, int] = Field(default_factory=dict)
     records: list[dict[str, Any]] = Field(default_factory=list)

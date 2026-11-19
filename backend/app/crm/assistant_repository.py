@@ -1,10 +1,11 @@
 """Private assistant reads. Model input never selects the user or organization."""
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import func, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.assistant_actions.models import AssistantListingDraft, AssistantReminder, AssistantViewing
+from app.crm.assignment import AssignmentScope, visible_clause
 from app.crm.assistant_models import CrmAssistantQuery
 from app.crm.import_models import (
     CrmContactImport,
@@ -23,7 +24,8 @@ from app.crm.inbound_models import (
 from app.crm.models import CrmLeadNote, CrmLeadWorkspace, CrmSavedLead
 
 
-def _records(request: CrmAssistantQuery, user_id: str, organization_id: str):
+def _records(request: CrmAssistantQuery, scope: AssignmentScope):
+    user_id, organization_id = scope.user_id, scope.organization_id
     resource = request.resource
     if resource in {"reminders", "viewings", "listing_drafts"}:
         model = {
@@ -46,13 +48,7 @@ def _records(request: CrmAssistantQuery, user_id: str, organization_id: str):
                 .where(
                     CrmInboundEnquiry.organization_id == organization_id,
                     CrmInboundContact.organization_id == organization_id,
-                    or_(
-                        CrmInboundEnquiry.assigned_user_id == user_id,
-                        and_(
-                            CrmInboundEnquiry.assigned_user_id.is_(None),
-                            CrmInboundEnquiry.created_by_user_id == user_id,
-                        ),
-                    ),
+                    visible_clause(scope),
                 )
             )
             statement = statement.where(or_(model.lead_id.is_(None), model.lead_id.in_(accessible)))
@@ -60,7 +56,8 @@ def _records(request: CrmAssistantQuery, user_id: str, organization_id: str):
         status = None
     elif resource in {"lead_notes", "lead_activities"}:
         model = CrmInboundNote if resource == "lead_notes" else CrmInboundActivity
-        columns = [model.id, model.enquiry_id, model.body, model.created_at]
+        # Every author's entries on a visible lead, as on the CRM lead page.
+        columns = [model.id, model.enquiry_id, model.user_id, model.body, model.created_at]
         if resource == "lead_activities":
             columns.append(model.activity_type)
         statement = (
@@ -68,16 +65,9 @@ def _records(request: CrmAssistantQuery, user_id: str, organization_id: str):
             .join(CrmInboundEnquiry, CrmInboundEnquiry.id == model.enquiry_id)
             .join(CrmInboundContact, CrmInboundContact.id == CrmInboundEnquiry.contact_id)
             .where(
-                model.user_id == user_id,
                 CrmInboundEnquiry.organization_id == organization_id,
                 CrmInboundContact.organization_id == organization_id,
-                or_(
-                    CrmInboundEnquiry.assigned_user_id == user_id,
-                    and_(
-                        CrmInboundEnquiry.assigned_user_id.is_(None),
-                        CrmInboundEnquiry.created_by_user_id == user_id,
-                    ),
-                ),
+                visible_clause(scope),
             )
         )
         search_columns = [model.body]
@@ -107,6 +97,7 @@ def _records(request: CrmAssistantQuery, user_id: str, organization_id: str):
             model.criteria,
             model.next_follow_up,
             model.updated_at,
+            model.assigned_user_id,
             CrmInboundContact.full_name.label("contact_name"),
         ]
         if resource == "renewals":
@@ -118,10 +109,7 @@ def _records(request: CrmAssistantQuery, user_id: str, organization_id: str):
             .join(CrmInboundContact, CrmInboundContact.id == model.contact_id)
             .where(
                 CrmInboundContact.organization_id == organization_id,
-                or_(
-                    model.assigned_user_id == user_id,
-                    and_(model.assigned_user_id.is_(None), model.created_by_user_id == user_id),
-                ),
+                visible_clause(scope),
             )
         )
         if resource == "renewals":
@@ -130,6 +118,14 @@ def _records(request: CrmAssistantQuery, user_id: str, organization_id: str):
             )
         search_columns = [CrmInboundContact.full_name, model.source]
         status = model.status
+        if request.assignment == "mine":
+            statement = statement.where(model.assigned_user_id == user_id)
+        elif request.assignment == "colleagues":
+            statement = statement.where(
+                model.assigned_user_id.is_not(None), model.assigned_user_id != user_id
+            )
+        elif request.assignment == "unassigned":
+            statement = statement.where(model.assigned_user_id.is_(None))
     elif resource == "owner_properties":
         model = CrmPropertyContactClaim
         columns = [
@@ -203,9 +199,10 @@ def _records(request: CrmAssistantQuery, user_id: str, organization_id: str):
 
 
 async def query_records(
-    db: AsyncSession, request: CrmAssistantQuery, *, user_id: str, organization_id: str
+    db: AsyncSession, request: CrmAssistantQuery, *, scope: AssignmentScope
 ) -> tuple[int, dict[str, int], list[dict]]:
-    statement, model, has_status = _records(request, user_id, organization_id)
+    """Leads follow the caller's CRM role; every other resource stays the caller's own."""
+    statement, model, has_status = _records(request, scope)
     scoped = statement.subquery()
     total = (await db.exec(select(func.count()).select_from(scoped))).one()
     counts = {}

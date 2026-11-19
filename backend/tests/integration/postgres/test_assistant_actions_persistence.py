@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import select
+from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.assistant_actions import service
@@ -49,6 +49,26 @@ async def actor(db):
     return dict(user_id=user, organization_id=org), colleague, conversation.id
 
 
+async def supervise(db, identity, *members):
+    """Make the actor a manager of a team holding themselves and `members` as agents."""
+    from app.organization.models import OrganizationTeam, OrganizationTeamMember
+
+    team = OrganizationTeam(organization_id=identity["organization_id"], name=uuid4().hex[:8])
+    db.add(team)
+    await db.flush()
+    for user_id, role in [(identity["user_id"], "supervisor"), *((m, "agent") for m in members)]:
+        db.add(
+            OrganizationTeamMember(
+                team_id=team.id,
+                organization_id=identity["organization_id"],
+                user_id=user_id,
+                role=role,
+            )
+        )
+    await db.commit()
+    return team.id
+
+
 async def propose(db, identity, conversation_id, kind, payload, key=None):
     return await service.propose_action(
         db,
@@ -67,6 +87,14 @@ async def execute(db, identity, conversation_id, kind, payload):
     result = await service.confirm_action(db, **identity, action_id=proposal.id)
     assert result.status == "succeeded", result
     return result
+
+
+async def reassigned_by_someone_else(db, lead_id, assignee):
+    """A colleague's manager moves the lead: only they, not the agent, may reassign it."""
+    lead = await db.get(CrmInboundEnquiry, lead_id)
+    lead.assigned_user_id = assignee
+    db.add(lead)
+    await db.commit()
 
 
 async def test_assistant_actions_proposal_reload_idempotency_and_double_confirm(
@@ -173,13 +201,7 @@ async def test_assistant_actions_own_leads_reassignment_stale_preview_and_shared
     await pg_session.commit()
     result = await service.confirm_action(pg_session, **identity, action_id=proposal.id)
     assert result.status == "failed"
-    await execute(
-        pg_session,
-        identity,
-        conversation_id,
-        "assign_lead",
-        {"lead_id": lead_id, "assignee_id": colleague},
-    )
+    await reassigned_by_someone_else(pg_session, lead_id, colleague)
     with pytest.raises(HTTPException) as error:
         await propose(
             pg_session,
@@ -367,13 +389,7 @@ async def test_assistant_actions_history_and_task_lists_hide_reassigned_lead_evi
         "add_note",
         {"lead_id": lead_id, "body": "Sensitive note"},
     )
-    await execute(
-        pg_session,
-        identity,
-        conversation_id,
-        "assign_lead",
-        {"lead_id": lead_id, "assignee_id": colleague},
-    )
+    await reassigned_by_someone_else(pg_session, lead_id, colleague)
     for proposal_id in (created.id, reminder.id, note.id):
         value = await service.get_action(pg_session, **identity, action_id=proposal_id)
         assert "Sensitive" not in value.model_dump_json()
@@ -451,7 +467,6 @@ async def test_assistant_actions_previews_identify_authorized_targets_and_conseq
     proposals = []
     for kind, payload, consequence in (
         ("update_lead", {"lead_id": lead_id, "status": "qualified"}, "enquiry fields"),
-        ("assign_lead", {"lead_id": lead_id, "assignee_id": colleague}, "lose assistant access"),
         ("delete_lead", {"lead_id": lead_id}, "cannot be undone"),
         ("add_note", {"lead_id": lead_id, "body": "Test note"}, "enquiry history"),
         (
@@ -500,13 +515,7 @@ async def test_assistant_actions_previews_identify_authorized_targets_and_conseq
     assert deletion.preview["lead"] == f"Preview target (lead #{lead_id})"
     assert "cannot be undone" in deletion.preview["consequence"]
     proposals.append(deletion)
-    await execute(
-        pg_session,
-        identity,
-        conversation_id,
-        "assign_lead",
-        {"lead_id": lead_id, "assignee_id": colleague},
-    )
+    await reassigned_by_someone_else(pg_session, lead_id, colleague)
     for proposal in proposals:
         hidden = await service.get_action(pg_session, **identity, action_id=proposal.id)
         assert hidden.preview["available"] is False
@@ -544,6 +553,7 @@ async def test_assistant_actions_assignee_lookup_names_are_scoped_and_ambiguous(
     from app.organization import service as organizations
 
     identity, colleague, conversation_id = await actor(pg_session)
+    team_id = await supervise(pg_session, identity, colleague)
     foreign, _, _ = await actor(pg_session)
     looked_up = []
 
@@ -560,31 +570,43 @@ async def test_assistant_actions_assignee_lookup_names_are_scoped_and_ambiguous(
     assert "email" not in str(result) and "role" not in str(result)
     assert "private@example.test" not in str(result)
     extra_ids = [str(uuid4()) for _ in range(12)]
+    from app.organization.models import OrganizationTeamMember
+
     for user_id in extra_ids:
         pg_session.add(
             OrganizationMembership(user_id=user_id, organization_id=identity["organization_id"])
+        )
+    await pg_session.flush()
+    for user_id in extra_ids:
+        pg_session.add(
+            OrganizationTeamMember(
+                team_id=team_id, organization_id=identity["organization_id"], user_id=user_id
+            )
         )
     await pg_session.commit()
     bounded = await service.lookup_assignees(pg_session, **identity, search="Ali")
     assert len(bounded["matches"]) == 10
     assert bounded["truncated"] is True and bounded["clarification_required"] is True
     # Assignment preview resolves its already verified member to a human name only.
+    from crm_role_support import agency, lead
+
     monkeypatch.setattr(
         service,
         "get_user_by_id",
         AsyncMock(return_value=SimpleNamespace(first_name="Ali", last_name="Broker")),
     )
-    created = await execute(
-        pg_session, identity, conversation_id, "create_lead", {"full_name": "Owner lead"}
-    )
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "TeamLead", team="north", assignee="omar")
+    manager, manager_conversation = await _team_actor(pg_session, ids, "nadia")
     proposal = await propose(
         pg_session,
-        identity,
-        conversation_id,
+        manager,
+        manager_conversation,
         "assign_lead",
-        {"lead_id": created.result["lead_id"], "assignee_id": colleague},
+        {"lead_id": target.id, "assignee_id": ids["sara"]},
     )
     assert proposal.preview["assignee"] == "Ali Broker"
+    assert "assignment history" in proposal.preview["consequence"]
     lookup = AsyncMock(
         side_effect=AssertionError("Cross-org assignee must fail before profile lookup")
     )
@@ -592,12 +614,12 @@ async def test_assistant_actions_assignee_lookup_names_are_scoped_and_ambiguous(
     with pytest.raises(HTTPException) as error:
         await propose(
             pg_session,
-            identity,
-            conversation_id,
+            manager,
+            manager_conversation,
             "assign_lead",
-            {"lead_id": created.result["lead_id"], "assignee_id": foreign["user_id"]},
+            {"lead_id": target.id, "assignee_id": foreign["user_id"]},
         )
-    assert error.value.status_code == 404
+    assert error.value.status_code == 403
     lookup.assert_not_called()
 
 
@@ -610,6 +632,7 @@ async def test_assistant_actions_assignee_lookup_rechecks_membership_after_direc
     from app.organization import service as organizations
 
     identity, colleague, _ = await actor(pg_session)
+    await supervise(pg_session, identity, colleague)
     changed = False
 
     async def profile(user_id):
@@ -635,3 +658,261 @@ async def test_assistant_actions_assignee_lookup_rechecks_membership_after_direc
         result = await service.lookup_assignees(pg_session, **identity, search="Ali")
         assert result["matches"] == [{"id": identity["user_id"], "display_name": "Ali Broker"}]
         assert result["clarification_required"] is False
+
+
+# --- Assistant actions follow the CRM role (agent / manager / organization admin) ---
+
+
+async def _team_actor(db, ids, person):
+    conversation = Conversation(user_id=ids[person], organization_id=ids["org"])
+    db.add(conversation)
+    await db.commit()
+    return dict(user_id=ids[person], organization_id=ids["org"]), conversation.id
+
+
+async def _proposal_count(db, ids):
+    return (
+        await db.exec(
+            select(func.count())
+            .select_from(AssistantAction)
+            .where(AssistantAction.organization_id == ids["org"])
+        )
+    ).one()
+
+
+async def test_manager_assigns_team_lead_to_team_agent_with_history(pg_session):
+    from crm_role_support import agency, lead
+
+    from app.crm.inbound_models import CrmInboundAssignmentEvent
+
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    identity, conversation_id = await _team_actor(pg_session, ids, "nadia")
+    revision = target.assignment_revision
+    await execute(
+        pg_session,
+        identity,
+        conversation_id,
+        "assign_lead",
+        {"lead_id": target.id, "assignee_id": ids["sara"]},
+    )
+    pg_session.expire_all()
+    moved = await pg_session.get(CrmInboundEnquiry, target.id)
+    assert (moved.assigned_user_id, moved.team_id) == (ids["sara"], ids["north"])
+    assert moved.assignment_revision == revision + 1
+    events = (
+        await pg_session.exec(
+            select(CrmInboundAssignmentEvent).where(
+                CrmInboundAssignmentEvent.enquiry_id == target.id
+            )
+        )
+    ).all()
+    assert [(e.actor_user_id, e.assigned_user_id, e.reason) for e in events] == [
+        (ids["nadia"], ids["sara"], "manual")
+    ]
+
+
+async def test_agent_cannot_propose_assignment(pg_session):
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    identity, conversation_id = await _team_actor(pg_session, ids, "omar")
+    with pytest.raises(HTTPException) as error:
+        await propose(
+            pg_session,
+            identity,
+            conversation_id,
+            "assign_lead",
+            {"lead_id": target.id, "assignee_id": ids["sara"]},
+        )
+    assert error.value.status_code == 403
+    await pg_session.rollback()
+    assert await _proposal_count(pg_session, ids) == 0
+
+
+async def test_manager_cannot_assign_outside_supervised_teams(pg_session):
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    south = await lead(pg_session, ids, "LinaLead", team="south", assignee="lina")
+    north = await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    identity, conversation_id = await _team_actor(pg_session, ids, "nadia")
+    for target, assignee, status in ((south, "omar", 404), (north, "lina", 403)):
+        with pytest.raises(HTTPException) as error:
+            await propose(
+                pg_session,
+                identity,
+                conversation_id,
+                "assign_lead",
+                {"lead_id": target.id, "assignee_id": ids[assignee]},
+            )
+        assert error.value.status_code == status
+        await pg_session.rollback()
+
+
+async def test_confirmation_fails_after_lead_leaves_managers_team(pg_session):
+    from crm_role_support import agency, lead
+
+    from app.crm import assignment
+
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    identity, conversation_id = await _team_actor(pg_session, ids, "nadia")
+    proposal = await propose(
+        pg_session,
+        identity,
+        conversation_id,
+        "assign_lead",
+        {"lead_id": target.id, "assignee_id": ids["sara"]},
+    )
+    owner = await assignment.load_scope(pg_session, ids["org"], ids["owner"])
+    await assignment.reassign(pg_session, owner, [target.id], ids["lina"], team_id=ids["south"])
+    await pg_session.commit()
+    result = await service.confirm_action(pg_session, **identity, action_id=proposal.id)
+    assert result.status == "failed"
+    pg_session.expire_all()
+    assert (await pg_session.get(CrmInboundEnquiry, target.id)).assigned_user_id == ids["lina"]
+
+
+async def test_pooled_lead_note_refused_for_agent(pg_session):
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    pooled = await lead(pg_session, ids, "Pooled", team="north", assignee=None, pooled=True)
+    identity, conversation_id = await _team_actor(pg_session, ids, "omar")
+    with pytest.raises(HTTPException) as error:
+        await propose(
+            pg_session, identity, conversation_id, "add_note", {"lead_id": pooled.id, "body": "x"}
+        )
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "LEAD_IN_POOL"
+    await pg_session.rollback()
+
+
+async def test_manager_updates_and_notes_agents_lead(pg_session):
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    identity, conversation_id = await _team_actor(pg_session, ids, "nadia")
+    await execute(
+        pg_session,
+        identity,
+        conversation_id,
+        "update_lead",
+        {"lead_id": target.id, "status": "won"},
+    )
+    await execute(
+        pg_session, identity, conversation_id, "add_note", {"lead_id": target.id, "body": "Coach"}
+    )
+    pg_session.expire_all()
+    assert (await pg_session.get(CrmInboundEnquiry, target.id)).status == "won"
+
+
+async def test_assistant_created_lead_gets_team_and_history(pg_session):
+    from crm_role_support import agency
+
+    from app.crm.inbound_models import CrmInboundAssignmentEvent
+
+    ids = await agency(pg_session)
+    identity, conversation_id = await _team_actor(pg_session, ids, "omar")
+    created = await execute(
+        pg_session, identity, conversation_id, "create_lead", {"full_name": "New buyer"}
+    )
+    lead_id = created.result["lead_id"]
+    row = await pg_session.get(CrmInboundEnquiry, lead_id)
+    assert (row.assigned_user_id, row.team_id) == (ids["omar"], ids["north"])
+    events = (
+        await pg_session.exec(
+            select(CrmInboundAssignmentEvent).where(CrmInboundAssignmentEvent.enquiry_id == lead_id)
+        )
+    ).all()
+    assert [(e.reason, e.assigned_user_id) for e in events] == [("created", ids["omar"])]
+
+
+async def test_delete_lead_only_by_assignee_or_admin(pg_session):
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    first = await lead(pg_session, ids, "First", team="north", assignee="omar")
+    second = await lead(pg_session, ids, "Second", team="north", assignee="omar")
+    manager, manager_conversation = await _team_actor(pg_session, ids, "nadia")
+    with pytest.raises(HTTPException) as error:
+        await propose(
+            pg_session, manager, manager_conversation, "delete_lead", {"lead_id": first.id}
+        )
+    assert error.value.status_code == 403
+    await pg_session.rollback()
+    agent, agent_conversation = await _team_actor(pg_session, ids, "omar")
+    await execute(pg_session, agent, agent_conversation, "delete_lead", {"lead_id": first.id})
+    owner, owner_conversation = await _team_actor(pg_session, ids, "owner")
+    await execute(pg_session, owner, owner_conversation, "delete_lead", {"lead_id": second.id})
+    pg_session.expire_all()
+    assert await pg_session.get(CrmInboundEnquiry, first.id) is None
+    assert await pg_session.get(CrmInboundEnquiry, second.id) is None
+
+
+def _everyone_named_sam(monkeypatch, ids):
+    from types import SimpleNamespace
+
+    from app.organization import service as organizations
+
+    people = {user_id: name for name, user_id in ids.items()}
+
+    async def profile(user_id):
+        return SimpleNamespace(first_name="Sam", last_name=people.get(user_id, "Other"), email=None)
+
+    monkeypatch.setattr(organizations, "get_user_by_id", profile)
+
+
+async def test_lookup_returns_only_people_the_user_may_assign_to(pg_session, monkeypatch):
+    from crm_role_support import agency
+
+    ids = await agency(pg_session)
+    _everyone_named_sam(monkeypatch, ids)
+    nadia = await service.lookup_assignees(
+        pg_session, user_id=ids["nadia"], organization_id=ids["org"], search="sam"
+    )
+    assert {item["id"] for item in nadia["matches"]} == {ids["nadia"], ids["omar"], ids["sara"]}
+    owner = await service.lookup_assignees(
+        pg_session, user_id=ids["owner"], organization_id=ids["org"], search="sam"
+    )
+    # Administrators assign into every team; the owner is in none, so is not a destination.
+    assert {item["id"] for item in owner["matches"]} == {
+        ids[name] for name in ("nadia", "omar", "sara", "karim", "lina")
+    }
+
+
+async def test_agent_lookup_explains_assignment_is_for_managers(pg_session, monkeypatch):
+    from crm_role_support import agency
+
+    ids = await agency(pg_session)
+    _everyone_named_sam(monkeypatch, ids)
+    result = await service.lookup_assignees(
+        pg_session, user_id=ids["omar"], organization_id=ids["org"], search="sam"
+    )
+    assert result == {
+        "available": False,
+        "reason": "Only managers and organization administrators can assign leads",
+    }
+
+
+async def test_assignee_cannot_delete_a_lead_carrying_others_assignment_history(pg_session):
+    """Deleting cascades the lead's assignment history; a manager's hand-over is their record."""
+    from crm_role_support import agency, lead
+
+    from app.crm import assignment
+
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "Handed", team="north", assignee="sara")
+    manager = await assignment.load_scope(pg_session, ids["org"], ids["nadia"])
+    await assignment.reassign(pg_session, manager, [target.id], ids["omar"])
+    await pg_session.commit()
+    identity, conversation_id = await _team_actor(pg_session, ids, "omar")
+    with pytest.raises(HTTPException) as error:
+        await propose(pg_session, identity, conversation_id, "delete_lead", {"lead_id": target.id})
+    assert error.value.status_code == 409
+    await pg_session.rollback()
+    pg_session.expire_all()
+    assert await pg_session.get(CrmInboundEnquiry, target.id) is not None
