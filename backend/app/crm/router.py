@@ -26,6 +26,7 @@ from app.crm import (
     agent_languages,
     assignment,
     calendar_service,
+    calendar_visibility,
     deals,
     email_store,
     oversight,
@@ -510,11 +511,12 @@ async def crm_calendar_events(
         raise HTTPException(status_code=422, detail="Calendar range must be within 371 days")
     user_id, organization_id = _auth_ids(context)
     try:
-        return await calendar_service.list_events(
-            db, user_id=user_id, organization_id=organization_id, start=start, end=end
-        )
+        # Only the viewer's own Google account; colleagues' events are their stored rows.
+        await calendar_service.sync_own(db, user_id=user_id, organization_id=organization_id)
     except (httpx.HTTPError, RuntimeError) as exc:
         raise HTTPException(status_code=502, detail="Google Calendar sync failed") from exc
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return await calendar_visibility.list_for_viewer(db, scope, start, end)
 
 
 @router.get(
@@ -525,7 +527,12 @@ async def crm_calendar_event(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    return calendar_service.serialize_event(await _own_event(db, context, event_id))
+    user_id, organization_id = _auth_ids(context)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    event = await calendar_visibility.get_for_viewer(db, scope, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Calendar event not found")
+    return event
 
 
 @router.post(

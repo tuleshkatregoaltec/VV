@@ -441,7 +441,9 @@ export function createPresentationCrm(live: CrmApi, today: string): CrmApi {
 			show_as: 'busy',
 			visibility: 'default',
 			rescheduled_from: [],
-			google_sync_status: 'local'
+			google_sync_status: 'local',
+			can_edit: true,
+			redacted: false
 		}
 	})
 	const renewals: T.RenewalDetail[] = listings.slice(0, 18).map((l, i) => ({

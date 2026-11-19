@@ -1280,6 +1280,137 @@
 		.ev:hover {
 			background: var(--line);
 		}
+		/* Month cell event: time, title and (shared view) whose it is, tinted by its kind. */
+		.cal .ev {
+			display: grid;
+			gap: 0.05rem;
+			white-space: normal;
+			padding: 0.2rem 0.35rem;
+			background: color-mix(in srgb, var(--e) 11%, var(--card));
+		}
+		.cal .ev:hover {
+			background: color-mix(in srgb, var(--e) 20%, var(--card));
+		}
+		.cal .ev .evtime {
+			font-size: 0.62rem;
+			color: var(--text2);
+			font-variant-numeric: tabular-nums;
+		}
+		.cal .ev .evt {
+			font-weight: 600;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.cal .ev .evo {
+			font-size: 0.62rem;
+			color: var(--text2);
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.cal .ev.more {
+			background: transparent;
+			color: var(--text2);
+		}
+		/* Day number: selects the day for the Selected day card. */
+		.cal .c button.dn {
+			pointer-events: auto;
+			justify-self: start;
+			min-width: 1.4rem;
+			height: 1.4rem;
+			padding: 0 0.3rem;
+			border-radius: 99px;
+		}
+		.cal .c button.dn:hover {
+			background: var(--line);
+		}
+		.cal .c.sel {
+			box-shadow: inset 0 0 0 2px var(--teal);
+		}
+		.cal-head {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			gap: 0.75rem;
+			flex-wrap: wrap;
+			padding: 0.75rem 1rem;
+			border-bottom: 1px solid var(--line);
+		}
+		.cal-head h2 {
+			margin: 0;
+			font-size: 1.05rem;
+		}
+		.cal-foot {
+			display: grid;
+			gap: 0.4rem;
+			padding: 0.7rem 1rem;
+			border-top: 1px solid var(--line);
+		}
+		.cal-foot p {
+			margin: 0;
+		}
+		/* Calendar › View calendar: label, picker and a one-line note under it. */
+		.cal-picker {
+			display: grid;
+			gap: 0.2rem;
+			min-width: 15rem;
+		}
+		.cal-picker label {
+			font-size: 0.72rem;
+			font-weight: 600;
+			color: var(--text2);
+		}
+		.cal-picker span {
+			font-size: 0.62rem;
+			font-weight: 700;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+			color: var(--faint, var(--text2));
+		}
+		.side .pill {
+			border-radius: 99px;
+			padding: 0.15rem 0.55rem;
+			background: var(--teal-soft);
+			color: var(--teal);
+			font-size: 0.7rem;
+			font-weight: 700;
+			white-space: nowrap;
+		}
+		.side .day-date {
+			margin: 0;
+			padding: 0 1rem 0.5rem;
+			font-size: 0.78rem;
+			color: var(--text2);
+		}
+		.access {
+			list-style: none;
+			margin: 0;
+			padding: 0.25rem 1rem 1rem;
+			display: grid;
+			gap: 0.7rem;
+			font-size: 0.78rem;
+			color: var(--text2);
+		}
+		.access li {
+			display: grid;
+			grid-template-columns: 1.5rem 1fr;
+			gap: 0.55rem;
+			align-items: start;
+		}
+		.access strong {
+			display: block;
+			color: var(--ink);
+		}
+		.access .tick {
+			width: 1.5rem;
+			height: 1.5rem;
+			display: grid;
+			place-items: center;
+			border-radius: 6px;
+			background: var(--sunk);
+			color: var(--teal);
+		}
 		.dayh {
 			padding: 6px 14px;
 			background: var(--sunk);
@@ -1302,6 +1433,14 @@
 			display: inline-flex;
 			align-items: center;
 			gap: 0.35rem;
+		}
+		.evrow .owner {
+			display: flex;
+			align-items: center;
+			gap: 0.35rem;
+			font-size: 0.75rem;
+			font-weight: 600;
+			color: var(--text2);
 		}
 
 		/* ── horizontal bars ── */

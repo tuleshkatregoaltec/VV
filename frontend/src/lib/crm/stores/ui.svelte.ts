@@ -83,6 +83,12 @@ const defaults = {
 	weekDay: '',
 	/** YYYY-MM; empty = this month */
 	calMonth: '',
+	/** Calendar on desktop: the month grid or the day-by-day list (phones always get the list). */
+	calView: 'month' as 'month' | 'list',
+	/** Calendar › View calendar: 'all' or 'person:<id>' (only narrows what the server sent). */
+	calShow: 'all',
+	/** Calendar › Selected day, YYYY-MM-DD; empty = today */
+	calDay: '',
 	homeTodo: 'gaps' as HomeTodo,
 	/** Matches: tab, the selected client per tab, up to 10% over budget, show after the move date. */
 	matchTab: 'ready' as MatchTabId,

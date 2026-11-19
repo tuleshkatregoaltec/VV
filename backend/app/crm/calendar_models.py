@@ -155,6 +155,12 @@ class CalendarEventResponse(BaseModel):
     outcome: str | None
     rescheduled_from: list[CalendarSlot]
     google_sync_status: GoogleSyncStatus
+    # False: a colleague's event, shown read-only (writes are owner-only on the server too).
+    can_edit: bool
+    # True: a colleague's private/confidential event; only the busy slot is sent.
+    redacted: bool
+    # Owner, Admin, Manager or Agent; set when colleagues' events are in the response.
+    owner_role: str | None = None
 
 
 class GoogleCalendarConnectResponse(BaseModel):

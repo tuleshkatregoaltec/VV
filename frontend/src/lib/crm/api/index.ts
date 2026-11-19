@@ -482,7 +482,10 @@ const liveCrm = {
 		removeOwners: (id: number): Promise<Written<null>> => backend.deleteOwnerImport(id)
 	},
 
-	/** The signed-in user's own calendar; pushed to Google Calendar when connected. */
+	/**
+	 * Events you may read: yours, plus your supervised teams' (managers) or everyone's
+	 * (owners/admins). Only yours are editable; yours are pushed to Google Calendar when connected.
+	 */
 	events: {
 		list: (from: string, to: string): Promise<CalendarEvent[]> =>
 			backend.listCalendarEvents(from, to),

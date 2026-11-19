@@ -1387,6 +1387,12 @@ export interface CalendarEvent {
 	/** Earlier slots this event was rescheduled from, oldest first; shown struck through. */
 	rescheduled_from: { date: string; time: string | null }[]
 	google_sync_status: 'local' | 'pending' | 'synced' | 'error'
+	/** false: a colleague's event (manager/owner view), read-only; `agent` is their name. */
+	can_edit: boolean
+	/** true: a colleague's private/confidential event — only the busy slot is sent. */
+	redacted: boolean
+	/** Owner, Admin, Manager or Agent; sent when colleagues' events are in the list. */
+	owner_role?: string | null
 }
 
 export interface EventCreate {

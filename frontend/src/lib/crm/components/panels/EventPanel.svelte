@@ -3,6 +3,7 @@ import { createQuery } from '@tanstack/svelte-query'
 import { getQueryClient } from '$lib/queries/client'
 import { crm } from '../../api'
 import type { CalendarEvent } from '../../api/types'
+import { eventColor, ownerLabel } from '../../calendar'
 import { EVENT_KINDS } from '../../config'
 import { dayLabel, fullDate } from '../../format'
 import { crmKeys, crmQueries } from '../../queries'
@@ -13,7 +14,9 @@ import Panel from '../ui/Panel.svelte'
 import PanelLoading from '../ui/PanelLoading.svelte'
 
 /**
- * Event detail (7 Oct): when, kind, detail, linked record, outcome. Open record, Edit (full form,
+ * Event detail (7 Oct): when, kind, detail, linked record, outcome. A colleague's event (manager or
+ * owner view) shows its owner and no write actions; a private one only its busy slot.
+ * Open record, Edit (full form,
  * synced to Google Calendar), Reschedule
  * (a lead's event is logged on the lead and becomes its next action) and Delete, each with Undo.
  */
@@ -76,13 +79,20 @@ async function done(title: string) {
 
 {#if event.data}
 	{@const e = event.data}
-	<Panel kicker={EVENT_KINDS[e.kind].label} title={e.title} sub="{fullDate(e.date)}{e.time ? ` · ${e.time}` : ''}">
+	{@const kindLabel = e.redacted ? 'Busy' : EVENT_KINDS[e.kind].label}
+	<Panel kicker={kindLabel} title={e.title} sub="{fullDate(e.date)}{e.time ? ` · ${e.time}` : ''}">
 		{#snippet tags()}
-			<span class="dot" style:background={EVENT_KINDS[e.kind].color} style:width="10px" style:height="10px"></span>
-			<span class="small muted">{EVENT_KINDS[e.kind].label}</span>
+			<span class="dot" style:background={eventColor(e)} style:width="10px" style:height="10px"></span>
+			<span class="small muted">{e.redacted ? 'Private event' : kindLabel}</span>
 		{/snippet}
 		<div class="kv">
+			{#if !e.can_edit}
+				<Kv k="Owner" v={ownerLabel(e)} />
+			{/if}
 			<Kv k="When" v="{dayLabel(e.date)}{e.all_day ? ' · all day' : ` · ${e.time ?? ''}–${e.end_time ?? ''}`}{e.end_date !== e.date ? ` → ${dayLabel(e.end_date)}` : ''}" />
+			{#if e.redacted}
+				<Kv k="Show as" v={e.show_as === 'free' ? 'Free' : 'Busy'} />
+			{:else}
 			<Kv k="Kind" v={EVENT_KINDS[e.kind].label} />
 			<Kv k="Repeat" v={e.repeat === 'none' ? 'Does not repeat' : e.repeat} />
 			<Kv k="Show as" v={e.show_as === 'free' ? 'Free' : 'Busy'} />
@@ -99,9 +109,10 @@ async function done(title: string) {
 			{/if}
 			<Kv k="Linked record" v={e.record?.label ?? 'None'} o={e.context ?? ''} />
 			<Kv k="Outcome" v={e.outcome ?? '—'} />
+			{/if}
 		</div>
 
-		{#if moving}
+		{#if moving && e.can_edit}
 			<form class="form" onsubmit={reschedule}>
 				<div class="frow">
 					<div class="fld">
@@ -125,12 +136,14 @@ async function done(title: string) {
 				{@const rec = e.record}
 				<button type="button" class="btn" onclick={() => openRef(rec)}>Open record</button>
 			{/if}
-			<button type="button" class="btn ghost" onclick={() => panel.open({ kind: 'edit-event', id })}>Edit</button>
-			<button type="button" class="btn ghost" onclick={startMove}>Reschedule</button>
-			{#if !e.record}
-				<button type="button" class="btn ghost" onclick={() => done(e.title)}>Mark done</button>
+			{#if e.can_edit}
+				<button type="button" class="btn ghost" onclick={() => panel.open({ kind: 'edit-event', id })}>Edit</button>
+				<button type="button" class="btn ghost" onclick={startMove}>Reschedule</button>
+				{#if !e.record}
+					<button type="button" class="btn ghost" onclick={() => done(e.title)}>Mark done</button>
+				{/if}
+				<button type="button" class="btn danger" onclick={() => remove(e.title)}>Delete</button>
 			{/if}
-			<button type="button" class="btn danger" onclick={() => remove(e.title)}>Delete</button>
 		{/snippet}
 	</Panel>
 {:else}

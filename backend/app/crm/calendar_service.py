@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import secrets
+from collections.abc import Callable
 from datetime import date, datetime, time, timedelta, timezone
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -610,7 +611,7 @@ def serialize_event(event: CrmCalendarEvent) -> dict:
         "lead_id": event.lead_id,
         "deal_id": None,
         "listing_id": event.listing_id,
-        "owner_id": None,
+        "owner_id": event.user_id,
         "context": None,
         "record": (
             {"kind": "lead", "id": str(event.lead_id), "label": event.title}
@@ -620,23 +621,39 @@ def serialize_event(event: CrmCalendarEvent) -> dict:
         "outcome": "Done" if event.done else None,
         "rescheduled_from": event.rescheduled_from,
         "google_sync_status": event.google_sync_status,
+        "can_edit": True,
+        "redacted": False,
+        "owner_role": None,
     }
 
 
-async def list_events(
-    db: AsyncSession, *, user_id: str, organization_id: str, start: date, end: date
-) -> list[dict]:
+async def sync_own(db: AsyncSession, *, user_id: str, organization_id: str) -> None:
+    """Pull the signed-in user's Google changes and push their pending edits.
+
+    Only ever the viewer's own connection: a shared calendar reads colleagues' stored rows.
+    """
     connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
     if connection:
         await sync_google_events(db, user_id=user_id, organization_id=organization_id)
         connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
         if connection:
             await _sync_pending(db, connection=connection, token=await _access_token(connection))
+
+
+async def stored_events(
+    db: AsyncSession,
+    *,
+    organization_id: str,
+    user_ids: frozenset[str],
+    start: date,
+    end: date,
+) -> list[CrmCalendarEvent]:
+    """Open events of these owners that touch [start, end]; no Google call."""
     rows = await db.exec(
         select(CrmCalendarEvent)
         .where(
             CrmCalendarEvent.organization_id == organization_id,
-            CrmCalendarEvent.user_id == user_id,
+            col(CrmCalendarEvent.user_id).in_(sorted(user_ids)),
             or_(
                 and_(
                     CrmCalendarEvent.event_date <= end,
@@ -653,16 +670,26 @@ async def list_events(
         )
         .order_by(CrmCalendarEvent.event_date, CrmCalendarEvent.event_time)
     )
+    return list(rows.all())
+
+
+def expand_occurrences(
+    rows: list[CrmCalendarEvent],
+    start: date,
+    end: date,
+    serialize: Callable[[CrmCalendarEvent], dict],
+) -> list[dict]:
+    """One item per occurrence in [start, end] (repeats expanded), plus moved-away slots."""
     output = []
     frequencies = {"daily": DAILY, "weekly": WEEKLY, "monthly": MONTHLY, "yearly": YEARLY}
-    for row in rows.all():
+    for row in rows:
         if row.repeat == "none":
             in_range = row.event_date <= end and (row.event_end_date or row.event_date) >= start
             if in_range or any(
                 start.isoformat() <= slot["date"] <= end.isoformat()
                 for slot in row.rescheduled_from
             ):
-                output.append(serialize_event(row))
+                output.append(serialize(row))
             continue
         frequency = frequencies.get(row.repeat)
         if frequency:
@@ -676,7 +703,7 @@ async def list_events(
             )
             output.extend(
                 {
-                    **serialize_event(row),
+                    **serialize(row),
                     "date": occurrence.date().isoformat(),
                     "end_date": (occurrence.date() + duration).isoformat(),
                 }

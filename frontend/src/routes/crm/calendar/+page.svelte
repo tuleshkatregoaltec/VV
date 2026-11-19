@@ -2,16 +2,28 @@
 import { createQuery } from '@tanstack/svelte-query'
 import ArrowLeft from 'lucide-svelte/icons/arrow-left'
 import ArrowRight from 'lucide-svelte/icons/arrow-right'
+import Check from 'lucide-svelte/icons/check'
 import RefreshCw from 'lucide-svelte/icons/refresh-cw'
 import { afterNavigate, replaceState } from '$app/navigation'
 import { crm } from '$lib/crm/api'
-import { calendarDays, googleReturn } from '$lib/crm/calendar'
-import Chip from '$lib/crm/components/ui/Chip.svelte'
+import {
+	calendarDays,
+	calendarScope,
+	eventColor,
+	eventsOn,
+	googleReturn,
+	hasShared,
+	ownerLabel,
+	ownerTeam,
+	showFilter,
+	viewHeading,
+	viewOptions
+} from '$lib/crm/calendar'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
 import ErrorLine from '$lib/crm/components/ui/ErrorLine.svelte'
 import EventItem from '$lib/crm/components/ui/EventItem.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
-import QueryView from '$lib/crm/components/ui/QueryView.svelte'
+import Seg from '$lib/crm/components/ui/Seg.svelte'
 import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
 import { EVENT_KIND_ORDER, EVENT_KINDS } from '$lib/crm/config'
 import { openEvent } from '$lib/crm/events'
@@ -19,15 +31,17 @@ import {
 	addMonths,
 	dayLabel,
 	dayOfMonth,
+	fullDate,
 	monthGrid,
 	monthOf,
 	monthTitle,
 	shortDate,
 	WEEKDAYS
 } from '$lib/crm/format'
+import { crmIdentity } from '$lib/crm/identity.svelte'
 import { crmQueries } from '$lib/crm/queries'
 import { phone } from '$lib/crm/stores/media.svelte'
-import { openLead, panel } from '$lib/crm/stores/panel.svelte'
+import { panel } from '$lib/crm/stores/panel.svelte'
 import { toast } from '$lib/crm/stores/toast.svelte'
 import { ui } from '$lib/crm/stores/ui.svelte'
 import { errorText, write } from '$lib/crm/write'
@@ -43,7 +57,8 @@ const events = createQuery(() => ({
 	enabled: grid.length > 0,
 	refetchOnWindowFocus: Boolean(googleCalendar.data?.connected)
 }))
-const side = createQuery(() => crmQueries.calendarSide())
+// Only for wording and the Show dropdown: the server already decided whose events were sent.
+const assignmentScope = createQuery(() => crmQueries.assignmentScope())
 
 async function syncGoogleCalendar() {
 	const r = await events.refetch()
@@ -86,32 +101,57 @@ async function disconnectGoogleCalendar() {
 	})
 }
 
-const inMonth = $derived(
-	(events.data ?? []).filter(
-		(e) => monthOf(e.date) <= month && monthOf(e.end_date || e.date) >= month
-	)
-)
 const syncIssue = $derived(
 	googleCalendar.data?.connected &&
 		(events.data ?? []).some((event) => event.google_sync_status === 'error')
 )
+const scope = $derived(calendarScope(assignmentScope.data))
+// Manager/owner view: colleagues' events are in the list, so every event says whose it is.
+const shared = $derived(hasShared(events.data ?? []))
+const options = $derived(viewOptions(scope, crmIdentity.userId, events.data ?? []))
+const choice = $derived(options.some((o) => o.value === ui.calShow) ? ui.calShow : 'all')
+const shown = $derived(showFilter(events.data ?? [], choice))
+const heading = $derived(viewHeading(scope, choice))
+const inMonth = $derived(
+	shown.filter((e) => monthOf(e.date) <= month && monthOf(e.end_date || e.date) >= month)
+)
 // A rescheduled event also leaves a struck-through entry on each slot it was moved from.
-const byDay = $derived(calendarDays(events.data ?? [], grid[0] ?? '', grid[41] ?? ''))
+const byDay = $derived(calendarDays(shown, grid[0] ?? '', grid[41] ?? ''))
 const agendaDays = $derived([...byDay.keys()].filter((d) => monthOf(d) === month).sort())
+const selectedDay = $derived(ui.calDay || today)
+const dayEvents = $derived(selectedDay ? eventsOn(shown, selectedDay) : [])
 
 const shift = (n: number) => (ui.calMonth = addMonths(month, n))
+const goToday = () => {
+	ui.calMonth = ''
+	ui.calDay = ''
+}
+/** "You", or a colleague's name, role and team: "Aisha K · Agent · Marina Team". */
+const whose = (e: (typeof shown)[number]) =>
+	[ownerLabel(e), ownerTeam(scope, e)].filter(Boolean).join(' · ')
 </script>
 
 <svelte:head><title>Calendar · CRM</title></svelte:head>
 
-<PageHeader
-	title={month ? monthTitle(month) : 'Calendar'}
-	facts={events.data
-		? `${inMonth.length} event${inMonth.length === 1 ? '' : 's'} this month`
-		: ''}
->
+<PageHeader title="Calendar" facts={heading.description}>
 	{#snippet right()}
 		<div class="flex gap-2">
+			{#if options.length}
+				<div class="cal-picker">
+					<label for="cal-view">View calendar</label>
+					<select
+						id="cal-view"
+						aria-describedby="cal-view-help"
+						value={choice}
+						onchange={(e) => (ui.calShow = e.currentTarget.value)}
+					>
+						{#each options as o (o.value)}
+							<option value={o.value}>{o.label}</option>
+						{/each}
+					</select>
+					<span id="cal-view-help">Only calendars this role can access are listed.</span>
+				</div>
+			{/if}
 			{#if googleCalendar.data?.connected}
 				<span class="small muted" title={googleCalendar.data.email ?? ''}>Google connected</span>
 				<button
@@ -132,13 +172,6 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 			{:else}
 				<span class="small muted" title="Set Google OAuth credentials in backend environment">Google Calendar not configured</span>
 			{/if}
-			<button type="button" class="btn ghost sm" aria-label="Previous month" onclick={() => shift(-1)}>
-				<ArrowLeft size={14} />
-			</button>
-			<button type="button" class="btn ghost sm" onclick={() => (ui.calMonth = '')}>Today</button>
-			<button type="button" class="btn ghost sm" aria-label="Next month" onclick={() => shift(1)}>
-				<ArrowRight size={14} />
-			</button>
 		</div>
 	{/snippet}
 </PageHeader>
@@ -147,21 +180,44 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 	<ErrorLine message="Some calendar events haven't synced to Google yet." onretry={() => events.refetch()} bar />
 {/if}
 
-<div class="legend" aria-label="Legend">
-	{#each EVENT_KIND_ORDER as k (k)}
-		<span><span class="dot" style:background={EVENT_KINDS[k].color}></span>{EVENT_KINDS[k].label}</span>
-	{/each}
-</div>
-
 <div class="cal-layout">
-	<div class="card">
+	<section class="card cal-card" aria-label="Calendar">
+		<div class="cal-head">
+			<div>
+				<h2>{month ? monthTitle(month) : 'Calendar'}</h2>
+				{#if events.data}
+					<span class="small muted">{inMonth.length} event{inMonth.length === 1 ? '' : 's'} this month</span>
+				{/if}
+			</div>
+			<div class="flex gap-2">
+				{#if !phone.current}
+					<Seg
+						label="Calendar view"
+						items={[
+							{ id: 'month' as const, label: 'Month' },
+							{ id: 'list' as const, label: 'List' }
+						]}
+						value={ui.calView}
+						onselect={(v) => (ui.calView = v)}
+					/>
+				{/if}
+				<button type="button" class="btn ghost sm" aria-label="Previous month" onclick={() => shift(-1)}>
+					<ArrowLeft size={14} />
+				</button>
+				<button type="button" class="btn ghost sm" onclick={goToday}>Today</button>
+				<button type="button" class="btn ghost sm" aria-label="Next month" onclick={() => shift(1)}>
+					<ArrowRight size={14} />
+				</button>
+			</div>
+		</div>
+
 		{#if !events.data}
 			{#if events.isError}
 				<ErrorLine message={errorText(events.error)} onretry={() => events.refetch()} />
 			{:else}
 				<Skeleton rows={6} />
 			{/if}
-		{:else if phone.current}
+		{:else if phone.current || ui.calView === 'list'}
 			<div class="agenda">
 				{#each agendaDays as date (date)}
 					<div class={['dayh', date === today && 'today']}>
@@ -169,7 +225,7 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 					</div>
 					<div class="list">
 						{#each byDay.get(date) ?? [] as d (d.key)}
-							<EventItem event={d.event} movedFrom={d.moved ? d.time ?? 'Due' : null} />
+							<EventItem event={d.event} movedFrom={d.moved ? d.time ?? 'Due' : null} showOwner={shared} />
 						{/each}
 					</div>
 				{:else}
@@ -188,7 +244,12 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 						{#each grid.slice(week * 7, week * 7 + 7) as date (date)}
 							{@const evs = byDay.get(date) ?? []}
 							<div
-								class={['c', monthOf(date) !== month && 'out', date === today && 'today']}
+								class={[
+									'c',
+									monthOf(date) !== month && 'out',
+									date === today && 'today',
+									date === selectedDay && 'sel'
+								]}
 								role="gridcell"
 							>
 								<button
@@ -197,26 +258,39 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 									aria-label="New task on {dayLabel(date)}"
 									onclick={() => panel.open({ kind: 'new-task', date })}
 								></button>
-								<span class="dn">{dayOfMonth(date)}</span>
+								<button
+									type="button"
+									class="dn"
+									aria-label="Show {dayLabel(date)}"
+									aria-pressed={date === selectedDay}
+									onclick={() => (ui.calDay = date)}
+								>
+									{dayOfMonth(date)}
+								</button>
 								{#each evs.slice(0, 3) as d (d.key)}
 									<button
 										type="button"
-										class={['ev', d.moved && 'moved']}
-										style:--e={EVENT_KINDS[d.event.kind].color}
+										class={['ev', d.moved && 'moved', !d.event.can_edit && 'shared']}
+										style:--e={eventColor(d.event)}
 										title={d.moved
-											? `${d.event.title} · rescheduled to ${shortDate(d.event.date)}${d.event.time ? ` ${d.event.time}` : ''}`
-											: d.event.title}
-										onclick={() => openEvent(d.event)}
+											? `${ownerLabel(d.event)}: ${d.event.title} · rescheduled to ${shortDate(d.event.date)}${d.event.time ? ` ${d.event.time}` : ''}`
+											: `${ownerLabel(d.event)}: ${d.event.title}`}
+										onclick={() => {
+											ui.calDay = date
+											openEvent(d.event)
+										}}
 									>
-										{d.time ? `${d.time} ` : ''}{d.event.title}
+										{#if d.time}<span class="evtime">{d.time}</span>{/if}
+										<span class="evt">{d.event.title}</span>
+										{#if shared}<span class="evo">{d.event.can_edit ? 'You' : d.event.agent}</span>{/if}
 									</button>
 								{/each}
 								{#if evs.length > 3}
 									<button
 										type="button"
-										class="ev"
+										class="ev more"
 										style:--e="var(--line-2)"
-										onclick={() => panel.open({ kind: 'day', date })}
+										onclick={() => (ui.calDay = date)}
 									>
 										+{evs.length - 3} more
 									</button>
@@ -227,47 +301,60 @@ const shift = (n: number) => (ui.calMonth = addMonths(month, n))
 				{/each}
 			</div>
 		{/if}
-	</div>
+
+		<div class="cal-foot">
+			<div class="legend" aria-label="Event types">
+				{#each EVENT_KIND_ORDER as k (k)}
+					<span><span class="dot" style:background={EVENT_KINDS[k].color}></span>{EVENT_KINDS[k].label}</span>
+				{/each}
+			</div>
+			<p class="small muted">
+				Each person connects their own Google Calendar.
+				{#if shared}Colleagues' events show their last synced copy; changes they make in Google appear after
+					they open their own calendar.{/if}
+			</p>
+		</div>
+	</section>
 
 	<div class="side">
-		<section class="card" aria-labelledby="overdue-h">
+		<section class="card" aria-labelledby="day-h">
 			<div class="ch">
-				<h2 id="overdue-h">Overdue</h2>
-				{#if side.data}<Chip tone="red">{side.data.overdue.length}</Chip>{/if}
+				<h2 id="day-h">Selected day</h2>
+				<span class="pill">{dayEvents.length} event{dayEvents.length === 1 ? '' : 's'}</span>
 			</div>
-			<QueryView query={side} rows={2}>
-				{#snippet children(s)}
-					<div class="list">
-						{#each s.overdue as o (o.text)}
-							<button type="button" class="li" onclick={() => openLead(o.lead_id)}>
-								<span class="dot" style:background="var(--red)"></span>
-								<span><div class="t">{o.text}</div><div class="d">{o.detail}</div></span>
-								<span></span>
-							</button>
-						{:else}
-							<Empty text="Nothing overdue." />
-						{/each}
-					</div>
-				{/snippet}
-			</QueryView>
+			{#if selectedDay}<p class="day-date">{fullDate(selectedDay)}</p>{/if}
+			<div class="list">
+				{#each dayEvents as e (e.id)}
+					<button type="button" class="li evrow" onclick={() => openEvent(e)}>
+						<span class="time">{e.time ?? 'All day'}{#if e.end_time}<br />{e.end_time}{/if}</span>
+						<span class="bar" style:background={eventColor(e)}></span>
+						<span>
+							<div class="t">{e.title}</div>
+							<div class="d">
+								{#if e.redacted}Private event · details hidden · {e.agent}{:else}{whose(e)}{/if}
+							</div>
+						</span>
+						<span class="small muted">{e.can_edit ? '' : 'View only'}</span>
+					</button>
+				{:else}
+					<Empty text="No events on this day." />
+				{/each}
+			</div>
 		</section>
-		<section class="card" aria-labelledby="deadlines-h">
-			<div class="ch"><h2 id="deadlines-h">Deadlines</h2></div>
-			<QueryView query={side} rows={3}>
-				{#snippet children(s)}
-					<div class="list">
-						{#each s.deadlines as d (d.event.id)}
-							<button type="button" class="li" onclick={() => openEvent(d.event)}>
-								<span class="time">{shortDate(d.event.date)}</span>
-								<span><div class="t">{d.event.title}</div><div class="d">{d.event.detail}</div></span>
-								<Chip chip={d.chip} />
-							</button>
-						{:else}
-							<Empty text="No deadlines ahead." />
-						{/each}
-					</div>
-				{/snippet}
-			</QueryView>
+
+		<section class="card" aria-labelledby="access-h">
+			<div class="ch">
+				<h2 id="access-h">Your calendar access</h2>
+				<span class="pill">{heading.pill}</span>
+			</div>
+			<ul class="access">
+				{#each scope.rules as [title, body] (title)}
+					<li>
+						<span class="tick" aria-hidden="true"><Check size={13} /></span>
+						<span><strong>{title}</strong>{body}</span>
+					</li>
+				{/each}
+			</ul>
 		</section>
 	</div>
 </div>
