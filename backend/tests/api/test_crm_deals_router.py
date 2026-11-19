@@ -297,3 +297,24 @@ async def test_editing_a_deal_records_what_changed(client, db, act_as):
 async def test_deals_require_sign_in(client_no_auth):
     for method, path in [("GET", BASE), ("POST", BASE), ("GET", f"{BASE}/oversight")]:
         assert (await client_no_auth.request(method, path, json={})).status_code in {401, 403}
+
+
+async def test_a_deal_follows_its_leads_team_for_manager_visibility(client, db, act_as):
+    # A lead with no team: its manager cannot open the lead, so not its deal either.
+    act_as("omar")
+    teamless = (
+        await client.post(
+            BASE, json={"lead_id": await lead(db, holder="omar", team=None, name="No team")}
+        )
+    ).json()
+    on_team = (
+        await client.post(BASE, json={"lead_id": await lead(db, holder="omar", team="north")})
+    ).json()
+    assert teamless["team_id"] is None and on_team["team_id"] == "north"
+
+    act_as("sara")
+    assert (await client.get(f"{BASE}/{teamless['id']}")).status_code == 404
+    assert (await client.get(f"{BASE}/{on_team['id']}")).status_code == 200
+
+    act_as("admin")
+    assert (await client.get(f"{BASE}/{teamless['id']}")).status_code == 200

@@ -171,7 +171,9 @@ async def create_deal(
         lead_id=lead.id,
         # A lead waiting in a pool is taken by whoever opens the deal.
         assigned_user_id=lead.assigned_user_id or scope.user_id,
-        team_id=lead.team_id or assignment.own_team(scope),
+        # The deal belongs to its lead's team, so a manager sees a deal exactly when they can
+        # see its lead (a lead with no team stays with its agent and administrators).
+        team_id=lead.team_id,
         created_by_user_id=scope.user_id,
         deal_type=_deal_type(lead.intent),
         unit=_unit_of(lead, payload),
