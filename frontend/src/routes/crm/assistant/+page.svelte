@@ -25,7 +25,7 @@ const selection = createConversationSelection()
 		<ConversationSidebar bind:selectedId={selection.id} onSelect={(id) => (selection.id = id)} />
 	</aside>
 	<div class="min-h-[450px] overflow-hidden rounded-lg border border-border md:min-h-0">
-		<ChatBox bind:conversationId={selection.id} />
+		<ChatBox bind:conversationId={selection.id} voice />
 	</div>
 </section>
 

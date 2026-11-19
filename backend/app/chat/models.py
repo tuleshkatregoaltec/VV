@@ -74,6 +74,12 @@ class SendMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
 
 
+class TranscriptResponse(BaseModel):
+    """The words in a voice message, for the agent to check before sending. Empty: no speech."""
+
+    text: str
+
+
 class UpdateConversationRequest(BaseModel):
     """Request model for updating a conversation"""
 

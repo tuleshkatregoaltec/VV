@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createQuery, useQueryClient } from '@tanstack/svelte-query'
 import DOMPurify from 'dompurify'
+import Mic from 'lucide-svelte/icons/mic'
 import { marked } from 'marked'
 import { cubicOut } from 'svelte/easing'
 import { fade, fly } from 'svelte/transition'
@@ -8,6 +9,8 @@ import { browser } from '$app/environment'
 import { chat, type MessageResponse } from '$lib/api/chat'
 import { artifactSortValue, type ChatArtifact, isChatArtifact } from '$lib/chat/artifacts'
 import { safeChatHref } from '$lib/chat/safeLinks'
+import VoicePanel from '$lib/chat/voice/VoicePanel.svelte'
+import { voiceSupported } from '$lib/chat/voice/voice.svelte'
 import ChatActionCard from '$lib/components/chat/ChatActionCard.svelte'
 import ChatArtifactBubble from '$lib/components/chat/ChatArtifactBubble.svelte'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
@@ -53,14 +56,20 @@ let {
 	initialMessage = null,
 	autoSend = false,
 	showHeader = true,
+	voice = false,
 	onMessageSent = () => {}
 }: {
 	conversationId: number | null
 	initialMessage?: string | null
 	autoSend?: boolean
 	showHeader?: boolean
+	/** Show the microphone: speak a message, check the words, then send. */
+	voice?: boolean
 	onMessageSent?: () => void
 } = $props()
+
+let talking = $state(false)
+const showMic = $derived(voice && voiceSupported)
 
 function startConversationWithPrompt(prompt: string) {
 	inputValue = prompt
@@ -829,7 +838,30 @@ function stopStreaming() {
 			</div>
 		{/if}
 
+		{#if talking}
+			<VoicePanel
+				onsend={(text) => {
+					talking = false
+					inputValue = text
+					handleSubmit()
+				}}
+				onclose={() => (talking = false)}
+			/>
+		{/if}
+
 		<div class="relative">
+			{#if showMic}
+				<button
+					type="button"
+					onclick={() => (talking = true)}
+					disabled={!conversationId || streamController !== null}
+					class="absolute right-11 top-1.5 flex h-8 w-8 items-center justify-center rounded text-fg-3 transition-colors hover:bg-panel hover:text-fg-1 disabled:cursor-not-allowed disabled:text-fg-5 disabled:hover:bg-transparent"
+					aria-label="Speak to the assistant"
+					title="Speak to the assistant"
+				>
+					<Mic size={15} />
+				</button>
+			{/if}
 			<textarea
 				bind:this={textareaRef}
 				bind:value={inputValue}
@@ -843,7 +875,7 @@ function stopStreaming() {
 				placeholder={conversationId
 					? 'Ask anything about Dubai real estate...'
 					: 'Select or create a conversation first'}
-				class="min-h-11 w-full resize-none rounded-md border border-focus bg-card py-3 pl-4 pr-14 text-[13px] leading-5 text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-2 focus:ring-navy/10"
+				class="min-h-11 w-full resize-none rounded-md border border-focus bg-card py-3 pl-4 {showMic ? 'pr-24' : 'pr-14'} text-[13px] leading-5 text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-2 focus:ring-navy/10"
 				rows="1"
 				readonly={!conversationId || streamController !== null}
 				style="max-height: 180px;"

@@ -9,7 +9,8 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
 	'X-Content-Type-Options': 'nosniff',
 	'X-Frame-Options': 'DENY',
 	'Referrer-Policy': 'strict-origin-when-cross-origin',
-	// Nothing in the app uses these features; denying them stops injected code from asking.
+	// Denying unused features stops injected code from asking. The microphone is allowed for the
+	// app's own pages only (CRM Assistant voice messages), never for embedded frames.
 	'Permissions-Policy': [
 		'accelerometer=()',
 		'autoplay=()',
@@ -20,7 +21,7 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
 		'gyroscope=()',
 		'hid=()',
 		'magnetometer=()',
-		'microphone=()',
+		'microphone=(self)',
 		'midi=()',
 		'payment=()',
 		'serial=()',

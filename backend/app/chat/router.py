@@ -3,7 +3,7 @@ import logging
 from contextlib import aclosing
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -14,6 +14,7 @@ from app.chat.models import (
     CreateConversationRequest,
     MessageResponse,
     SendMessageRequest,
+    TranscriptResponse,
     UpdateConversationRequest,
 )
 from app.chat.service import (
@@ -25,6 +26,7 @@ from app.chat.service import (
     stream_chat_response,
     update_conversation,
 )
+from app.chat.voice import MAX_AUDIO_BYTES, InvalidAudio, transcribe
 from app.core.dependencies import (
     AuthContext,
     require_active_subscription,
@@ -95,6 +97,33 @@ async def update_conversation_endpoint(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return ConversationResponse.model_validate(conversation)
+
+
+@router.post("/transcribe", response_model=TranscriptResponse)
+async def transcribe_voice_message(
+    audio: UploadFile = File(...),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_token_quota),
+):
+    """Turn the agent's recording (16 kHz mono WAV) into text for them to check before sending.
+    Nothing is stored and nothing is sent to the assistant."""
+    data = await audio.read(MAX_AUDIO_BYTES + 1)
+    try:
+        text = await transcribe(db, user_id=str(context.user.id), audio=data)
+    except InvalidAudio as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    except Exception as error:
+        # Only the error type: provider messages can carry what was said.
+        logger.error(
+            "assistant transcribe failed org=%s error=%s",
+            context.organization.id,
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=502, detail="Could not turn your voice into text."
+        ) from None
+    return TranscriptResponse(text=text)
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)

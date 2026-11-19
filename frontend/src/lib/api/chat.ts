@@ -49,6 +49,13 @@ export const chat = {
 			`/api/v1/assistant/actions/${encodeURIComponent(actionId)}/cancel`
 		),
 
+	/** The words in a voice recording (16 kHz mono WAV), for the agent to check before sending. */
+	transcribe: (audio: Blob) => {
+		const form = new FormData()
+		form.append('audio', audio, 'voice.wav')
+		return client.post<{ text: string }>('/api/v1/chat/transcribe', form)
+	},
+
 	createConversation: (data: CreateConversationRequest = {}) =>
 		client.post<ConversationResponse>('/api/v1/chat/conversations', data),
 

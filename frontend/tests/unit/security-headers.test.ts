@@ -10,7 +10,7 @@ describe('applySecurityHeaders', () => {
 		expect(headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin')
 		expect(headers.get('x-content-type-options')).toBe('nosniff')
 		expect(headers.get('permissions-policy')).toContain('camera=()')
-		expect(headers.get('permissions-policy')).toContain('microphone=()')
+		expect(headers.get('permissions-policy')).toContain('microphone=(self)')
 		expect(headers.get('permissions-policy')).toContain('geolocation=()')
 		expect(headers.get('content-type')).toBe('text/html')
 	})

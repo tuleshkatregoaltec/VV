@@ -109,6 +109,8 @@ class Settings(BaseSettings):
     # OpenRouter
     OPENROUTER_API_KEY: str  # Bitwarden Secrets
     DEFAULT_CHAT_MODEL: str  # configMap
+    # CRM Assistant voice: an OpenRouter model that accepts audio; unset uses DEFAULT_CHAT_MODEL.
+    ASSISTANT_VOICE_MODEL: str | None = None
 
     # Assistant qualification candidates are isolated from feasibility and imports.
     # Enable only after capped model evaluations and provider/privacy approval.
