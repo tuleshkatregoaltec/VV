@@ -6,7 +6,7 @@ import { cspDirectives } from './csp-directives.js'
 const config = {
 	preprocess: vitePreprocess(),
 	kit: {
-		adapter: adapter(),
+		adapter: process.env.NODE_ENV === 'development' ? undefined : adapter(),
 		env: {
 			dir: '..'
 		},

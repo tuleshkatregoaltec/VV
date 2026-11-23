@@ -153,7 +153,9 @@ const whose = (e: (typeof shown)[number]) =>
 				</div>
 			{/if}
 			{#if googleCalendar.data?.connected}
-				<span class="small muted" title={googleCalendar.data.email ?? ''}>Google connected</span>
+				<span class="small muted">
+					Google connected{googleCalendar.data.email ? ` · ${googleCalendar.data.email}` : ''}
+				</span>
 				<button
 					type="button"
 					class="btn ghost sm"

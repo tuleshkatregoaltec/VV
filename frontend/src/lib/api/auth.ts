@@ -202,6 +202,27 @@ export async function get_session(): Promise<Session | null> {
 	return res.data?.session || null
 }
 
+let expiredSessionCleanup: Promise<void> | null = null
+
+/** Remove a rejected session from this browser without signing out other devices. */
+export function clear_expired_session(): Promise<void> {
+	if (!expiredSessionCleanup) {
+		expiredSessionCleanup = (async () => {
+			try {
+				await authClient.signOut({ scope: 'local' })
+			} catch {
+				// Clear local state even if the auth service is unreachable.
+			}
+			const { clearUser } = await import('$lib/stores/user.svelte')
+			clearUser()
+			clearUserBrowserState()
+		})().finally(() => {
+			expiredSessionCleanup = null
+		})
+	}
+	return expiredSessionCleanup
+}
+
 /** Listen to auth state changes. */
 export function on_auth_state_change(
 	callback: (event: AuthChangeEvent, session: Session | null) => void

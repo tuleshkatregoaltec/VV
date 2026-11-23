@@ -40,7 +40,12 @@ def _allow_homebrew_libraries() -> None:
             return original(self, name, flags)
         except OSError:
             if isinstance(name, str) and name.endswith(".dylib") and "/" not in name:
-                for prefix in (os.environ.get("HOMEBREW_PREFIX"), "/opt/homebrew", "/usr/local"):
+                for prefix in (
+                    os.environ.get("HOMEBREW_PREFIX"),
+                    "/opt/homebrew",
+                    "/usr/local",
+                    "/opt/local",
+                ):
                     path = Path(prefix or "") / "lib" / name
                     if prefix and path.exists():
                         return original(self, str(path), flags)
@@ -53,9 +58,6 @@ def _allow_homebrew_libraries() -> None:
 if sys.platform == "darwin":
     _allow_homebrew_libraries()
 
-from weasyprint import HTML  # noqa: E402 - after the macOS library fallback
-from weasyprint.urls import URLFetcher, URLFetcherResponse  # noqa: E402
-
 _jinja = Environment(
     loader=FileSystemLoader(TEMPLATE_DIR),
     autoescape=True,
@@ -63,7 +65,7 @@ _jinja = Environment(
 )
 
 
-def _fetch_bundled(url: str) -> URLFetcherResponse:
+def _fetch_bundled(url: str) -> Any:
     """Serve a file from the template directory; refuse every other URL."""
     parsed = urlparse(url)
     if parsed.scheme != "file":
@@ -71,12 +73,9 @@ def _fetch_bundled(url: str) -> URLFetcherResponse:
     path = Path(unquote(parsed.path)).resolve()
     if not path.is_relative_to(TEMPLATE_DIR.resolve()) or not path.is_file():
         raise RenderError("Only bundled template assets can be loaded")
+    from weasyprint.urls import URLFetcherResponse
+
     return URLFetcherResponse(url, body=path.read_bytes())
-
-
-class _BundledOnly(URLFetcher):
-    def fetch(self, url, headers=None):
-        return _fetch_bundled(url)
 
 
 def render_pdf(doc_type: str, snapshot: dict[str, Any]) -> bytes:
@@ -87,6 +86,18 @@ def render_pdf(doc_type: str, snapshot: dict[str, Any]) -> bytes:
         )
     except TemplateError as exc:
         raise RenderError(f"Template {spec.file} could not be filled") from exc
+    try:
+        from weasyprint import HTML
+        from weasyprint.urls import URLFetcher
+    except (ImportError, OSError) as exc:
+        raise RenderError(
+            "PDF rendering requires WeasyPrint's system libraries, including Pango"
+        ) from exc
+
+    class _BundledOnly(URLFetcher):
+        def fetch(self, url, headers=None):
+            return _fetch_bundled(url)
+
     try:
         return HTML(
             string=html, base_url=TEMPLATE_DIR.as_uri() + "/", url_fetcher=_BundledOnly()

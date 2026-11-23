@@ -24,14 +24,14 @@ ps:
 	docker compose -f docker-compose.dev.yml ps
 
 dev-backend:
-	set -a && source .env.dev && set +a && cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+	set -a && source .env.dev && set +a && cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
 
 dev-frontend:
 	set -a && source .env.dev && set +a && cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173
 
 dev-app:
 	set -a && source .env.dev && set +a && \
-		for port in 8000 5173; do \
+		for port in 8002 5173; do \
 			pid=$(lsof -t -nP -iTCP:$port -sTCP:LISTEN 2>/dev/null | head -n 1); \
 			if [ -n "$pid" ]; then \
 				echo "Port $port is already in use by PID $pid:"; \
@@ -40,7 +40,7 @@ dev-app:
 				exit 1; \
 			fi; \
 		done; \
-		(cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload) & \
+		(cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload) & \
 		backend_pid=$!; \
 		(cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173) & \
 		frontend_pid=$!; \

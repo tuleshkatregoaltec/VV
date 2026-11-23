@@ -98,7 +98,7 @@ Related app recipes:
 Main local endpoints:
 
 - Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:8000`
+- Backend API: `http://localhost:8002`
 - Auth: `http://localhost:9999`
 - Mail UI: `http://localhost:9000`
 - MinIO console: `http://localhost:9003`

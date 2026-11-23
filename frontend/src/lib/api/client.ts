@@ -39,6 +39,7 @@ type QueryValue = string | number | boolean | null | undefined | Date
 type QueryParams = Record<string, QueryValue | QueryValue[]>
 
 const BUSY_RETRIES = 3
+let authRedirectStarted = false
 
 /**
  * A read the server turned away only because it was momentarily full (429 with
@@ -127,10 +128,19 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 	if (!res.ok) {
 		// 401 = expired/invalid JWT — clear session and redirect to auth
 		if (browser && res.status === 401) {
-			const { clearUser } = await import('$lib/stores/user.svelte')
-			clearUser()
-			const next = `${window.location.pathname}${window.location.search}`
-			window.location.href = `/auth?next=${encodeURIComponent(next)}`
+			const pathname = window.location.pathname
+			const isAuthPage = pathname === '/auth' || pathname === '/super-admin/auth'
+			const shouldRedirect = !isAuthPage && !authRedirectStarted
+			if (shouldRedirect) authRedirectStarted = true
+			const { clear_expired_session } = await import('./auth')
+			await clear_expired_session()
+			if (!isAuthPage && shouldRedirect) {
+				const next = `${window.location.pathname}${window.location.search}`
+				const authPath = pathname === '/super-admin' || pathname.startsWith('/super-admin/')
+					? '/super-admin/auth'
+					: '/auth'
+				window.location.href = `${authPath}?next=${encodeURIComponent(next)}`
+			}
 			throw new ApiError('Session expired', 401)
 		}
 
