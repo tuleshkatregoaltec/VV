@@ -1,12 +1,14 @@
 """Private assistant reads. Model input never selects the user or organization."""
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, case, exists, func, literal_column, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.assistant_actions.models import AssistantListingDraft, AssistantReminder, AssistantViewing
+from app.crm import deals
 from app.crm.assignment import AssignmentScope, visible_clause
-from app.crm.assistant_models import CrmAssistantQuery
+from app.crm.assistant.models import HANDLED_RESOURCES, CrmAssistantQuery
+from app.crm.deal_models import CrmDeal
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactList,
@@ -24,7 +26,33 @@ from app.crm.inbound_models import (
 from app.crm.models import CrmLeadNote, CrmLeadWorkspace, CrmSavedLead
 
 
-def _records(request: CrmAssistantQuery, scope: AssignmentScope):
+def _location_matches(search: str):
+    """A lead's stored criteria.locations (a list of names, or one name) contains `search`.
+
+    Only that key is read, never the rest of the criteria, notes or other JSON. Other shapes
+    (missing, null, objects) match nothing rather than raising.
+    """
+    locations = CrmInboundEnquiry.criteria["locations"]
+    kind = func.json_typeof(locations)
+    names = func.json_array_elements_text(
+        case((kind == "array", locations), else_=literal_column("'[]'::json"))
+    ).table_valued("value")
+    in_list = exists(
+        select(1).select_from(names).where(names.c.value.icontains(search, autoescape=True))
+    )
+    single = and_(kind == "string", locations.as_string().icontains(search, autoescape=True))
+    return or_(in_list, single)
+
+
+def _records(
+    request: CrmAssistantQuery,
+    scope: AssignmentScope,
+    *,
+    handler_ids: frozenset[str] | None = None,
+    team_ids: frozenset[str] | None = None,
+):
+    """`handler_ids`/`team_ids` are the server's resolution of the handled_by/team names; they
+    only ever narrow the role's own visibility clause."""
     user_id, organization_id = scope.user_id, scope.organization_id
     resource = request.resource
     if resource in {"reminders", "viewings", "listing_drafts"}:
@@ -98,6 +126,8 @@ def _records(request: CrmAssistantQuery, scope: AssignmentScope):
             model.next_follow_up,
             model.updated_at,
             model.assigned_user_id,
+            model.team_id,
+            model.pool_released_at,
             CrmInboundContact.full_name.label("contact_name"),
         ]
         if resource == "renewals":
@@ -118,14 +148,25 @@ def _records(request: CrmAssistantQuery, scope: AssignmentScope):
             )
         search_columns = [CrmInboundContact.full_name, model.source]
         status = model.status
-        if request.assignment == "mine":
-            statement = statement.where(model.assigned_user_id == user_id)
-        elif request.assignment == "colleagues":
-            statement = statement.where(
-                model.assigned_user_id.is_not(None), model.assigned_user_id != user_id
-            )
-        elif request.assignment == "unassigned":
-            statement = statement.where(model.assigned_user_id.is_(None))
+    elif resource == "deals":
+        model = CrmDeal
+        # The CRM's own deal visibility (crm/deals.py): own deals, supervised teams', or all.
+        statement = select(
+            model.id,
+            model.deal_type,
+            model.unit,
+            model.client,
+            model.value_aed,
+            model.due_date,
+            model.stage_index,
+            model.status,
+            model.lead_id,
+            model.assigned_user_id,
+            model.team_id,
+            model.updated_at,
+        ).where(deals.visible_clause(scope))
+        search_columns = [model.unit, model.client]
+        status = model.status
     elif resource == "owner_properties":
         model = CrmPropertyContactClaim
         columns = [
@@ -185,12 +226,26 @@ def _records(request: CrmAssistantQuery, scope: AssignmentScope):
         raise ValueError("Resource has no persisted assistant records")
 
     statement = statement.where(model.organization_id == organization_id)
+    if resource in HANDLED_RESOURCES:
+        if request.assignment == "mine":
+            statement = statement.where(model.assigned_user_id == user_id)
+        elif request.assignment == "colleagues":
+            statement = statement.where(
+                model.assigned_user_id.is_not(None), model.assigned_user_id != user_id
+            )
+        elif request.assignment == "unassigned":
+            statement = statement.where(model.assigned_user_id.is_(None))
+        if handler_ids is not None:
+            statement = statement.where(model.assigned_user_id.in_(sorted(handler_ids)))
+        if team_ids is not None:
+            statement = statement.where(model.team_id.in_(sorted(team_ids)))
     if request.record_id is not None:
         statement = statement.where(model.id == request.record_id)
     if request.search:
-        statement = statement.where(
-            or_(*(column.icontains(request.search, autoescape=True) for column in search_columns))
-        )
+        matches = [column.icontains(request.search, autoescape=True) for column in search_columns]
+        if resource in {"leads", "renewals"}:
+            matches.append(_location_matches(request.search))
+        statement = statement.where(or_(*matches))
     if request.status:
         statement = statement.where(status == request.status)
     if request.follow_up_before:
@@ -199,10 +254,10 @@ def _records(request: CrmAssistantQuery, scope: AssignmentScope):
 
 
 async def query_records(
-    db: AsyncSession, request: CrmAssistantQuery, *, scope: AssignmentScope
+    db: AsyncSession, request: CrmAssistantQuery, *, scope: AssignmentScope, **narrowing
 ) -> tuple[int, dict[str, int], list[dict]]:
-    """Leads follow the caller's CRM role; every other resource stays the caller's own."""
-    statement, model, has_status = _records(request, scope)
+    """Leads and deals follow the caller's CRM role; other resources stay the caller's own."""
+    statement, model, has_status = _records(request, scope, **narrowing)
     scoped = statement.subquery()
     total = (await db.exec(select(func.count()).select_from(scoped))).one()
     counts = {}
@@ -225,6 +280,42 @@ async def query_records(
         )
         rows = [dict(row) for row in result.mappings()]
     return int(total), counts, rows
+
+
+async def lead_breakdowns(
+    db: AsyncSession, request: CrmAssistantQuery, *, scope: AssignmentScope, **narrowing
+) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
+    """Counts by record kind, intent and assignment over exactly the matches `query_records`
+    totals. Assignment buckets use the same conditions as the `assignment` filter."""
+    if request.resource not in {"leads", "renewals"}:
+        raise ValueError("Only leads and renewals store a record kind, intent and assignee")
+    scoped = _records(request, scope, **narrowing)[0].subquery()
+    holder = scoped.c.assigned_user_id
+    assignment = case(
+        (holder.is_(None), "unassigned"),
+        (holder == scope.user_id, "mine"),
+        else_="colleagues",
+    )
+    counts = []
+    for column in (scoped.c.record_kind, scoped.c.intent, assignment):
+        grouped = await db.execute(select(column, func.count()).group_by(column))
+        counts.append({str(value): int(count) for value, count in grouped})
+    return counts[0], counts[1], counts[2]
+
+
+async def holder_breakdowns(
+    db: AsyncSession, request: CrmAssistantQuery, *, scope: AssignmentScope, **narrowing
+) -> tuple[dict[str | None, int], dict[str | None, int]]:
+    """Counts by owning team id and by handler id over exactly the matches `query_records`
+    totals (None: no team / unassigned). The caller turns ids into names."""
+    if request.resource not in HANDLED_RESOURCES:
+        raise ValueError("Only leads, renewals and deals have a handler and team")
+    scoped = _records(request, scope, **narrowing)[0].subquery()
+    counts = []
+    for column in (scoped.c.team_id, scoped.c.assigned_user_id):
+        grouped = await db.execute(select(column, func.count()).group_by(column))
+        counts.append({value: int(count) for value, count in grouped})
+    return counts[0], counts[1]
 
 
 async def has_current_access(db: AsyncSession, *, user_id: str, organization_id: str) -> bool:

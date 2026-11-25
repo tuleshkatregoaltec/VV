@@ -11,8 +11,8 @@ from pydantic_ai import Agent
 from pydantic_ai.models.instrumented import InstrumentationSettings
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 
-from app.chat.workflows import SETTINGS
 from app.core.openrouter import CompatibleOpenRouterModel
+from app.market_ai.workflows import SETTINGS
 from scripts.evaluation.http_trial import CURRENT_CASE, HTTPBudgetedModel
 from scripts.evaluation.trial_budget import BudgetedModel, TrialLedger
 

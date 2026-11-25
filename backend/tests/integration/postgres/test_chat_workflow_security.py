@@ -1,12 +1,12 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from app.chat import repository, service
-from app.chat.agent import _convert_to_pydantic_messages
+from app.chat import conversations, repository
 from app.chat.models import Message
 from app.chat.security import RESTRICTED_HISTORY, fingerprint, safe_data
-from app.crm.assistant import query_my_records
-from app.crm.assistant_models import CrmAssistantQuery
+from app.crm.assistant import query_my_records, service
+from app.crm.assistant.agent import _convert_to_pydantic_messages
+from app.crm.assistant.models import CrmAssistantQuery
 from app.crm.inbound_models import (
     CrmInboundActivity,
     CrmInboundContact,
@@ -72,7 +72,7 @@ async def test_notes_and_history_disappear_after_assignment_revocation(pg_sessio
     data = await query_my_records(pg_session, request, **scope)
     payload = safe_data(data.model_dump(mode="json"))
     payload["source"] = "Your CRM records"
-    conversation = await service.create_conversation(pg_session, user, org)
+    conversation = await conversations.create_conversation(pg_session, user, org)
     await service.add_message(
         pg_session,
         conversation.id,
@@ -109,7 +109,7 @@ async def test_notes_and_history_disappear_after_assignment_revocation(pg_sessio
 
 async def test_latest_history_is_chronological_and_before_id_pages_without_overlap(pg_session):
     user, org = str(uuid4()), str(uuid4())
-    conversation = await service.create_conversation(pg_session, user, org)
+    conversation = await conversations.create_conversation(pg_session, user, org)
     for number in range(105):
         pg_session.add(Message(conversation_id=conversation.id, role="user", content=str(number)))
     await pg_session.commit()
@@ -256,7 +256,7 @@ async def test_confirmed_update_keeps_only_reauthorized_followup_handle(pg_sessi
     pg_session.add(lead)
     await pg_session.commit()
     scope = {"user_id": user, "organization_id": org}
-    conversation = await service.create_conversation(pg_session, **scope)
+    conversation = await conversations.create_conversation(pg_session, **scope)
     query = CrmAssistantQuery(resource="leads", record_id=lead.id)
     evidence = safe_data(
         (await query_my_records(pg_session, query, **scope)).model_dump(mode="json")
@@ -329,7 +329,7 @@ async def test_manager_answer_withheld_after_losing_supervisor_role(pg_session):
     assert data.total == 1
     payload = safe_data(data.model_dump(mode="json"))
     payload["source"] = "Your CRM records"
-    conversation = await service.create_conversation(pg_session, **scope)
+    conversation = await conversations.create_conversation(pg_session, **scope)
     await service.add_message(
         pg_session,
         conversation.id,

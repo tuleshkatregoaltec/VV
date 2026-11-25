@@ -514,12 +514,13 @@ async def snapshot_payload(snapshot, url, client):
 
 
 async def verify_snapshot(snapshot, url, client):
+    from app.crm.assistant_models import CrmAssistantQuery
+
     from app.analytics.market_metrics import get_market_metrics
     from app.analytics.models import MarketMetricsRequest
     from app.analytics.service import get_project_search
     from app.clickhouse import client as warehouse
     from app.crm.assistant import query_my_records
-    from app.crm.assistant_models import CrmAssistantQuery
     from app.market.releases import pin_market_release
 
     name = validate_manifest(snapshot)

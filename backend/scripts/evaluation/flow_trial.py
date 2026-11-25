@@ -17,10 +17,10 @@ from unittest.mock import patch
 from pydantic_ai import ModelRetry, Tool
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from app.chat import routing, workflows
-from app.chat.agent import _convert_to_pydantic_messages
-from app.chat.dependencies import ChatDependencies
 from app.chat.models import Message
+from app.crm.assistant.agent import _convert_to_pydantic_messages
+from app.crm.assistant.dependencies import ChatDependencies
+from app.market_ai import routing, workflows
 from app.whatsapp import customer_agent
 from scripts.evaluation.model_trial import checks, load_cases, synthetic_tools
 
@@ -179,7 +179,9 @@ async def run_flow_case(case, model, *, timeout=180):
                             question,
                             deps=deps,
                             usage=RunUsage(),
-                            message_history=_convert_to_pydantic_messages(history),
+                            message_history=_convert_to_pydantic_messages(
+                                history, include_market=True
+                            ),
                             usage_limits=UsageLimits(
                                 request_limit=12, tool_calls_limit=16, total_tokens_limit=40000
                             ),

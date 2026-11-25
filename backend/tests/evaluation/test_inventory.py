@@ -3,25 +3,27 @@ from scripts.evaluation.inventory import build_inventory
 
 def test_actual_chat_registration_links_to_public_capabilities_and_warehouse():
     inventory = build_inventory()
-    chat = next(agent for agent in inventory["agents"] if agent["id"] == "app.chat.agent.agent")
+    chat = next(
+        agent for agent in inventory["agents"] if agent["id"] == "app.market_ai.agent.agent"
+    )
     assert {tool["function"] for tool in chat["tools"]} == {
-        "app.chat.workflows.research_market",
-        "app.chat.workflows.analyze_pricing",
-        "app.chat.workflows.retrieve_personal_crm",
-        "app.chat.workflows.plan_followups",
-        "app.chat.workflows.prepare_action",
+        "app.market_ai.workflows.research_market",
+        "app.market_ai.workflows.analyze_pricing",
     }
+    # CRM tools remain registered only on the separate CRM Operations Assistant.
     specialists = [
-        item for item in inventory["agents"] if item["id"].startswith("app.chat.workflows.")
+        item
+        for item in inventory["agents"]
+        if item["id"].startswith(("app.market_ai.workflows.", "app.crm.assistant.workflows."))
     ]
     registered = {tool["function"] for item in specialists for tool in item["tools"]}
     assert {
-        "app.chat.tools.query_market_metrics",
-        "app.chat.crm_tools.query_my_crm_records",
-        "app.chat.workflows.propose_crm_action",
-        "app.chat.tools.research_listing_shortlist",
-        "app.chat.tools.comparable_evidence",
-        "app.chat.tools.compare_stored_projects",
+        "app.market_ai.tools.query_market_metrics",
+        "app.crm.assistant.crm_tools.query_my_crm_records",
+        "app.crm.assistant.workflows.propose_crm_action",
+        "app.market_ai.tools.research_listing_shortlist",
+        "app.market_ai.tools.comparable_evidence",
+        "app.market_ai.tools.compare_stored_projects",
     } <= registered
     assert all("confirm" not in name for name in registered)
     pulse = inventory["functions"]["app.analytics.queries.fetch_market_pulse"]

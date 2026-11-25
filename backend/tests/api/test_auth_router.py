@@ -14,6 +14,9 @@ class FakeDB:
     async def get(self, model, key):
         return self.organization
 
+    async def exec(self, statement):
+        return SimpleNamespace(first=lambda: None)
+
 
 def make_user(**overrides):
     user = SimpleNamespace(
@@ -77,6 +80,8 @@ async def test_me_returns_owner_subscription_context(api_client, monkeypatch):
         "role": "owner",
         "is_owner": True,
         "subscription_status": "trialing",
+        "daily_token_limit": 500000,
+        "tokens_used_today": 0,
     }
 
 

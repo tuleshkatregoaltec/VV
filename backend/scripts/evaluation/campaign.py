@@ -244,7 +244,7 @@ def empty_record(case, error_type):
 
 
 async def live_trial(args):
-    from app.chat.capabilities import CAPABILITY_CONTEXT_VERSION
+    from app.market_ai.capabilities import CAPABILITY_CONTEXT_VERSION
     from scripts.evaluation.model_trial import FIXTURES, run_case, selected_workflow, summarise
 
     if settings.ENVIRONMENT != "local":

@@ -136,9 +136,10 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 			await clear_expired_session()
 			if (!isAuthPage && shouldRedirect) {
 				const next = `${window.location.pathname}${window.location.search}`
-				const authPath = pathname === '/super-admin' || pathname.startsWith('/super-admin/')
-					? '/super-admin/auth'
-					: '/auth'
+				const authPath =
+					pathname === '/super-admin' || pathname.startsWith('/super-admin/')
+						? '/super-admin/auth'
+						: '/auth'
 				window.location.href = `${authPath}?next=${encodeURIComponent(next)}`
 			}
 			throw new ApiError('Session expired', 401)
@@ -192,6 +193,37 @@ export type StreamCallback = (chunk: string) => void
  * Stream SSE responses using fetch with ReadableStream.
  * Supports POST requests with request bodies.
  */
+const STATUS_CODES: Record<number, string> = {
+	401: 'session_expired',
+	402: 'access_denied',
+	403: 'access_denied',
+	404: 'conversation_not_found',
+	422: 'invalid_request',
+	429: 'daily_limit_reached'
+}
+
+/** A stream refused before it started, as the stream's own error event. */
+async function refusalEvent(response: Response): Promise<Record<string, unknown>> {
+	let detail: unknown
+	try {
+		detail = (await response.json())?.detail
+	} catch {
+		// Not JSON: the status decides.
+	}
+	if (detail && typeof detail === 'object' && 'code' in detail) {
+		const { message, ...rest } = detail as { message?: string; code: string }
+		return { ...rest, type: 'error', error: message ?? response.statusText }
+	}
+	const code =
+		STATUS_CODES[response.status] ??
+		(response.status >= 500 ? 'server_unavailable' : 'internal_error')
+	return {
+		type: 'error',
+		code,
+		error: typeof detail === 'string' ? detail : `Request failed (${response.status})`
+	}
+}
+
 async function stream(endpoint: string, onChunk: StreamCallback, options: StreamOptions = {}) {
 	const { method = 'GET', body } = options
 
@@ -226,12 +258,10 @@ async function stream(endpoint: string, onChunk: StreamCallback, options: Stream
 	fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
 		.then(async (response) => {
 			if (!response.ok) {
-				if (response.status === 429) {
-					// Token limit exceeded
-					const errorData = await response.text().catch(() => 'Daily token limit exceeded')
-					throw new Error(`TOKEN_LIMIT_EXCEEDED: ${errorData}`)
-				}
-				throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+				// Refused before the stream started: report the server's code, or one for the status.
+				terminalEventSeen = true
+				onChunk(JSON.stringify(await refusalEvent(response)))
+				return
 			}
 
 			const reader = response.body?.pipeThrough(new TextDecoderStream()).getReader()
@@ -302,6 +332,7 @@ async function stream(endpoint: string, onChunk: StreamCallback, options: Stream
 				onChunk(
 					JSON.stringify({
 						type: 'error',
+						code: 'stream_interrupted',
 						error: 'Stream ended before completion. Please try again.'
 					})
 				)
@@ -316,13 +347,13 @@ async function stream(endpoint: string, onChunk: StreamCallback, options: Stream
 
 			// Only send error if stream wasn't completed normally
 			if (!terminalEventSeen) {
-				if (error.message.startsWith('TOKEN_LIMIT_EXCEEDED:')) {
-					onChunk(
-						JSON.stringify({ type: 'error', error: 'token_limit_exceeded', details: error.message })
-					)
-				} else {
-					onChunk(JSON.stringify({ type: 'error', error: 'Stream connection failed' }))
-				}
+				onChunk(
+					JSON.stringify({
+						type: 'error',
+						code: 'network_error',
+						error: 'Stream connection failed'
+					})
+				)
 			}
 		})
 

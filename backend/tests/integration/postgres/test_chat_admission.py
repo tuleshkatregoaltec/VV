@@ -184,3 +184,88 @@ async def test_migration_preserves_duplicate_history_and_sums_new_ledger(admissi
             )
         ).all()
         assert rows == [(13, 24, 37)]
+
+
+@pytest.mark.parametrize(
+    ("outcome", "observed", "status"),
+    [
+        ("answer", 900, "settled"),
+        ("turn_budget_exceeded", 5_000, "failed"),
+        ("provider_rate_limited", 1_234, "failed"),
+        ("cancelled", 700, "failed"),
+    ],
+)
+async def test_every_turn_outcome_charges_only_observed_usage_and_frees_the_lease(
+    admission_engine, monkeypatch, outcome, observed, status
+):
+    """Through the real chat turn: the reservation is made, then settled to what the provider
+    reported whether the turn answers, exceeds its budget, meets a provider failure or is
+    cancelled by the browser; the user can start the next turn straight away."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from pydantic_ai.exceptions import ModelHTTPError, UsageLimitExceeded
+
+    from app.crm.assistant import service
+
+    user, org = str(uuid4()), str(uuid4())
+    conversation = 50_000 + uuid4().int % 1_000_000  # Each case its own conversation.
+
+    async def session():
+        async with AsyncSession(admission_engine, expire_on_commit=False) as db:
+            yield db
+
+    monkeypatch.setattr(admission, "get_db_session", session)
+    monkeypatch.setattr(
+        admission,
+        "get_user_by_id",
+        AsyncMock(return_value=SimpleNamespace(daily_token_limit=500_000)),
+    )
+    monkeypatch.setattr(service.settings, "ASSISTANT_ENABLED", True)
+    monkeypatch.setattr(service.settings, "ASSISTANT_TYPED_ROUTING_ENABLED", False)
+    monkeypatch.setattr(
+        service, "get_conversation", AsyncMock(return_value=SimpleNamespace(id=conversation))
+    )
+    monkeypatch.setattr(service, "get_conversation_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "add_message", AsyncMock())
+    started = asyncio.Event()
+
+    async def run(*args, usage, **kwargs):
+        usage.input_tokens += observed
+        if outcome == "turn_budget_exceeded":
+            raise UsageLimitExceeded("Exceeded the total_tokens_limit")
+        if outcome == "provider_rate_limited":
+            raise ModelHTTPError(429, "model")
+        if outcome == "cancelled":
+            started.set()
+            await asyncio.sleep(3600)
+        return SimpleNamespace(output="Stored answer.")
+
+    monkeypatch.setattr(service, "agent", SimpleNamespace(run=run))
+    stream = service.stream_chat_response(AsyncMock(), conversation, "hello", user, org)
+    if outcome == "cancelled":
+        await anext(stream)  # thinking
+        pending = asyncio.ensure_future(anext(stream))
+        await started.wait()
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        await stream.aclose()
+    else:
+        sent = [item async for item in stream]
+        last = sent[-1]
+        assert (
+            ('"type": "done"' in last) if outcome == "answer" else (f'"code": "{outcome}"' in last)
+        )
+
+    assert await usage_total(admission_engine, user) == observed
+    async with AsyncSession(admission_engine) as db:
+        [lease] = (
+            await db.exec(
+                select(admission.ChatTurnLease).where(admission.ChatTurnLease.user_id == user)
+            )
+        ).all()
+        assert lease.status == status and lease.finished_at is not None
+    # Capacity is free again for this user and conversation.
+    again = await reserve(admission_engine, user, org, conversation)
+    async with AsyncSession(admission_engine) as db:
+        await admission.settle(db, again.id, RunUsage(), successful=True)

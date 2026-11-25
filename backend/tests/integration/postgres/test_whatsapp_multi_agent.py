@@ -14,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy import update as sql_update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.chat.service import create_conversation
+from app.chat.conversations import create_conversation
 from app.config import settings
 from app.whatsapp import customer_automation as automation
 from app.whatsapp import customer_connections as connections

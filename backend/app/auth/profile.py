@@ -3,6 +3,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.auth.models import AuthMeResponse
 from app.organization import service as organization_service
 from app.providers.auth import AuthenticatedUser
+from app.token_usage.service import token_usage_service
 
 
 def derive_role(current_user: AuthenticatedUser, organization_role: str | None) -> str:
@@ -41,6 +42,7 @@ async def get_user_profile(db: AsyncSession, current_user: AuthenticatedUser) ->
             subscription_status = org.subscription_status
 
     role = derive_role(current_user, organization_role)
+    usage = await token_usage_service.get_today_usage(db, current_user.id)
 
     return AuthMeResponse(
         id=current_user.id,
@@ -53,4 +55,6 @@ async def get_user_profile(db: AsyncSession, current_user: AuthenticatedUser) ->
         role=role,
         is_owner=is_owner,
         subscription_status=subscription_status,
+        daily_token_limit=current_user.daily_token_limit,
+        tokens_used_today=usage.total_tokens if usage else 0,
     )

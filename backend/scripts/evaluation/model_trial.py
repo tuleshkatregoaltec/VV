@@ -18,9 +18,9 @@ from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models.openrouter import OpenRouterModelSettings
 from pydantic_ai.usage import UsageLimits
 
-from app.chat.dependencies import ChatDependencies
-from app.chat.workflows import crm_agent, market_agent, pricing_agent
 from app.config import settings
+from app.crm.assistant.dependencies import ChatDependencies
+from app.market_ai.workflows import crm_agent, market_agent, pricing_agent
 from scripts.evaluation.dataset import load_benchmark
 
 FIXTURES = Path(__file__).with_name("model_trial_cases.json")

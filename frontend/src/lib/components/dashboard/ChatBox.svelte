@@ -6,9 +6,11 @@ import { marked } from 'marked'
 import { cubicOut } from 'svelte/easing'
 import { fade, fly } from 'svelte/transition'
 import { browser } from '$app/environment'
-import { chat, type MessageResponse } from '$lib/api/chat'
+import { type ChatAssistant, chat, type MessageResponse } from '$lib/api/chat'
 import { artifactSortValue, type ChatArtifact, isChatArtifact } from '$lib/chat/artifacts'
+import { describeChatError } from '$lib/chat/errors'
 import { safeChatHref } from '$lib/chat/safeLinks'
+import { applyTurnEvent, type TurnView } from '$lib/chat/toolLabels'
 import VoicePanel from '$lib/chat/voice/VoicePanel.svelte'
 import { voiceSupported } from '$lib/chat/voice/voice.svelte'
 import ChatActionCard from '$lib/components/chat/ChatActionCard.svelte'
@@ -57,6 +59,7 @@ let {
 	autoSend = false,
 	showHeader = true,
 	voice = false,
+	assistant = 'crm',
 	onMessageSent = () => {}
 }: {
 	conversationId: number | null
@@ -65,8 +68,55 @@ let {
 	showHeader?: boolean
 	/** Show the microphone: speak a message, check the words, then send. */
 	voice?: boolean
+	/** Which product answers: the CRM Operations Assistant (default) or Market AI (/chat). */
+	assistant?: ChatAssistant
 	onMessageSent?: () => void
 } = $props()
+
+// Each product's own words; Market AI's are as they were before the CRM assistant was separated.
+const COPY = {
+	market: {
+		title: 'Market AI',
+		subtitle: 'Research Dubai property market data, transactions, rents and projects.',
+		empty: 'Ask Market AI.',
+		emptyHint: 'Ask about Dubai transactions, rents, areas, projects or listings.',
+		starters: [
+			{
+				label: 'Dubai Marina 2BR rents',
+				prompt:
+					'What was the median annual rent for 2-bedroom apartments in Dubai Marina last month?'
+			},
+			{ label: 'Recent Dubai sales', prompt: 'Summarize recent Dubai property sales by area.' },
+			{
+				label: 'Compare area prices',
+				prompt: 'Compare current sale prices in Dubai Marina and JVC.'
+			}
+		],
+		placeholder: 'Ask anything about Dubai real estate...',
+		speaker: 'Vitevue AI'
+	},
+	crm: {
+		title: 'CRM Operations Assistant',
+		subtitle: 'Ask about your CRM records and teams. Changes require your confirmation.',
+		empty: 'Ask your CRM assistant.',
+		emptyHint:
+			'Ask about your CRM leads, teams, owner imports and follow-ups, or prepare a change for your confirmation.',
+		starters: [
+			{ label: 'My CRM pipeline', prompt: 'Summarize my CRM leads by status.' },
+			{
+				label: 'My follow-ups due',
+				prompt: 'Which of my CRM leads have follow-ups due today or earlier?'
+			},
+			{
+				label: 'My CRM teams',
+				prompt: 'Which teams are in my organization, with their managers and agents?'
+			}
+		],
+		placeholder: 'Ask about your CRM records or request a change...',
+		speaker: 'CRM assistant'
+	}
+} as const
+const copy = $derived(COPY[assistant])
 
 let talking = $state(false)
 const showMic = $derived(voice && voiceSupported)
@@ -80,22 +130,26 @@ interface DisplayMessage {
 	id: string
 	role: string
 	content: string
-	toolCalls?: string[]
 	artifacts?: ChatArtifact[]
 	actionIds?: string[]
 }
 
-type ToolCallState = 'start' | 'done'
-
 let inputValue = $state('')
 let messages = $state<DisplayMessage[]>([])
 let streamController: { close: () => void } | null = $state(null)
-let isThinking = $state(false)
+// The one transient status of a running turn; tool progress never enters the transcript.
+let workingStatus = $state<string | null>(null)
 let error = $state<string | null>(null)
 let textareaRef = $state<HTMLTextAreaElement>()
 let messagesEndRef = $state<HTMLDivElement>()
 let activeStreamConversationId: number | null = $state(null)
 let tokenLimitModalOpen = $state(false)
+// The message to send again when the failure says retrying is safe.
+let retryText = $state<string | null>(null)
+// The connection broke mid-turn: the server may still be answering, so sending is held until
+// the conversation has been reloaded (a second send would only be refused as busy).
+let awaitingReload = $state(false)
+const RELOAD_AFTER_INTERRUPTION_MS = [5_000, 20_000, 60_000]
 let olderMessages = $state<MessageResponse[]>([])
 let loadingOlder = $state(false)
 let hasOlder = $state(true)
@@ -103,11 +157,11 @@ let suppressScroll = false
 let latestLoadedMessages: MessageResponse[] = []
 let localMessageSequence = 0
 const queryClient = useQueryClient()
-const messagesQuery = createQuery(() => chatQueries.messages(conversationId))
+const messagesQuery = createQuery(() => chatQueries.messages(conversationId, 100, assistant))
 let loading = $derived(messagesQuery.isLoading)
 let displayError = $derived(error ?? (messagesQuery.isError ? 'Failed to load messages' : null))
 const scrollSignal = $derived(
-	`${messages.length}:${messages.at(-1)?.content.length ?? 0}:${messages.at(-1)?.toolCalls?.length ?? 0}:${messages.at(-1)?.artifacts?.length ?? 0}:${isThinking}:${streamController ? 'streaming' : 'idle'}`
+	`${messages.length}:${messages.at(-1)?.content.length ?? 0}:${messages.at(-1)?.artifacts?.length ?? 0}:${workingStatus}:${streamController ? 'streaming' : 'idle'}`
 )
 
 function toDisplayMessages(loadedMessages: MessageResponse[]): DisplayMessage[] {
@@ -115,7 +169,6 @@ function toDisplayMessages(loadedMessages: MessageResponse[]): DisplayMessage[] 
 		id: String(m.id),
 		role: m.role,
 		content: m.content,
-		toolCalls: [],
 		artifacts: artifactsFromMessage(m),
 		actionIds: actionsFromMessage(m)
 	}))
@@ -189,7 +242,7 @@ async function loadOlderMessages() {
 	if (!id || !oldest || loadingOlder) return
 	loadingOlder = true
 	try {
-		const older = await chat.getMessages(id, { before_id: oldest.id })
+		const older = await chat.getMessages(id, { before_id: oldest.id, assistant })
 		if (id !== conversationId) return
 		suppressScroll = true
 		olderMessages = [...older, ...olderMessages]
@@ -214,101 +267,6 @@ function mergeArtifact(artifacts: ChatArtifact[], artifact: ChatArtifact): ChatA
 	return [...artifacts.filter((item) => item.id !== artifact.id), artifact].sort(
 		(a, b) => artifactSortValue(a) - artifactSortValue(b)
 	)
-}
-
-function toolDisplayLabel(tool: string | undefined, state: ToolCallState, cached = false): string {
-	const labels: Record<string, { start: string; done: string }> = {
-		query_my_crm_records: {
-			start: 'Reading your CRM records',
-			done: 'Your CRM records ready'
-		},
-		get_database_coverage: {
-			start: 'Checking stored data coverage',
-			done: 'Stored data coverage ready'
-		},
-		search_database_locations: {
-			start: 'Finding stored locations',
-			done: 'Stored location matches ready'
-		},
-		get_project_profile: {
-			start: 'Reading stored project profile',
-			done: 'Stored project profile ready'
-		},
-		query_market_metrics: {
-			start: 'Querying stored market records',
-			done: 'Stored market metrics ready'
-		},
-		get_listing_inventory: {
-			start: 'Checking stored listing inventory',
-			done: 'Stored listing inventory ready'
-		},
-		get_project_delivery_summary: {
-			start: 'Checking registered project deliveries',
-			done: 'Registered project deliveries ready'
-		},
-		show_listings: {
-			start: 'Searching matching records',
-			done: 'Matched records ready'
-		},
-		show_market_trend: {
-			start: 'Building market view',
-			done: 'Market view ready'
-		},
-		show_chart: {
-			start: 'Building chart',
-			done: 'Chart ready'
-		},
-		get_area_snapshot: {
-			start: 'Reading area snapshot',
-			done: 'Area snapshot ready'
-		},
-		compare_areas: {
-			start: 'Comparing areas',
-			done: 'Comparison ready'
-		},
-		get_rental_market_pulse: {
-			start: 'Checking rental market',
-			done: 'Rental market ready'
-		},
-		get_market_pulse: {
-			start: 'Checking market pulse',
-			done: 'Market pulse ready'
-		},
-		rank_areas: {
-			start: 'Ranking areas',
-			done: 'Area ranking ready'
-		},
-		rank_upcoming_project_areas: {
-			start: 'Reading project pipeline',
-			done: 'Project pipeline ready'
-		},
-		search_development_projects: {
-			start: 'Searching projects',
-			done: 'Project matches ready'
-		},
-		get_developer_pipeline: {
-			start: 'Reading developer pipeline',
-			done: 'Developer pipeline ready'
-		},
-		get_price_trends: {
-			start: 'Reading price history',
-			done: 'Price history ready'
-		},
-		research_market: { start: 'Researching the market', done: 'Market research ready' },
-		analyze_pricing: { start: 'Analysing pricing evidence', done: 'Pricing analysis ready' },
-		retrieve_personal_crm: { start: 'Reading your CRM', done: 'Your CRM records ready' },
-		plan_followups: { start: 'Planning follow-ups', done: 'Follow-up plan ready' },
-		prepare_action: { start: 'Preparing the proposed change', done: 'Proposed change ready' },
-		get_similar_projects: { start: 'Finding similar projects', done: 'Similar projects ready' },
-		research_listing_shortlist: { start: 'Shortlisting listings', done: 'Listing shortlist ready' },
-		comparable_evidence: { start: 'Reading comparable sales', done: 'Comparable evidence ready' },
-		compare_stored_projects: { start: 'Comparing projects', done: 'Project comparison ready' },
-		find_assignment_colleagues: { start: 'Finding colleagues', done: 'Colleague matches ready' },
-		propose_crm_action: { start: 'Preparing confirmation', done: 'Confirmation ready' }
-	}
-	const fallback = tool ? tool.replaceAll('_', ' ') : 'Working'
-	const label = labels[tool ?? '']?.[state] ?? (state === 'done' ? `${fallback} ready` : fallback)
-	return state === 'done' ? `✓ ${label}${cached ? ' (cached)' : ''}` : `${label}...`
 }
 
 // Load messages when conversation changes
@@ -381,8 +339,11 @@ async function retryLoadMessages() {
 
 async function refreshMessagesAfterStream(conversationIdToRefresh: number) {
 	try {
-		const loadedMessages = await chat.getMessages(conversationIdToRefresh)
-		queryClient.setQueryData(chatKeys.messages(conversationIdToRefresh), loadedMessages)
+		const loadedMessages = await chat.getMessages(conversationIdToRefresh, { assistant })
+		queryClient.setQueryData(
+			chatKeys.messages(conversationIdToRefresh, 100, assistant),
+			loadedMessages
+		)
 		if (conversationId === conversationIdToRefresh) {
 			replaceMessagesIfChanged(toDisplayMessages([...olderMessages, ...loadedMessages]))
 		}
@@ -391,9 +352,39 @@ async function refreshMessagesAfterStream(conversationIdToRefresh: number) {
 	}
 }
 
+function dropEmptyAnswer() {
+	const last = messages.at(-1)
+	if (
+		last?.role === 'assistant' &&
+		!last.content &&
+		!last.artifacts?.length &&
+		!last.actionIds?.length
+	) {
+		messages = messages.slice(0, -1)
+	}
+}
+
+function reloadAfterInterruption(id: number, attempt = 0) {
+	awaitingReload = true
+	setTimeout(() => {
+		void refreshMessagesAfterStream(id).finally(() => {
+			const answered = conversationId === id && messages.at(-1)?.role === 'assistant'
+			if (answered || attempt + 1 >= RELOAD_AFTER_INTERRUPTION_MS.length || conversationId !== id) {
+				awaitingReload = false
+				if (activeStreamConversationId === id) activeStreamConversationId = null
+				if (answered) error = null
+				return
+			}
+			reloadAfterInterruption(id, attempt + 1)
+		})
+	}, RELOAD_AFTER_INTERRUPTION_MS[attempt])
+}
+
 async function handleSubmit() {
 	const text = inputValue.trim()
-	if (!text || !conversationId) return
+	if (!text || !conversationId || awaitingReload) return
+	error = null
+	retryText = null
 
 	if (streamController) streamController.close()
 
@@ -406,104 +397,79 @@ async function handleSubmit() {
 	if (textareaRef) textareaRef.style.height = 'auto'
 
 	// Start streaming
-	let currentAssistantMessage = ''
-	let currentToolCalls: string[] = []
+	let turn: TurnView = { answer: '', status: null }
 	let currentArtifacts: ChatArtifact[] = []
-	const toolCallIndexes = new Map<string, number>()
 
-	streamController = await chat.sendMessage(streamConversationId, text, (rawChunk) => {
-		// Only update messages if we're still viewing the same conversation
-		if (conversationId !== streamConversationId) {
-			return
-		}
+	streamController = await chat.sendMessage(
+		streamConversationId,
+		text,
+		(rawChunk) => {
+			// Only update messages if we're still viewing the same conversation
+			if (conversationId !== streamConversationId) {
+				return
+			}
 
-		try {
-			// Parse SSE data
-			const data = JSON.parse(rawChunk)
+			try {
+				// Parse SSE data
+				const data = JSON.parse(rawChunk)
+				turn = applyTurnEvent(turn, data)
+				workingStatus = turn.status
 
-			if (data.type === 'thinking') {
-				isThinking = true
-				if (messages[messages.length - 1]?.role !== 'assistant') {
-					messages = [
-						...messages,
-						{ id: nextLocalMessageId('assistant'), role: 'assistant', content: '' }
-					]
-				}
-			} else if (data.type === 'content') {
-				isThinking = false
-				currentAssistantMessage += data.content
-				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls)
-			} else if (data.type === 'tool_call_start') {
-				isThinking = false
-				const toolCallId = typeof data.tool_call_id === 'string' ? data.tool_call_id : data.tool
-				toolCallIndexes.set(toolCallId, currentToolCalls.length)
-				currentToolCalls.push(toolDisplayLabel(data.tool, 'start'))
-				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
-			} else if (data.type === 'tool_call_result') {
-				isThinking = false
-				const toolCallId = typeof data.tool_call_id === 'string' ? data.tool_call_id : data.tool
-				const index = toolCallIndexes.get(toolCallId) ?? currentToolCalls.length - 1
-				currentToolCalls[index] = toolDisplayLabel(data.tool, 'done', Boolean(data.cached))
-				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
-			} else if (
-				(data.type === 'artifact_opened' || data.type === 'artifact_updated') &&
-				isChatArtifact(data.artifact)
-			) {
-				isThinking = false
-				currentArtifacts = mergeArtifact(currentArtifacts, data.artifact)
-				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
-			} else if (data.type === 'action_proposed' && typeof data.action?.id === 'string') {
-				isThinking = false
-				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
-				const last = messages[messages.length - 1]
-				last.actionIds = [...new Set([...(last.actionIds ?? []), data.action.id])]
-				messages = [...messages]
-			} else if (data.type === 'done') {
-				isThinking = false
-				if (currentToolCalls.some((toolCall) => toolCall.endsWith('...'))) {
-					currentToolCalls = currentToolCalls.map((toolCall) =>
-						toolCall.endsWith('...') ? `✓ ${toolCall.slice(0, -3)} complete` : toolCall
-					)
-					updateLastMessage(
-						'assistant',
-						currentAssistantMessage,
-						currentToolCalls,
-						currentArtifacts
-					)
-				}
-				streamController = null
-				void queryClient.invalidateQueries({
-					queryKey: chatKeys.conversations()
-				})
-				void refreshMessagesAfterStream(streamConversationId).finally(() => {
-					if (activeStreamConversationId === streamConversationId) {
+				if (data.type === 'thinking') {
+					if (messages[messages.length - 1]?.role !== 'assistant') {
+						messages = [
+							...messages,
+							{ id: nextLocalMessageId('assistant'), role: 'assistant', content: '' }
+						]
+					}
+				} else if (data.type === 'content') {
+					updateLastMessage('assistant', turn.answer, currentArtifacts)
+				} else if (
+					(data.type === 'artifact_opened' || data.type === 'artifact_updated') &&
+					isChatArtifact(data.artifact)
+				) {
+					currentArtifacts = mergeArtifact(currentArtifacts, data.artifact)
+					updateLastMessage('assistant', turn.answer, currentArtifacts)
+				} else if (data.type === 'action_proposed' && typeof data.action?.id === 'string') {
+					updateLastMessage('assistant', turn.answer, currentArtifacts)
+					const last = messages[messages.length - 1]
+					last.actionIds = [...new Set([...(last.actionIds ?? []), data.action.id])]
+					messages = [...messages]
+				} else if (data.type === 'done') {
+					streamController = null
+					void queryClient.invalidateQueries({
+						queryKey: chatKeys.conversations(assistant)
+					})
+					void refreshMessagesAfterStream(streamConversationId).finally(() => {
+						if (activeStreamConversationId === streamConversationId) {
+							activeStreamConversationId = null
+						}
+					})
+					setTimeout(() => textareaRef?.focus(), 100)
+				} else if (data.type === 'error') {
+					// A failure is not an empty answer: drop the placeholder and say what happened.
+					const failure = describeChatError(data)
+					console.error('Stream error:', data.code ?? data.error)
+					dropEmptyAnswer()
+					if (failure.dailyLimit) tokenLimitModalOpen = true
+					error = failure.message
+					retryText = failure.retry ? text : null
+					streamController = null
+					if (failure.reloadConversation) {
+						reloadAfterInterruption(streamConversationId)
+					} else {
 						activeStreamConversationId = null
 					}
-				})
-				setTimeout(() => textareaRef?.focus(), 100)
-			} else if (data.type === 'error') {
-				console.error('Stream error:', data.error)
-				isThinking = false
-				if (data.error === 'token_limit_exceeded') {
-					tokenLimitModalOpen = true
-				} else {
-					error = 'The assistant could not complete this request. Please try again.'
 				}
-				streamController = null
-				activeStreamConversationId = null
+			} catch (e) {
+				console.error('Failed to parse chunk:', rawChunk, e)
 			}
-		} catch (e) {
-			console.error('Failed to parse chunk:', rawChunk, e)
-		}
-	})
+		},
+		assistant
+	)
 }
 
-function updateLastMessage(
-	role: string,
-	content: string,
-	toolCalls: string[],
-	artifacts?: ChatArtifact[]
-) {
+function updateLastMessage(role: string, content: string, artifacts?: ChatArtifact[]) {
 	const lastMsg = messages[messages.length - 1]
 	const nextArtifacts =
 		artifacts && artifacts.length > 0
@@ -516,7 +482,6 @@ function updateLastMessage(
 			id: lastMsg.id,
 			role,
 			content,
-			toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined,
 			artifacts: nextArtifacts,
 			actionIds: lastMsg.actionIds
 		}
@@ -528,7 +493,6 @@ function updateLastMessage(
 				id: nextLocalMessageId(role),
 				role,
 				content,
-				toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined,
 				artifacts: nextArtifacts
 			}
 		]
@@ -547,7 +511,7 @@ function stopStreaming() {
 	streamController?.close()
 	streamController = null
 	activeStreamConversationId = null
-	isThinking = false
+	workingStatus = null
 }
 </script>
 
@@ -559,10 +523,10 @@ function stopStreaming() {
 			<div>
 				<div class="flex items-center gap-2">
 					<img src="/icon.svg" alt="" class="h-3.5 w-3.5" />
-					<h1 class="text-sm font-semibold text-fg-1">Vitevue AI</h1>
+					<h1 class="text-sm font-semibold text-fg-1">{copy.title}</h1>
 				</div>
 				<p class="mt-1 text-xs text-fg-4">
-					Ask about market data or your own CRM records. Changes require your confirmation.
+					{copy.subtitle}
 				</p>
 			</div>
 			<div
@@ -638,44 +602,27 @@ function stopStreaming() {
 							class="mb-2 font-display text-3xl font-normal tracking-[var(--tracking-display)] text-fg-1"
 							in:fly={{ y: 20, duration: 500, delay: 200, easing: cubicOut }}
 						>
-							Ask Vitevue AI.
+							{copy.empty}
 						</h3>
 						<p
 							class="mx-auto mb-6 max-w-md text-sm leading-6 text-fg-3"
 							in:fly={{ y: 20, duration: 500, delay: 300, easing: cubicOut }}
 						>
-							Ask about your CRM leads, owner imports, follow-ups, or stored market data.
+							{copy.emptyHint}
 						</p>
 						<div
 							class="mx-auto grid max-w-xl grid-cols-1 gap-2 text-[13px] sm:grid-cols-3"
 							in:fly={{ y: 20, duration: 500, delay: 400, easing: cubicOut }}
 						>
-							<button
-								onclick={() =>
-									startConversationWithPrompt(
-										'Summarize my CRM leads by status.'
-									)}
-								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
-							>
-								<span class="mr-1 text-fg-5">→</span>
-								My CRM pipeline
-							</button>
-							<button
-								onclick={() =>
-									startConversationWithPrompt('Which of my CRM leads have follow-ups due today or earlier?')}
-								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
-							>
-								<span class="mr-1 text-fg-5">→</span>
-								My follow-ups due
-							</button>
-							<button
-								onclick={() =>
-									startConversationWithPrompt('What was the median annual rent for 2-bedroom apartments in Dubai Marina last month?')}
-								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
-							>
-								<span class="mr-1 text-fg-5">→</span>
-								Dubai Marina 2BR rents
-							</button>
+			{#each copy.starters as starter (starter.label)}
+				<button
+					onclick={() => startConversationWithPrompt(starter.prompt)}
+					class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
+				>
+					<span class="mr-1 text-fg-5">→</span>
+					{starter.label}
+				</button>
+			{/each}
 						</div>
 					</div>
 				</div>
@@ -721,7 +668,7 @@ function stopStreaming() {
 								? 'bg-transparent text-fg-2'
 								: 'border border-border bg-panel text-fg-2'}"
 					>
-						{#if isThinking && i === messages.length - 1 && msg.role === 'assistant' && !msg.content && !msg.toolCalls?.length && !msg.artifacts?.length}
+						{#if workingStatus && i === messages.length - 1 && msg.role === 'assistant' && !msg.content && !msg.artifacts?.length}
 							<div class="flex items-center gap-2 text-fg-5">
 								<div class="flex gap-1 items-center">
 									<div
@@ -737,33 +684,14 @@ function stopStreaming() {
 										style="animation-delay: 300ms"
 									></div>
 								</div>
-								<span class="text-sm">Thinking...</span>
+								<span class="text-sm" role="status">{workingStatus}</span>
 							</div>
 						{:else if msg.role === 'assistant'}
 							<div
 								class="mb-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.06em] text-fg-4"
 								>
-									Vitevue AI
+									{copy.speaker}
 								</div>
-									{#if msg.toolCalls && msg.toolCalls.length > 0}
-										<div
-											class="{msg.content || msg.artifacts?.length ? 'mb-3 border-b border-border pb-3' : ''} space-y-2 text-xs text-fg-3"
-										>
-											{#each msg.toolCalls as toolCall, index (`${index}:${toolCall}`)}
-												<div class="flex items-center gap-2">
-												<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M13 10V3L4 14h7v7l9-11h-7z"
-													/>
-												</svg>
-												<span class="font-medium">{toolCall}</span>
-											</div>
-											{/each}
-										</div>
-									{/if}
 									{#if msg.artifacts?.length}
 										<div class="{msg.content ? 'mb-3' : ''} space-y-3">
 											{#each msg.artifacts as artifact (artifact.id)}
@@ -788,31 +716,6 @@ function stopStreaming() {
 							{:else}
 								<div class="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
 							{/if}
-							{#if msg.role !== 'assistant' && msg.toolCalls && msg.toolCalls.length > 0}
-								<div
-									class="mt-3 pt-3 border-t {msg.role === 'user'
-									? 'border-slate-700'
-									: 'border-border'} text-xs space-y-2"
-							>
-								{#each msg.toolCalls as toolCall, index (`${index}:${toolCall}`)}
-									<div
-										class="flex items-center gap-2 {msg.role === 'user'
-											? 'text-slate-300'
-											: 'text-fg-3'}"
-									>
-										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M13 10V3L4 14h7v7l9-11h-7z"
-											/>
-										</svg>
-										<span class="font-medium">{toolCall}</span>
-									</div>
-								{/each}
-							</div>
-						{/if}
 						</div>
 				</div>
 			{/each}
@@ -834,7 +737,19 @@ function stopStreaming() {
 						clip-rule="evenodd"
 					/>
 				</svg>
-				<span>{displayError}</span>
+				<span class="flex-1">{displayError}</span>
+				{#if retryText && error}
+					<button
+						type="button"
+						class="shrink-0 rounded px-2 py-1 text-xs font-medium underline hover:opacity-80"
+						onclick={() => {
+							inputValue = retryText ?? ''
+							void handleSubmit()
+						}}
+					>
+						Try again
+					</button>
+				{/if}
 			</div>
 		{/if}
 
@@ -873,7 +788,7 @@ function stopStreaming() {
 					}
 				}}
 				placeholder={conversationId
-					? 'Ask anything about Dubai real estate...'
+					? copy.placeholder
 					: 'Select or create a conversation first'}
 				class="min-h-11 w-full resize-none rounded-md border border-focus bg-card py-3 pl-4 {showMic ? 'pr-24' : 'pr-14'} text-[13px] leading-5 text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-2 focus:ring-navy/10"
 				rows="1"
@@ -898,7 +813,7 @@ function stopStreaming() {
 			{:else}
 				<button
 					onclick={handleSubmit}
-					disabled={!inputValue.trim() || !conversationId}
+					disabled={!inputValue.trim() || !conversationId || awaitingReload}
 					class="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded transition-colors {inputValue.trim() &&
 					conversationId
 						? 'bg-navy text-bone hover:bg-primary-light'

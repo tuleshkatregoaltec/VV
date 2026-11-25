@@ -482,10 +482,25 @@ async def release_to_pool(
     """Put leads, unassigned, in a team's shared pool, all or none: the manager of that team (or
     an administrator) frees them for the team's agents to claim."""
     scope = await load_scope(db, organization_id, user_id)
+    results = await release(
+        db, scope, request.enquiry_ids, request.team_id, request.expected_revisions
+    )
+    await db.commit()
+    return LeadAssignmentResponse(results=results)
+
+
+async def release(
+    db: AsyncSession,
+    scope: AssignmentScope,
+    enquiry_ids: list[int],
+    team_id: str,
+    expected_revisions: dict[int, int] | None = None,
+) -> list[LeadAssignmentResult]:
+    """`release_to_pool` without the commit: the Assistant confirms through this too."""
     require_assigner(scope)
-    if request.team_id not in scope.team_members:
+    if team_id not in scope.team_members:
         raise HTTPException(status_code=403, detail="You do not manage that team")
-    rows = await _lock_visible(db, scope, request.enquiry_ids, request.expected_revisions)
+    rows = await _lock_visible(db, scope, enquiry_ids, expected_revisions)
     if not all(scope.may_reassign(row) for row in rows):
         raise HTTPException(status_code=403, detail="You cannot reassign this lead")
     now = _utcnow()
@@ -493,7 +508,7 @@ async def release_to_pool(
     for row in rows:
         already = (
             row.assigned_user_id is None
-            and row.team_id == request.team_id
+            and row.team_id == team_id
             and row.pool_released_at is not None
         )
         if not already:
@@ -501,16 +516,15 @@ async def release_to_pool(
                 db,
                 row,
                 None,
-                actor_user_id=user_id,
+                actor_user_id=scope.user_id,
                 reason="released",
                 now=now,
-                team_id=request.team_id,
+                team_id=team_id,
                 shared=True,
             )
             await sync_rotation(db, row, now=now)
         results.append(_result(row, not already))
-    await db.commit()
-    return LeadAssignmentResponse(results=results)
+    return results
 
 
 async def claim(

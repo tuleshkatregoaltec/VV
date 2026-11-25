@@ -186,7 +186,8 @@ def main():
         if not minimum <= value <= maximum:
             cli.error(f"{label} must be between {minimum} and {maximum}")
     if args.execute_one:
-        resource.setrlimit(resource.RLIMIT_AS, (args.memory_mib * 1024 * 1024,) * 2)
+        if sys.platform != "darwin":
+            resource.setrlimit(resource.RLIMIT_AS, (args.memory_mib * 1024 * 1024,) * 2)
         factory = async_sessionmaker(
             get_postgres_engine(), class_=AsyncSession, expire_on_commit=False
         )

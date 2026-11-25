@@ -1,19 +1,32 @@
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, LiteralString, Optional
+from typing import Any, Dict, List, Literal, LiteralString, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import DateTime, Text
+from sqlalchemy import CheckConstraint, DateTime, Index, String, Text
 from sqlmodel import JSON, Column, Field, Relationship, SQLModel
+
+# The chat product a conversation belongs to: the CRM Operations Assistant or Market AI (/chat).
+ChatAssistant = Literal["crm", "market"]
 
 
 class Conversation(SQLModel, table=True):
     __tablename__: LiteralString = "conversations"
+    __table_args__ = (
+        CheckConstraint("assistant IN ('crm', 'market')", name="ck_conversations_assistant"),
+        # Each product lists its own history: newest first, per owner.
+        Index("ix_conversations_owner_assistant", "user_id", "organization_id", "assistant"),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: str = Field(index=True)
     organization_id: str = Field(index=True)
     title: Optional[str] = None
+    # Set when created and never changed: a conversation belongs to one assistant.
+    assistant: str = Field(
+        default="crm",
+        sa_column=Column(String, nullable=False, server_default="crm"),
+    )
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
@@ -66,6 +79,8 @@ class CreateConversationRequest(BaseModel):
     """Request model for creating a new conversation"""
 
     title: Optional[str] = None
+    # Which product's history it belongs to; the CRM Operations Assistant when omitted.
+    assistant: ChatAssistant = "crm"
 
 
 class SendMessageRequest(BaseModel):
@@ -94,6 +109,7 @@ class ConversationResponse(BaseModel):
     id: int
     user_id: str
     title: Optional[str]
+    assistant: ChatAssistant = "crm"
     created_at: datetime
     updated_at: datetime
 

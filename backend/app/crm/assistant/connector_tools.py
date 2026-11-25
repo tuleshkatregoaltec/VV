@@ -12,8 +12,8 @@ from typing import Annotated
 from pydantic import Field
 from pydantic_ai import RunContext
 
-from app.chat.dependencies import ChatDependencies
 from app.chat.security import safe_tool
+from app.crm.assistant.dependencies import ChatDependencies
 from app.postgres import get_db_session
 
 MAX_DAYS = 62

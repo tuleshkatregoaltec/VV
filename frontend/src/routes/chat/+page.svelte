@@ -15,7 +15,7 @@ type ChatNavigationState = {
 
 const initialState = get(page).state as ChatNavigationState
 
-const selection = createConversationSelection(initialState?.conversationId ?? null)
+const selection = createConversationSelection(initialState?.conversationId ?? null, 'market')
 let initialMessage = $state<string | null>(initialState?.initialMessage ?? null)
 let autoSendPending = $state(Boolean(initialState?.conversationId && initialState?.initialMessage))
 let mobileHistoryOpen = $state(false)
@@ -48,7 +48,7 @@ $effect(() => {
 />
 
 <svelte:head>
-	<title>Chat - Vitevue</title>
+	<title>Market AI - Vitevue</title>
 </svelte:head>
 
 <AppFrame stableScrollGutter>
@@ -58,6 +58,7 @@ $effect(() => {
 				aria-label="Conversation history"
 			>
 				<ConversationSidebar
+					assistant="market"
 					bind:selectedId={selection.id}
 					onSelect={selectConversation}
 				/>
@@ -70,17 +71,17 @@ $effect(() => {
 					<div class="min-w-0">
 						<div class="flex items-center gap-2">
 							<img src="/icon.svg" alt="" class="h-3.5 w-3.5" />
-							<h1 class="text-sm font-semibold text-fg-1">Vitevue AI</h1>
+							<h1 class="text-sm font-semibold text-fg-1">Market AI</h1>
 						</div>
 						<p class="mt-1 text-xs text-fg-4">
-							Ask about market data or your own CRM records. Changes require your confirmation.
+							Research Dubai property transactions, rents, areas, projects and listings.
 						</p>
 					</div>
 					<button
 						type="button"
 						class="ui-button h-9 shrink-0 px-3 text-xs lg:hidden"
 						onclick={() => (mobileHistoryOpen = true)}
-						aria-label="Open conversation history"
+						aria-label="Open Market AI history"
 					>
 						<PanelLeft size={15} strokeWidth={1.8} />
 						History
@@ -91,6 +92,7 @@ $effect(() => {
 					class="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card shadow-sm"
 				>
 					<ChatBox
+						assistant="market"
 						bind:conversationId={selection.id}
 						{initialMessage}
 						autoSend={autoSendPending}
@@ -129,6 +131,7 @@ $effect(() => {
 			aria-label="Conversation history"
 		>
 			<ConversationSidebar
+				assistant="market"
 				bind:selectedId={selection.id}
 				onSelect={selectConversation}
 			/>

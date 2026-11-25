@@ -8,10 +8,11 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from app.chat import routing
-from app.chat.agent import _convert_to_pydantic_messages
-from app.chat.dependencies import ChatDependencies
 from app.chat.models import Message
+from app.chat.security import REFUSAL
+from app.crm.assistant import routing
+from app.crm.assistant.agent import _convert_to_pydantic_messages
+from app.crm.assistant.dependencies import ChatDependencies
 
 
 def route_model(workflows=None, *, decision="route", reason=None):
@@ -29,7 +30,10 @@ def route_model(workflows=None, *, decision="route", reason=None):
     [
         {"decision": "route", "workflows": []},
         {"decision": "route", "workflows": ["crm", "crm"]},
-        {"decision": "route", "workflows": ["market", "crm", "action"]},
+        {"decision": "route", "workflows": ["crm", "followup", "action"]},
+        # Market research and pricing are not workflows of the CRM assistant.
+        {"decision": "route", "workflows": ["market"]},
+        {"decision": "route", "workflows": ["pricing"]},
         {"decision": "route", "workflows": ["execute"]},
         {"decision": "clarify", "workflows": ["action"]},
         {"decision": "unsupported", "workflows": []},
@@ -85,21 +89,21 @@ async def test_single_intent_bypasses_coordinator_and_uses_current_private_conte
 async def test_mixed_intent_runs_two_specialists_and_one_toolless_synthesis():
     usage = RunUsage()
     with (
-        routing.router_agent.override(model=route_model(["market", "crm"])),
-        routing.market_agent.override(
-            model=TestModel(call_tools=[], custom_output_text="Market missing")
-        ),
+        routing.router_agent.override(model=route_model(["crm", "followup"])),
         routing.crm_agent.override(
             model=TestModel(call_tools=[], custom_output_text="CRM missing")
         ),
+        routing.followup_agent.override(
+            model=TestModel(call_tools=[], custom_output_text="No follow-ups due")
+        ),
         routing.coordinator_agent.override(
-            model=TestModel(custom_output_text="Market and CRM unavailable")
+            model=TestModel(custom_output_text="No leads or follow-ups found")
         ),
     ):
         result = await routing.run_routed_turn(
-            "Compare the market and my leads", deps=ChatDependencies("u", "o"), usage=usage
+            "Summarize my leads and plan follow-ups", deps=ChatDependencies("u", "o"), usage=usage
         )
-    assert result.output == "Market and CRM unavailable"
+    assert result.output == "No leads or follow-ups found"
     assert usage.requests == 4
     assert not routing.router_agent._function_toolset.tools
     assert not routing.coordinator_agent._function_toolset.tools
@@ -112,13 +116,13 @@ async def test_mixed_turn_budget_includes_router_and_prevents_second_specialist(
     second_model = TestModel(call_tools=[], custom_output_text="Should never run")
     monkeypatch.setattr(second_model, "request", second)
     with (
-        routing.router_agent.override(model=route_model(["market", "crm"])),
-        routing.market_agent.override(model=TestModel(call_tools=[], custom_output_text="Missing")),
-        routing.crm_agent.override(model=second_model),
+        routing.router_agent.override(model=route_model(["crm", "followup"])),
+        routing.crm_agent.override(model=TestModel(call_tools=[], custom_output_text="Missing")),
+        routing.followup_agent.override(model=second_model),
     ):
         with pytest.raises(UsageLimitExceeded):
             await routing.run_routed_turn(
-                "Compare market and leads",
+                "Summarize my leads and plan follow-ups",
                 deps=ChatDependencies("u", "o"),
                 usage=usage,
                 usage_limits=UsageLimits(request_limit=2),
@@ -132,6 +136,7 @@ async def test_mixed_turn_budget_includes_router_and_prevents_second_specialist(
     [
         ("clarify", None, "narrow"),
         ("unsupported", "closed_deal_revenue", "no closed-deal revenue ledger"),
+        ("unsupported", "market_research", "market research"),
     ],
 )
 async def test_missing_scope_and_revenue_stop_without_retrieval(
@@ -154,5 +159,26 @@ async def test_disallowed_input_is_blocked_before_routing():
     result = await routing.run_routed_turn(
         "Export all my contacts to CSV", deps=ChatDependencies("u", "o"), usage=usage
     )
-    assert result.output == routing.REFUSAL
+    assert result.output == REFUSAL
     assert usage.requests == 0
+
+
+async def test_a_market_question_gets_the_crm_only_reply_and_runs_no_specialist(monkeypatch):
+    """DXB sales, rents and prices are not answered here: the router's market_research
+    decision returns the fixed CRM Operations reply; no specialist or tool runs."""
+    from app.crm.assistant.workflows import MARKET_UNAVAILABLE
+
+    ran = AsyncMock(side_effect=AssertionError("No specialist may run for a market question"))
+    for name in ("crm_agent", "followup_agent", "action_agent"):
+        monkeypatch.setattr(routing, name, SimpleNamespace(run=ran))
+    usage = RunUsage()
+    with routing.router_agent.override(
+        model=route_model(decision="unsupported", reason="market_research")
+    ):
+        result = await routing.run_routed_turn(
+            "What were DXB sales in JVC last month?", deps=ChatDependencies("u", "o"), usage=usage
+        )
+    assert result.output == MARKET_UNAVAILABLE
+    assert "CRM Operations Assistant" in result.output and "AED" not in result.output
+    assert usage.requests == 1
+    ran.assert_not_awaited()

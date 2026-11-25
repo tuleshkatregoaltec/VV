@@ -131,6 +131,7 @@ import type {
 	LeadListResponse,
 	LeadMatches,
 	LeadPatch,
+	LeadQualify,
 	LeadRow,
 	LeadStage,
 	LeadStageMove,
@@ -698,9 +699,12 @@ export async function getLead(id: number): Promise<LeadDetail> {
 	return leadDetail(e, u)
 }
 
+/** The New Lead form's area goes into the brief's areas, as the leads list reads it. */
+const withArea = (fields: LeadFields, area: string): LeadFields =>
+	area && !fields.areas ? { ...fields, areas: area } : fields
+
 export async function createLead(body: LeadCreate): Promise<Written<LeadDetail>> {
-	const fields =
-		body.area && !body.fields.areas ? { ...body.fields, areas: body.area } : body.fields
+	const fields = withArea(body.fields, body.area)
 	const [e, u] = await Promise.all([
 		client.post<InboundEnquiryResponse>(`${CRM}/inbound/enquiries`, {
 			intent: INTENT[body.lead_type],
@@ -740,6 +744,15 @@ export async function patchLead(id: number, body: LeadPatch): Promise<Written<Le
 	}
 	const e = Object.keys(update).length ? await patchEnquiry(id, update) : current
 	return done(leadDetail(e, u))
+}
+
+/**
+ * Qualify an Inbox contact in place: the same enquiry (ID, contact, assignment, notes and history
+ * kept) gets its intent and brief. The backend's own update makes it an opportunity and records
+ * the confirmed intent and criteria, after the same visibility and edit checks as any lead edit.
+ */
+export function qualifyLead(id: number, body: LeadQualify): Promise<Written<LeadDetail>> {
+	return patchLead(id, { lead_type: body.lead_type, fields: withArea(body.fields, body.area) })
 }
 
 /** "No answer" counts as an attempt, a WhatsApp reply as WhatsApp, anything else as a call. */
@@ -2469,6 +2482,8 @@ function inboxItem(e: InboundEnquiryResponse, u: AuthMeResponse): InboxItem {
 	const type = typeOf(e)
 	const typed = e.intent !== 'unknown'
 	const summary = summaryOf(type, fieldsOf(e.criteria), e.criteria)
+	const qualifyFields = fieldsOf(e.criteria)
+	delete qualifyFields.areas
 	const name = e.contact.full_name || 'Unnamed contact'
 	const dismissed = e.status === 'disqualified'
 	const mine = e.assigned_user_id === u.id
@@ -2504,13 +2519,23 @@ function inboxItem(e: InboundEnquiryResponse, u: AuthMeResponse): InboxItem {
 		conversation: e.raw_notes
 			? [{ from: 'client', who: name, at: stamp(e.enquiry_date), text: e.raw_notes }]
 			: [],
+		qualify_prefill: !typed
+			? {
+					area: (Array.isArray(e.criteria.locations)
+						? text(e.criteria.locations[0])
+						: text(e.criteria.locations)) ?? '',
+					fields: qualifyFields
+				}
+			: undefined,
 		can: {
 			ask: false,
 			withdraw: false,
 			release: false,
 			dismiss: false,
 			restore: false,
-			approve: e.source === SOLD_OWNER_SOURCE && e.intent === 'unknown'
+			approve: e.source === SOLD_OWNER_SOURCE && e.intent === 'unknown',
+			// Recently sold owners have their own approval above; any other contact is qualified.
+			qualify: !typed && !dismissed && e.source !== SOLD_OWNER_SOURCE
 		},
 		my_request: null
 	}

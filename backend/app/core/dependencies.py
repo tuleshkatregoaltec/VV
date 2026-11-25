@@ -12,7 +12,7 @@ from app.config import settings
 from app.organization.service import get_membership_for_user, get_organization_by_id
 from app.postgres import get_db_session
 from app.providers.auth import AuthenticatedUser
-from app.token_usage.service import token_usage_service
+from app.token_usage.service import daily_limit_detail, token_usage_service
 
 if TYPE_CHECKING:
     from app.billing.models import Subscription
@@ -66,9 +66,10 @@ async def require_token_quota(
     tokens_used = usage.total_tokens if usage else 0
 
     if tokens_used >= user.daily_token_limit:
+        # A stable code with the user's own usage figures, so the client need not parse text.
         raise HTTPException(
             status_code=429,
-            detail=f"Daily token limit exceeded ({tokens_used}/{user.daily_token_limit} tokens used today)",
+            detail=daily_limit_detail(tokens_used, user.daily_token_limit),
         )
 
     return None

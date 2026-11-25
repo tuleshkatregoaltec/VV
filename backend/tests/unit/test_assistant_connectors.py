@@ -163,8 +163,11 @@ async def test_a_refused_email_reports_brevos_reason(monkeypatch):
     assert outcome.status == "failed" and "Marked do not contact" in outcome.message
 
 
+# The CRM event is committed before Google is called, so a sync failure is a partial success
+# (saved in the CRM, Google not updated), never a plain failure or a full success.
 @pytest.mark.parametrize(
-    ("sync", "status"), [("synced", "succeeded"), ("error", "failed"), ("pending", "failed")]
+    ("sync", "status"),
+    [("synced", "succeeded"), ("error", "partially_succeeded"), ("pending", "partially_succeeded")],
 )
 async def test_a_booking_lands_in_dubai_time_and_reports_googles_answer(monkeypatch, sync, status):
     seen = {}
@@ -186,7 +189,9 @@ async def test_a_booking_lands_in_dubai_time_and_reports_googles_answer(monkeypa
     assert seen["kind"] == "viewing" and seen["lead_id"] == 7
     assert seen["location"] == "Marina Gate 2, Dubai Marina"
     assert outcome.status == status
-    assert "20 Nov 2026 11:00 Dubai time" in outcome.message
+    assert "20 Nov 2026 11:00–12:00 Dubai time" in outcome.message
+    assert "Saved on your CRM calendar" in outcome.message
+    assert ("added to your Google Calendar" in outcome.message) == (sync == "synced")
 
 
 # ── confirmation dispatches once, and only a ready connector ──

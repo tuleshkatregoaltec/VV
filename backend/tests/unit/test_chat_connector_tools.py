@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 from sqlalchemy.dialects import postgresql
 
-from app.chat import connector_tools
-from app.chat.dependencies import ChatDependencies
+from app.crm.assistant import connector_tools
+from app.crm.assistant.dependencies import ChatDependencies
 
 
 class Rows:

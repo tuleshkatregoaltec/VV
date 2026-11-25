@@ -1,4 +1,4 @@
-import { chat } from '$lib/api/chat'
+import { type ChatAssistant, chat } from '$lib/api/chat'
 import { currentUser } from '$lib/stores/user.svelte'
 
 export function chatScope(): string | null {
@@ -9,10 +9,11 @@ export function chatScope(): string | null {
 export const chatKeys = {
 	all: ['chat'] as const,
 	action: (actionId: string) => [...chatKeys.all, chatScope(), 'action', actionId] as const,
-	conversations: (limit = 50, offset = 0) =>
-		[...chatKeys.all, chatScope(), 'conversations', { limit, offset }] as const,
-	messages: (conversationId: number, limit = 100) =>
-		[...chatKeys.all, chatScope(), 'messages', { conversationId, limit }] as const
+	// Each assistant has its own history list.
+	conversations: (assistant: ChatAssistant = 'crm', limit = 50, offset = 0) =>
+		[...chatKeys.all, chatScope(), 'conversations', assistant, { limit, offset }] as const,
+	messages: (conversationId: number, limit = 100, assistant: ChatAssistant = 'crm') =>
+		[...chatKeys.all, chatScope(), 'messages', assistant, { conversationId, limit }] as const
 }
 
 export const chatQueries = {
@@ -22,15 +23,17 @@ export const chatQueries = {
 		enabled: chatScope() !== null,
 		staleTime: 0
 	}),
-	conversations: (limit = 50, offset = 0) => ({
-		queryKey: chatKeys.conversations(limit, offset),
-		queryFn: () => chat.getConversations({ limit, offset }),
+	conversations: (assistant: ChatAssistant = 'crm', limit = 50, offset = 0) => ({
+		queryKey: chatKeys.conversations(assistant, limit, offset),
+		queryFn: () => chat.getConversations({ limit, offset, assistant }),
 		enabled: chatScope() !== null,
 		staleTime: 60 * 1000
 	}),
-	messages: (conversationId: number | null, limit = 100) => ({
-		queryKey: chatKeys.messages(conversationId ?? 0, limit),
-		queryFn: () => chat.getMessages(conversationId ?? 0, { limit }),
+	// A conversation belongs to one assistant, so its ID alone keys its messages; the request
+	// still names the assistant, and the server finds no other assistant's conversation.
+	messages: (conversationId: number | null, limit = 100, assistant: ChatAssistant = 'crm') => ({
+		queryKey: chatKeys.messages(conversationId ?? 0, limit, assistant),
+		queryFn: () => chat.getMessages(conversationId ?? 0, { limit, assistant }),
 		enabled: conversationId !== null && chatScope() !== null,
 		staleTime: 5 * 60 * 1000
 	})

@@ -1,30 +1,28 @@
-import json
+"""The conversation API every chat product shares (CRM Operations Assistant and Market AI):
+list, create, rename, delete, read messages and transcribe a voice message. Each product
+streams its own answers from its own endpoint."""
+
 import logging
-from contextlib import aclosing
 from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.chat.events import with_heartbeat
+from app.chat.conversations import (
+    create_conversation,
+    delete_conversation,
+    get_conversation,
+    get_user_conversations,
+    update_conversation,
+)
 from app.chat.models import (
+    ChatAssistant,
     ConversationListResponse,
     ConversationResponse,
     CreateConversationRequest,
     MessageResponse,
-    SendMessageRequest,
     TranscriptResponse,
     UpdateConversationRequest,
-)
-from app.chat.service import (
-    create_conversation,
-    delete_conversation,
-    get_conversation,
-    get_conversation_messages,
-    get_user_conversations,
-    stream_chat_response,
-    update_conversation,
 )
 from app.chat.voice import MAX_AUDIO_BYTES, InvalidAudio, transcribe
 from app.core.dependencies import (
@@ -32,6 +30,7 @@ from app.core.dependencies import (
     require_active_subscription,
     require_token_quota,
 )
+from app.crm.assistant.service import get_conversation_messages
 from app.postgres import get_db_session
 
 logger = logging.getLogger(__name__)
@@ -54,6 +53,7 @@ async def create_conversation_endpoint(
         user_id=context.user.id,
         organization_id=context.organization.id,
         title=request.title,
+        assistant=request.assistant,
     )
     return ConversationResponse.model_validate(conversation)
 
@@ -63,15 +63,17 @@ async def list_conversations(
     context: AuthContext = Depends(require_active_subscription),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    assistant: ChatAssistant = Query(default="crm"),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Get all conversations for current user"""
+    """Get the current user's conversations with one assistant (the CRM assistant by default)"""
     conversations = await get_user_conversations(
         db=db,
         user_id=context.user.id,
         organization_id=context.organization.id,
         limit=limit,
         offset=offset,
+        assistant=assistant,
     )
     return ConversationListResponse(
         conversations=[ConversationResponse.model_validate(c) for c in conversations],
@@ -83,6 +85,7 @@ async def list_conversations(
 async def update_conversation_endpoint(
     conversation_id: int,
     request: UpdateConversationRequest,
+    assistant: ChatAssistant = Query(default="crm"),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -93,6 +96,7 @@ async def update_conversation_endpoint(
         user_id=context.user.id,
         organization_id=context.organization.id,
         title=request.title,
+        assistant=assistant,
     )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -129,6 +133,7 @@ async def transcribe_voice_message(
 @router.delete("/conversations/{conversation_id}", status_code=204)
 async def delete_conversation_endpoint(
     conversation_id: int,
+    assistant: ChatAssistant = Query(default="crm"),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -138,6 +143,7 @@ async def delete_conversation_endpoint(
         conversation_id=conversation_id,
         user_id=context.user.id,
         organization_id=context.organization.id,
+        assistant=assistant,
     )
     if not success:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -149,12 +155,13 @@ async def get_conversation_messages_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     limit: int = Query(default=100, ge=1, le=100),
     before_id: int | None = Query(default=None, ge=1),
+    assistant: ChatAssistant = Query(default="crm"),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Get messages for a conversation"""
+    """Get messages for a conversation (only that assistant's, when `assistant` is given)"""
     # Verify ownership
     conversation = await get_conversation(
-        db, conversation_id, context.user.id, context.organization.id
+        db, conversation_id, context.user.id, context.organization.id, assistant=assistant
     )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -168,46 +175,3 @@ async def get_conversation_messages_endpoint(
         before_id=before_id,
     )
     return [MessageResponse.model_validate(m) for m in messages]
-
-
-@router.post(
-    "/conversations/{conversation_id}/messages/stream",
-    response_class=StreamingResponse,
-)
-async def send_message(
-    conversation_id: int,
-    request: SendMessageRequest,
-    context: AuthContext = Depends(require_active_subscription),
-    db: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_token_quota),
-):
-    """Send a message and stream AI response via SSE"""
-
-    async def event_stream():
-        try:
-            async with aclosing(
-                with_heartbeat(
-                    stream_chat_response(
-                        db=db,
-                        conversation_id=conversation_id,
-                        user_message=request.message,
-                        user_id=context.user.id,
-                        organization_id=context.organization.id,
-                    )
-                )
-            ) as stream:
-                async for chunk in stream:
-                    yield chunk
-        except Exception as e:
-            logger.error("Chat endpoint failed (%s)", type(e).__name__)
-            yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
-    )

@@ -103,6 +103,8 @@ const key = $derived.by(() => {
 		<NewMenuPanel />
 	{:else if p.kind === 'new-lead'}
 		<NewLeadPanel leadType={p.leadType} />
+	{:else if p.kind === 'qualify-lead'}
+		<NewLeadPanel qualify={{ id: p.id, name: p.name, prefill: p.prefill }} />
 	{:else if p.kind === 'new-listing'}
 		<NewListingPanel fromLeadId={p.fromLeadId} />
 	{:else if p.kind === 'new-deal'}

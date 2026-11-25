@@ -814,6 +814,43 @@ async def get_event(db: AsyncSession, *, id: int, user_id: str, organization_id:
     return result.first()
 
 
+def move_event(event: CrmCalendarEvent, new_date: date, new_time: str | None) -> None:
+    """Move an event to a new start, keeping its length, as the calendar's drag and drop does.
+
+    The previous slot is kept in `rescheduled_from`. A time of None makes it an all-day event.
+    Changes the event only; the caller saves it with `update_event`.
+    """
+    original_date = event.event_date
+    original_time = event.event_time
+    duration_days = (event.event_end_date or original_date) - original_date
+    if (new_date, new_time) != (original_date, event.event_time):
+        # A new list, so SQLAlchemy sees the JSON change.
+        event.rescheduled_from = [
+            *event.rescheduled_from,
+            {"date": original_date.isoformat(), "time": event.event_time},
+        ]
+    event.event_date = new_date
+    event.event_time = new_time
+    if new_time is None:
+        event.event_end_date = new_date + duration_days
+        event.event_end_time = None
+        event.all_day = True
+    else:
+        original_start = datetime.combine(
+            original_date, time.fromisoformat(original_time or "10:00")
+        )
+        original_end = datetime.combine(
+            event.event_end_date or original_date,
+            time.fromisoformat(event.event_end_time or "11:00"),
+        )
+        new_start = datetime.combine(new_date, time.fromisoformat(new_time))
+        duration = original_end - original_start
+        new_end = new_start + (duration if duration > timedelta(0) else timedelta(hours=1))
+        event.event_end_date = new_end.date()
+        event.event_end_time = new_end.strftime("%H:%M")
+        event.all_day = False
+
+
 async def update_event(
     db: AsyncSession,
     *,

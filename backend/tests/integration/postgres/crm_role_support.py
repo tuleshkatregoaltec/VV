@@ -54,6 +54,7 @@ async def lead(
     creator: str | None = None,
     pooled: bool = False,
     status: str = "new",
+    **fields,
 ) -> SimpleNamespace:
     """A lead owned by `team` ("north"/"south"/None) and assigned to a person name or None."""
     now = datetime.now(UTC)
@@ -74,11 +75,11 @@ async def lead(
         assigned_user_id=ids[assignee] if assignee else None,
         team_id=ids[team] if team else None,
         pool_released_at=now if pooled else None,
-        intent="buy",
         status=status,
         enquiry_date=now,
         created_at=now,
         updated_at=now,
+        **{"intent": "buy", **fields},
     )
     db.add(enquiry)
     await db.commit()

@@ -24,11 +24,11 @@ from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
 
 from app.chat import admission, budget
-from app.chat.agent import _convert_to_pydantic_messages, agent
-from app.chat.dependencies import ChatDependencies
 from app.chat.models import Message
 from app.chat.security import safe_tool
-from app.chat.workflows import LIMITS, market_agent
+from app.crm.assistant.agent import _convert_to_pydantic_messages, agent
+from app.crm.assistant.dependencies import ChatDependencies
+from app.crm.assistant.workflows import LIMITS, crm_agent
 
 LOGGED_PROMPT_TOKENS = 27_374
 LOGGED_COMPLETION_TOKENS = 2_142
@@ -44,21 +44,21 @@ def _logged_usage() -> RequestUsage:
 
 
 @safe_tool
-async def stored_metrics(ctx: RunContext[ChatDependencies | None], step: int) -> dict:
-    """Return one bounded stored-evidence page."""
-    return {"step": step, "rows": [{"area": "Dubai Marina", "median_aed_sqft": 2100}]}
+async def stored_records(ctx: RunContext[ChatDependencies | None], step: int) -> dict:
+    """Return one bounded page of CRM records."""
+    return {"step": step, "rows": [{"status": "qualified", "count": 3}]}
 
 
 async def _run_logged_turn(limits: UsageLimits, deps: ChatDependencies) -> tuple[str, RunUsage]:
-    """Coordinator -> market specialist (5 tool rounds + answer) -> coordinator answer."""
+    """Coordinator -> CRM specialist (5 tool rounds + answer) -> coordinator answer."""
 
     def coordinator(messages, info):
         if any(isinstance(p, ToolReturnPart) for m in messages for p in m.parts):
             return ModelResponse(
-                parts=[TextPart("Marina medians are stored.")], usage=_logged_usage()
+                parts=[TextPart("Three leads are qualified.")], usage=_logged_usage()
             )
         return ModelResponse(
-            parts=[ToolCallPart("research_market", {"question": "Marina prices"})],
+            parts=[ToolCallPart("retrieve_personal_crm", {"question": "My qualified leads"})],
             usage=_logged_usage(),
         )
 
@@ -66,16 +66,16 @@ async def _run_logged_turn(limits: UsageLimits, deps: ChatDependencies) -> tuple
         returns = sum(isinstance(p, ToolReturnPart) for m in messages for p in m.parts)
         if returns < 5:
             return ModelResponse(
-                parts=[ToolCallPart("stored_metrics", {"step": returns})], usage=_logged_usage()
+                parts=[ToolCallPart("stored_records", {"step": returns})], usage=_logged_usage()
             )
-        return ModelResponse(parts=[TextPart("Median AED 2,100 per sq ft.")], usage=_logged_usage())
+        return ModelResponse(parts=[TextPart("3 qualified leads.")], usage=_logged_usage())
 
     usage = RunUsage()
     with (
         agent.override(model=FunctionModel(coordinator)),
-        market_agent.override(model=FunctionModel(specialist), tools=[stored_metrics]),
+        crm_agent.override(model=FunctionModel(specialist), tools=[stored_records]),
     ):
-        result = await agent.run("Marina prices", deps=deps, usage=usage, usage_limits=limits)
+        result = await agent.run("My qualified leads", deps=deps, usage=usage, usage_limits=limits)
     return result.output, usage
 
 
@@ -88,7 +88,7 @@ async def test_logged_eight_request_turn_exceeded_the_old_cumulative_limit():
 async def test_logged_eight_request_turn_completes_within_the_turn_limits():
     deps = ChatDependencies("u", "o", conversation_id=1, usage_limits=LIMITS)
     output, usage = await _run_logged_turn(LIMITS, deps)
-    assert output == "Marina medians are stored."
+    assert output == "Three leads are qualified."
     assert usage.requests == LOGGED_REQUESTS
     # Leaves headroom for a two-workflow turn of the same shape (about 2x).
     assert usage.total_tokens * 2 < LIMITS.total_tokens_limit
@@ -101,9 +101,9 @@ async def test_tool_progress_reaches_the_turn_without_model_text_or_arguments():
     )
     await _run_logged_turn(LIMITS, deps)
     kinds = [(event["type"], event["tool"]) for event in events]
-    assert kinds[0] == ("tool_call_start", "research_market")
-    assert kinds[-1] == ("tool_call_result", "research_market")
-    assert kinds.count(("tool_call_start", "stored_metrics")) == 5
+    assert kinds[0] == ("tool_call_start", "retrieve_personal_crm")
+    assert kinds[-1] == ("tool_call_result", "retrieve_personal_crm")
+    assert kinds.count(("tool_call_start", "stored_records")) == 5
     assert all(set(event) <= {"type", "tool", "tool_call_id"} for event in events)
 
 

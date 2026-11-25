@@ -1,100 +1,49 @@
 import asyncio
+import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, List, Optional
+from dataclasses import dataclass
+from typing import Any, AsyncGenerator, List
 
 from fastapi import HTTPException
-from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.usage import RunUsage
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.chat import admission, repository
-from app.chat.agent import _convert_to_pydantic_messages, agent
 from app.chat.budget import turn_limits
-from app.chat.connector_tools import CONNECTOR_EVIDENCE, evidence_still_accessible
-from app.chat.dependencies import ChatDependencies
+from app.chat.conversations import (
+    add_message,
+    get_conversation,
+)
+from app.chat.errors import error_event, failure_event
 from app.chat.events import encode_sse as _sse
-from app.chat.models import Conversation, Message
-from app.chat.routing import run_routed_turn
+from app.chat.models import Message
 from app.chat.security import (
-    REFUSAL,
     RESTRICTED_HISTORY,
     fingerprint,
+    guarded_answer,
     input_refusal,
     safe_answer,
     safe_data,
 )
 from app.config import settings
 from app.crm.assistant import has_current_access, query_my_records
-from app.crm.assistant_models import CrmAssistantQuery
+from app.crm.assistant.agent import _convert_to_pydantic_messages, agent
+from app.crm.assistant.connector_tools import CONNECTOR_EVIDENCE, evidence_still_accessible
+from app.crm.assistant.dependencies import ChatDependencies
+from app.crm.assistant.models import CrmAssistantQuery
+from app.crm.assistant.routing import run_routed_turn
+from app.token_usage.service import allowance_resets_at
 
 logger = logging.getLogger(__name__)
 
 TURN_DEADLINE_SECONDS = 300
-TURN_ERROR = "Unable to complete this answer. Please try again."
-TURN_LIMIT_ERROR = (
-    "This question needed more research steps than one answer allows. "
-    "Please ask about one area, project or record at a time."
-)
-
-
-async def create_conversation(
-    db: AsyncSession, user_id: str, organization_id: str, title: Optional[str] = None
-) -> Conversation:
-    """Create a new conversation"""
-    now = datetime.now(timezone.utc)
-    conversation = Conversation(
-        user_id=user_id,
-        organization_id=organization_id,
-        title=title or "New Conversation",
-        created_at=now,
-        updated_at=now,
-    )
-    repository.save_conversation(db, conversation)
-    await db.commit()
-    await db.refresh(conversation)
-    return conversation
-
-
-async def get_user_conversations(
-    db: AsyncSession, user_id: str, organization_id: str, limit: int = 50, offset: int = 0
-) -> List[Conversation]:
-    return await repository.get_user_conversations(db, user_id, organization_id, limit, offset)
-
-
-async def get_conversation(
-    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str
-) -> Optional[Conversation]:
-    return await repository.get_conversation(db, conversation_id, user_id, organization_id)
-
-
-async def update_conversation(
-    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str, title: str
-) -> Optional[Conversation]:
-    """Update a conversation's title"""
-    conversation = await get_conversation(db, conversation_id, user_id, organization_id)
-    if not conversation:
-        return None
-
-    conversation.title = title
-    conversation.updated_at = datetime.now(timezone.utc)
-    repository.save_conversation(db, conversation)
-    await db.commit()
-    await db.refresh(conversation)
-    return conversation
-
-
-async def delete_conversation(
-    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str
-) -> bool:
-    """Delete a conversation and all its messages"""
-    conversation = await get_conversation(db, conversation_id, user_id, organization_id)
-    if not conversation:
-        return False
-
-    await repository.delete_conversation_records(db, conversation_id, user_id, organization_id)
-    await db.commit()
-    return True
+# Name lookups recorded as turn evidence, rechecked (same result) whenever history loads.
+LOOKUP_EVIDENCE = {
+    "assignee_lookup": "lookup_assignees",
+    "colleague_lookup": "lookup_colleagues",
+    "team_lookup": "lookup_teams",
+    "team_people_lookup": "lookup_team_people",
+}
 
 
 async def _evidence_accessible(db, evidence, user_id, organization_id) -> bool:
@@ -110,10 +59,16 @@ async def _evidence_accessible(db, evidence, user_id, organization_id) -> bool:
                 ):
                     return False
                 continue
-            if reference.get("type") == "assignee_lookup":
-                from app.assistant_actions.service import lookup_assignees
+            if reference.get("type") == "pending_action":
+                result = await _pending_target(db, reference, user_id, organization_id)
+                if not result.get("available"):
+                    return False
+                continue
+            if reference.get("type") in LOOKUP_EVIDENCE:
+                from app.assistant_actions import service as actions
 
-                result = await lookup_assignees(
+                lookup = getattr(actions, LOOKUP_EVIDENCE[reference["type"]])
+                result = await lookup(
                     db,
                     user_id=user_id,
                     organization_id=organization_id,
@@ -135,6 +90,94 @@ async def _evidence_accessible(db, evidence, user_id, organization_id) -> bool:
         except Exception:
             return False
     return True
+
+
+async def _pending_target(db, reference, user_id, organization_id):
+    from app.assistant_actions.models import ActionKind
+    from app.assistant_actions.service import pending_target
+
+    return await pending_target(
+        db,
+        user_id=user_id,
+        organization_id=organization_id,
+        kind=ActionKind(reference["kind"]) if reference.get("kind") else None,
+        lead_id=int(reference["lead_id"]) if reference.get("lead_id") else None,
+    )
+
+
+def _pending_details(reference) -> dict:
+    """The held details, revalidated as typed values; raises when they are not."""
+    from app.crm.assistant.workflows import PendingDetails
+
+    details = PendingDetails.model_validate(reference.get("details") or {})
+    raw = details.model_dump(mode="json", exclude_defaults=True)
+    if not safe_answer(json.dumps(raw)):
+        raise ValueError("Pending details are not permitted")
+    return raw
+
+
+# A pending request survives turns that neither replace nor settle it (a further clarifying
+# question), but not indefinitely: after this many it lapses and must be asked for again.
+PENDING_MAX_CARRIES = 2
+
+
+def _carry_pending(prior: dict | None, deps: ChatDependencies) -> None:
+    """Keep the still-valid pending request of the last turn when this turn did not re-hold
+    it, replace it or settle it with a proposal. `prior` was rechecked when history loaded and
+    is rechecked again before the answer is saved and on every later turn."""
+    if deps.proposals:
+        # A proposal settles the request, including one held earlier in this turn.
+        deps.evidence[:] = [i for i in deps.evidence if i.get("type") != "pending_action"]
+        return
+    if not prior or any(item.get("type") == "pending_action" for item in deps.evidence):
+        return
+    carried = int(prior.get("carried", 0)) + 1
+    if carried > PENDING_MAX_CARRIES:
+        return
+    deps.evidence.append(
+        {
+            "private": True,
+            "type": "pending_action",
+            "kind": prior["kind"],
+            "lead_id": prior["lead_id"],
+            "details": prior.get("details") or {},
+            "carried": carried,
+        }
+    )
+
+
+async def _current_pending_action(db, messages, user_id, organization_id):
+    """The request the latest answer left waiting for the user's reply, if still permitted.
+
+    Only the latest assistant message counts: any later answer settles or replaces it. Kind and
+    lead ID only, rechecked against current access; never any private text.
+    """
+    index = next(
+        (i for i in range(len(messages) - 1, -1, -1) if messages[i].role == "assistant"), None
+    )
+    if index is None:
+        return None, None
+    pending = [
+        item
+        for item in (messages[index].meta_data or {}).get("evidence", [])
+        if item.get("type") == "pending_action"
+    ]
+    if not pending:
+        return None, None
+    try:
+        result = await _pending_target(db, pending[-1], user_id, organization_id)
+        details = _pending_details(pending[-1])
+    except Exception:
+        return None, None
+    if not result.get("available"):
+        return None, None
+    lead_id = pending[-1].get("lead_id")
+    return index, {
+        "kind": pending[-1].get("kind"),
+        "lead_id": int(lead_id) if lead_id else None,
+        "details": details,
+        "carried": int(pending[-1].get("carried", 0)),
+    }
 
 
 async def _current_record_handles(db, messages, user_id, organization_id):
@@ -190,22 +233,30 @@ async def get_conversation_messages(
     messages = await repository.get_conversation_messages(
         db, conversation_id, user_id, organization_id, limit, before_id
     )
+    from app.assistant_actions import outcome
+
     visible = []
     for message in messages:
         if message.role != "assistant":
             visible.append(message)
             continue
         metadata = dict(message.meta_data or {})
+        action_responses = []
         permitted = metadata.get("guardrail_version") == 1
+        stale_prose = False
         if metadata.get("private"):
             permitted = permitted and await has_current_access(
                 db, user_id=user_id, organization_id=organization_id
             )
             evidence = metadata.get("evidence", [])
             permitted = permitted and bool(evidence or metadata.get("actions"))
-            permitted = permitted and await _evidence_accessible(
-                db, evidence, user_id, organization_id
-            )
+            current = await _evidence_accessible(db, evidence, user_id, organization_id)
+            if metadata.get("actions"):
+                # Each action is rechecked below and states its own status. Changed evidence,
+                # often the confirmed action's own effect, makes only the model's prose stale.
+                stale_prose = not current
+            else:
+                permitted = permitted and current
             if metadata.get("actions"):
                 from app.assistant_actions.service import get_action
 
@@ -220,6 +271,7 @@ async def get_conversation_messages(
                         permitted = (
                             permitted and action_response.preview.get("available") is not False
                         )
+                        action_responses.append(action_response)
                     except Exception:
                         permitted = False
         # A copied model avoids dirtying ORM state while preparing an authorized response.
@@ -238,7 +290,16 @@ async def get_conversation_messages(
                 )
             )
         else:
-            visible.append(message.model_copy(update={"meta_data": public_metadata}))
+            update = {"meta_data": public_metadata}
+            if action_responses:
+                # The stored text was written before confirmation; the action's current status
+                # decides what this answer says about it.
+                update["content"] = outcome.compose(
+                    "" if stale_prose else message.content, action_responses
+                )
+                if include_retrieval_context:
+                    public_metadata["_action_outcomes"] = outcome.model_context(action_responses)
+            visible.append(message.model_copy(update=update))
     if include_retrieval_context:
         index, handles = await _current_record_handles(db, messages, user_id, organization_id)
         if index is not None and handles:
@@ -246,42 +307,26 @@ async def get_conversation_messages(
                 **(visible[index].meta_data or {}),
                 "_retrieval_context": handles,
             }
+        index, pending = await _current_pending_action(db, messages, user_id, organization_id)
+        if index is not None:
+            visible[index].meta_data = {
+                **(visible[index].meta_data or {}),
+                "_pending_action": pending,
+            }
     return visible
 
 
-async def add_message(
-    db: AsyncSession,
-    conversation_id: int,
-    role: str,
-    content: str,
-    meta_data: Optional[dict[str, Any]] = None,
-    *,
-    user_id: str,
-    organization_id: str,
-) -> Message:
-    """Add a message to a conversation the caller owns; nothing is written otherwise."""
-    conversation = await get_conversation(db, conversation_id, user_id, organization_id)
-    if conversation is None:
-        raise LookupError("Conversation not found")
+@dataclass(frozen=True)
+class AssistantRuntime:
+    """Which assistant answers a turn: its coordinator, typed router and product tag.
 
-    message = Message(
-        conversation_id=conversation_id,
-        role=role,
-        content=content,
-        meta_data=meta_data or {},
-        created_at=datetime.now(timezone.utc),
-    )
-    repository.save_message(db, message)
+    The CRM Operations Assistant is the default. Market AI (app.market_ai) passes its own; the
+    turn's checks (admission, evidence and access rechecks, proposals, outcomes) are the same.
+    """
 
-    # Update conversation timestamp
-    conversation.updated_at = datetime.now(timezone.utc)
-    # Auto-generate title from first user message
-    if not conversation.title or conversation.title == "New Conversation":
-        conversation.title = content[:50] + ("..." if len(content) > 50 else "")
-
-    await db.commit()
-    await db.refresh(message)
-    return message
+    name: str
+    agent: Any
+    run_routed_turn: Any
 
 
 async def stream_chat_response(
@@ -290,11 +335,17 @@ async def stream_chat_response(
     user_message: str,
     user_id: str,
     organization_id: str,
+    runtime: AssistantRuntime | None = None,
 ) -> AsyncGenerator[str, None]:
     """Only validated complete answers cross the SSE/persistence boundary."""
-    conversation = await get_conversation(db, conversation_id, user_id, organization_id)
+    # Each assistant answers only in its own conversations: a CRM conversation is not found by
+    # Market AI's endpoint, and a Market AI conversation not by the CRM assistant's.
+    assistant = runtime.name if runtime is not None else "crm"
+    conversation = await get_conversation(
+        db, conversation_id, user_id, organization_id, assistant=assistant
+    )
     if not conversation:
-        yield _sse({"type": "error", "error": "Conversation not found"})
+        yield _sse(error_event("conversation_not_found"))
         return
     scope = {"user_id": user_id, "organization_id": organization_id}
     refusal = input_refusal(user_message)
@@ -304,15 +355,26 @@ async def stream_chat_response(
         yield _sse({"type": "done"})
         return
     if not settings.ASSISTANT_ENABLED:
-        yield _sse({"type": "error", "error": "The assistant is not enabled yet."})
+        yield _sse(error_event("assistant_disabled"))
         return
     # Request auth and conversation lookup may already hold a read connection.
     await db.commit()
     try:
         async with asyncio.timeout(30):
             lease = await admission.acquire(**scope, conversation_id=conversation_id)
-    except HTTPException as exc:
-        yield _sse({"type": "error", "error": exc.detail})
+    except admission.AdmissionRefused as exc:
+        # Nothing was reserved or saved: the turn never started.
+        if exc.code == "busy":
+            yield _sse(error_event("turn_in_progress"))
+        else:
+            yield _sse(error_event("insufficient_allowance", resets_at=allowance_resets_at()))
+        return
+    except HTTPException:
+        yield _sse(error_event("account_unavailable"))
+        return
+    except TimeoutError:
+        # Admission waits on a shared lock; nothing was reserved.
+        yield _sse(error_event("service_busy"))
         return
     usage = RunUsage()
     provider_completed = False
@@ -328,7 +390,17 @@ async def stream_chat_response(
             messages = await get_conversation_messages(
                 db, conversation_id, **scope, include_retrieval_context=True
             )
-            history = _convert_to_pydantic_messages(messages[:-1])
+            history = _convert_to_pydantic_messages(
+                messages[:-1], include_market=runtime is not None
+            )
+            prior_pending = next(
+                (
+                    (m.meta_data or {})["_pending_action"]
+                    for m in reversed(messages[:-1])
+                    if (m.meta_data or {}).get("_pending_action")
+                ),
+                None,
+            )
             # Release the read transaction and pool connection before nested tools
             # open their own sessions during provider latency.
             await db.commit()
@@ -339,8 +411,13 @@ async def stream_chat_response(
             conversation_id=conversation_id,
             usage_limits=limits,
             progress=progress.put_nowait,
+            pending=dict(prior_pending or {}),
         )
-        run = run_routed_turn if settings.ASSISTANT_TYPED_ROUTING_ENABLED else agent.run
+        typed = settings.ASSISTANT_TYPED_ROUTING_ENABLED
+        if runtime is None:
+            run = run_routed_turn if typed else agent.run
+        else:
+            run = runtime.run_routed_turn if typed else runtime.agent.run
 
         async def run_turn():
             async with asyncio.timeout_at(deadline):
@@ -368,6 +445,7 @@ async def stream_chat_response(
         async with asyncio.timeout_at(deadline):
             provider_completed = True
             answer = result.output
+            _carry_pending(prior_pending, deps)
             # A target can be reassigned while the provider is composing its answer.
             if (deps.evidence or deps.proposals) and (
                 not await has_current_access(db, user_id=user_id, organization_id=organization_id)
@@ -398,9 +476,20 @@ async def stream_chat_response(
                     deps.proposals.clear()
                 else:
                     deps.proposals[:] = current_proposals
-            if not safe_answer(answer):
-                answer = REFUSAL
+            answer = guarded_answer(answer)
+            # Stored as written; whenever shown, the actions' current status is put first and
+            # the model's own claims about them are left out (assistant_actions/outcome.py).
+            shown = answer
+            if deps.proposals:
+                from app.assistant_actions.models import ActionProposalResponse
+                from app.assistant_actions.outcome import compose
+
+                shown = compose(
+                    answer, [ActionProposalResponse.model_validate(p) for p in deps.proposals]
+                )
             metadata = {"guardrail_version": 1, "private": bool(deps.evidence or deps.proposals)}
+            if runtime is not None:
+                metadata["assistant"] = runtime.name
             if usage.total_tokens:
                 metadata["total_tokens"] = usage.total_tokens
             if deps.evidence:
@@ -408,20 +497,20 @@ async def stream_chat_response(
             if deps.proposals:
                 metadata["actions"] = [{"id": item["id"]} for item in deps.proposals]
             await add_message(db, conversation_id, "assistant", answer, metadata, **scope)
-        yield _sse({"type": "content", "content": answer})
+        yield _sse({"type": "content", "content": shown})
         for proposal in deps.proposals:
             yield _sse({"type": "action_proposed", "action": safe_data(proposal)})
         yield _sse({"type": "done"})
     except Exception as exc:
-        logger.error(
-            "Chat execution failed (%s; requests=%s tokens=%s budget=%s)",
-            type(exc).__name__,
-            usage.requests,
-            usage.total_tokens,
-            lease.token_budget,
+        yield _sse(
+            failure_event(
+                exc,
+                context="Chat turn",
+                requests=usage.requests,
+                tokens=usage.total_tokens,
+                budget=lease.token_budget,
+            )
         )
-        error = TURN_LIMIT_ERROR if isinstance(exc, UsageLimitExceeded) else TURN_ERROR
-        yield _sse({"type": "error", "error": error})
     finally:
         if next_event is not None:
             next_event.cancel()

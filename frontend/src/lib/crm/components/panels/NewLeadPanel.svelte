@@ -11,16 +11,38 @@ import MoneyInput from '../ui/MoneyInput.svelte'
 import Panel from '../ui/Panel.svelte'
 import Seg from '../ui/Seg.svelte'
 
-/** Type switch first; name, phone, source and area survive a type switch. */
-let { leadType }: { leadType?: LeadType } = $props()
+/**
+ * Type switch first; name, phone, source and area survive a type switch.
+ * With `qualify`, the same form qualifies an Inbox contact in place: its name, phone and source
+ * are already on the enquiry, so only the lead type and its brief are asked for.
+ */
+let {
+	leadType,
+	qualify
+}: {
+	leadType?: LeadType
+	qualify?: { id: number; name: string; prefill?: { area: string; fields: LeadFields } }
+} = $props()
 
 let type = $state<LeadType>(untrack(() => leadType ?? 'buyer'))
 let name = $state('')
 let phone = $state('')
 let sourceLabel = $state(SOURCE_OPTIONS[0].label)
-let area = $state('')
-let draft = $state<Record<string, string>>({})
-let money = $state<Record<string, number | null>>({})
+let area = $state(untrack(() => qualify?.prefill?.area ?? ''))
+let draft = $state<Record<string, string>>(
+	untrack(() =>
+		Object.fromEntries(
+			Object.entries(qualify?.prefill?.fields ?? {}).filter(([, value]) => typeof value === 'string')
+		)
+	)
+)
+let money = $state<Record<string, number | null>>(
+	untrack(() =>
+		Object.fromEntries(
+			Object.entries(qualify?.prefill?.fields ?? {}).filter(([, value]) => typeof value === 'number')
+		)
+	)
+)
 let saving = $state(false)
 
 const fields = $derived(LEAD_TYPES[type].fields)
@@ -32,10 +54,10 @@ const areaRequired = $derived(LEAD_TYPES[type].areaRequired ?? false)
  */
 function problems(): [string, string][] {
 	const list: [string, string][] = [
-		['nl-name', name.trim() ? '' : 'Enter a name.'],
-		['nl-phone', phoneProblem(phone)],
 		['nl-area', areaRequired && !area.trim() ? 'Enter an area.' : '']
 	]
+	if (!qualify)
+		list.push(['nl-name', name.trim() ? '' : 'Enter a name.'], ['nl-phone', phoneProblem(phone)])
 	for (const f of fields.filter((x) => x.required)) {
 		const filled = f.money ? Boolean(money[f.key]) : Boolean(String(draft[f.key] ?? '').trim())
 		list.push([`nl-${f.key}`, filled ? '' : `Enter the ${f.label.toLowerCase()}.`])
@@ -62,22 +84,29 @@ async function submit(e: SubmitEvent) {
 		}
 	}
 	saving = true
-	const r = await write({
-		domain: 'leads',
-		call: () =>
-			crm.leads.create({
-				name: name.trim(),
-				phone,
-				source: option.source,
-				source_detail: option.label,
-				lead_type: type,
-				area: area.trim(),
-				fields: out
-			}),
-		success: (res) => `${res.data.name} created`,
-		created: (res) => ({ kind: 'lead', id: res.data.id }),
-		event: 'lead_created'
-	})
+	const r = qualify
+		? await write({
+				domain: 'leads',
+				call: () =>
+					crm.inbox.qualify(qualify.id, { lead_type: type, area: area.trim(), fields: out }),
+				success: (res) => `${res.data.name} is now a ${LEAD_TYPES[type].label.toLowerCase()} lead`
+			})
+		: await write({
+				domain: 'leads',
+				call: () =>
+					crm.leads.create({
+						name: name.trim(),
+						phone,
+						source: option.source,
+						source_detail: option.label,
+						lead_type: type,
+						area: area.trim(),
+						fields: out
+					}),
+				success: (res) => `${res.data.name} created`,
+				created: (res) => ({ kind: 'lead', id: res.data.id }),
+				event: 'lead_created'
+			})
 	saving = false
 	if (r) {
 		ui.leadTab = 'all'
@@ -87,7 +116,7 @@ async function submit(e: SubmitEvent) {
 }
 </script>
 
-<Panel kicker="New" title="Lead">
+<Panel kicker={qualify ? 'Inbox' : 'New'} title={qualify ? `Qualify ${qualify.name}` : 'Lead'}>
 	<form
 		class="form"
 		onsubmit={submit}
@@ -102,6 +131,7 @@ async function submit(e: SubmitEvent) {
 				onselect={(t) => (type = t)}
 			/>
 		</div>
+		{#if !qualify}
 		<div class="fld">
 			<label for="nl-name">Name</label>
 			<input id="nl-name" required autocomplete="off" bind:value={name} />
@@ -125,6 +155,7 @@ async function submit(e: SubmitEvent) {
 				</select>
 			</div>
 		</div>
+		{/if}
 		{#each fields.filter((x) => fieldShown(x, draft)) as f (f.key)}
 			<div class="fld">
 				<label for="nl-{f.key}">{f.label}{f.money ? ' (AED)' : ''}</label>
@@ -144,6 +175,6 @@ async function submit(e: SubmitEvent) {
 			<label for="nl-area">Area</label>
 			<input id="nl-area" placeholder="JVC" required={areaRequired} bind:value={area} />
 		</div>
-		<div><button type="submit" class="btn" disabled={saving}>Create lead</button></div>
+		<div><button type="submit" class="btn" disabled={saving}>{qualify ? 'Qualify lead' : 'Create lead'}</button></div>
 	</form>
 </Panel>

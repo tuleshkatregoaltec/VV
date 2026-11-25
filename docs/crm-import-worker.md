@@ -8,7 +8,8 @@ first three states apply. Parsing, model mapping and contact publication happen
 only in a separate worker. Source-only jobs preserve their reviewed source
 classification and never request warehouse enrichment.
 
-Run locally against `.env.dev` using `just crm-import-worker`, or use
+The local `just dev-backend`, `just dev-app` and `just dev` recipes start the worker
+alongside the API. To run only the worker, use `just crm-import-worker`, or use
 `just crm-import-worker --once` for at most one job. Deployment runs
 `python -m app.crm.import_worker` in a separate private regional worker service
 using the backend image and the same database/private object-storage configuration.

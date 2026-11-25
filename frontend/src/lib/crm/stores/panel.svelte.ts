@@ -6,7 +6,7 @@
  * Close and Escape go back one panel; a click outside closes them all.
  */
 import { replaceState } from '$app/navigation'
-import type { LeadStage, LeadType } from '../api/types'
+import type { LeadFields, LeadStage, LeadType } from '../api/types'
 import type { ViewAs } from '../mock/manager'
 
 export type LeadPanelTab =
@@ -38,6 +38,8 @@ export type PanelState =
 	| { kind: 'notifications' }
 	| { kind: 'new' }
 	| { kind: 'new-lead'; leadType?: LeadType }
+	/** The New Lead form for an Inbox contact: saves its type and brief on the same enquiry. */
+	| { kind: 'qualify-lead'; id: number; name: string; prefill?: { area: string; fields: LeadFields } }
 	| { kind: 'new-listing'; fromLeadId?: number }
 	| { kind: 'new-deal'; leadId?: number }
 	| { kind: 'new-task'; date?: string }

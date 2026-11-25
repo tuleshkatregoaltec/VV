@@ -89,8 +89,8 @@ def create_app():
     from app.postgres import get_postgres_engine
 
     instrument_postgres(get_postgres_engine(), tracer)
-    from app.chat import routing, workflows
-    from app.chat.agent import agent
+    from app.market_ai import routing, workflows
+    from app.market_ai.agent import agent
 
     typed = plan["routing_mode"] == "typed"
     primary = routing.router_agent if typed else agent
@@ -118,7 +118,9 @@ def create_app():
             "campaign_stage": "flows",
             "snapshot_sha256": plan["snapshot_sha256"],
             "provider": "openrouter",
-            "agent": "app.chat.routing.run_routed_turn" if typed else "app.chat.agent.agent",
+            "agent": "app.market_ai.routing.run_routed_turn"
+            if typed
+            else "app.market_ai.agent.agent",
             "agent_name": primary.name,
             "prompt_sha256": fingerprint(primary._system_prompts),
             "tools_sha256": fingerprint(tools),

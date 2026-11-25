@@ -47,6 +47,7 @@ import type {
 	LeadListResponse,
 	LeadMatches,
 	LeadPatch,
+	LeadQualify,
 	LeadStageMove,
 	ListingCreate,
 	ListingCreateResult,
@@ -267,6 +268,8 @@ const liveCrm = {
 			backend.listInbox(filter, days),
 		/** A recently sold owner → a possible buyer lead (preferences filled in by the agent). */
 		approve: (id: string) => backend.approveRecentSeller(Number(id)),
+		/** An unqualified contact → a buyer, seller, tenant or landlord lead, same enquiry. */
+		qualify: (id: number, body: LeadQualify) => backend.qualifyLead(id, body),
 		ask: (_id: string) => notOnBackend<Written<InboxItem>>('Asking for an enquiry'),
 		withdraw: (_id: string) => notOnBackend<Written<InboxItem>>('Withdrawing a request'),
 		release: (_id: string) => notOnBackend<Written<InboxItem>>('Releasing an enquiry'),

@@ -1,4 +1,5 @@
 <script lang="ts">
+import { onMount } from 'svelte'
 import { logout, update_user_profile } from '$lib/api/auth'
 import ThemePreferenceControl from '$lib/components/preferences/ThemePreferenceControl.svelte'
 import { currentUser, refreshUser } from '$lib/stores/user.svelte'
@@ -25,6 +26,10 @@ let avatarUrl = $derived(
 		? currentUser.data.avatar_url
 		: ''
 )
+
+onMount(() => {
+	void refreshUser()
+})
 
 $effect(() => {
 	if (currentUser.data && !editingName) {
@@ -176,6 +181,18 @@ function handleAvatarError() {
 						<div class="flex justify-between">
 							<span class="text-fg-4">Organization</span>
 							<span class="text-fg-1">{currentUser.data.organization_name}</span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-fg-4">Daily token limit</span>
+							<span class="text-fg-1">
+								{currentUser.data.daily_token_limit.toLocaleString()} tokens / day
+							</span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-fg-4">Tokens used today (UTC)</span>
+							<span class="text-fg-1">
+								{currentUser.data.tokens_used_today.toLocaleString()} tokens
+							</span>
 						</div>
 					</div>
 				{:else}

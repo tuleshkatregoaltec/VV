@@ -95,7 +95,7 @@ export type AcceptInviteResponse = {
 /**
  * ActionKind
  */
-export type ActionKind = 'create_lead' | 'update_lead' | 'assign_lead' | 'delete_lead' | 'add_note' | 'create_reminder' | 'update_reminder' | 'delete_reminder' | 'schedule_viewing' | 'cancel_viewing' | 'create_listing_draft' | 'update_listing_draft' | 'send_message' | 'publish_listing' | 'book_external_viewing';
+export type ActionKind = 'create_lead' | 'update_lead' | 'assign_lead' | 'unassign_lead' | 'delete_lead' | 'log_contact' | 'release_to_pool' | 'add_note' | 'create_reminder' | 'update_reminder' | 'delete_reminder' | 'schedule_viewing' | 'cancel_viewing' | 'create_listing_draft' | 'update_listing_draft' | 'send_message' | 'publish_listing' | 'book_external_viewing' | 'book_calendar_meeting' | 'create_team' | 'delete_team' | 'add_team_agent' | 'remove_team_member' | 'set_team_manager' | 'move_team_agent' | 'reschedule_calendar_event' | 'cancel_calendar_event';
 
 /**
  * ActionProposalRequest
@@ -109,7 +109,7 @@ export type ActionProposalRequest = {
     /**
      * Payload
      */
-    payload: CreateLead | UpdateLead | AssignLead | LeadTarget | AddNote | CreateReminder | UpdateReminder | DeleteReminder | ScheduleViewing | CancelViewing | CreateListingDraft | UpdateListingDraft | SendMessage | PublishListing;
+    payload: CreateLead | UpdateLead | AssignLead | LeadTarget | AddNote | LogContact | CreateReminder | UpdateReminder | DeleteReminder | ScheduleViewing | CalendarMeeting | CancelViewing | CreateListingDraft | UpdateListingDraft | SendMessage | PublishListing | CreateTeam | TeamTransfer | RescheduleCalendarEvent | CalendarEventTarget | SetTeamManager | TeamMemberChange | TeamTarget;
     /**
      * Idempotency Key
      */
@@ -128,7 +128,7 @@ export type ActionProposalResponse = {
     /**
      * Status
      */
-    status: 'awaiting_confirmation' | 'succeeded' | 'cancelled' | 'expired' | 'failed' | 'not_connected' | 'queued' | 'unknown';
+    status: 'awaiting_confirmation' | 'succeeded' | 'partially_succeeded' | 'cancelled' | 'expired' | 'failed' | 'not_connected' | 'queued' | 'unknown';
     /**
      * Title
      */
@@ -1181,6 +1181,14 @@ export type AuthMeResponse = {
      * Subscription Status
      */
     subscription_status: string | null;
+    /**
+     * Daily Token Limit
+     */
+    daily_token_limit: number;
+    /**
+     * Tokens Used Today
+     */
+    tokens_used_today: number;
 };
 
 /**
@@ -1223,6 +1231,16 @@ export type BlockResult = {
      * Blocked Total
      */
     blocked_total: number;
+};
+
+/**
+ * Body_chat-transcribe_voice_message
+ */
+export type BodyChatTranscribeVoiceMessage = {
+    /**
+     * Audio
+     */
+    audio: Blob | File;
 };
 
 /**
@@ -1731,6 +1749,58 @@ export type CalendarEventResponse = {
      * Google Sync Status
      */
     google_sync_status: 'local' | 'pending' | 'synced' | 'error';
+    /**
+     * Can Edit
+     */
+    can_edit: boolean;
+    /**
+     * Redacted
+     */
+    redacted: boolean;
+    /**
+     * Owner Role
+     */
+    owner_role?: string | null;
+};
+
+/**
+ * CalendarEventTarget
+ */
+export type CalendarEventTarget = {
+    /**
+     * Event Id
+     */
+    event_id: number;
+};
+
+/**
+ * CalendarMeeting
+ */
+export type CalendarMeeting = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Starts At
+     */
+    starts_at: string;
+    /**
+     * Ends At
+     */
+    ends_at: string;
+    /**
+     * Location
+     */
+    location?: string | null;
+    /**
+     * Lead Id
+     */
+    lead_id?: number | null;
+    /**
+     * Colleague Ids
+     */
+    colleague_ids?: Array<string>;
 };
 
 /**
@@ -2368,6 +2438,10 @@ export type ConversationResponse = {
      */
     title: string | null;
     /**
+     * Assistant
+     */
+    assistant?: 'crm' | 'market';
+    /**
      * Created At
      */
     created_at: string;
@@ -2387,6 +2461,10 @@ export type CreateConversationRequest = {
      * Title
      */
     title?: string | null;
+    /**
+     * Assistant
+     */
+    assistant?: 'crm' | 'market';
 };
 
 /**
@@ -2453,6 +2531,16 @@ export type CreateReminder = {
      * Lead Id
      */
     lead_id?: number | null;
+};
+
+/**
+ * CreateTeam
+ */
+export type CreateTeam = {
+    /**
+     * Name
+     */
+    name: string;
 };
 
 /**
@@ -10043,6 +10131,24 @@ export type ListingTrendPoint = {
 };
 
 /**
+ * LogContact
+ */
+export type LogContact = {
+    /**
+     * Lead Id
+     */
+    lead_id: number;
+    /**
+     * Activity Type
+     */
+    activity_type: 'contact_attempt' | 'call' | 'email' | 'whatsapp' | 'meeting';
+    /**
+     * Body
+     */
+    body?: string | null;
+};
+
+/**
  * MarketCoverage
  *
  * Load evidence for the period's days, from the served release's coverage record.
@@ -13732,6 +13838,24 @@ export type ReplyEdit = {
 };
 
 /**
+ * RescheduleCalendarEvent
+ */
+export type RescheduleCalendarEvent = {
+    /**
+     * Event Id
+     */
+    event_id: number;
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Time
+     */
+    time?: string | null;
+};
+
+/**
  * RevisionDecision
  */
 export type RevisionDecision = {
@@ -14034,6 +14158,24 @@ export type SendMessageRequest = {
      * Message
      */
     message: string;
+};
+
+/**
+ * SetTeamManager
+ */
+export type SetTeamManager = {
+    /**
+     * Team Id
+     */
+    team_id: string;
+    /**
+     * Member Id
+     */
+    member_id: string;
+    /**
+     * Replace Existing
+     */
+    replace_existing?: boolean;
 };
 
 /**
@@ -14825,6 +14967,20 @@ export type TeamAnalyticsResponse = {
 };
 
 /**
+ * TeamMemberChange
+ */
+export type TeamMemberChange = {
+    /**
+     * Team Id
+     */
+    team_id: string;
+    /**
+     * Member Id
+     */
+    member_id: string;
+};
+
+/**
  * TeamMemberInput
  */
 export type TeamMemberInput = {
@@ -14924,6 +15080,34 @@ export type TeamResponse = {
      * Updated At
      */
     updated_at: string;
+};
+
+/**
+ * TeamTarget
+ */
+export type TeamTarget = {
+    /**
+     * Team Id
+     */
+    team_id: string;
+};
+
+/**
+ * TeamTransfer
+ */
+export type TeamTransfer = {
+    /**
+     * Member Id
+     */
+    member_id: string;
+    /**
+     * From Team Id
+     */
+    from_team_id: string;
+    /**
+     * To Team Id
+     */
+    to_team_id: string;
 };
 
 /**
@@ -15110,6 +15294,18 @@ export type TransactionResponse = {
      * Price Per Sqft Aed
      */
     price_per_sqft_aed?: number | null;
+};
+
+/**
+ * TranscriptResponse
+ *
+ * The words in a voice message, for the agent to check before sending. Empty: no speech.
+ */
+export type TranscriptResponse = {
+    /**
+     * Text
+     */
+    text: string;
 };
 
 /**
@@ -16456,6 +16652,10 @@ export type ChatListConversationsData = {
          * Offset
          */
         offset?: number;
+        /**
+         * Assistant
+         */
+        assistant?: 'crm' | 'market';
     };
     url: '/api/v1/chat/conversations';
 };
@@ -16563,6 +16763,31 @@ export type ChatUpdateConversationEndpointResponses = {
 
 export type ChatUpdateConversationEndpointResponse = ChatUpdateConversationEndpointResponses[keyof ChatUpdateConversationEndpointResponses];
 
+export type ChatTranscribeVoiceMessageData = {
+    body: BodyChatTranscribeVoiceMessage;
+    path?: never;
+    query?: never;
+    url: '/api/v1/chat/transcribe';
+};
+
+export type ChatTranscribeVoiceMessageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatTranscribeVoiceMessageError = ChatTranscribeVoiceMessageErrors[keyof ChatTranscribeVoiceMessageErrors];
+
+export type ChatTranscribeVoiceMessageResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptResponse;
+};
+
+export type ChatTranscribeVoiceMessageResponse = ChatTranscribeVoiceMessageResponses[keyof ChatTranscribeVoiceMessageResponses];
+
 export type ChatGetConversationMessagesEndpointData = {
     body?: never;
     path: {
@@ -16580,6 +16805,10 @@ export type ChatGetConversationMessagesEndpointData = {
          * Before Id
          */
         before_id?: number | null;
+        /**
+         * Assistant
+         */
+        assistant?: 'crm' | 'market' | null;
     };
     url: '/api/v1/chat/conversations/{conversation_id}/messages';
 };
@@ -16626,6 +16855,34 @@ export type ChatSendMessageErrors = {
 export type ChatSendMessageError = ChatSendMessageErrors[keyof ChatSendMessageErrors];
 
 export type ChatSendMessageResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ChatSendMarketMessageData = {
+    body: SendMessageRequest;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: number;
+    };
+    query?: never;
+    url: '/api/v1/market-chat/conversations/{conversation_id}/messages/stream';
+};
+
+export type ChatSendMarketMessageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatSendMarketMessageError = ChatSendMarketMessageErrors[keyof ChatSendMarketMessageErrors];
+
+export type ChatSendMarketMessageResponses = {
     /**
      * Successful Response
      */

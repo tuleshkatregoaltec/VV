@@ -3,14 +3,14 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.chat.models import Conversation, Message
-from app.chat.service import (
+from app.chat.conversations import (
     add_message,
     create_conversation,
     delete_conversation,
     get_conversation,
-    get_conversation_messages,
 )
+from app.chat.models import Conversation, Message
+from app.crm.assistant.service import get_conversation_messages
 
 OWNER = {"user_id": "user-1", "organization_id": "org-1"}
 

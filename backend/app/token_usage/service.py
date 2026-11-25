@@ -1,5 +1,5 @@
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -9,6 +9,28 @@ from app.token_usage import repository
 from app.token_usage.models import UserTokenUsage
 
 logger = logging.getLogger(__name__)
+
+DAILY_LIMIT_REACHED = "You have used today's assistant allowance."
+
+
+def allowance_resets_at(now: datetime | None = None) -> str:
+    """Daily usage is counted per UTC day, so it resets at the next UTC midnight."""
+    now = now or datetime.now(timezone.utc)
+    tomorrow = now.astimezone(timezone.utc).date() + timedelta(days=1)
+    return datetime.combine(tomorrow, time(0), tzinfo=timezone.utc).isoformat()
+
+
+def daily_limit_detail(tokens_used: int, daily_limit: int) -> dict:
+    """The 429 detail when today's allowance is used: a stable code, the user's own figures and
+    the reset time, in the API's structured {code, message} form."""
+    return {
+        "code": "daily_limit_reached",
+        "message": DAILY_LIMIT_REACHED,
+        "retryable": False,
+        "tokens_used": tokens_used,
+        "daily_limit": daily_limit,
+        "resets_at": allowance_resets_at(),
+    }
 
 
 class TokenUsageService:

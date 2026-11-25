@@ -12,20 +12,27 @@ import {
 	Trash2
 } from 'lucide-svelte'
 import { onMount } from 'svelte'
-import { type ConversationListResponse, type ConversationResponse, chat } from '$lib/api/chat'
+import {
+	type ChatAssistant,
+	type ConversationListResponse,
+	type ConversationResponse,
+	chat
+} from '$lib/api/chat'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 import { chatKeys, chatQueries } from '$lib/queries/chat'
 
 let {
 	selectedId = $bindable(null),
+	assistant = 'crm',
 	onSelect = (_id: number) => {}
 }: {
 	selectedId: number | null
+	assistant?: ChatAssistant
 	onSelect?: (id: number) => void
 } = $props()
 
 const queryClient = useQueryClient()
-const conversationsQuery = createQuery(() => chatQueries.conversations())
+const conversationsQuery = createQuery(() => chatQueries.conversations(assistant))
 
 let creating = $state(false)
 let error = $state<string | null>(null)
@@ -50,13 +57,16 @@ let conversationCount = $derived(conversations.length)
 function updateConversationCache(
 	updater: (conversations: ConversationResponse[]) => ConversationResponse[]
 ) {
-	queryClient.setQueryData<ConversationListResponse>(chatKeys.conversations(), (current) => {
-		const nextConversations = updater(current?.conversations ?? [])
-		return {
-			conversations: nextConversations,
-			total: nextConversations.length
+	queryClient.setQueryData<ConversationListResponse>(
+		chatKeys.conversations(assistant),
+		(current) => {
+			const nextConversations = updater(current?.conversations ?? [])
+			return {
+				conversations: nextConversations,
+				total: nextConversations.length
+			}
 		}
-	})
+	)
 }
 
 function displayTitle(title?: string | null): string {
@@ -90,7 +100,7 @@ $effect(() => {
 		onSelect(firstConversation.id)
 	}
 	if (firstConversation) {
-		void queryClient.prefetchQuery(chatQueries.messages(firstConversation.id))
+		void queryClient.prefetchQuery(chatQueries.messages(firstConversation.id, 100, assistant))
 	}
 })
 
@@ -102,9 +112,9 @@ async function createNew() {
 	creating = true
 	error = null
 	try {
-		const newConv = await chat.createConversation({})
+		const newConv = await chat.createConversation({ assistant })
 		updateConversationCache((current) => [newConv, ...current.filter((c) => c.id !== newConv.id)])
-		queryClient.setQueryData(chatKeys.messages(newConv.id), [])
+		queryClient.setQueryData(chatKeys.messages(newConv.id, 100, assistant), [])
 		selectedId = newConv.id
 		onSelect(newConv.id)
 		searchValue = ''
@@ -131,7 +141,7 @@ async function saveRename(conv: ConversationResponse) {
 	}
 
 	try {
-		const updated = await chat.updateConversation(conv.id, trimmed)
+		const updated = await chat.updateConversation(conv.id, trimmed, assistant)
 		updateConversationCache((current) => current.map((c) => (c.id === conv.id ? updated : c)))
 		renamingId = null
 		renameValue = ''
@@ -163,11 +173,11 @@ async function confirmDelete() {
 	if (conversationToDelete === null) return
 
 	try {
-		await chat.deleteConversation(conversationToDelete)
+		await chat.deleteConversation(conversationToDelete, assistant)
 		const deletedId = conversationToDelete
 		const remainingConversations = conversations.filter((c) => c.id !== deletedId)
 		updateConversationCache(() => remainingConversations)
-		queryClient.removeQueries({ queryKey: chatKeys.messages(deletedId) })
+		queryClient.removeQueries({ queryKey: chatKeys.messages(deletedId, 100, assistant) })
 
 		// If deleted conversation was selected, select the first available one
 		if (selectedId === deletedId) {
@@ -219,7 +229,7 @@ function formatDate(dateString: string): string {
 					<p
 						class="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-fg-4"
 					>
-						History
+						{assistant === 'market' ? 'Market AI history' : 'CRM Assistant history'}
 					</p>
 					{#if conversationCount > 0}
 						<span
@@ -235,8 +245,8 @@ function formatDate(dateString: string): string {
 				onclick={() => void createNew()}
 				disabled={creating}
 				class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-navy text-bone transition-colors hover:bg-primary-light disabled:cursor-wait disabled:opacity-70"
-				aria-label="New chat"
-				title="New chat"
+				aria-label={assistant === 'market' ? 'New Market AI chat' : 'New CRM Assistant chat'}
+				title={assistant === 'market' ? 'New Market AI chat' : 'New CRM Assistant chat'}
 			>
 				{#if creating}
 					<Loader2 size={16} strokeWidth={2} class="animate-spin" />
@@ -255,7 +265,7 @@ function formatDate(dateString: string): string {
 			<input
 				type="search"
 				bind:value={searchValue}
-				placeholder="Search history"
+				placeholder={assistant === 'market' ? 'Search Market AI history' : 'Search CRM history'}
 				class="h-8 w-full rounded-md border border-border bg-elevated py-1.5 pl-9 pr-3 text-[13px] text-fg-1 outline-none transition placeholder:text-fg-5 focus:border-navy focus:ring-2 focus:ring-navy/10"
 			/>
 		</div>

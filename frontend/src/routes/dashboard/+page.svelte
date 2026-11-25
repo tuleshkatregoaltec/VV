@@ -33,14 +33,20 @@ const newestArticleAt = $derived(newestDate(newsArticles.map((article) => articl
 
 async function handleChatSubmit(message: string) {
 	try {
-		const conversation = await chat.createConversation({ title: message.slice(0, 50) })
-		queryClient.setQueryData<ConversationListResponse>(chatKeys.conversations(), (current) => {
-			const conversations = [
-				conversation,
-				...(current?.conversations ?? []).filter((item) => item.id !== conversation.id)
-			]
-			return { conversations, total: conversations.length }
+		const conversation = await chat.createConversation({
+			title: message.slice(0, 50),
+			assistant: 'market'
 		})
+		queryClient.setQueryData<ConversationListResponse>(
+			chatKeys.conversations('market'),
+			(current) => {
+				const conversations = [
+					conversation,
+					...(current?.conversations ?? []).filter((item) => item.id !== conversation.id)
+				]
+				return { conversations, total: conversations.length }
+			}
+		)
 		goto('/chat', {
 			state: { conversationId: conversation.id, initialMessage: message }
 		})

@@ -125,7 +125,7 @@ async def test_native_agent_spans_keep_stable_identity_and_template_versions(mon
     from pydantic_ai.models.instrumented import InstrumentationSettings
     from pydantic_ai.models.test import TestModel
 
-    from app.chat.agent import agent
+    from app.market_ai.agent import agent
 
     target = InMemorySpanExporter()
     provider = TracerProvider()

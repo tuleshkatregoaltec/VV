@@ -42,7 +42,7 @@ test('chat renders existing SSE artifacts and keeps them after message refresh',
         { id: 1, conversation_id: conversation.id, role: 'user', content: 'Show market activity', created_at: now, meta_data: {} },
         { id: 2, conversation_id: conversation.id, role: 'assistant', content: 'Existing streaming contract preserved.', created_at: now, meta_data: { artifacts: [artifact], total_tokens: 17 } }
     ] : [] }));
-    await page.route('**/api/v1/chat/conversations/987654/messages/stream', route => {
+    await page.route('**/api/v1/market-chat/conversations/987654/messages/stream', route => {
         expect(route.request().postDataJSON()).toEqual({ message: 'Show market activity' });
         sent = true;
         const events = [
@@ -90,7 +90,7 @@ test('CRM assistant reuses authenticated chat and persists its answer', async ({
         return route.fulfill({ contentType: 'text/event-stream', body: events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') });
     });
     await page.goto('/crm/assistant');
-    await expect(page.getByText('Your records only · Confirm changes', { exact: true })).toBeVisible();
+    await expect(page.getByText('Same lead access as your CRM · Confirm changes', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Select Private CRM. Double-click to rename.' }).click();
     await page.getByRole('button', { name: 'My CRM pipeline' }).click();
     await expect(page.getByText(answer, { exact: true })).toBeVisible();
@@ -162,7 +162,7 @@ test('older messages prepend chronologically without losing the newest page', as
         const ids = before ? [99, 100] : Array.from({ length: 100 }, (_, i) => i + (sent ? 103 : 101));
         return route.fulfill({ json: ids.map(id => ({ id, conversation_id: conversation.id, role: 'assistant', content: `Paged message ${id}`, created_at: now, meta_data: {} })) });
     });
-    await page.route('**/api/v1/chat/conversations/987657/messages/stream', route => {
+    await page.route('**/api/v1/market-chat/conversations/987657/messages/stream', route => {
         sent = true;
         return route.fulfill({ contentType: 'text/event-stream', body: 'data: {"type":"content","content":"Paged message 202"}\n\ndata: {"type":"done"}\n\n' });
     });

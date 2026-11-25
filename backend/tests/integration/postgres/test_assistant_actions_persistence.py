@@ -16,7 +16,7 @@ from app.assistant_actions.models import (
     AssistantReminder,
 )
 from app.chat.models import Conversation
-from app.crm.inbound_models import CrmInboundContact, CrmInboundEnquiry, CrmInboundNote
+from app.crm.inbound_models import CrmInboundContact, CrmInboundEnquiry
 from app.organization.models import Organization, OrganizationMembership
 
 
@@ -226,37 +226,66 @@ async def test_assistant_actions_own_leads_reassignment_stale_preview_and_shared
     assert second_lead.contact_id != contact_id
 
 
-async def test_assistant_actions_deletion_preserves_shared_contact_and_colleague_notes(pg_session):
-    identity, colleague, conversation_id = await actor(pg_session)
-    created = await execute(
-        pg_session, identity, conversation_id, "create_lead", {"full_name": "Keep contact"}
+async def test_delete_lead_is_refused_because_the_crm_cannot_delete_leads(pg_session):
+    """The CRM has no lead deletion; the assistant must not offer more than the CRM does,
+    whoever asks: not the assignee, and not an organization administrator."""
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "Keep me", team="north", assignee="omar")
+    for person in ("omar", "owner"):
+        identity, conversation_id = await _team_actor(pg_session, ids, person)
+        with pytest.raises(HTTPException) as error:
+            await propose(
+                pg_session, identity, conversation_id, "delete_lead", {"lead_id": target.id}
+            )
+        assert error.value.status_code == 403
+        assert "does not support deleting leads" in error.value.detail
+        await pg_session.rollback()
+    pg_session.expire_all()
+    assert await pg_session.get(CrmInboundEnquiry, target.id) is not None
+
+
+async def test_a_delete_proposal_stored_before_the_refusal_fails_on_confirmation(pg_session):
+    """Confirmation re-checks the CRM's rules: an old pending delete never executes."""
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    target = await lead(pg_session, ids, "Old proposal", team="north", assignee="omar")
+    identity, conversation_id = await _team_actor(pg_session, ids, "omar")
+    now = datetime.now(timezone.utc)
+    # Arguments exactly as stored, so only the rules (not an argument check) can stop it.
+    request = ActionProposalRequest(
+        kind="delete_lead",
+        conversation_id=conversation_id,
+        payload={"lead_id": target.id},
+        idempotency_key="stored-delete-proposal",
     )
-    lead_id = created.result["lead_id"]
-    lead = await pg_session.get(CrmInboundEnquiry, lead_id)
-    contact_id = lead.contact_id
-    note = CrmInboundNote(
-        enquiry_id=lead_id,
-        organization_id=identity["organization_id"],
-        user_id=colleague,
-        body="Colleague's work",
-        created_at=datetime.now(timezone.utc),
+    stored = AssistantAction(
+        user_id=ids["omar"],
+        organization_id=ids["org"],
+        conversation_id=conversation_id,
+        kind="delete_lead",
+        status="awaiting_confirmation",
+        idempotency_key="stored-delete-proposal",
+        request_hash=service._request_hash(request, ids["omar"], ids["org"]),
+        payload={"lead_id": target.id},
+        snapshot={},
+        preview={},
+        created_at=now,
+        expires_at=now + timedelta(minutes=15),
     )
-    pg_session.add(note)
+    pg_session.add(stored)
     await pg_session.commit()
-    note_id = note.id
-    with pytest.raises(HTTPException) as error:
-        await propose(pg_session, identity, conversation_id, "delete_lead", {"lead_id": lead_id})
-    assert error.value.status_code == 409
-    await pg_session.rollback()
-    assert await pg_session.get(CrmInboundNote, note_id)
-    await pg_session.delete(await pg_session.get(CrmInboundNote, note_id))
-    await pg_session.commit()
-    await execute(
-        pg_session, identity, conversation_id, "add_note", {"lead_id": lead_id, "body": "Own note"}
+    action_id = stored.id
+    result = await service.confirm_action(pg_session, **identity, action_id=action_id)
+    assert result.status == "failed"
+    pg_session.expire_all()
+    assert (
+        "does not support deleting leads"
+        in (await pg_session.get(AssistantAction, action_id)).result["message"]
     )
-    await execute(pg_session, identity, conversation_id, "delete_lead", {"lead_id": lead_id})
-    assert await pg_session.get(CrmInboundEnquiry, lead_id) is None
-    assert await pg_session.get(CrmInboundContact, contact_id) is not None
+    assert await pg_session.get(CrmInboundEnquiry, target.id) is not None
 
 
 async def test_assistant_actions_persist_reminders_viewings_drafts_and_disconnected_outbox(
@@ -467,7 +496,7 @@ async def test_assistant_actions_previews_identify_authorized_targets_and_conseq
     proposals = []
     for kind, payload, consequence in (
         ("update_lead", {"lead_id": lead_id, "status": "qualified"}, "enquiry fields"),
-        ("delete_lead", {"lead_id": lead_id}, "cannot be undone"),
+        ("log_contact", {"lead_id": lead_id, "activity_type": "call"}, "Log contact"),
         ("add_note", {"lead_id": lead_id, "body": "Test note"}, "enquiry history"),
         (
             "create_reminder",
@@ -522,7 +551,13 @@ async def test_assistant_actions_previews_identify_authorized_targets_and_conseq
         assert "Preview target" not in hidden.model_dump_json()
         assert "Named reminder" not in hidden.model_dump_json()
     with pytest.raises(HTTPException) as error:
-        await propose(pg_session, identity, conversation_id, "delete_lead", {"lead_id": lead_id})
+        await propose(
+            pg_session,
+            identity,
+            conversation_id,
+            "update_lead",
+            {"lead_id": lead_id, "status": "won"},
+        )
     assert error.value.status_code == 404
 
 
@@ -533,7 +568,7 @@ async def test_assistant_actions_changed_confirmation_label_requires_new_preview
     )
     lead_id = created.result["lead_id"]
     proposal = await propose(
-        pg_session, identity, conversation_id, "delete_lead", {"lead_id": lead_id}
+        pg_session, identity, conversation_id, "update_lead", {"lead_id": lead_id, "status": "won"}
     )
     lead = await pg_session.get(CrmInboundEnquiry, lead_id)
     contact = await pg_session.get(CrmInboundContact, lead.contact_id)
@@ -541,7 +576,8 @@ async def test_assistant_actions_changed_confirmation_label_requires_new_preview
     await pg_session.commit()
     result = await service.confirm_action(pg_session, **identity, action_id=proposal.id)
     assert result.status == "failed"
-    assert await pg_session.get(CrmInboundEnquiry, lead_id) is not None
+    pg_session.expire_all()
+    assert (await pg_session.get(CrmInboundEnquiry, lead_id)).status != "won"
 
 
 async def test_assistant_actions_assignee_lookup_names_are_scoped_and_ambiguous(
@@ -605,7 +641,7 @@ async def test_assistant_actions_assignee_lookup_names_are_scoped_and_ambiguous(
         "assign_lead",
         {"lead_id": target.id, "assignee_id": ids["sara"]},
     )
-    assert proposal.preview["assignee"] == "Ali Broker"
+    assert proposal.preview["new_assignee"] == "Ali Broker"
     assert "assignment history" in proposal.preview["consequence"]
     lookup = AsyncMock(
         side_effect=AssertionError("Cross-org assignee must fail before profile lookup")
@@ -831,28 +867,6 @@ async def test_assistant_created_lead_gets_team_and_history(pg_session):
     assert [(e.reason, e.assigned_user_id) for e in events] == [("created", ids["omar"])]
 
 
-async def test_delete_lead_only_by_assignee_or_admin(pg_session):
-    from crm_role_support import agency, lead
-
-    ids = await agency(pg_session)
-    first = await lead(pg_session, ids, "First", team="north", assignee="omar")
-    second = await lead(pg_session, ids, "Second", team="north", assignee="omar")
-    manager, manager_conversation = await _team_actor(pg_session, ids, "nadia")
-    with pytest.raises(HTTPException) as error:
-        await propose(
-            pg_session, manager, manager_conversation, "delete_lead", {"lead_id": first.id}
-        )
-    assert error.value.status_code == 403
-    await pg_session.rollback()
-    agent, agent_conversation = await _team_actor(pg_session, ids, "omar")
-    await execute(pg_session, agent, agent_conversation, "delete_lead", {"lead_id": first.id})
-    owner, owner_conversation = await _team_actor(pg_session, ids, "owner")
-    await execute(pg_session, owner, owner_conversation, "delete_lead", {"lead_id": second.id})
-    pg_session.expire_all()
-    assert await pg_session.get(CrmInboundEnquiry, first.id) is None
-    assert await pg_session.get(CrmInboundEnquiry, second.id) is None
-
-
 def _everyone_named_sam(monkeypatch, ids):
     from types import SimpleNamespace
 
@@ -898,21 +912,260 @@ async def test_agent_lookup_explains_assignment_is_for_managers(pg_session, monk
     }
 
 
-async def test_assignee_cannot_delete_a_lead_carrying_others_assignment_history(pg_session):
-    """Deleting cascades the lead's assignment history; a manager's hand-over is their record."""
+@pytest.mark.parametrize(
+    ("intent", "record_kind", "confirmed"),
+    [
+        ("buy", "opportunity", {"intent": "buy"}),
+        ("rent", "opportunity", {"intent": "rent"}),
+        ("sell", "opportunity", {"intent": "sell"}),
+        ("let", "opportunity", {"intent": "let"}),
+        ("unknown", "unqualified_contact", {}),
+    ],
+)
+async def test_assistant_created_lead_is_classified_like_a_crm_created_lead(
+    pg_session, intent, record_kind, confirmed
+):
+    """A known intent makes a confirmed opportunity, as in the CRM; otherwise matching, inbox
+    triage and lead breakdowns would treat a qualified buyer as an unqualified contact."""
+    identity, _, conversation_id = await actor(pg_session)
+    created = await execute(
+        pg_session,
+        identity,
+        conversation_id,
+        "create_lead",
+        {"full_name": f"Classified {intent}", "intent": intent},
+    )
+    lead = await pg_session.get(CrmInboundEnquiry, created.result["lead_id"])
+    await pg_session.refresh(lead)
+    assert (lead.intent, lead.record_kind, lead.confirmed_data) == (intent, record_kind, confirmed)
+
+
+async def test_assistant_intent_updates_keep_classification_like_the_crm(pg_session):
+    """Mirrors crm/inbound.py: a known intent promotes to an opportunity and is confirmed; back
+    to unknown is an unqualified contact again; other edits leave the classification alone."""
+    identity, _, conversation_id = await actor(pg_session)
+    created = await execute(
+        pg_session, identity, conversation_id, "create_lead", {"full_name": "Updated intent"}
+    )
+    lead_id = created.result["lead_id"]
+
+    async def update(**fields):
+        await execute(
+            pg_session, identity, conversation_id, "update_lead", {"lead_id": lead_id, **fields}
+        )
+        lead = await pg_session.get(CrmInboundEnquiry, lead_id)
+        await pg_session.refresh(lead)
+        return lead.intent, lead.record_kind, lead.confirmed_data
+
+    assert await update(intent="rent") == ("rent", "opportunity", {"intent": "rent"})
+    assert await update(intent="buy") == ("buy", "opportunity", {"intent": "buy"})
+    assert await update(status="contacted") == ("buy", "opportunity", {"intent": "buy"})
+    # As in the CRM, confirmed_data keeps the last confirmed intent; the kind is what changes.
+    assert await update(intent="unknown") == ("unknown", "unqualified_contact", {"intent": "buy"})
+
+
+async def _set_admin(db, ids, person, admin: bool):
+    from sqlalchemy import update
+
+    await db.execute(
+        update(OrganizationMembership)
+        .where(OrganizationMembership.user_id == ids[person])
+        .values(organization_admin=admin)
+    )
+    await db.commit()
+
+
+async def test_member_made_admin_acts_across_teams_until_the_flag_is_revoked(pg_session):
+    """Organization administration, not team membership, grants every lead; losing it between
+    preview and confirmation must stop the change."""
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    south = await lead(pg_session, ids, "LinaLead", team="south", assignee="lina")
+    identity, conversation_id = await _team_actor(pg_session, ids, "sara")
+    # A plain member of North cannot even find South's lead.
+    with pytest.raises(HTTPException) as error:
+        await propose(
+            pg_session,
+            identity,
+            conversation_id,
+            "update_lead",
+            {"lead_id": south.id, "status": "contacted"},
+        )
+    assert error.value.status_code == 404
+    await pg_session.rollback()
+
+    await _set_admin(pg_session, ids, "sara", True)
+    await execute(
+        pg_session,
+        identity,
+        conversation_id,
+        "update_lead",
+        {"lead_id": south.id, "status": "contacted"},
+    )
+    pending = await propose(
+        pg_session, identity, conversation_id, "update_lead", {"lead_id": south.id, "status": "won"}
+    )
+    await _set_admin(pg_session, ids, "sara", False)
+    result = await service.confirm_action(pg_session, **identity, action_id=pending.id)
+    assert result.status == "failed"
+    pg_session.expire_all()
+    assert (await pg_session.get(CrmInboundEnquiry, south.id)).status == "contacted"
+
+
+async def test_agent_acts_on_own_leads_and_shared_signals_but_not_colleagues(pg_session):
+    from crm_role_support import agency, lead
+
+    from app.crm.inbound_models import SOLD_OWNER_SOURCE
+
+    ids = await agency(pg_session)
+    own = await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    signal = await lead(
+        pg_session, ids, "SoldOwner", team=None, assignee=None, source=SOLD_OWNER_SOURCE
+    )
+    teammate = await lead(pg_session, ids, "SaraLead", team="north", assignee="sara")
+    other_team = await lead(pg_session, ids, "LinaLead", team="south", assignee="lina")
+    identity, conversation_id = await _team_actor(pg_session, ids, "omar")
+    for target in (own, signal):
+        await execute(
+            pg_session, identity, conversation_id, "add_note", {"lead_id": target.id, "body": "x"}
+        )
+    # A teammate's or another team's lead answers like a missing one: nothing is disclosed.
+    for target in (teammate, other_team):
+        with pytest.raises(HTTPException) as error:
+            await propose(
+                pg_session,
+                identity,
+                conversation_id,
+                "add_note",
+                {"lead_id": target.id, "body": "x"},
+            )
+        assert error.value.status_code == 404
+        await pg_session.rollback()
+
+
+async def test_shared_signal_action_fails_once_a_colleague_takes_it(pg_session):
     from crm_role_support import agency, lead
 
     from app.crm import assignment
+    from app.crm.inbound_models import SOLD_OWNER_SOURCE
 
     ids = await agency(pg_session)
-    target = await lead(pg_session, ids, "Handed", team="north", assignee="sara")
-    manager = await assignment.load_scope(pg_session, ids["org"], ids["nadia"])
-    await assignment.reassign(pg_session, manager, [target.id], ids["omar"])
-    await pg_session.commit()
+    signal = await lead(
+        pg_session, ids, "SoldOwner", team=None, assignee=None, source=SOLD_OWNER_SOURCE
+    )
     identity, conversation_id = await _team_actor(pg_session, ids, "omar")
-    with pytest.raises(HTTPException) as error:
-        await propose(pg_session, identity, conversation_id, "delete_lead", {"lead_id": target.id})
-    assert error.value.status_code == 409
-    await pg_session.rollback()
+    pending = await propose(
+        pg_session,
+        identity,
+        conversation_id,
+        "update_lead",
+        {"lead_id": signal.id, "status": "contacted"},
+    )
+    owner = await assignment.load_scope(pg_session, ids["org"], ids["owner"])
+    await assignment.reassign(pg_session, owner, [signal.id], ids["lina"], team_id=ids["south"])
+    await pg_session.commit()
+    result = await service.confirm_action(pg_session, **identity, action_id=pending.id)
+    assert result.status == "failed"
     pg_session.expire_all()
-    assert await pg_session.get(CrmInboundEnquiry, target.id) is not None
+    assert (await pg_session.get(CrmInboundEnquiry, signal.id)).status == "new"
+
+
+def _platform_admin_api(pg_session, user_id):
+    """The real action routes and auth dependencies; only token verification is replaced by a
+    user whose platform metadata says Super Admin."""
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+
+    from app.assistant_actions import router as actions
+    from app.core.dependencies import require_auth
+    from app.postgres import get_db_session
+
+    app = FastAPI()
+    app.include_router(actions.router)
+
+    async def session():
+        yield pg_session
+
+    app.dependency_overrides[get_db_session] = session
+    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
+        id=user_id, is_admin=True, app_metadata=SimpleNamespace(is_admin=True)
+    )
+    return app
+
+
+async def test_platform_super_admin_without_membership_gets_no_crm_access(pg_session):
+    from types import SimpleNamespace
+
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.dependencies import require_active_subscription
+
+    await actor(pg_session)  # An active organization exists; the admin is not a member of it.
+    platform_admin = f"platform-{uuid4().hex[:8]}"
+    # The dependency every assistant chat and action route uses refuses before any CRM read.
+    with pytest.raises(HTTPException) as error:
+        await require_active_subscription(
+            SimpleNamespace(id=platform_admin, is_admin=True), pg_session
+        )
+    assert error.value.status_code == 403
+    app = _platform_admin_api(pg_session, platform_admin)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        refused = await client.post(
+            "/api/v1/assistant/actions/proposals",
+            json={
+                "kind": "create_lead",
+                "conversation_id": 1,
+                "payload": {"full_name": "Super admin lead"},
+                "idempotency_key": uuid4().hex,
+            },
+        )
+        assert refused.status_code == 403
+        assert (await client.get("/api/v1/assistant/actions/reminders")).status_code == 403
+    count = (
+        await pg_session.exec(
+            select(func.count())
+            .select_from(CrmInboundContact)
+            .where(CrmInboundContact.full_name == "Super admin lead")
+        )
+    ).one()
+    assert count == 0
+
+
+async def test_platform_super_admin_who_is_an_agent_keeps_agent_scope(pg_session):
+    """The platform flag adds nothing inside an organization: only the CRM role counts."""
+    from crm_role_support import agency, lead
+    from httpx import ASGITransport, AsyncClient
+
+    from app.crm.assistant import query_my_records
+    from app.crm.assistant.models import CrmAssistantQuery
+
+    ids = await agency(pg_session)
+    own = await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    other_team = await lead(pg_session, ids, "LinaLead", team="south", assignee="lina")
+    _, conversation_id = await _team_actor(pg_session, ids, "omar")
+    app = _platform_admin_api(pg_session, ids["omar"])
+
+    async def note(client, target):
+        return await client.post(
+            "/api/v1/assistant/actions/proposals",
+            json={
+                "kind": "add_note",
+                "conversation_id": conversation_id,
+                "payload": {"lead_id": target.id, "body": "x"},
+                "idempotency_key": uuid4().hex,
+            },
+        )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await note(client, own)).status_code == 200
+        assert (await note(client, other_team)).status_code == 404
+    # Reads take no platform role at all; the agent sees only their own lead.
+    result = await query_my_records(
+        pg_session,
+        CrmAssistantQuery(resource="leads", summary_only=True),
+        user_id=ids["omar"],
+        organization_id=ids["org"],
+    )
+    assert result.total == 1

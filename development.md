@@ -118,9 +118,9 @@ Use `just --list` for the current command list. The main recipes are:
 | `just setup` | Install host dependencies, start local services, apply migrations, and seed local bootstrap state. |
 | `just up` | Start external services only. |
 | `just down` | Stop services and remove local Compose volumes. |
-| `just dev` | Start services, backend, and frontend for local development. |
-| `just dev-app` | Start backend and frontend when services are already running. |
-| `just dev-backend` | Start the FastAPI backend on the host. |
+| `just dev` | Start services, backend, frontend, and the CRM import worker for local development. |
+| `just dev-app` | Start backend, frontend, and the CRM import worker when services are already running. |
+| `just dev-backend` | Start the FastAPI backend and CRM import worker on the host. |
 | `just dev-frontend` | Start the SvelteKit frontend on the host. |
 | `just check-all` | Format backend/frontend, lint backend/frontend, then run backend/frontend tests. This may modify files. |
 | `just test-backend [args...]` | Run fast backend tests, or the exact pytest selection provided. |

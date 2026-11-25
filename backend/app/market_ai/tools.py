@@ -9,12 +9,12 @@ from app.analytics import market_metrics
 from app.analytics import service as analytics_service
 from app.analytics.assistant_models import ComparableRequest
 from app.analytics.models import MarketMetricsRequest
-from app.chat.security import safe_tool
 from app.listings import assistant as listing_assistant
 from app.listings import service as listings_service
 from app.listings.assistant import ListingResearchRequest
 from app.market.reference import community_location
 from app.market.scope import ProjectFilterType
+from app.market_ai.sources import safe_tool
 from app.project import assistant as project_assistant
 from app.project import delivery
 from app.project import service as project_service

@@ -3,11 +3,11 @@ from datetime import date
 import pytest
 
 from app.analytics import chart_queries
-from app.chat import agent as chat_agent
-from app.chat import artifacts as chat_artifacts
 from app.chat.models import Message
+from app.crm.assistant import agent as chat_agent
 from app.listings.models import ListingFiltersResponse, ListingListResponse
 from app.market.reference import SQM_TO_SQFT
+from app.market_ai import artifacts as chat_artifacts
 
 
 def test_legacy_rendered_artifacts_are_not_replayed_as_fresh_evidence():

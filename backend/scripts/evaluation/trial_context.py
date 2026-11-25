@@ -7,9 +7,9 @@ from pathlib import Path
 
 
 def execution_context():
-    from app.chat import routing, workflows
-    from app.chat.agent import agent as orchestrator
-    from app.chat.capabilities import CAPABILITY_CONTEXT_VERSION
+    from app.market_ai import routing, workflows
+    from app.market_ai.agent import agent as orchestrator
+    from app.market_ai.capabilities import CAPABILITY_CONTEXT_VERSION
     from app.whatsapp import customer_agent
 
     agents = (
@@ -32,13 +32,14 @@ def execution_context():
                 (Path(__file__).resolve().parents[2] / name).read_bytes()
             ).hexdigest()
             for name in (
-                "app/chat/agent.py",
-                "app/chat/routing.py",
-                "app/chat/workflows.py",
-                "app/chat/capabilities.py",
+                "app/market_ai/agent.py",
+                "app/market_ai/routing.py",
+                "app/market_ai/workflows.py",
+                "app/market_ai/capabilities.py",
+                "app/market_ai/tools.py",
+                "app/crm/assistant/workflows.py",
+                "app/crm/assistant/crm_tools.py",
                 "app/chat/security.py",
-                "app/chat/crm_tools.py",
-                "app/chat/tools.py",
                 "app/whatsapp/customer_agent.py",
                 "app/whatsapp/customer_policy.py",
                 "app/whatsapp/customer_evidence.py",

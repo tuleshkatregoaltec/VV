@@ -12,7 +12,7 @@ for (const complete of [true, false]) {
             { id: 2, conversation_id: 901, role: 'assistant', content: 'Validated answer', created_at: now, meta_data: {} }
         ] : [] }));
         await page.route('**/api/v1/assistant/actions/proposals?*', route => route.fulfill({ json: [] }));
-        await page.route('**/api/v1/chat/conversations/901/messages/stream', route => {
+        await page.route('**/api/v1/market-chat/conversations/901/messages/stream', route => {
             sent = true;
             return route.fulfill({ contentType: 'text/event-stream', body:
                 ': keep-alive\n\ndata: {"type":"content","content":"Validated answer"}\n\n' +
@@ -26,7 +26,8 @@ for (const complete of [true, false]) {
             await expect(page.getByText('Validated answer', { exact: true })).toBeVisible();
             await expect(page.getByText('The assistant could not complete this request. Please try again.', { exact: true })).toHaveCount(0);
         } else {
-            await expect(page.getByText('The assistant could not complete this request. Please try again.', { exact: true })).toBeVisible();
+            // A broken stream may still finish on the server: say so, do not invite a resend.
+            await expect(page.getByText(/interrupted before the answer arrived/)).toBeVisible();
         }
         await expect(page.getByRole('button', { name: 'Stop streaming' })).toHaveCount(0);
         await expect(page.getByText('keep-alive', { exact: true })).toHaveCount(0);

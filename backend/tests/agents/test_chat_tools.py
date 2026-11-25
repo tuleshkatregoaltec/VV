@@ -1,10 +1,9 @@
-from app.chat.agent import agent
+from app.crm.assistant.agent import agent
 
 
-def test_registered_chat_tools_preserve_existing_capabilities():
+def test_registered_chat_tools_are_crm_operations_only():
+    # Market research and pricing analysis are a separate product, not this assistant's.
     assert set(agent._function_toolset.tools) == {
-        "research_market",
-        "analyze_pricing",
         "retrieve_personal_crm",
         "plan_followups",
         "prepare_action",

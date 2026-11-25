@@ -6,11 +6,10 @@ import pytest
 from pydantic_ai.messages import ModelRequest, ToolReturnPart
 from pydantic_ai.models.test import TestModel
 
-from app.chat import crm_tools
-from app.chat.dependencies import ChatDependencies
-from app.chat.workflows import crm_agent as agent
-from app.crm.assistant import query_my_records
-from app.crm.assistant_models import CrmAssistantQuery
+from app.crm.assistant import crm_tools, query_my_records
+from app.crm.assistant.dependencies import ChatDependencies
+from app.crm.assistant.models import CrmAssistantQuery
+from app.crm.assistant.workflows import crm_agent as agent
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactList,
@@ -407,3 +406,242 @@ async def test_leads_say_whose_they_are_and_can_be_narrowed_to_mine(pg_session):
     assert (await query(assignment="mine", summary_only=True)).total == 1
     assert (await query(assignment="colleagues", summary_only=True)).total == 1
     assert (await query(assignment="unassigned", summary_only=True)).total == 1
+
+
+# --- Lead classification counts and the exact role rules the assistant reports ---
+
+
+async def test_classification_counts_cover_only_the_callers_visible_leads(pg_session):
+    """Breakdowns are what the user may see, never the agency's; kind and intent stay apart."""
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    await lead(
+        pg_session, ids, "OmarBuyer", team="north", assignee="omar", record_kind="opportunity"
+    )
+    await lead(
+        pg_session, ids, "Pooled", team="north", assignee=None, pooled=True, intent="unknown"
+    )
+    # Another team's lettings: a manager of South and the owner see it, Omar must not.
+    await lead(
+        pg_session,
+        ids,
+        "LinaLet",
+        team="south",
+        assignee="lina",
+        intent="let",
+        record_kind="opportunity",
+    )
+
+    async def summary(person, **fields):
+        return await query_my_records(
+            pg_session,
+            CrmAssistantQuery(resource="leads", summary_only=True, **fields),
+            user_id=ids[person],
+            organization_id=ids["org"],
+        )
+
+    omar = await summary("omar")
+    assert omar.total == 2
+    assert omar.counts_by_record_kind == {"opportunity": 1, "unqualified_contact": 1}
+    # Absent intents are absent, not zero-filled or guessed: no "let" leaks from South.
+    assert omar.counts_by_intent == {"buy": 1, "unknown": 1}
+    owner = await summary("owner")
+    assert owner.counts_by_intent == {"buy": 1, "unknown": 1, "let": 1}
+    assert sum(owner.counts_by_record_kind.values()) == owner.total == 3
+    # Filters narrow the breakdown exactly as they narrow the total.
+    mine = await summary("omar", assignment="mine")
+    assert (mine.total, mine.counts_by_intent) == (1, {"buy": 1})
+    # Resources with no such classification say unavailable (None), not an empty breakdown.
+    reminders = await query_my_records(
+        pg_session,
+        CrmAssistantQuery(resource="reminders", summary_only=True),
+        user_id=ids["omar"],
+        organization_id=ids["org"],
+    )
+    assert reminders.counts_by_record_kind is None and reminders.counts_by_intent is None
+    assert reminders.counts_by_assignment is None
+
+
+async def test_one_summary_reports_assignment_counts_matching_each_assignment_filter(pg_session):
+    """Assigned vs unassigned must come from one authorized aggregate, never be called
+    unavailable, and agree exactly with the mine/colleagues/unassigned filters."""
+    from crm_role_support import agency, lead
+
+    ids = await agency(pg_session)
+    await lead(pg_session, ids, "NadiaLead", team="north", assignee="nadia")
+    await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    await lead(pg_session, ids, "SaraLead", team="north", assignee="sara", status="contacted")
+    await lead(pg_session, ids, "Pooled", team="north", assignee=None, pooled=True)
+    await lead(pg_session, ids, "SouthLead", team="south", assignee="lina")
+
+    async def summary(person, **fields):
+        return await query_my_records(
+            pg_session,
+            CrmAssistantQuery(resource="leads", summary_only=True, **fields),
+            user_id=ids[person],
+            organization_id=ids["org"],
+        )
+
+    for person in ("nadia", "omar", "owner"):
+        overall = await summary(person)
+        assert sum(overall.counts_by_assignment.values()) == overall.total
+        for bucket in ("mine", "colleagues", "unassigned"):
+            filtered = await summary(person, assignment=bucket)
+            assert overall.counts_by_assignment.get(bucket, 0) == filtered.total, (person, bucket)
+    # The manager's view of their team; South's lead is outside it.
+    assert (await summary("nadia")).counts_by_assignment == {
+        "mine": 1,
+        "colleagues": 2,
+        "unassigned": 1,
+    }
+    # An agent cannot see colleagues' leads, so none are counted, not guessed.
+    assert (await summary("omar")).counts_by_assignment == {"mine": 1, "unassigned": 1}
+    # Status filters narrow the assignment split too.
+    assert (await summary("nadia", status="contacted")).counts_by_assignment == {"colleagues": 1}
+
+
+async def test_unassigned_shared_signals_are_visible_to_every_member_until_assigned(pg_session):
+    from crm_role_support import agency, lead
+
+    from app.crm.inbound_models import SOLD_OWNER_SOURCE
+
+    ids = await agency(pg_session)
+    await lead(pg_session, ids, "SoldOwner", team=None, assignee=None, source=SOLD_OWNER_SOURCE)
+    await lead(pg_session, ids, "TakenSignal", team=None, assignee="sara", source=SOLD_OWNER_SOURCE)
+    # Lina is in another team and Omar holds neither: the unassigned signal only.
+    assert await _count(pg_session, ids, "lina") == 1
+    assert await _count(pg_session, ids, "omar") == 1
+    assert await _count(pg_session, ids, "sara") == 2
+
+
+async def test_member_made_administrator_sees_the_organization_but_plain_members_do_not(
+    pg_session,
+):
+    from crm_role_support import agency, lead
+    from sqlalchemy import update
+
+    from app.organization.models import OrganizationMembership
+
+    ids = await agency(pg_session)
+    await lead(pg_session, ids, "NorthLead", team="north", assignee="omar")
+    await lead(pg_session, ids, "SouthLead", team="south", assignee="lina")
+    await lead(pg_session, ids, "NoTeamLead", team=None, assignee="omar")
+    assert await _count(pg_session, ids, "sara") == 0
+    await pg_session.execute(
+        update(OrganizationMembership)
+        .where(OrganizationMembership.user_id == ids["sara"])
+        .values(organization_admin=True)
+    )
+    await pg_session.commit()
+    assert await _count(pg_session, ids, "sara") == 3
+
+
+async def test_removed_members_and_outsiders_get_no_crm_read(pg_session):
+    """A platform administrator has no CRM role: without membership there is no read at all."""
+    from crm_role_support import agency, lead
+    from sqlalchemy import delete
+
+    from app.organization.models import OrganizationMembership
+
+    ids = await agency(pg_session)
+    await lead(pg_session, ids, "OmarLead", team="north", assignee="omar")
+    with pytest.raises(PermissionError):
+        await _count(pg_session, ids | {"platform": f"platform-{uuid4().hex[:6]}"}, "platform")
+    await pg_session.execute(
+        delete(OrganizationMembership).where(OrganizationMembership.user_id == ids["omar"])
+    )
+    await pg_session.commit()
+    # Still the assignee on the lead row, but membership is checked first on every read.
+    with pytest.raises(PermissionError):
+        await _count(pg_session, ids, "omar")
+
+
+async def test_lead_search_finds_stored_locations_within_the_users_access_only(pg_session):
+    """Asked for "Dubai Marina" or "JVC" leads, the assistant said none existed: search read
+    only name and source. It must match criteria.locations, and nothing else in the brief."""
+    from crm_role_support import agency, lead
+
+    from app.crm.inbound_models import CrmInboundNote
+
+    ids = await agency(pg_session)
+    marina = await lead(
+        pg_session,
+        ids,
+        "Buyer A",
+        team="north",
+        assignee="omar",
+        criteria={"locations": ["Dubai Marina", "JLT"], "bedrooms_min": 2},
+    )
+    jvc = await lead(
+        pg_session,
+        ids,
+        "Buyer B",
+        team="north",
+        assignee="omar",
+        criteria={"locations": ["jvc"]},
+    )
+    # Legacy shape: one location stored as a string.
+    single = await lead(
+        pg_session,
+        ids,
+        "Buyer C",
+        team="north",
+        assignee="omar",
+        criteria={"locations": "Dubai Marina"},
+    )
+    # Same text outside locations: other criteria fields and lead notes are not locations.
+    decoy = await lead(
+        pg_session,
+        ids,
+        "Buyer D",
+        team="north",
+        assignee="omar",
+        criteria={"locations": ["Downtown"], "building": "Marina Gate", "notes": "near JVC"},
+    )
+    pg_session.add(
+        CrmInboundNote(
+            enquiry_id=decoy.id,
+            organization_id=ids["org"],
+            user_id=ids["omar"],
+            body="Also likes Dubai Marina and JVC",
+            created_at=datetime.now(UTC),
+        )
+    )
+    await lead(pg_session, ids, "Buyer E", team="north", assignee="omar", criteria={})
+    # Same locations, but another team's agent holds them: Omar must not see or count them.
+    await lead(
+        pg_session,
+        ids,
+        "Hidden Marina",
+        team="south",
+        assignee="lina",
+        criteria={"locations": ["Dubai Marina", "JVC"]},
+    )
+    await pg_session.commit()
+
+    async def search(person, term, **fields):
+        return await query_my_records(
+            pg_session,
+            CrmAssistantQuery(resource="leads", search=term, **fields),
+            user_id=ids[person],
+            organization_id=ids["org"],
+        )
+
+    for term, expected in (
+        ("Dubai Marina", {marina.id, single.id}),
+        ("dubai marina", {marina.id, single.id}),
+        ("JVC", {jvc.id}),
+    ):
+        detail = await search("omar", term)
+        assert {row["id"] for row in detail.records} == expected, term
+        summary = await search("omar", term, summary_only=True)
+        # Summary and detail use the same filter and the same access.
+        assert summary.total == detail.total == len(expected), term
+        assert summary.counts_by_assignment == {"mine": len(expected)}
+    # The south lead exists and is found for whoever may see it.
+    assert (await search("karim", "JVC", summary_only=True)).total == 1
+    assert (await search("owner", "Dubai Marina", summary_only=True)).total == 3
+    # Name and source search still work; LIKE wildcards are literal text.
+    assert {row["id"] for row in (await search("omar", "Buyer B")).records} == {jvc.id}
+    assert (await search("omar", "%", summary_only=True)).total == 0

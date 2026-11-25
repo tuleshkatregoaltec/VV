@@ -1165,6 +1165,26 @@ async def add_inbound_activity(
     """Log a contact attempt. On a lead waiting in the pool of a team the user belongs to, the
     first logged contact claims it for them (agreed: "whoever makes the first contact")."""
     scope = await assignment.load_scope(db, organization_id, user_id)
+    enquiry = await log_contact(
+        db, scope, enquiry_id=enquiry_id, activity_type=activity_type, body=body
+    )
+    await db.commit()
+    await db.refresh(enquiry)
+    return await _enquiry_response(
+        db, enquiry, include_registry_profiles=True, include_history=True
+    )
+
+
+async def log_contact(
+    db: AsyncSession,
+    scope: assignment.AssignmentScope,
+    *,
+    enquiry_id: int,
+    activity_type: str,
+    body: str | None,
+) -> CrmInboundEnquiry:
+    """`add_inbound_activity` without the commit: the Assistant confirms through this too."""
+    organization_id, user_id = scope.organization_id, scope.user_id
     try:
         enquiry = await assignment.load_visible(db, scope, enquiry_id, lock=True)
     except HTTPException:
@@ -1197,8 +1217,4 @@ async def add_inbound_activity(
             created_at=now,
         ),
     )
-    await db.commit()
-    await db.refresh(enquiry)
-    return await _enquiry_response(
-        db, enquiry, include_registry_profiles=True, include_history=True
-    )
+    return enquiry

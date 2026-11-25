@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic_ai.models.test import TestModel
 
-from app.chat import service
-from app.chat.agent import _convert_to_pydantic_messages
 from app.chat.models import Message
 from app.chat.security import REFUSAL, input_refusal, safe_answer, safe_data, safe_tool
+from app.crm.assistant import service
+from app.crm.assistant.agent import _convert_to_pydantic_messages
 
 
 @pytest.fixture(autouse=True)
@@ -63,7 +63,7 @@ def test_tool_projection_removes_metadata_and_bounds_untrusted_text():
         }
     )
     assert data == {
-        "source": "Stored market data",
+        "source": "Stored records",  # The physical table name is never shown.
         "notes": "a" * 2000 + " [source text truncated]",
     }
 
@@ -150,16 +150,20 @@ async def test_reassignment_during_generation_withholds_complete_answer(monkeypa
     assert service.RESTRICTED_HISTORY in "".join(events)
 
 
-def test_business_source_counts_preserve_distinctions_without_physical_names():
+def test_crm_sources_keep_their_names_and_internal_keys_stay_hidden():
+    """A lead's own source (its channel) is shown as the CRM stores it, not relabelled; CRM
+    evidence is named as such; internal keys and table names are never shown."""
     data = safe_data(
         {
-            "sources": {"dld/matched": 3, "dld/unmatched": 2, "dxbi/matched": 4},
-            "source": "Property Finder listings (asking prices)",
+            "sources": {"Property Finder": 3, "Website": 2, "crm_inbound_enquiries": 4},
+            "source": "Your CRM records",
+            "records": [{"source": "Property Finder"}, {"source": "raw_physical_table"}],
         }
     )
     assert data == {
-        "sources": {"DLD registered transactions": 5, "DXBI records": 4},
-        "source": "Property Finder asking listings",
+        "sources": {"Property Finder": 3, "Website": 2, "Your CRM records": 4},
+        "source": "Your CRM records",
+        "records": [{"source": "Property Finder"}, {"source": "Stored records"}],
     }
 
 
@@ -313,3 +317,22 @@ async def test_assignee_history_fingerprint_revalidates_canonical_directory(monk
     lookup.assert_awaited_with(None, user_id="u", organization_id="org", search="Ali")
     lookup.return_value = {"available": True, "matches": []}
     assert not await service._evidence_accessible(None, evidence, "u", "org")
+
+
+def test_a_contact_self_link_is_shown_as_plain_text_and_other_links_still_refused():
+    """A lead's phone or email written as a link to itself is a normal contact answer; any
+    link that carries something else (a query, another address, a web page) is refused."""
+    from app.chat.security import REFUSAL, guarded_answer
+
+    contact = (
+        "- Phone: [+971 50 000 0009](tel:+971500000009)\n"
+        "- Email: [Bilal@Example.test](mailto:bilal@example.test)"
+    )
+    assert guarded_answer(contact) == ("- Phone: +971 50 000 0009\n- Email: Bilal@Example.test")
+    for linked in (
+        "[bilal@example.test](mailto:bilal@example.test?body=hi)",
+        "[bilal@example.test](mailto:other@example.test)",
+        "[+971500000009](tel:+971500000001)",
+        "[profile](https://example.test/bilal)",
+    ):
+        assert guarded_answer(linked) == REFUSAL, linked

@@ -8,6 +8,7 @@ from sqlalchemy import BigInteger, DateTime, UniqueConstraint
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
+from app.crm.calendar_models import TIME_PATTERN
 from app.crm.inbound_models import InboundIntent, InboundStatus
 
 
@@ -15,7 +16,15 @@ class ActionKind(StrEnum):
     CREATE_LEAD = "create_lead"
     UPDATE_LEAD = "update_lead"
     ASSIGN_LEAD = "assign_lead"
+    # Removes the assignee and keeps the lead (with its team); never a deletion.
+    UNASSIGN_LEAD = "unassign_lead"
+    # Kept so stored proposals still load; the CRM cannot delete leads, so it is always refused.
     DELETE_LEAD = "delete_lead"
+    # Logs a contact attempt, as the CRM's lead page does; on a lead in the pool of a team the
+    # user belongs to, the first logged contact takes the lead for them.
+    LOG_CONTACT = "log_contact"
+    # A manager or administrator shares the lead, unassigned, in its own team's pool.
+    RELEASE_TO_POOL = "release_to_pool"
     ADD_NOTE = "add_note"
     CREATE_REMINDER = "create_reminder"
     UPDATE_REMINDER = "update_reminder"
@@ -27,11 +36,26 @@ class ActionKind(StrEnum):
     SEND_MESSAGE = "send_message"
     PUBLISH_LISTING = "publish_listing"
     BOOK_EXTERNAL_VIEWING = "book_external_viewing"
+    # A meeting on the user's own calendar, optionally naming colleagues; no invitations.
+    BOOK_CALENDAR_MEETING = "book_calendar_meeting"
+    # Team management, as the CRM's Teams page (organization owners and administrators only).
+    CREATE_TEAM = "create_team"
+    DELETE_TEAM = "delete_team"
+    ADD_TEAM_AGENT = "add_team_agent"
+    REMOVE_TEAM_MEMBER = "remove_team_member"
+    SET_TEAM_MANAGER = "set_team_manager"
+    # Moves an agent from one team to another (organization owners and administrators only).
+    MOVE_TEAM_AGENT = "move_team_agent"
+    # The user's own CRM calendar events, as CRM › Calendar moves and deletes them.
+    RESCHEDULE_CALENDAR_EVENT = "reschedule_calendar_event"
+    CANCEL_CALENDAR_EVENT = "cancel_calendar_event"
 
 
 ActionStatus = Literal[
     "awaiting_confirmation",
     "succeeded",
+    # The CRM change was saved but its external delivery (Google Calendar) was not.
+    "partially_succeeded",
     "cancelled",
     "expired",
     "failed",
@@ -81,6 +105,12 @@ class AddNote(LeadTarget):
     body: str = Field(min_length=1, max_length=4000)
 
 
+class LogContact(LeadTarget):
+    # The CRM's own activity types (crm/inbound_models.InboundActivityCreate).
+    activity_type: Literal["contact_attempt", "call", "email", "whatsapp", "meeting"]
+    body: str | None = Field(default=None, min_length=1, max_length=4000)
+
+
 class CreateReminder(StrictPayload):
     title: str = Field(min_length=1, max_length=200)
     due_at: AwareDatetime
@@ -110,6 +140,24 @@ class ScheduleViewing(LeadTarget):
         return self
 
 
+class CalendarMeeting(StrictPayload):
+    title: str = Field(min_length=1, max_length=200)
+    starts_at: AwareDatetime
+    ends_at: AwareDatetime
+    location: str | None = Field(default=None, max_length=500)
+    lead_id: int | None = Field(default=None, gt=0)
+    # Organization members named in the event details only; they are not invited.
+    colleague_ids: list[str] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def ordered_times(self):
+        if self.ends_at <= self.starts_at:
+            raise ValueError("Meeting end must follow its start")
+        if len(set(self.colleague_ids)) != len(self.colleague_ids):
+            raise ValueError("Each colleague may be named once")
+        return self
+
+
 class CancelViewing(StrictPayload):
     viewing_id: int = Field(gt=0)
 
@@ -136,28 +184,83 @@ class PublishListing(StrictPayload):
     listing_id: int = Field(gt=0)
 
 
+class CreateTeam(StrictPayload):
+    # As the CRM's TeamWriteRequest.
+    name: str = Field(min_length=1, max_length=120)
+
+
+class TeamTarget(StrictPayload):
+    team_id: str = Field(min_length=1, max_length=200)
+
+
+class TeamMemberChange(TeamTarget):
+    # An organization member's ID (from the team people lookup). Not named user_id: the
+    # answer guard treats that name as an internal identifier.
+    member_id: str = Field(min_length=1, max_length=200)
+
+
+class SetTeamManager(TeamMemberChange):
+    # True: the team's other managers leave the team (they stay in the organization).
+    replace_existing: bool = False
+
+
+class TeamTransfer(StrictPayload):
+    member_id: str = Field(min_length=1, max_length=200)
+    from_team_id: str = Field(min_length=1, max_length=200)
+    to_team_id: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def different_teams(self):
+        if self.from_team_id == self.to_team_id:
+            raise ValueError("Choose two different teams")
+        return self
+
+
+class CalendarEventTarget(StrictPayload):
+    event_id: int = Field(gt=0)
+
+
+class RescheduleCalendarEvent(CalendarEventTarget):
+    # As the CRM's CalendarEventMove: a new start date and time (HH:MM, Dubai), or no time for
+    # all day; the event keeps its length.
+    date: date
+    time: str | None = Field(default=None, pattern=TIME_PATTERN)
+
+
 Payload = (
     CreateLead
     | UpdateLead
     | AssignLead
     | LeadTarget
     | AddNote
+    | LogContact
     | CreateReminder
     | UpdateReminder
     | DeleteReminder
     | ScheduleViewing
+    | CalendarMeeting
     | CancelViewing
     | CreateListingDraft
     | UpdateListingDraft
     | SendMessage
     | PublishListing
+    | CreateTeam
+    | TeamTransfer
+    | RescheduleCalendarEvent
+    | CalendarEventTarget
+    | SetTeamManager
+    | TeamMemberChange
+    | TeamTarget
 )
 PAYLOAD_TYPES = {
     ActionKind.CREATE_LEAD: CreateLead,
     ActionKind.UPDATE_LEAD: UpdateLead,
     ActionKind.ASSIGN_LEAD: AssignLead,
+    ActionKind.UNASSIGN_LEAD: LeadTarget,
     ActionKind.DELETE_LEAD: LeadTarget,
     ActionKind.ADD_NOTE: AddNote,
+    ActionKind.LOG_CONTACT: LogContact,
+    ActionKind.RELEASE_TO_POOL: LeadTarget,
     ActionKind.CREATE_REMINDER: CreateReminder,
     ActionKind.UPDATE_REMINDER: UpdateReminder,
     ActionKind.DELETE_REMINDER: DeleteReminder,
@@ -168,6 +271,15 @@ PAYLOAD_TYPES = {
     ActionKind.SEND_MESSAGE: SendMessage,
     ActionKind.PUBLISH_LISTING: PublishListing,
     ActionKind.BOOK_EXTERNAL_VIEWING: ScheduleViewing,
+    ActionKind.BOOK_CALENDAR_MEETING: CalendarMeeting,
+    ActionKind.CREATE_TEAM: CreateTeam,
+    ActionKind.DELETE_TEAM: TeamTarget,
+    ActionKind.ADD_TEAM_AGENT: TeamMemberChange,
+    ActionKind.REMOVE_TEAM_MEMBER: TeamMemberChange,
+    ActionKind.SET_TEAM_MANAGER: SetTeamManager,
+    ActionKind.MOVE_TEAM_AGENT: TeamTransfer,
+    ActionKind.RESCHEDULE_CALENDAR_EVENT: RescheduleCalendarEvent,
+    ActionKind.CANCEL_CALENDAR_EVENT: CalendarEventTarget,
 }
 
 

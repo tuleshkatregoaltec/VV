@@ -31,3 +31,31 @@ async def with_heartbeat(
         pending.cancel()
         await asyncio.gather(pending, return_exceptions=True)
         await stream.aclose()
+
+
+def turn_stream_response(stream: AsyncGenerator[str, None], *, context: str):
+    """An assistant turn as an SSE response: heartbeats while it works, and one safe error
+    event (never the exception's text) if the turn itself fails unexpectedly."""
+    from contextlib import aclosing
+
+    from fastapi.responses import StreamingResponse
+
+    from app.chat.errors import failure_event
+
+    async def events():
+        try:
+            async with aclosing(with_heartbeat(stream)) as heartbeats:
+                async for chunk in heartbeats:
+                    yield chunk
+        except Exception as error:
+            yield encode_sse(failure_event(error, context=context))
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )

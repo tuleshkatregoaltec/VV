@@ -3,7 +3,7 @@ import { createQuery, useQueryClient } from '@tanstack/svelte-query'
 import { onMount } from 'svelte'
 import { chat } from '$lib/api/chat'
 import { crmKeys } from '$lib/crm/queries'
-import { chatKeys, chatQueries } from '$lib/queries/chat'
+import { chatKeys, chatQueries, chatScope } from '$lib/queries/chat'
 
 let { actionId }: { actionId: string } = $props()
 const queryClient = useQueryClient()
@@ -21,6 +21,7 @@ const labels: Record<string, string> = {
 	awaiting_confirmation: 'Awaiting your confirmation',
 	unavailable: 'This action is unavailable — request a new proposal',
 	succeeded: 'Completed',
+	partially_succeeded: 'Partly completed — saved in the CRM, external update failed',
 	cancelled: 'Cancelled',
 	expired: 'Expired — request a new proposal',
 	failed: 'Failed — no success confirmed',
@@ -45,6 +46,8 @@ onMount(() => {
 
 function previewValue(value: unknown): string {
 	if (value === null) return 'None'
+	if (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+		return value.length ? value.join(', ') : 'None'
 	if (typeof value === 'object') return JSON.stringify(value, null, 2)
 	return String(value)
 }
@@ -56,7 +59,9 @@ async function decide(confirm: boolean) {
 	try {
 		const updated = await (confirm ? chat.confirmAction(actionId) : chat.cancelAction(actionId))
 		queryClient.setQueryData(chatKeys.action(actionId), updated)
-		if (updated.status === 'succeeded') {
+		// The answer above this card is rebuilt from the action's status on the server.
+		await queryClient.invalidateQueries({ queryKey: [...chatKeys.all, chatScope(), 'messages'] })
+		if (updated.status === 'succeeded' || updated.status === 'partially_succeeded') {
 			await queryClient.invalidateQueries({ queryKey: crmKeys.all })
 		}
 	} catch {

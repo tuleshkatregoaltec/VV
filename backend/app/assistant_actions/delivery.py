@@ -10,14 +10,29 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from app.assistant_actions.models import PublishListing, ScheduleViewing, SendMessage
+from app.assistant_actions.models import (
+    CalendarEventTarget,
+    CalendarMeeting,
+    PublishListing,
+    RescheduleCalendarEvent,
+    ScheduleViewing,
+    SendMessage,
+)
 
-ExternalPayload = SendMessage | PublishListing | ScheduleViewing
+ExternalPayload = (
+    SendMessage
+    | PublishListing
+    | ScheduleViewing
+    | CalendarMeeting
+    | RescheduleCalendarEvent
+    | CalendarEventTarget
+)
 
 
 class DeliveryOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    status: Literal["succeeded", "failed", "unknown", "not_connected"]
+    # partially_succeeded: saved in the CRM, but the external provider did not take it.
+    status: Literal["succeeded", "partially_succeeded", "failed", "unknown", "not_connected"]
     # What happened, in words the confirmation card can show.
     message: str | None = None
 

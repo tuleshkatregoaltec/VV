@@ -32,7 +32,9 @@ def violations():
         for target in targets:
             if target == "app.postgres.models" and source not in {"app.postgres.models"}:
                 found.add(f"{source} -> {target}")
-            if source.startswith("app.chat.") and target in {
+            if source.startswith(
+                ("app.chat.", "app.crm.assistant", "app.market_ai")
+            ) and target in {
                 "app.clickhouse",
                 "app.clickhouse.client",
                 "app.clickhouse.queries",
@@ -56,9 +58,19 @@ def violations():
                 "app.clickhouse.queries",
             }:
                 found.add(f"{source} -> {target}")
+            # The chat platform's internals are private, except to the two chat products built on
+            # it: the CRM Operations Assistant (app.crm.assistant) and Market AI (app.market_ai).
             if (
                 source.startswith("app.")
-                and not source.startswith(("app.chat.", "app.main", "app.postgres.models"))
+                and not source.startswith(
+                    (
+                        "app.chat.",
+                        "app.crm.assistant.",
+                        "app.market_ai.",
+                        "app.main",
+                        "app.postgres.models",
+                    )
+                )
                 and target.startswith("app.chat.")
                 and target not in {"app.chat.models", "app.chat.operations"}
                 and not target.startswith("app.chat.operations.")
@@ -92,19 +104,58 @@ def test_application_imports_are_acyclic():
         visit(module, [])
 
 
-def test_chat_orchestration_cannot_own_warehouse_queries():
+PACKAGES = {
+    "chat": ("app.chat", APP / "chat"),
+    "crm_assistant": ("app.crm.assistant", APP / "crm" / "assistant"),
+    "market_ai": ("app.market_ai", APP / "market_ai"),
+}
+# Market AI's own code and the market data it reads.
+MARKET = ("app.market_ai", "app.analytics", "app.listings", "app.project", "app.supply")
+
+
+def _package_modules(name):
+    prefix, directory = PACKAGES[name]
+    for path in sorted(directory.glob("*.py")):
+        yield path, prefix if path.stem == "__init__" else f"{prefix}.{path.stem}"
+
+
+def test_the_crm_assistant_reaches_no_market_ai_or_market_data():
+    """The CRM Operations Assistant imports only its own package and the shared chat platform:
+    nothing from Market AI or market data, directly or through the chat platform."""
     graph = imports()
-    for path in (APP / "chat").glob("*.py"):
-        tree = ast.parse(path.read_text())
-        module = "app.chat." + path.stem
-        assert not any(target.startswith("app.clickhouse") for target in graph[module])
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                value = node.value.upper()
-                assert not value.lstrip().startswith(("SELECT ", "SELECT\n", "WITH\n")), path
-        if path.stem != "repository":
-            assert "sqlmodel.select" not in graph[module]
-            assert "sqlalchemy.delete" not in graph[module]
+    for _, module in _package_modules("crm_assistant"):
+        reached = {target for target in graph[module] if target.startswith(MARKET)}
+        assert not reached, (module, reached)
+    # The shared chat platform stays neutral: it never imports Market AI either.
+    for _, module in _package_modules("chat"):
+        assert not any(target.startswith("app.market_ai") for target in graph[module]), module
+
+    # Transitively: nothing the CRM assistant imports leads to Market AI.
+    internal = {name: {t for t in targets if t in graph} for name, targets in graph.items()}
+    seen, stack = set(), [module for _, module in _package_modules("crm_assistant")]
+    while stack:
+        module = stack.pop()
+        if module in seen:
+            continue
+        seen.add(module)
+        stack.extend(internal.get(module, ()))
+    assert not {module for module in seen if module.startswith("app.market_ai")}
+
+
+def test_chat_orchestration_cannot_own_warehouse_queries():
+    """No chat product or the chat platform queries the market warehouse itself."""
+    graph = imports()
+    for name in PACKAGES:
+        for path, module in _package_modules(name):
+            tree = ast.parse(path.read_text())
+            assert not any(target.startswith("app.clickhouse") for target in graph[module]), module
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    value = node.value.upper()
+                    assert not value.lstrip().startswith(("SELECT ", "SELECT\n", "WITH\n")), path
+            if path.stem != "repository":
+                assert "sqlmodel.select" not in graph[module], module
+                assert "sqlalchemy.delete" not in graph[module], module
 
 
 def test_migrated_account_operations_do_not_own_sql_or_sdks():

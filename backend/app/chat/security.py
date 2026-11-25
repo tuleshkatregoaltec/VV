@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 MAX_INPUT = 8000
@@ -131,23 +132,20 @@ def safe_answer(text: str) -> bool:
     )
 
 
+# An internal name (a table, schema or source key such as "raw_physical_table" or
+# "dld/matched"): lower-case words joined by underscores, dots or slashes.
+_INTERNAL_NAME = re.compile(r"[a-z0-9]+(?:[_./][a-z0-9]+)+")
+
+
 def source_label(value: Any) -> str:
-    text = str(value).lower()
-    if "crm" in text:
+    """A readable source: CRM evidence by name, a record's own source (a lead's channel, such
+    as "Property Finder") as stored, and never an internal table or source key."""
+    text = str(value).strip()
+    if "crm" in text.lower():
         return "Your CRM records"
-    if "property finder" in text or "propertyfinder" in text or text.startswith("pf"):
-        return "Property Finder asking listings"
-    if "dld" in text and "dxbi" in text:
-        return "Reconciled DLD and DXBI registered records"
-    if "dubai_pulse" in text:
-        return "DLD registered transactions"
-    if "dxbi" in text:
-        return "DXBI records"
-    if "dld" in text:
-        return "DLD project register" if "project" in text else "DLD registered transactions"
-    if "reelly" in text:
-        return "Reelly project catalogue"
-    return "Stored market data"
+    if not text or _INTERNAL_NAME.fullmatch(text):
+        return "Stored records"
+    return text[:120]
 
 
 def source_evidence(value: Any) -> Any:
@@ -199,6 +197,16 @@ def fingerprint(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 
 
+_progress_event: ContextVar[dict | None] = ContextVar("tool_progress_event", default=None)
+
+
+def mark_cached() -> None:
+    """Report that this call reused an identical earlier result of the turn, not a new read."""
+    event = _progress_event.get()
+    if event is not None:
+        event["cached"] = True
+
+
 @contextmanager
 def tool_progress(ctx: Any, tool: str):
     """Report a tool's start and finish to the turn's stream: names only, no arguments."""
@@ -211,10 +219,42 @@ def tool_progress(ctx: Any, tool: str):
     call_id = getattr(ctx, "tool_call_id", None) or tool
     event = {"tool": tool, "tool_call_id": hashlib.sha256(call_id.encode()).hexdigest()[:12]}
     progress({"type": "tool_call_start", **event})
+    token = _progress_event.set(event)
     try:
         yield
     finally:
+        _progress_event.reset(token)
         progress({"type": "tool_call_result", **event})
+
+
+# A Markdown contact link: [label](mailto:address) or [label](tel:number).
+_CONTACT_LINK = re.compile(r"\[([^\]\n]{1,200})\]\((mailto|tel):([^)\s]{1,200})\)", re.I)
+
+
+def plain_contact_links(text: str) -> str:
+    """Show a contact link as its plain text when the link only repeats it.
+
+    Models write a lead's phone or email as a tel:/mailto: link. The link guard would refuse the
+    whole answer, so a self-link becomes plain text instead. Any other link, including a contact
+    link whose target differs from what is shown (a query, another address), is left to be
+    refused.
+    """
+
+    def plain(match: re.Match) -> str:
+        label, scheme, target = match.group(1), match.group(2).lower(), match.group(3)
+        if scheme == "mailto":
+            same = label.strip().casefold() == target.casefold()
+        else:
+            same = re.sub(r"[\s().-]", "", label) == re.sub(r"[().-]", "", target)
+        return label if same else match.group(0)
+
+    return _CONTACT_LINK.sub(plain, text)
+
+
+def guarded_answer(text: str) -> str:
+    """Model text as it may be shown, or the refusal when it fails the output guard."""
+    text = plain_contact_links(text)
+    return text if safe_answer(text) else REFUSAL
 
 
 def safe_tool(function):

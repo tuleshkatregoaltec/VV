@@ -100,17 +100,50 @@ async def _team_or_404(db: AsyncSession, org_id: str, team_id: str) -> Organizat
     return team
 
 
+TEAM_NAME_TAKEN = "A team with this name exists"
+TEAM_IN_USE = "This team still has routing rules or leads. Move or delete them first."
+
+
 async def _commit_name(db: AsyncSession, team: OrganizationTeam) -> None:
     repository.save_team(db, team)
     try:
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        raise HTTPException(status_code=409, detail="A team with this name exists") from exc
+        raise HTTPException(status_code=409, detail=TEAM_NAME_TAKEN) from exc
+
+
+async def stage_team(db: AsyncSession, org_id: str, name: str) -> OrganizationTeam:
+    """Add a team in the caller's transaction, without committing; a taken name is a 409.
+
+    The caller commits, or rolls back its transaction (or savepoint) on the 409.
+    """
+    team = OrganizationTeam(organization_id=org_id, name=name.strip())
+    repository.save_team(db, team)
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail=TEAM_NAME_TAKEN) from exc
+    return team
+
+
+async def stage_team_deletion(db: AsyncSession, team: OrganizationTeam) -> None:
+    """Delete a team in the caller's transaction; one still used by leads or routing rules is
+    a 409 (the database restricts it). The caller commits or rolls back."""
+    await repository.delete_team(db, team)
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail=TEAM_IN_USE) from exc
 
 
 async def create_team(db: AsyncSession, org_id: str, request: TeamWriteRequest) -> TeamsResponse:
-    await _commit_name(db, OrganizationTeam(organization_id=org_id, name=request.name.strip()))
+    try:
+        await stage_team(db, org_id, request.name)
+    except HTTPException:
+        await db.rollback()
+        raise
+    await db.commit()
     return await list_teams(db, org_id)
 
 
@@ -126,15 +159,12 @@ async def rename_team(
 
 async def delete_team(db: AsyncSession, org_id: str, team_id: str) -> OperationSuccessResponse:
     team = await _team_or_404(db, org_id, team_id)
-    await repository.delete_team(db, team)
     try:
-        await db.commit()
-    except IntegrityError as exc:
+        await stage_team_deletion(db, team)
+    except HTTPException:
         await db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="This team still has routing rules or leads. Move or delete them first.",
-        ) from exc
+        raise
+    await db.commit()
     return OperationSuccessResponse(success=True)
 
 
@@ -142,6 +172,15 @@ async def replace_team_members(
     db: AsyncSession, org_id: str, team_id: str, request: TeamMembersUpdateRequest
 ) -> TeamsResponse:
     team = await _team_or_404(db, org_id, team_id)
+    await stage_team_members(db, org_id, team, request)
+    await db.commit()
+    return await list_teams(db, org_id)
+
+
+async def stage_team_members(
+    db: AsyncSession, org_id: str, team: OrganizationTeam, request: TeamMembersUpdateRequest
+) -> None:
+    """Replace a team's agents and supervisors in the caller's transaction, without committing."""
     user_ids = [member.user_id for member in request.members]
     if len(set(user_ids)) != len(user_ids):
         raise HTTPException(status_code=422, detail="A person is listed twice")
@@ -160,8 +199,7 @@ async def replace_team_members(
         )
     team.updated_at = datetime.now(timezone.utc)
     repository.save_team(db, team)
-    await db.commit()
-    return await list_teams(db, org_id)
+    await db.flush()
 
 
 async def set_organization_admin(

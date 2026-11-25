@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import { crm } from '../../api'
+import { allSelected, matchingAreas, setAll } from '../../areaSelection'
 import { fmt } from '../../format'
 import { crmQueries } from '../../queries'
 import { panel } from '../../stores/panel.svelte'
@@ -23,6 +24,9 @@ let forward = $state<number | null>(null)
 let lookback = $state<number | null>(null)
 const forwardDays = $derived(forward ?? saved.data?.forward_days ?? 60)
 const lookbackDays = $derived(lookback ?? saved.data?.lookback_days ?? 30)
+// Filters what is shown only; selections hidden by the search stay selected.
+let search = $state('')
+const available = $derived((areas.data ?? []).map((a) => a.area))
 
 function toggle(area: string, on: boolean) {
 	const next = new Set(selected)
@@ -80,9 +84,22 @@ async function save() {
 	</div>
 	<QueryView query={areas} rows={6}>
 		{#snippet children(list)}
+			<div class="fld">
+				<label for="areas-search">Search areas</label>
+				<input id="areas-search" type="search" bind:value={search} placeholder="Area name…" />
+			</div>
 			<fieldset class="docs">
 				<legend class="sr-only">Areas</legend>
-				{#each list as a (a.area)}
+				<label class="doc" style="grid-template-columns:auto minmax(0,1fr) auto;cursor:pointer">
+					<input
+						type="checkbox"
+						checked={allSelected(available, selected)}
+						onchange={(e) => (picked = setAll(available, selected, e.currentTarget.checked))}
+					/>
+					<span>All areas</span>
+					<span class="small muted num">{fmt(available.length)}</span>
+				</label>
+				{#each matchingAreas(list, search) as a (a.area)}
 					<label class="doc" style="grid-template-columns:auto minmax(0,1fr) auto;cursor:pointer">
 						<input
 							type="checkbox"
@@ -94,6 +111,8 @@ async function save() {
 							{fmt(a.owners_in_90_day_window)}
 						</span>
 					</label>
+				{:else}
+					<p class="small muted">No areas match “{search.trim()}”.</p>
 				{/each}
 			</fieldset>
 		{/snippet}

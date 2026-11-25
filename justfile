@@ -24,32 +24,61 @@ ps:
 	docker compose -f docker-compose.dev.yml ps
 
 dev-backend:
-	set -a && source .env.dev && set +a && cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+	#!/usr/bin/env bash
+	set -euo pipefail
+	set -a
+	source .env.dev
+	set +a
+	cd backend
+	uv sync
+	scripts/lifecycle/prestart.sh
+	uv run python -m app.crm.import_worker &
+	worker_pid=$!
+	uv run uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload &
+	api_pid=$!
+	cleanup() { kill "$api_pid" "$worker_pid" 2>/dev/null || true; wait "$api_pid" "$worker_pid" 2>/dev/null || true; }
+	trap cleanup EXIT INT TERM
+	while kill -0 "$api_pid" 2>/dev/null && kill -0 "$worker_pid" 2>/dev/null; do sleep 1; done
+	if ! kill -0 "$api_pid" 2>/dev/null; then wait "$api_pid"; else wait "$worker_pid"; fi
 
 dev-frontend:
 	set -a && source .env.dev && set +a && cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173
 
 dev-app:
-	set -a && source .env.dev && set +a && \
-		for port in 8002 5173; do \
-			pid=$(lsof -t -nP -iTCP:$port -sTCP:LISTEN 2>/dev/null | head -n 1); \
-			if [ -n "$pid" ]; then \
-				echo "Port $port is already in use by PID $pid:"; \
-				ps -p "$pid" -o pid=,ppid=,cmd=; \
-				echo "Stop the existing process or use the running app directly."; \
-				exit 1; \
-			fi; \
-		done; \
-		(cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload) & \
-		backend_pid=$!; \
-		(cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173) & \
-		frontend_pid=$!; \
-		trap 'kill $backend_pid $frontend_pid 2>/dev/null || true' EXIT INT TERM; \
-		wait -n $backend_pid $frontend_pid; \
-		exit_code=$?; \
-		kill $backend_pid $frontend_pid 2>/dev/null || true; \
-		wait $backend_pid $frontend_pid 2>/dev/null || true; \
-		exit $exit_code
+	#!/usr/bin/env bash
+	set -euo pipefail
+	set -a
+	source .env.dev
+	set +a
+	for port in 8002 5173; do
+		pid=$(lsof -t -nP -iTCP:$port -sTCP:LISTEN 2>/dev/null | head -n 1 || true)
+		if [ -n "$pid" ]; then
+			echo "Port $port is already in use by PID $pid:"
+			ps -p "$pid" -o pid=,ppid=,cmd=
+			echo "Stop the existing process or use the running app directly."
+			exit 1
+		fi
+	done
+	(
+		cd backend
+		uv sync
+		scripts/lifecycle/prestart.sh
+		uv run python -m app.crm.import_worker &
+		worker_pid=$!
+		uv run uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload &
+		api_pid=$!
+		cleanup_backend() { kill "$api_pid" "$worker_pid" 2>/dev/null || true; wait "$api_pid" "$worker_pid" 2>/dev/null || true; }
+		trap cleanup_backend EXIT INT TERM
+		while kill -0 "$api_pid" 2>/dev/null && kill -0 "$worker_pid" 2>/dev/null; do sleep 1; done
+		if ! kill -0 "$api_pid" 2>/dev/null; then wait "$api_pid"; else wait "$worker_pid"; fi
+	) &
+	backend_pid=$!
+	(cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173) &
+	frontend_pid=$!
+	cleanup() { kill "$backend_pid" "$frontend_pid" 2>/dev/null || true; wait "$backend_pid" "$frontend_pid" 2>/dev/null || true; }
+	trap cleanup EXIT INT TERM
+	while kill -0 "$backend_pid" 2>/dev/null && kill -0 "$frontend_pid" 2>/dev/null; do sleep 1; done
+	if ! kill -0 "$backend_pid" 2>/dev/null; then wait "$backend_pid"; else wait "$frontend_pid"; fi
 
 dev:
 	just up

@@ -319,6 +319,9 @@ export interface LeadCreate {
 	fields: LeadFields
 }
 
+/** Qualifying an Inbox contact: the lead type and its brief, saved on the same enquiry. */
+export type LeadQualify = Pick<LeadCreate, 'lead_type' | 'area' | 'fields'>
+
 export interface LeadPatch {
 	stage?: LeadStage
 	lead_type?: LeadType
@@ -1533,6 +1536,8 @@ export interface InboxItem {
 	want_line: string
 	lead_id: number | null
 	conversation: ConversationMessage[]
+	/** Structured enquiry details to review when qualifying this contact. */
+	qualify_prefill?: { area: string; fields: LeadFields }
 	/** What I can do here, decided by the backend from the handout mode. */
 	can: {
 		ask: boolean
@@ -1542,6 +1547,8 @@ export interface InboxItem {
 		restore: boolean
 		/** A recently sold owner can be approved into Leads as a possible buyer. */
 		approve: boolean
+		/** An unqualified contact can be qualified, in place, as a buyer, seller, tenant or landlord. */
+		qualify: boolean
 	}
 	/** "Asked 10:05 · the manager confirms" when I asked. */
 	my_request: string | null

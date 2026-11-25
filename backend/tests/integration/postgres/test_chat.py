@@ -1,20 +1,21 @@
+import json
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import func
 from sqlmodel import select
 
-from app.chat.models import Conversation, Message
-from app.chat.service import (
+from app.chat.conversations import (
     add_message,
     create_conversation,
     delete_conversation,
     get_conversation,
-    get_conversation_messages,
     get_user_conversations,
-    stream_chat_response,
     update_conversation,
 )
+from app.chat.errors import error_event
+from app.chat.models import Conversation, Message
+from app.crm.assistant.service import get_conversation_messages, stream_chat_response
 
 
 async def test_conversation_ownership_and_message_json_survive_real_commits(pg_session):
@@ -112,7 +113,9 @@ async def test_conversations_are_invisible_outside_their_user_and_organization(p
                 pg_session, conversation_id, "injected", user_id, organization_id
             )
         ]
-        assert events == ['data: {"type": "error", "error": "Conversation not found"}\n\n']
+        assert [json.loads(event.removeprefix("data: ")) for event in events] == [
+            error_event("conversation_not_found")
+        ]
         assert await _snapshot(pg_session, conversation_id) == before
 
     # A forged ID owned by nobody is rejected the same way.

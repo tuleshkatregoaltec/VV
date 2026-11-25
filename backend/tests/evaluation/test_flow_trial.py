@@ -18,7 +18,8 @@ def test_all_application_leaf_tools_are_replaced_and_catalog_covers_both_channel
 
 
 async def test_actual_typed_router_and_crm_specialist_share_synthetic_leaf_evidence(monkeypatch):
-    from app.chat import crm_tools, routing
+    from app.crm.assistant import crm_tools
+    from app.market_ai import routing
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("Evaluation may not execute a production data operation")

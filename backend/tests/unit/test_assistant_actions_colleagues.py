@@ -5,9 +5,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.assistant_actions import service
-from app.chat import workflows
-from app.chat.dependencies import ChatDependencies
 from app.chat.security import fingerprint
+from app.crm.assistant import workflows
+from app.crm.assistant.dependencies import ChatDependencies
 
 
 @pytest.mark.parametrize(

@@ -7,9 +7,10 @@ from contextlib import aclosing, asynccontextmanager
 from pydantic_ai.usage import RunUsage
 
 from app.chat import admission, budget
+from app.chat.conversations import create_conversation
 from app.chat.security import input_refusal, safe_answer
-from app.chat.service import create_conversation, stream_chat_response
 from app.crm.assistant import has_current_access
+from app.crm.assistant.service import stream_chat_response
 from app.postgres import get_db_session
 
 # Raised by `channel_budget` when a turn cannot start yet; nothing was reserved or spent.

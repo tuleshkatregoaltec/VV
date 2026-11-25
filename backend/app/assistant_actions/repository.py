@@ -4,13 +4,13 @@ from sqlmodel import select
 
 from app.assistant_actions.models import AssistantAction
 from app.chat import models as chat_models
-from app.crm.inbound_models import (
-    CrmInboundActivity,
-    CrmInboundContact,
-    CrmInboundMatch,
-    CrmInboundNote,
+from app.crm.inbound_models import CrmInboundContact
+from app.organization.models import (
+    Organization,
+    OrganizationMembership,
+    OrganizationTeam,
+    OrganizationTeamMember,
 )
-from app.organization.models import Organization, OrganizationMembership
 
 
 def _locked(statement):
@@ -139,38 +139,6 @@ async def records(db, model, *, user_id, organization_id):
     ).all()
 
 
-async def has_others_assignment_history(db, *, lead_id, user_id) -> bool:
-    from app.crm.inbound_models import CrmInboundAssignmentEvent
-
-    return (
-        await db.exec(
-            select(CrmInboundAssignmentEvent.id)
-            .where(
-                CrmInboundAssignmentEvent.enquiry_id == lead_id,
-                CrmInboundAssignmentEvent.actor_user_id != user_id,
-            )
-            .limit(1)
-        )
-    ).first() is not None
-
-
-async def lead_dependents(db, *, lead_id):
-    result = []
-    for model in (CrmInboundNote, CrmInboundActivity, CrmInboundMatch):
-        result.extend(
-            (
-                await db.exec(
-                    _locked(
-                        select(model).where(
-                            model.enquiry_id == lead_id,
-                        )
-                    )
-                )
-            ).all()
-        )
-    return result
-
-
 async def outbox(db, *, user_id, organization_id, action_id):
     from app.assistant_actions.models import AssistantOutbox
 
@@ -211,3 +179,50 @@ async def member_ids(db, *, organization_id):
             )
         ).all()
     )
+
+
+async def team(db, *, organization_id, team_id):
+    """A team of this organization, locked until the transaction ends."""
+    return (
+        await db.exec(
+            _locked(
+                select(OrganizationTeam).where(
+                    OrganizationTeam.id == team_id,
+                    OrganizationTeam.organization_id == organization_id,
+                )
+            )
+        )
+    ).first()
+
+
+async def team_members(db, *, organization_id, team_id):
+    """A team's members and roles, locked, in a stable order."""
+    return (
+        await db.exec(
+            _locked(
+                select(OrganizationTeamMember)
+                .where(
+                    OrganizationTeamMember.team_id == team_id,
+                    OrganizationTeamMember.organization_id == organization_id,
+                )
+                .order_by(OrganizationTeamMember.user_id)
+            )
+        )
+    ).all()
+
+
+async def own_calendar_event(db, *, user_id, organization_id, event_id):
+    """The user's own CRM calendar event, locked (as CRM › Calendar's own-event check)."""
+    from app.crm.calendar_models import CrmCalendarEvent
+
+    return (
+        await db.exec(
+            _locked(
+                select(CrmCalendarEvent).where(
+                    CrmCalendarEvent.id == event_id,
+                    CrmCalendarEvent.organization_id == organization_id,
+                    CrmCalendarEvent.user_id == user_id,
+                )
+            )
+        )
+    ).first()

@@ -2,36 +2,34 @@ from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolRetu
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 
-from app.chat.agent import agent
-from app.chat.dependencies import ChatDependencies
-from app.chat.workflows import LIMITS, action_agent, crm_agent, market_agent, pricing_agent
+from app.crm.assistant import workflows
+from app.crm.assistant.agent import agent
+from app.crm.assistant.dependencies import ChatDependencies
+from app.crm.assistant.workflows import LIMITS, action_agent, crm_agent, followup_agent
 
 
-async def test_orchestrator_delegates_with_shared_identity_without_market_tools():
+async def test_orchestrator_delegates_with_shared_identity_to_crm_workflows_only():
     def orchestrator(messages, info):
         if not any(
             isinstance(part, ToolReturnPart) for message in messages for part in message.parts
         ):
             return ModelResponse(
-                parts=[ToolCallPart("research_market", {"question": "Dubai prices"})]
+                parts=[ToolCallPart("retrieve_personal_crm", {"question": "My leads"})]
             )
-        return ModelResponse(parts=[TextPart("Stored data is unavailable for this scope.")])
+        return ModelResponse(parts=[TextPart("You have no matching leads.")])
 
     deps = ChatDependencies("user", "org", conversation_id=1)
     with (
         agent.override(model=FunctionModel(orchestrator)),
-        market_agent.override(
-            model=TestModel(
-                call_tools=[], custom_output_text="Stored data is unavailable for this scope."
-            )
+        crm_agent.override(
+            model=TestModel(call_tools=[], custom_output_text="You have no matching leads.")
         ),
     ):
-        result = await agent.run("Dubai prices", deps=deps, usage_limits=LIMITS)
+        result = await agent.run("My leads", deps=deps, usage_limits=LIMITS)
     assert result.usage().requests == 3
-    assert "unavailable" in result.output
+    assert "no matching leads" in result.output
+    # CRM Operations only: no market research or pricing workflow is registered.
     assert set(agent._function_toolset.tools) == {
-        "research_market",
-        "analyze_pricing",
         "retrieve_personal_crm",
         "plan_followups",
         "prepare_action",
@@ -44,17 +42,23 @@ def test_specialists_have_narrow_tools_and_no_execution_capability():
         "query_my_crm_records",
         "query_my_calendar",
         "query_my_lead_emails",
+        # Read-only: rechecks access and notes the request in turn evidence; writes nothing.
+        "hold_pending_request",
     }
     assert set(action_agent._function_toolset.tools) == {
         "query_my_crm_records",
         "query_my_calendar",
         "propose_crm_action",
         "find_assignment_colleagues",
+        "find_meeting_colleagues",
+        # Team management lookups (organization owners and administrators only).
+        "find_teams",
+        "find_team_people",
+        "hold_pending_request",
     }
-    assert "propose_crm_action" not in pricing_agent._function_toolset.tools
-    assert {"research_listing_shortlist", "comparable_evidence", "compare_stored_projects"} <= set(
-        pricing_agent._function_toolset.tools
-    )
+    assert "propose_crm_action" not in followup_agent._function_toolset.tools
+    # No market specialist exists in the CRM assistant.
+    assert not hasattr(workflows, "market_agent") and not hasattr(workflows, "pricing_agent")
     assert (
         LIMITS.request_limit == 20
         and LIMITS.tool_calls_limit == 24
@@ -68,14 +72,12 @@ async def test_recursive_workflow_requests_share_and_exhaust_one_turn_budget():
     from pydantic_ai.usage import RunUsage, UsageLimits
 
     def repeat(messages, info):
-        return ModelResponse(parts=[ToolCallPart("research_market", {"question": "Repeat"})])
+        return ModelResponse(parts=[ToolCallPart("retrieve_personal_crm", {"question": "Repeat"})])
 
     usage = RunUsage()
     with (
         agent.override(model=FunctionModel(repeat)),
-        market_agent.override(
-            model=TestModel(call_tools=[], custom_output_text="No stored evidence")
-        ),
+        crm_agent.override(model=TestModel(call_tools=[], custom_output_text="No stored records")),
     ):
         with pytest.raises(UsageLimitExceeded):
             await agent.run(
@@ -88,8 +90,8 @@ async def test_recursive_workflow_requests_share_and_exhaust_one_turn_budget():
 
 
 def test_private_followup_replays_only_reauthorized_lookup_handles():
-    from app.chat.agent import _convert_to_pydantic_messages
     from app.chat.models import Message
+    from app.crm.assistant.agent import _convert_to_pydantic_messages
 
     message = Message(
         conversation_id=1,

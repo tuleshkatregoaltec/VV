@@ -21,12 +21,19 @@ export type {
 export interface ConversationListParams {
 	limit?: number
 	offset?: number
+	/** Whose history: the CRM Operations Assistant (default) or Market AI. */
+	assistant?: ChatAssistant
 }
 
 export interface MessageListParams {
 	before_id?: number
 	limit?: number
+	/** Only a conversation of this assistant (the other assistant's is not found). */
+	assistant?: ChatAssistant
 }
+
+/** Which chat product answers: the CRM Operations Assistant or Market AI. */
+export type ChatAssistant = 'crm' | 'market'
 
 export const chat = {
 	getAction: (actionId: string) =>
@@ -59,32 +66,46 @@ export const chat = {
 	createConversation: (data: CreateConversationRequest = {}) =>
 		client.post<ConversationResponse>('/api/v1/chat/conversations', data),
 
-	getConversations: ({ limit = 50, offset = 0 }: ConversationListParams = {}) =>
+	getConversations: ({ limit = 50, offset = 0, assistant = 'crm' }: ConversationListParams = {}) =>
 		client.get<ConversationListResponse>(
-			client.withQuery('/api/v1/chat/conversations', { limit, offset })
+			client.withQuery('/api/v1/chat/conversations', { limit, offset, assistant })
 		),
 
-	updateConversation: (conversationId: number, title: string) =>
+	updateConversation: (conversationId: number, title: string, assistant: ChatAssistant = 'crm') =>
 		client.patch<ConversationResponse, UpdateConversationRequest>(
-			`/api/v1/chat/conversations/${conversationId}`,
+			client.withQuery(`/api/v1/chat/conversations/${conversationId}`, { assistant }),
 			{ title }
 		),
 
-	deleteConversation: (conversationId: number) =>
-		client.delete(`/api/v1/chat/conversations/${conversationId}`),
+	deleteConversation: (conversationId: number, assistant: ChatAssistant = 'crm') =>
+		client.delete(client.withQuery(`/api/v1/chat/conversations/${conversationId}`, { assistant })),
 
-	getMessages: (conversationId: number, { limit = 100, before_id }: MessageListParams = {}) =>
+	getMessages: (
+		conversationId: number,
+		{ limit = 100, before_id, assistant }: MessageListParams = {}
+	) =>
 		client.get<MessageResponse[]>(
 			client.withQuery(`/api/v1/chat/conversations/${conversationId}/messages`, {
 				limit,
-				before_id
+				before_id,
+				assistant
 			})
 		),
 
-	/** Streams AI response chunks via Server-Sent Events */
-	sendMessage: (conversationId: number, message: string, onChunk: StreamCallback) =>
-		client.stream(`/api/v1/chat/conversations/${conversationId}/messages/stream`, onChunk, {
-			method: 'POST',
-			body: { message }
-		})
+	/**
+	 * Streams AI response chunks via Server-Sent Events. Each product answers from its own
+	 * endpoint over the shared conversation list: the CRM Operations Assistant (default) or
+	 * Market AI (/chat).
+	 */
+	sendMessage: (
+		conversationId: number,
+		message: string,
+		onChunk: StreamCallback,
+		assistant: ChatAssistant = 'crm'
+	) =>
+		client.stream(
+			`/api/v1/${assistant === 'market' ? 'market-chat' : 'chat'}/conversations/${conversationId}/messages/stream`,
+			onChunk,
+			{ method: 'POST', body: { message } }
+		)
 }

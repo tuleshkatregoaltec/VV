@@ -10,7 +10,7 @@ async def test_chat_identity_is_resolved_from_auth_not_request_fields(client, mo
         captured.update(kwargs)
         yield 'data: {"type": "done"}\n\n'
 
-    monkeypatch.setattr("app.chat.router.stream_chat_response", stream)
+    monkeypatch.setattr("app.crm.assistant.router.stream_chat_response", stream)
     app.dependency_overrides[require_token_quota] = lambda: None
     response = await client.post(
         "/api/v1/chat/conversations/7/messages/stream",
@@ -39,7 +39,7 @@ async def test_http_stream_close_awaits_provider_cleanup_before_releasing_sessio
 
     from conftest import make_mock_auth_context
 
-    from app.chat import router
+    from app.crm.assistant import router
 
     closed = asyncio.Event()
 

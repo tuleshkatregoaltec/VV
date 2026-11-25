@@ -1574,7 +1574,7 @@
           "chat"
         ],
         "summary": "List Conversations",
-        "description": "Get all conversations for current user",
+        "description": "Get the current user's conversations with one assistant (the CRM assistant by default)",
         "operationId": "chat-list_conversations",
         "parameters": [
           {
@@ -1598,6 +1598,20 @@
               "minimum": 0,
               "default": 0,
               "title": "Offset"
+            }
+          },
+          {
+            "name": "assistant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "crm",
+                "market"
+              ],
+              "type": "string",
+              "default": "crm",
+              "title": "Assistant"
             }
           }
         ],
@@ -1714,6 +1728,49 @@
         }
       }
     },
+    "/api/v1/chat/transcribe": {
+      "post": {
+        "tags": [
+          "chat",
+          "chat"
+        ],
+        "summary": "Transcribe Voice Message",
+        "description": "Turn the agent's recording (16 kHz mono WAV) into text for them to check before sending.\nNothing is stored and nothing is sent to the assistant.",
+        "operationId": "chat-transcribe_voice_message",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_chat-transcribe_voice_message"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/chat/conversations/{conversation_id}/messages": {
       "get": {
         "tags": [
@@ -1721,7 +1778,7 @@
           "chat"
         ],
         "summary": "Get Conversation Messages Endpoint",
-        "description": "Get messages for a conversation",
+        "description": "Get messages for a conversation (only that assistant's, when `assistant` is given)",
         "operationId": "chat-get_conversation_messages_endpoint",
         "parameters": [
           {
@@ -1761,6 +1818,26 @@
               ],
               "title": "Before Id"
             }
+          },
+          {
+            "name": "assistant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "crm",
+                    "market"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assistant"
+            }
           }
         ],
         "responses": {
@@ -1798,8 +1875,55 @@
           "chat"
         ],
         "summary": "Send Message",
-        "description": "Send a message and stream AI response via SSE",
+        "description": "Send a message to the CRM Operations Assistant and stream its answer via SSE",
         "operationId": "chat-send_message",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/market-chat/conversations/{conversation_id}/messages/stream": {
+      "post": {
+        "tags": [
+          "chat",
+          "chat"
+        ],
+        "summary": "Send Market Message",
+        "description": "Send a message to Market AI and stream its answer via SSE",
+        "operationId": "chat-send_market_message",
         "parameters": [
           {
             "name": "conversation_id",
@@ -16535,7 +16659,10 @@
           "create_lead",
           "update_lead",
           "assign_lead",
+          "unassign_lead",
           "delete_lead",
+          "log_contact",
+          "release_to_pool",
           "add_note",
           "create_reminder",
           "update_reminder",
@@ -16546,7 +16673,16 @@
           "update_listing_draft",
           "send_message",
           "publish_listing",
-          "book_external_viewing"
+          "book_external_viewing",
+          "book_calendar_meeting",
+          "create_team",
+          "delete_team",
+          "add_team_agent",
+          "remove_team_member",
+          "set_team_manager",
+          "move_team_agent",
+          "reschedule_calendar_event",
+          "cancel_calendar_event"
         ],
         "title": "ActionKind"
       },
@@ -16578,6 +16714,9 @@
                 "$ref": "#/components/schemas/AddNote"
               },
               {
+                "$ref": "#/components/schemas/LogContact"
+              },
+              {
                 "$ref": "#/components/schemas/CreateReminder"
               },
               {
@@ -16588,6 +16727,9 @@
               },
               {
                 "$ref": "#/components/schemas/ScheduleViewing"
+              },
+              {
+                "$ref": "#/components/schemas/CalendarMeeting"
               },
               {
                 "$ref": "#/components/schemas/CancelViewing"
@@ -16603,6 +16745,27 @@
               },
               {
                 "$ref": "#/components/schemas/PublishListing"
+              },
+              {
+                "$ref": "#/components/schemas/CreateTeam"
+              },
+              {
+                "$ref": "#/components/schemas/TeamTransfer"
+              },
+              {
+                "$ref": "#/components/schemas/RescheduleCalendarEvent"
+              },
+              {
+                "$ref": "#/components/schemas/CalendarEventTarget"
+              },
+              {
+                "$ref": "#/components/schemas/SetTeamManager"
+              },
+              {
+                "$ref": "#/components/schemas/TeamMemberChange"
+              },
+              {
+                "$ref": "#/components/schemas/TeamTarget"
               }
             ],
             "title": "Payload"
@@ -16639,6 +16802,7 @@
             "enum": [
               "awaiting_confirmation",
               "succeeded",
+              "partially_succeeded",
               "cancelled",
               "expired",
               "failed",
@@ -18552,6 +18716,14 @@
               }
             ],
             "title": "Subscription Status"
+          },
+          "daily_token_limit": {
+            "type": "integer",
+            "title": "Daily Token Limit"
+          },
+          "tokens_used_today": {
+            "type": "integer",
+            "title": "Tokens Used Today"
           }
         },
         "type": "object",
@@ -18564,7 +18736,9 @@
           "organization_name",
           "role",
           "is_owner",
-          "subscription_status"
+          "subscription_status",
+          "daily_token_limit",
+          "tokens_used_today"
         ],
         "title": "AuthMeResponse"
       },
@@ -18629,6 +18803,20 @@
           "blocked_total"
         ],
         "title": "BlockResult"
+      },
+      "Body_chat-transcribe_voice_message": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_chat-transcribe_voice_message"
       },
       "Body_crm-crm_contact_import": {
         "properties": {
@@ -19514,6 +19702,25 @@
               "error"
             ],
             "title": "Google Sync Status"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit"
+          },
+          "redacted": {
+            "type": "boolean",
+            "title": "Redacted"
+          },
+          "owner_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Role"
           }
         },
         "type": "object",
@@ -19548,9 +19755,86 @@
           "record",
           "outcome",
           "rescheduled_from",
-          "google_sync_status"
+          "google_sync_status",
+          "can_edit",
+          "redacted"
         ],
         "title": "CalendarEventResponse"
+      },
+      "CalendarEventTarget": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Event Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id"
+        ],
+        "title": "CalendarEventTarget"
+      },
+      "CalendarMeeting": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "lead_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Id"
+          },
+          "colleague_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Colleague Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "starts_at",
+          "ends_at"
+        ],
+        "title": "CalendarMeeting"
       },
       "CalendarSlot": {
         "properties": {
@@ -20676,6 +20960,15 @@
             ],
             "title": "Title"
           },
+          "assistant": {
+            "type": "string",
+            "enum": [
+              "crm",
+              "market"
+            ],
+            "title": "Assistant",
+            "default": "crm"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -20710,6 +21003,15 @@
               }
             ],
             "title": "Title"
+          },
+          "assistant": {
+            "type": "string",
+            "enum": [
+              "crm",
+              "market"
+            ],
+            "title": "Assistant",
+            "default": "crm"
           }
         },
         "type": "object",
@@ -20850,6 +21152,22 @@
           "due_at"
         ],
         "title": "CreateReminder"
+      },
+      "CreateTeam": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CreateTeam"
       },
       "CreateUserRequest": {
         "properties": {
@@ -34583,6 +34901,46 @@
         ],
         "title": "ListingTrendPoint"
       },
+      "LogContact": {
+        "properties": {
+          "lead_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Lead Id"
+          },
+          "activity_type": {
+            "type": "string",
+            "enum": [
+              "contact_attempt",
+              "call",
+              "email",
+              "whatsapp",
+              "meeting"
+            ],
+            "title": "Activity Type"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lead_id",
+          "activity_type"
+        ],
+        "title": "LogContact"
+      },
       "MarketCoverage": {
         "properties": {
           "status": {
@@ -41130,6 +41488,39 @@
         ],
         "title": "ReplyEdit"
       },
+      "RescheduleCalendarEvent": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Event Id"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "date"
+        ],
+        "title": "RescheduleCalendarEvent"
+      },
       "RevisionDecision": {
         "properties": {
           "expected_revision": {
@@ -41628,6 +42019,34 @@
         ],
         "title": "SendMessageRequest",
         "description": "Request model for sending a message in a conversation"
+      },
+      "SetTeamManager": {
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Team Id"
+          },
+          "member_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Member Id"
+          },
+          "replace_existing": {
+            "type": "boolean",
+            "title": "Replace Existing",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "team_id",
+          "member_id"
+        ],
+        "title": "SetTeamManager"
       },
       "ShareLinkResponse": {
         "properties": {
@@ -43137,6 +43556,29 @@
         ],
         "title": "TeamAnalyticsResponse"
       },
+      "TeamMemberChange": {
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Team Id"
+          },
+          "member_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Member Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "team_id",
+          "member_id"
+        ],
+        "title": "TeamMemberChange"
+      },
       "TeamMemberInput": {
         "properties": {
           "user_id": {
@@ -43282,6 +43724,52 @@
           "updated_at"
         ],
         "title": "TeamResponse"
+      },
+      "TeamTarget": {
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Team Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "team_id"
+        ],
+        "title": "TeamTarget"
+      },
+      "TeamTransfer": {
+        "properties": {
+          "member_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Member Id"
+          },
+          "from_team_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "From Team Id"
+          },
+          "to_team_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "To Team Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "member_id",
+          "from_team_id",
+          "to_team_id"
+        ],
+        "title": "TeamTransfer"
       },
       "TeamWorkload": {
         "properties": {
@@ -43617,6 +44105,20 @@
         ],
         "title": "TransactionResponse",
         "description": "One DXBI sale (dxbi_sales_unit_events): sizes in sq ft, prices in AED."
+      },
+      "TranscriptResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "TranscriptResponse",
+        "description": "The words in a voice message, for the agent to check before sending. Empty: no speech."
       },
       "TrendPoint": {
         "properties": {

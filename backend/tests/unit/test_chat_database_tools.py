@@ -12,8 +12,8 @@ from app.analytics.models import (
     ProjectRentalSummary,
     ProjectSalesSummary,
 )
-from app.chat import tools
-from app.chat.workflows import market_agent as agent
+from app.market_ai import tools
+from app.market_ai.workflows import market_agent as agent
 
 
 @pytest.mark.parametrize("count", [0, 42])

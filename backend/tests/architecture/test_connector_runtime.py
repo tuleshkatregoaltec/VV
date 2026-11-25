@@ -14,17 +14,25 @@ def test_removed_prototypes_cannot_shadow_the_shared_assistant_or_register_table
     import app.postgres.models  # noqa: F401 - register the managed runtime schema
     from app.crm import assistant
 
-    assert Path(assistant.__file__).name == "assistant.py"
+    # The shared CRM Operations Assistant now lives in its own package, app/crm/assistant/
+    # (25 Nov 2026), with the record reads it always had.
+    assert Path(assistant.__file__).relative_to(BACKEND).as_posix() == (
+        "app/crm/assistant/__init__.py"
+    )
     assert callable(assistant.query_my_records)
     # Calendar and email were restored (lead-assignment scoped, user-bound Google sign-in,
-    # migration f2b4d6e8a0c1); the assistant and WhatsApp prototypes stay removed.
+    # migration f2b4d6e8a0c1); the assistant and WhatsApp prototypes stay removed: no
+    # prototype tables, no prototype modules (its own scope, actions, deps and voice).
     assert not any(
         table.startswith(("crm_assistant_", "crm_whatsapp_")) for table in SQLModel.metadata.tables
     )
-    for name in ("assistant", "whatsapp"):
-        source = BACKEND / "app" / "crm" / name
-        assert not source.is_file()
-        assert not list(source.rglob("*.py"))
+    package = BACKEND / "app" / "crm" / "assistant"
+    for prototype in ("scope", "actions", "deps", "voice"):
+        assert not (package / f"{prototype}.py").exists(), prototype
+    assert not (package / "tools").exists()
+    source = BACKEND / "app" / "crm" / "whatsapp"
+    assert not source.is_file()
+    assert not list(source.rglob("*.py"))
 
 
 def test_valuation_migration_extends_one_current_vv_history_without_prototype_tables():

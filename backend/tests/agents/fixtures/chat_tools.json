@@ -1,55 +1,4 @@
 {
-  "research_market": {
-    "description": "Research Dubai transactions, rents, market trends, locations, stock and deliveries.",
-    "schema": {
-      "additionalProperties": false,
-      "properties": {
-        "question": {
-          "maxLength": 8000,
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "question"
-      ],
-      "type": "object"
-    }
-  },
-  "analyze_pricing": {
-    "description": "Compare achieved prices, rental metrics, asking inventory and comparable projects.",
-    "schema": {
-      "additionalProperties": false,
-      "properties": {
-        "question": {
-          "maxLength": 8000,
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "question"
-      ],
-      "type": "object"
-    }
-  },
-  "retrieve_personal_crm": {
-    "description": "Retrieve the leads the user's CRM role lets them see, their owner claims, notes, activities, calendar and lead emails.",
-    "schema": {
-      "additionalProperties": false,
-      "properties": {
-        "question": {
-          "maxLength": 8000,
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "question"
-      ],
-      "type": "object"
-    }
-  },
   "plan_followups": {
     "description": "Plan personal follow-ups from current CRM evidence and draft messages in chat.",
     "schema": {
@@ -69,6 +18,23 @@
   },
   "prepare_action": {
     "description": "Prepare CRM writes the user's role allows, reminders, viewings, listings, emails to a lead or Google Calendar bookings for confirmation.",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "question": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "type": "object"
+    }
+  },
+  "retrieve_personal_crm": {
+    "description": "Retrieve the leads the user's CRM role lets them see, their owner claims, notes, activities, CRM teams and team workload, calendar and lead emails.",
     "schema": {
       "additionalProperties": false,
       "properties": {

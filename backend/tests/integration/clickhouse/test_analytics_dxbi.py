@@ -97,7 +97,7 @@ async def test_rental_only_scope_is_searchable_and_empty_sales_are_json_safe(dxb
 
 
 async def test_chat_search_to_profile_reads_stored_lease_without_inventing_sales(dxbi):  # noqa: F811
-    from app.chat.tools import get_project_profile, search_database_locations
+    from app.market_ai.tools import get_project_profile, search_database_locations
 
     await dxbi(leases=[lease("chat-rental-only")])
     matches = await search_database_locations(None, "Iris")

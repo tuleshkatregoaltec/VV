@@ -1,6 +1,6 @@
 import json
 import secrets
-from datetime import date, datetime, time, timedelta
+from datetime import date
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -622,35 +622,7 @@ async def crm_move_calendar_event(
 ):
     user_id, organization_id = _auth_ids(context)
     event = await _own_event(db, context, event_id)
-    original_date = event.event_date
-    original_time = event.event_time
-    duration_days = (event.event_end_date or original_date) - original_date
-    if (payload.date, payload.time) != (original_date, event.event_time):
-        # A new list, so SQLAlchemy sees the JSON change.
-        event.rescheduled_from = [
-            *event.rescheduled_from,
-            {"date": original_date.isoformat(), "time": event.event_time},
-        ]
-    event.event_date = payload.date
-    event.event_time = payload.time
-    if payload.time is None:
-        event.event_end_date = payload.date + duration_days
-        event.event_end_time = None
-        event.all_day = True
-    else:
-        original_start = datetime.combine(
-            original_date, time.fromisoformat(original_time or "10:00")
-        )
-        original_end = datetime.combine(
-            event.event_end_date or original_date,
-            time.fromisoformat(event.event_end_time or "11:00"),
-        )
-        new_start = datetime.combine(payload.date, time.fromisoformat(payload.time))
-        duration = original_end - original_start
-        new_end = new_start + (duration if duration > timedelta(0) else timedelta(hours=1))
-        event.event_end_date = new_end.date()
-        event.event_end_time = new_end.strftime("%H:%M")
-        event.all_day = False
+    calendar_service.move_event(event, payload.date, payload.time)
     connection = await db.get(CrmCalendarConnection, (organization_id, user_id))
     return await calendar_service.update_event(db, event=event, connection=connection)
 

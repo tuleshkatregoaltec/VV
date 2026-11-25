@@ -23,3 +23,5 @@ class AuthMeResponse(BaseModel):
     role: str
     is_owner: bool
     subscription_status: str | None
+    daily_token_limit: int
+    tokens_used_today: int

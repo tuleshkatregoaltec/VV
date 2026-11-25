@@ -269,7 +269,7 @@ async def test_last_month_average_sale_price_in_jvc(served):
 
 
 async def test_chat_coverage_counts_only_eligible_stored_records(served):
-    from app.chat.tools import get_database_coverage
+    from app.market_ai.tools import get_database_coverage
 
     result = await get_database_coverage(None, "sales")
     # Three September JVC sales, one Business Bay sale and two outside September.
@@ -404,7 +404,7 @@ async def test_api_and_chat_tool_return_the_database_result(served, client):
 
     Both are checked against the hand-computed September JVC numbers, not only each other.
     """
-    from app.chat.tools import query_market_metrics
+    from app.market_ai.tools import query_market_metrics
 
     body = {
         "dataset": "sales",
@@ -439,7 +439,7 @@ async def test_registered_chat_agent_executes_the_tool_against_the_database(serv
     from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
     from pydantic_ai.models.function import FunctionModel
 
-    from app.chat.workflows import market_agent as agent
+    from app.market_ai.workflows import market_agent as agent
 
     arguments = {
         "dataset": "sales",

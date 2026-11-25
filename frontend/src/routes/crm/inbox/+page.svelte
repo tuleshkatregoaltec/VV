@@ -10,7 +10,7 @@ import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
 import { fmt } from '$lib/crm/format'
 import { crmQueries } from '$lib/crm/queries'
-import { openLead } from '$lib/crm/stores/panel.svelte'
+import { openLead, panel } from '$lib/crm/stores/panel.svelte'
 import { ui } from '$lib/crm/stores/ui.svelte'
 import { errorText, write } from '$lib/crm/write'
 
@@ -180,6 +180,23 @@ function act(
 							{#if sel.can.approve}
 								{@const item = sel}
 								<button type="button" class="btn" onclick={() => approve(item)}>Approve as buyer</button>
+							{/if}
+							{#if sel.can.qualify}
+								{@const item = sel}
+								<button
+									type="button"
+									class="btn"
+					onclick={() =>
+						panel.open({
+							kind: 'qualify-lead',
+							id: Number(item.id),
+							name: item.name,
+							prefill: item.qualify_prefill
+						})
+					}
+								>
+									Qualify lead
+								</button>
 							{/if}
 							{#if sel.lead_id}
 								{@const leadId = sel.lead_id}

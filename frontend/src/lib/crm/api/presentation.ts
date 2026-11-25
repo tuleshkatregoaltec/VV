@@ -524,7 +524,9 @@ export function createPresentationCrm(live: CrmApi, today: string): CrmApi {
 			release: false,
 			dismiss: false,
 			restore: false,
-			approve: false
+			approve: false,
+			// Presentation mode is read only.
+			qualify: false
 		},
 		my_request: null
 	}))

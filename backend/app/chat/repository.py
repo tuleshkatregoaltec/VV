@@ -19,12 +19,21 @@ def _owned_conversation_ids(conversation_id: int, user_id: str, organization_id:
 
 
 async def get_user_conversations(
-    db: AsyncSession, user_id: str, organization_id: str, limit: int = 50, offset: int = 0
+    db: AsyncSession,
+    user_id: str,
+    organization_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    assistant: str = "crm",
 ) -> List[Conversation]:
-    """Get the user's conversations in the current organization"""
+    """Get the user's conversations with one assistant in the current organization"""
     stmt = (
         select(Conversation)
-        .where(Conversation.user_id == user_id, Conversation.organization_id == organization_id)
+        .where(
+            Conversation.user_id == user_id,
+            Conversation.organization_id == organization_id,
+            Conversation.assistant == assistant,
+        )
         .order_by(Conversation.updated_at.desc())
         .limit(limit)
         .offset(offset)
@@ -34,14 +43,20 @@ async def get_user_conversations(
 
 
 async def get_conversation(
-    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str
+    db: AsyncSession,
+    conversation_id: int,
+    user_id: str,
+    organization_id: str,
+    assistant: str | None = None,
 ) -> Optional[Conversation]:
-    """Get a conversation by ID (with auth check)"""
+    """Get a conversation by ID (with auth check), optionally only if it is that assistant's"""
     stmt = select(Conversation).where(
         Conversation.id == conversation_id,
         Conversation.user_id == user_id,
         Conversation.organization_id == organization_id,
     )
+    if assistant is not None:
+        stmt = stmt.where(Conversation.assistant == assistant)
     result = await db.exec(stmt)
     return result.first()
 

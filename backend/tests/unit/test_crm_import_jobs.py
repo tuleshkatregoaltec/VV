@@ -81,6 +81,23 @@ def test_worker_supervisor_bounds_child_wall_and_propagates_resource_budget(monk
     assert kwargs["timeout"] == 30
 
 
+def test_worker_skips_unsupported_address_space_limit_on_macos(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["worker", "--execute-one"])
+    monkeypatch.setattr(import_worker.sys, "platform", "darwin")
+    setrlimit = Mock(side_effect=AssertionError("macOS cannot set RLIMIT_AS"))
+    monkeypatch.setattr(import_worker.resource, "setrlimit", setrlimit)
+    monkeypatch.setattr(import_worker, "get_postgres_engine", Mock())
+
+    def run_without_database(coroutine):
+        coroutine.close()
+        return False
+
+    monkeypatch.setattr(import_worker.asyncio, "run", run_without_database)
+
+    assert import_worker.main() == 3
+    setrlimit.assert_not_called()
+
+
 def test_worker_timeout_is_reported_as_failure_in_finite_mode(monkeypatch):
     monkeypatch.setattr("sys.argv", ["worker", "--once"])
     monkeypatch.setattr(

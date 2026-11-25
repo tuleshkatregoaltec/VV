@@ -23,24 +23,31 @@ from app.assistant_actions.models import (
     ViewingResponse,
 )
 from app.auth.service import get_user_by_id
-from app.crm import assignment
+from app.crm import assignment, inbound
 from app.crm.inbound_models import CrmInboundContact, CrmInboundEnquiry, CrmInboundNote
+from app.organization import teams as org_teams
+from app.organization.models import TeamMemberInput, TeamMembersUpdateRequest
 from app.organization.service import get_organization_members
 
 EXTERNAL_KINDS = {
     ActionKind.SEND_MESSAGE,
     ActionKind.PUBLISH_LISTING,
     ActionKind.BOOK_EXTERNAL_VIEWING,
+    ActionKind.BOOK_CALENDAR_MEETING,
+    # The CRM calendar saves and syncs Google itself (it commits), so these run after the
+    # confirmation is recorded and report the calendar's own outcome.
+    ActionKind.RESCHEDULE_CALENDAR_EVENT,
+    ActionKind.CANCEL_CALENDAR_EVENT,
 }
 # Changes to a lead itself: a pooled lead stays read-only to agents until they claim it.
 EDIT_KINDS = {
     ActionKind.UPDATE_LEAD,
-    ActionKind.DELETE_LEAD,
     ActionKind.ADD_NOTE,
     ActionKind.SCHEDULE_VIEWING,
     ActionKind.CANCEL_VIEWING,
     ActionKind.SEND_MESSAGE,
     ActionKind.BOOK_EXTERNAL_VIEWING,
+    ActionKind.BOOK_CALENDAR_MEETING,
 }
 
 
@@ -77,6 +84,143 @@ def _response(row):
     )
 
 
+REASSIGN_KINDS = {ActionKind.ASSIGN_LEAD, ActionKind.UNASSIGN_LEAD, ActionKind.RELEASE_TO_POOL}
+NO_LEAD_DELETION = (
+    "The CRM does not support deleting leads, so the assistant cannot delete one. "
+    "You can change its stage instead (for example to lost or disqualified)."
+)
+
+
+TEAM_KINDS = {
+    ActionKind.CREATE_TEAM,
+    ActionKind.DELETE_TEAM,
+    ActionKind.ADD_TEAM_AGENT,
+    ActionKind.REMOVE_TEAM_MEMBER,
+    ActionKind.SET_TEAM_MANAGER,
+    ActionKind.MOVE_TEAM_AGENT,
+}
+CALENDAR_EVENT_KINDS = {ActionKind.RESCHEDULE_CALENDAR_EVENT, ActionKind.CANCEL_CALENDAR_EVENT}
+TEAM_ADMIN_ONLY = (
+    "Only the organization's owner or an administrator can create or delete teams or change "
+    "their members and managers, as on the CRM's Teams page."
+)
+ROLE_NAMES = {"supervisor": "manager", "agent": "agent"}
+
+
+async def _team_resources(db, request, scope, organization_id, *, pending):
+    """The CRM's Teams rules (organization/router.py: organization administrators only) and
+    the team's current membership, locked; the state checks apply while it awaits confirmation.
+    """
+    if not scope.organization_admin:
+        raise HTTPException(403, TEAM_ADMIN_ONLY)
+    payload = request.payload
+    if request.kind == ActionKind.CREATE_TEAM:
+        return {}  # A taken name is refused by the CRM when the team is created.
+    if request.kind == ActionKind.MOVE_TEAM_AGENT:
+        return await _transfer_resources(db, payload, organization_id, pending=pending)
+    team = await repository.team(db, organization_id=organization_id, team_id=payload.team_id)
+    if team is None:
+        if not pending and request.kind == ActionKind.DELETE_TEAM:
+            return {}  # Deleted, as confirmed.
+        raise HTTPException(404, "Team not found in your organization")
+    members = await repository.team_members(db, organization_id=organization_id, team_id=team.id)
+    person = getattr(payload, "member_id", None)
+    if person is not None:
+        if person not in await repository.member_ids(db, organization_id=organization_id):
+            raise HTTPException(409, "That person is not a member of your organization")
+        role = next((member.role for member in members if member.user_id == person), None)
+        if pending and request.kind == ActionKind.ADD_TEAM_AGENT and role:
+            raise HTTPException(409, f"Already in this team as {ROLE_NAMES[role]}")
+        if pending and request.kind == ActionKind.REMOVE_TEAM_MEMBER and role is None:
+            raise HTTPException(409, "This person is not in this team")
+        if pending and request.kind == ActionKind.SET_TEAM_MANAGER and role == "supervisor":
+            others = [m for m in members if m.role == "supervisor" and m.user_id != person]
+            if not (payload.replace_existing and others):
+                raise HTTPException(409, "This person already manages this team")
+    return {"team": team, "team_members": list(members)}
+
+
+async def _transfer_resources(db, payload, organization_id, *, pending):
+    """Both teams and their members, locked in a fixed order. While it awaits confirmation the
+    person must be an agent of the first team and not yet in the second."""
+    teams = {}
+    for team_id in sorted({payload.from_team_id, payload.to_team_id}):
+        team = await repository.team(db, organization_id=organization_id, team_id=team_id)
+        if team is None:
+            raise HTTPException(404, "Team not found in your organization")
+        members = await repository.team_members(
+            db, organization_id=organization_id, team_id=team.id
+        )
+        teams[team_id] = (team, list(members))
+    if payload.member_id not in await repository.member_ids(db, organization_id=organization_id):
+        raise HTTPException(409, "That person is not a member of your organization")
+    (source, source_members), (target, target_members) = (
+        teams[payload.from_team_id],
+        teams[payload.to_team_id],
+    )
+    if pending:
+        role = next((m.role for m in source_members if m.user_id == payload.member_id), None)
+        if role is None:
+            raise HTTPException(409, f"This person is not in {source.name}")
+        if role == "supervisor":
+            raise HTTPException(
+                409,
+                f"This person manages {source.name}; only agents are moved. Change the "
+                "team's managers instead.",
+            )
+        if any(m.user_id == payload.member_id for m in target_members):
+            raise HTTPException(409, f"This person is already in {target.name}")
+    return {
+        "team": source,
+        "team_members": source_members,
+        "to_team": target,
+        "to_team_members": target_members,
+    }
+
+
+async def _calendar_resources(db, request, user_id, organization_id, *, pending):
+    """The user's own event, as CRM › Calendar allows (crm/router.py _own_event), locked."""
+    event = await repository.own_calendar_event(
+        db, user_id=user_id, organization_id=organization_id, event_id=request.payload.event_id
+    )
+    if event is None:
+        if not pending and request.kind == ActionKind.CANCEL_CALENDAR_EVENT:
+            return {}  # Deleted, as confirmed.
+        raise HTTPException(404, "Calendar event not found")
+    if pending and request.kind == ActionKind.RESCHEDULE_CALENDAR_EVENT:
+        if (event.event_date, event.event_time) == (request.payload.date, request.payload.time):
+            raise HTTPException(409, "The event is already at that date and time")
+    return {"calendar_event": event}
+
+
+def _refuse_unsupported(kind):
+    """Capabilities the CRM itself does not offer are refused before any lead is read."""
+    if kind == ActionKind.DELETE_LEAD:
+        raise HTTPException(403, NO_LEAD_DELETION)
+
+
+def _lead_rights(scope, kind, lead, *, pending=True):
+    """The CRM's own rules for this change on this lead (crm/assignment.py, crm/inbound.py),
+    applied on proposal, on confirmation and when a request is held between turns."""
+    if kind in EDIT_KINDS:
+        assignment.require_edit(scope, lead)
+    if kind == ActionKind.LOG_CONTACT:
+        # As crm/inbound.log_contact: logging contact on a lead in the pool of a team the user
+        # belongs to takes it; on any other lead it needs edit rights.
+        pooled = lead.assigned_user_id is None and lead.pool_released_at is not None
+        if not (pooled and lead.team_id in scope.member_team_ids):
+            assignment.require_edit(scope, lead)
+    if kind in REASSIGN_KINDS and not scope.may_reassign(lead):
+        raise HTTPException(403, "You cannot reassign this lead")
+    if kind == ActionKind.RELEASE_TO_POOL:
+        if lead.team_id is None or lead.team_id not in scope.team_members:
+            raise HTTPException(
+                403, "This lead is not in a team you manage; choose its team in the CRM first"
+            )
+        if pending and lead.assigned_user_id is None and lead.pool_released_at is not None:
+            raise HTTPException(409, "This lead is already waiting in its team's pool")
+
+
 async def _authorize(db, user_id, organization_id, conversation_id=None):
     # Lock the org before memberships so assignment confirmations have consistent ordering.
     organization = await repository.organization(db, organization_id)
@@ -94,12 +238,24 @@ async def _authorize(db, user_id, organization_id, conversation_id=None):
             raise HTTPException(404, "Conversation not found")
 
 
-async def _resources(db, request, user_id, organization_id):
-    """Lock every target and take a versioned snapshot used again on confirmation."""
+async def _resources(db, request, user_id, organization_id, *, pending=True):
+    """Lock every target and take a versioned snapshot used again on confirmation.
+
+    `pending` is false when showing a finished action: its effect may have changed the
+    target (a removed member, a deleted team), so only access is checked, not the state."""
     payload = request.payload
+    _refuse_unsupported(request.kind)
     # Lead authority is the CRM's own (crm/assignment.py): agent, manager or administrator.
     scope = await assignment.load_scope(db, organization_id, user_id)
     resources = {"scope": scope}
+    if request.kind in TEAM_KINDS:
+        resources.update(
+            await _team_resources(db, request, scope, organization_id, pending=pending)
+        )
+    if request.kind in CALENDAR_EVENT_KINDS:
+        resources.update(
+            await _calendar_resources(db, request, user_id, organization_id, pending=pending)
+        )
     lead_id = getattr(payload, "lead_id", None)
     if lead_id is not None:
         resources["lead"] = await assignment.load_visible(db, scope, lead_id, lock=True)
@@ -133,39 +289,30 @@ async def _resources(db, request, user_id, organization_id):
         if contact is None:
             raise HTTPException(404, "Lead contact not found")
         resources["contact"] = contact
-        if request.kind in EDIT_KINDS:
-            assignment.require_edit(scope, resources["lead"])
+        _lead_rights(scope, request.kind, resources["lead"], pending=pending)
     if request.kind == ActionKind.ASSIGN_LEAD:
-        if not scope.may_reassign(resources["lead"]):
-            raise HTTPException(403, "You cannot reassign this lead")
         # Raises when the assignee is not in a team this user may assign into.
         assignment.assignable_team(scope, payload.assignee_id, None, resources["lead"].team_id)
-    if request.kind == ActionKind.DELETE_LEAD:
-        lead = resources["lead"]
-        if lead.assigned_user_id != user_id and not scope.organization_admin:
+    if request.kind == ActionKind.UNASSIGN_LEAD and pending:
+        # Only while it awaits confirmation: once done, the lead is unassigned by design.
+        if resources["lead"].assigned_user_id is None:
+            raise HTTPException(409, "This lead is already unassigned")
+    if request.kind == ActionKind.BOOK_CALENDAR_MEETING and payload.colleague_ids:
+        # Named colleagues must still be members of this organization (other than the user).
+        members = await repository.member_ids(db, organization_id=organization_id)
+        if any(item == user_id or item not in members for item in payload.colleague_ids):
             raise HTTPException(
-                403, "Only the lead's assignee or an organization administrator can delete it"
+                409, "A named colleague is not a current member of your organization"
             )
-        dependents = await repository.lead_dependents(db, lead_id=payload.lead_id)
-        # Deleting cascades the lead's assignment history: refuse when others wrote it.
-        if await repository.has_others_assignment_history(
-            db, lead_id=payload.lead_id, user_id=user_id
-        ):
-            raise HTTPException(
-                409, "Lead has assignment history recorded by others; deletion refused"
-            )
-        # Matches have no individual owner; deleting them could destroy another agent's work.
-        if any(getattr(item, "user_id", None) != user_id for item in dependents):
-            raise HTTPException(
-                409, "Lead has shared or colleague-authored records; deletion refused"
-            )
-        resources["dependents"] = dependents
+        resources["colleagues"] = sorted(payload.colleague_ids)
     snapshot = {}
     for key, record in resources.items():
         if key == "scope":
             continue
-        if key == "dependents":
-            snapshot[key] = sorted(f"{type(item).__name__}:{item.id}" for item in record)
+        if key == "colleagues":
+            snapshot[key] = record
+        elif key in {"team_members", "to_team_members"}:
+            snapshot[key] = sorted([member.user_id, member.role] for member in record)
         else:
             snapshot[key] = _hash(record.model_dump(mode="json"))
     return resources, snapshot
@@ -184,7 +331,9 @@ def _target_preview(request, resources):
     consequences = {
         ActionKind.UPDATE_LEAD: "Updates this lead's enquiry fields; retains its shared contact details.",
         ActionKind.ASSIGN_LEAD: "Assigns this lead to the selected team member and records it in the lead's assignment history.",
-        ActionKind.DELETE_LEAD: "Permanently deletes this lead enquiry and your notes and activities on it. The shared contact is retained. This cannot be undone.",
+        ActionKind.UNASSIGN_LEAD: "Removes the lead's assignee; the lead, its team and its history are kept, and it is recorded in the assignment history. Nothing is deleted.",
+        ActionKind.LOG_CONTACT: "Logs this contact on the lead's history, as the CRM's Log contact does. A lead waiting in your team's pool becomes yours.",
+        ActionKind.RELEASE_TO_POOL: "Removes the lead's assignee and shares it in its team's pool; the first team member to log contact takes it. Recorded in the assignment history.",
         ActionKind.ADD_NOTE: "Adds this note to the selected lead's enquiry history.",
         ActionKind.CREATE_REMINDER: "Saves a reminder in your list; notification delivery is not configured.",
         ActionKind.UPDATE_REMINDER: "Replaces this reminder's title and due time.",
@@ -195,9 +344,73 @@ def _target_preview(request, resources):
         ActionKind.SEND_MESSAGE: "Records a disconnected message request for this lead; nothing is sent.",
         ActionKind.PUBLISH_LISTING: "Records a disconnected publication request for this draft; nothing is published.",
         ActionKind.BOOK_EXTERNAL_VIEWING: "Records a disconnected booking request for this lead; no external booking or invitation is made.",
+        ActionKind.BOOK_CALENDAR_MEETING: "Adds this meeting to your own calendar. Named colleagues appear in its details only; no invitations are sent.",
+        ActionKind.CREATE_TEAM: "Creates this team with no members, as the CRM's Teams page does. Add its manager and agents afterwards.",
+        ActionKind.DELETE_TEAM: "Deletes this team. Its members stay in the organization. The CRM refuses if leads or routing rules still use the team.",
+        ActionKind.ADD_TEAM_AGENT: "Adds this person to the team as an agent.",
+        ActionKind.REMOVE_TEAM_MEMBER: "Removes this person from the team; they stay in the organization and keep the leads assigned to them.",
+        ActionKind.SET_TEAM_MANAGER: "Makes this person a manager of the team (added, or promoted from agent).",
+        ActionKind.MOVE_TEAM_AGENT: "Moves this agent out of the first team and into the second as an agent. They stay in the organization and keep the leads assigned to them; those leads stay with the team that owns them.",
     }
     if request.kind in consequences:
         preview["consequence"] = consequences[request.kind]
+    return preview
+
+
+def _event_when(event_date, event_time, end_date=None, end_time=None) -> str:
+    day = f"{event_date.day} {event_date:%b %Y}"
+    if event_time is None:
+        return f"{day}, all day"
+    end = f"–{end_time}" if end_time and (end_date in (None, event_date)) else ""
+    return f"{day} {event_time}{end} Dubai time"
+
+
+def _calendar_preview(request, event):
+    """The event as the user knows it (title and time), never its ID."""
+    preview = {
+        "event": event.title,
+        "currently": _event_when(
+            event.event_date, event.event_time, event.event_end_date, event.event_end_time
+        ),
+    }
+    if event.repeat and event.repeat != "none":
+        preview["repeats"] = (
+            f"{event.repeat}; the whole series moves or is deleted, as in CRM › Calendar"
+        )
+    if request.kind == ActionKind.RESCHEDULE_CALENDAR_EVENT:
+        preview["new_time"] = _event_when(request.payload.date, request.payload.time)
+    return preview
+
+
+async def _team_preview(request, resources):
+    """Names, never IDs: the team, the person and the team's current managers and agents."""
+    payload = request.payload
+    if request.kind == ActionKind.CREATE_TEAM:
+        return {"team": payload.name}
+    if request.kind == ActionKind.MOVE_TEAM_AGENT:
+        return {
+            "person": await _person_name(payload.member_id),
+            "from_team": resources["team"].name,
+            "to_team": resources["to_team"].name,
+        }
+    members = resources["team_members"]
+    preview = {
+        "team": resources["team"].name,
+        "current_managers": [
+            await _person_name(m.user_id) for m in members if m.role == "supervisor"
+        ],
+        "current_agents": [await _person_name(m.user_id) for m in members if m.role == "agent"],
+    }
+    if getattr(payload, "member_id", None):
+        preview["person"] = await _person_name(payload.member_id)
+    if request.kind == ActionKind.SET_TEAM_MANAGER and payload.replace_existing:
+        leaving = [
+            await _person_name(m.user_id)
+            for m in members
+            if m.role == "supervisor" and m.user_id != payload.member_id
+        ]
+        if leaving:
+            preview["managers_leaving_the_team"] = leaving
     return preview
 
 
@@ -221,15 +434,26 @@ async def propose_action(
     resources, snapshot = await _resources(db, request, user_id, organization_id)
     payload = request.payload.model_dump(mode="json", exclude_unset=True)
     preview = {**_target_preview(request, resources), "changes": payload}
-    if request.kind == ActionKind.ASSIGN_LEAD:
-        try:
-            async with asyncio.timeout(3):
-                assignee = await get_user_by_id(request.payload.assignee_id)
-            name = _display_name(assignee.first_name, assignee.last_name) if assignee else None
-        except Exception:
-            name = None
-        if name:
-            preview["assignee"] = name
+    if request.kind in REASSIGN_KINDS:
+        preview["current_assignee"] = await _person_name(resources["lead"].assigned_user_id)
+        preview["new_assignee"] = (
+            await _person_name(request.payload.assignee_id)
+            if request.kind == ActionKind.ASSIGN_LEAD
+            else "Team pool"
+            if request.kind == ActionKind.RELEASE_TO_POOL
+            else "Unassigned"
+        )
+    if request.kind in TEAM_KINDS:
+        # Names only: the raw arguments are IDs.
+        preview.pop("changes")
+        preview.update(await _team_preview(request, resources))
+    if request.kind in CALENDAR_EVENT_KINDS:
+        preview.pop("changes")
+        preview.update(_calendar_preview(request, resources["calendar_event"]))
+    if request.kind == ActionKind.BOOK_CALENDAR_MEETING:
+        preview["when"] = connectors.dubai_span(request.payload.starts_at, request.payload.ends_at)
+        if request.payload.colleague_ids:
+            preview["with"] = [await _person_name(item) for item in request.payload.colleague_ids]
     if request.kind in EXTERNAL_KINDS:
         ready, delivery, consequence = await connectors.readiness(
             db,
@@ -305,7 +529,9 @@ async def _visible_response(db, row, user_id, organization_id):
             payload=row.payload,
             idempotency_key=row.idempotency_key,
         )
-        _, snapshot = await _resources(db, request, user_id, organization_id)
+        _, snapshot = await _resources(
+            db, request, user_id, organization_id, pending=row.status == "awaiting_confirmation"
+        )
         if row.status == "awaiting_confirmation" and snapshot != row.snapshot:
             row.status = "failed"
             row.completed_at = _now()
@@ -414,12 +640,19 @@ async def confirm_action(db, *, user_id, organization_id, action_id):
                 organization_id=organization_id,
                 contact=resources.get("contact"),
             )
-        async with db.begin_nested():
-            row.result = await _execute(db, row, request, resources, queue=ready)
-        if request.kind not in EXTERNAL_KINDS:
-            row.status = "succeeded"
+        try:
+            async with db.begin_nested():
+                row.result = await _execute(db, row, request, resources, queue=ready)
+        except HTTPException as error:
+            # The CRM refused the change (a taken team name, a team still in use): nothing
+            # was saved, and it is reported as failed with the CRM's reason.
+            row.status = "failed"
+            row.result = {"message": error.detail}
         else:
-            row.status = "queued" if ready else "not_connected"
+            if request.kind not in EXTERNAL_KINDS:
+                row.status = "succeeded"
+            else:
+                row.status = "queued" if ready else "not_connected"
     if row.status != "queued":
         row.completed_at = _now()
     response = await _visible_response(db, row, user_id, organization_id)
@@ -432,7 +665,11 @@ async def confirm_action(db, *, user_id, organization_id, action_id):
             organization_id=organization_id,
             action_id=action_id,
             adapter=connectors.adapter_for(
-                db, request.kind, user_id=user_id, organization_id=organization_id
+                db,
+                request.kind,
+                user_id=user_id,
+                organization_id=organization_id,
+                person_name=_person_name,
             ),
         )
         return await get_action(
@@ -458,6 +695,8 @@ async def _execute(db, row, request, resources, *, queue=False):
         if queue:
             return {"message": "Confirmed; sending now."}
         return {"message": "No connector configured. Nothing was sent, published, or booked."}
+    if kind in TEAM_KINDS:
+        return await _execute_team(db, row, request, resources)
     if kind == ActionKind.CREATE_LEAD:
         contact = CrmInboundContact(
             organization_id=row.organization_id,
@@ -473,7 +712,10 @@ async def _execute(db, row, request, resources, *, queue=False):
             organization_id=row.organization_id,
             contact_id=contact.id,
             created_by_user_id=row.user_id,
+            # As in the CRM's lead creation: only a known intent makes a confirmed opportunity.
+            record_kind="opportunity" if payload.intent != "unknown" else "unqualified_contact",
             intent=payload.intent,
+            confirmed_data={"intent": payload.intent} if payload.intent != "unknown" else {},
             raw_notes=payload.notes,
             source="Assistant",
             enquiry_date=now,
@@ -494,23 +736,47 @@ async def _execute(db, row, request, resources, *, queue=False):
             team_id=team,
         )
         return {"lead_id": lead.id, "message": "Lead created"}
-    if kind in {ActionKind.UPDATE_LEAD, ActionKind.ASSIGN_LEAD}:
+    if kind in {ActionKind.UPDATE_LEAD, ActionKind.ASSIGN_LEAD, ActionKind.UNASSIGN_LEAD}:
         lead = resources["lead"]
-        if kind == ActionKind.ASSIGN_LEAD:
+        if kind in {ActionKind.ASSIGN_LEAD, ActionKind.UNASSIGN_LEAD}:
             # The CRM's authorized reassignment: history, owning team, pool and rotation.
-            await assignment.reassign(
-                db, resources["scope"], [lead.id], payload.assignee_id, reason="manual"
-            )
-            return {"lead_id": lead.id, "message": "Lead assigned"}
-        for key, value in payload.model_dump(exclude_unset=True, exclude={"lead_id"}).items():
+            assignee = payload.assignee_id if kind == ActionKind.ASSIGN_LEAD else None
+            await assignment.reassign(db, resources["scope"], [lead.id], assignee, reason="manual")
+            return {
+                "lead_id": lead.id,
+                "message": "Lead assigned" if assignee else "Lead unassigned",
+            }
+        changes = payload.model_dump(exclude_unset=True, exclude={"lead_id"})
+        for key, value in changes.items():
             setattr(lead, key, value)
+        # Keep the classification as the CRM's own lead update does (crm/inbound.py).
+        if changes.get("intent") and changes["intent"] != "unknown":
+            lead.record_kind = "opportunity"
+            lead.confirmed_data = {**(lead.confirmed_data or {}), "intent": changes["intent"]}
+        if lead.intent == "unknown":
+            lead.record_kind = "unqualified_contact"
         lead.updated_at = now
         return {"lead_id": lead.id, "message": "Lead updated"}
-    if kind == ActionKind.DELETE_LEAD:
-        for dependent in resources["dependents"]:
-            await db.delete(dependent)
-        await db.delete(resources["lead"])
-        return {"lead_id": payload.lead_id, "message": "Enquiry deleted; shared contact preserved"}
+    if kind == ActionKind.LOG_CONTACT:
+        lead = resources["lead"]
+        holder = lead.assigned_user_id
+        # The CRM's own write: claim from the pool or edit check, rotation, counters, history.
+        await inbound.log_contact(
+            db,
+            resources["scope"],
+            enquiry_id=lead.id,
+            activity_type=payload.activity_type,
+            body=payload.body,
+        )
+        taken = holder is None and lead.assigned_user_id == row.user_id
+        return {
+            "lead_id": lead.id,
+            "message": "Contact logged; the lead is now yours" if taken else "Contact logged",
+        }
+    if kind == ActionKind.RELEASE_TO_POOL:
+        lead = resources["lead"]
+        await assignment.release(db, resources["scope"], [lead.id], lead.team_id)
+        return {"lead_id": lead.id, "message": "Lead shared in its team's pool"}
     if kind == ActionKind.ADD_NOTE:
         note = CrmInboundNote(
             **owner,
@@ -558,6 +824,65 @@ async def _execute(db, row, request, resources, *, queue=False):
         item.updated_at = now
         return {"listing_id": item.id, "message": "Listing draft updated; not published"}
     raise HTTPException(400, "Unsupported action")
+
+
+async def _execute_team(db, row, request, resources):
+    """Through the CRM's own team writes (organization/teams.py), in the confirmation's
+    savepoint; a CRM refusal raises and nothing is kept."""
+    kind, payload, organization_id = request.kind, request.payload, row.organization_id
+    if kind == ActionKind.CREATE_TEAM:
+        team = await org_teams.stage_team(db, organization_id, payload.name)
+        return {"team_id": team.id, "message": f"Team {team.name} created"}
+    team = resources["team"]
+    name = team.name
+    if kind == ActionKind.DELETE_TEAM:
+        await org_teams.stage_team_deletion(db, team)
+        return {"message": f"Team {name} deleted"}
+    if kind == ActionKind.MOVE_TEAM_AGENT:
+        target = resources["to_team"]
+        person = await _person_name(payload.member_id)
+        source_roles = {m.user_id: m.role for m in resources["team_members"]}
+        target_roles = {m.user_id: m.role for m in resources["to_team_members"]}
+        source_roles.pop(payload.member_id)
+        target_roles[payload.member_id] = "agent"
+        # Both teams change in the confirmation's savepoint: all or nothing.
+        for changed, roles in ((team, source_roles), (target, target_roles)):
+            await org_teams.stage_team_members(
+                db,
+                organization_id,
+                changed,
+                TeamMembersUpdateRequest(
+                    members=[
+                        TeamMemberInput(user_id=user, role=role)
+                        for user, role in sorted(roles.items())
+                    ]
+                ),
+            )
+        return {"team_id": target.id, "message": f"{person} moved from {name} to {target.name}"}
+    roles = {member.user_id: member.role for member in resources["team_members"]}
+    person = await _person_name(payload.member_id)
+    if kind == ActionKind.ADD_TEAM_AGENT:
+        roles[payload.member_id] = "agent"
+        message = f"{person} added to {name} as an agent"
+    elif kind == ActionKind.REMOVE_TEAM_MEMBER:
+        roles.pop(payload.member_id)
+        message = f"{person} removed from {name}"
+    else:
+        if payload.replace_existing:
+            roles = {user: role for user, role in roles.items() if role != "supervisor"}
+        roles[payload.member_id] = "supervisor"
+        message = f"{person} is now a manager of {name}"
+    await org_teams.stage_team_members(
+        db,
+        organization_id,
+        team,
+        TeamMembersUpdateRequest(
+            members=[
+                TeamMemberInput(user_id=user, role=role) for user, role in sorted(roles.items())
+            ]
+        ),
+    )
+    return {"team_id": team.id, "message": message}
 
 
 async def _list_records(db, model, response_model, user_id, organization_id):
@@ -661,7 +986,7 @@ async def record_external_outcome(
     db, *, user_id, organization_id, action_id, status, message: str | None = None
 ):
     """Persist only a claim's safe outcome, including after offboarding during delivery."""
-    if status not in {"succeeded", "failed", "unknown", "not_connected"}:
+    if status not in {"succeeded", "partially_succeeded", "failed", "unknown", "not_connected"}:
         raise ValueError("Invalid delivery outcome")
     row = await repository.action(
         db,
@@ -687,11 +1012,71 @@ def _display_name(first_name, last_name):
     return name[:200] or None
 
 
-async def lookup_assignees(db, *, user_id: str, organization_id: str, search: str):
-    """Bounded business-name lookup of the people this user may assign a lead to."""
+async def _person_name(user_id: str | None) -> str:
+    """A verified member's display name for a preview; never an ID or email."""
+    if user_id is None:
+        return "Unassigned"
+    try:
+        async with asyncio.timeout(3):
+            person = await get_user_by_id(user_id)
+        name = _display_name(person.first_name, person.last_name) if person else None
+    except Exception:
+        name = None
+    return name or "A team member (name unavailable)"
+
+
+async def _member_matches(db, organization_id: str, search: str, allowed):
+    """Organization members whose display name starts with `search`, among `allowed(ids)`.
+
+    None when the member directory is unavailable. A full name typed exactly ("User 1") means
+    that person, not every name it begins ("User 10", "User 1 Khan"); two people with that
+    exact name stay ambiguous.
+    """
+    prefix = " ".join(search.split()).casefold()
+    organization = await repository.organization(db, organization_id)
+    # Release database locks while the existing public directory adapter fetches profiles.
+    await db.commit()
+    try:
+        async with asyncio.timeout(10):
+            members = await get_organization_members(organization, db)
+    except Exception:
+        await db.rollback()
+        return None
+    # Memberships and teams may have changed during the directory call: re-read them now.
+    current_ids = await allowed(await repository.member_ids(db, organization_id=organization_id))
+    matches = []
+    for member in members:
+        if member["id"] not in current_ids:
+            continue
+        name = _display_name(member.get("first_name"), member.get("last_name"))
+        if name and name.casefold().startswith(prefix):
+            matches.append({"id": member["id"], "display_name": name})
+    exact = [item for item in matches if item["display_name"].casefold() == prefix]
+    matches = exact or matches
+    matches.sort(key=lambda item: (item["display_name"].casefold(), item["id"]))
+    return matches
+
+
+def _check_search(search):
     if not isinstance(search, str) or not 2 <= len(search.strip()) <= 80:
         raise HTTPException(422, "Enter between 2 and 80 characters of a member's name")
-    prefix = " ".join(search.split()).casefold()
+
+
+def _match_result(matches, none_reason):
+    result = {
+        "available": True,
+        "matches": matches[:10],
+        "clarification_required": len(matches) != 1,
+        "truncated": len(matches) > 10,
+    }
+    if not matches:
+        result["reason"] = none_reason
+    return result
+
+
+async def lookup_assignees(db, *, user_id: str, organization_id: str, search: str):
+    """Bounded business-name lookup of the people this user may assign a lead to."""
+    _check_search(search)
     await _authorize(db, user_id, organization_id)
     # Same authority as the CRM: managers assign into their teams, administrators into all.
     scope = await assignment.load_scope(db, organization_id, user_id)
@@ -701,38 +1086,151 @@ async def lookup_assignees(db, *, user_id: str, organization_id: str, search: st
             "available": False,
             "reason": "Only managers and organization administrators can assign leads",
         }
-    organization = await repository.organization(db, organization_id)
-    # Release database locks while the existing public directory adapter fetches profiles.
-    await db.commit()
-    try:
-        async with asyncio.timeout(10):
-            members = await get_organization_members(organization, db)
-    except Exception:
-        await db.rollback()
+
+    async def assignable(member_ids):
+        await _authorize(db, user_id, organization_id)
+        current = await assignment.load_scope(db, organization_id, user_id)
+        return member_ids & current.eligible_user_ids
+
+    matches = await _member_matches(db, organization_id, search, assignable)
+    if matches is None:
         await _authorize(db, user_id, organization_id)
         await db.commit()
         return {
             "available": False,
             "reason": "Organization member names are temporarily unavailable",
         }
-    await _authorize(db, user_id, organization_id)
-    # Teams may have changed during the directory call: re-read who is assignable now.
-    scope = await assignment.load_scope(db, organization_id, user_id)
-    current_ids = (
-        await repository.member_ids(db, organization_id=organization_id)
-    ) & scope.eligible_user_ids
-    matches = []
-    for member in members:
-        if member["id"] not in current_ids:
-            continue
-        name = _display_name(member.get("first_name"), member.get("last_name"))
-        if name and name.casefold().startswith(prefix):
-            matches.append({"id": member["id"], "display_name": name})
-    matches.sort(key=lambda item: (item["display_name"].casefold(), item["id"]))
+    reason = "No one you can assign this lead to has that name"
+    if not matches:
+        # The CRM assigns a lead to one person, whose team it then belongs to: a team's name is
+        # not an assignee. Said only of a team this user may assign into.
+        wanted = " ".join(search.split())
+        if any(
+            team.name.casefold() == wanted.casefold()
+            and (scope.organization_admin or team.id in scope.supervised_team_ids)
+            for team in await org_teams.list_org_teams(db, organization_id)
+        ):
+            reason = (
+                f"{wanted} is a team, not a person. The CRM assigns a lead to one person and "
+                "the lead then belongs to their team: ask which member should handle it."
+            )
     await db.commit()
-    return {
+    return _match_result(matches, reason)
+
+
+async def lookup_colleagues(db, *, user_id: str, organization_id: str, search: str):
+    """Bounded business-name lookup of fellow organization members, to name in a meeting.
+
+    Any member may look up colleagues by name; only IDs and display names are returned.
+    """
+    _check_search(search)
+    await _authorize(db, user_id, organization_id)
+
+    async def others(member_ids):
+        await _authorize(db, user_id, organization_id)
+        return member_ids - {user_id}
+
+    matches = await _member_matches(db, organization_id, search, others)
+    if matches is None:
+        await _authorize(db, user_id, organization_id)
+        await db.commit()
+        return {
+            "available": False,
+            "reason": "Organization member names are temporarily unavailable",
+        }
+    await db.commit()
+    return _match_result(matches, "No colleague in your organization has that name")
+
+
+async def _team_admin(db, user_id, organization_id):
+    await _authorize(db, user_id, organization_id)
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return scope.organization_admin
+
+
+async def lookup_teams(db, *, user_id: str, organization_id: str, search: str):
+    """Teams of this organization by name, for the owner or an administrator to manage.
+
+    "Dubai Marina CRM team" finds "Dubai Marina" (the CRM's own name matching); otherwise the
+    name's start or any word of it. Only IDs and names are returned.
+    """
+    from app.crm.assistant import same_team
+
+    _check_search(search)
+    if not await _team_admin(db, user_id, organization_id):
+        await db.commit()
+        return {"available": False, "reason": TEAM_ADMIN_ONLY}
+    teams = await org_teams.list_org_teams(db, organization_id)
+    await db.commit()
+    exact = [team for team in teams if same_team(team.name, search)]
+    wanted = " ".join(search.split()).casefold()
+    found = exact or [
+        team
+        for team in teams
+        if team.name.casefold().startswith(wanted) or wanted in team.name.casefold().split()
+    ]
+    matches = [{"id": team.id, "name": team.name} for team in found]
+    result = {
         "available": True,
         "matches": matches[:10],
-        "clarification_required": len(matches) > 1,
+        "clarification_required": len(matches) != 1,
         "truncated": len(matches) > 10,
     }
+    if not matches:
+        result["reason"] = "Your organization has no team with that name"
+    return result
+
+
+async def lookup_team_people(db, *, user_id: str, organization_id: str, search: str):
+    """Organization members by name, for the owner or an administrator to place in a team
+    (anyone in the organization may join a team, including the user)."""
+    _check_search(search)
+    if not await _team_admin(db, user_id, organization_id):
+        await db.commit()
+        return {"available": False, "reason": TEAM_ADMIN_ONLY}
+
+    async def members(member_ids):
+        await _authorize(db, user_id, organization_id)
+        return member_ids
+
+    matches = await _member_matches(db, organization_id, search, members)
+    if matches is None:
+        await db.commit()
+        return {
+            "available": False,
+            "reason": "Organization member names are temporarily unavailable",
+        }
+    await db.commit()
+    return _match_result(matches, "No one in your organization has that name")
+
+
+async def pending_target(
+    db, *, user_id: str, organization_id: str, kind: ActionKind | None, lead_id: int | None
+):
+    """Whether this user may still continue `kind` on this lead; nothing is written.
+
+    `kind` None holds a chosen lead whose action is still being clarified: visibility only.
+    `lead_id` None holds a request that has no lead yet: membership only.
+
+    The same checks a proposal makes (membership, visibility, edit and reassignment rights), so
+    a request held between turns never outlives the user's access to its lead.
+    """
+    await _authorize(db, user_id, organization_id)
+    if kind == ActionKind.DELETE_LEAD:
+        await db.commit()
+        return {"available": False, "reason": NO_LEAD_DELETION}
+    if lead_id is None:
+        await db.commit()
+        return {"available": True}
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    try:
+        lead = await assignment.load_visible(db, scope, lead_id)
+        if kind is not None:
+            _lead_rights(scope, kind, lead)
+    except HTTPException as error:
+        await db.commit()
+        detail = error.detail
+        reason = detail.get("message") if isinstance(detail, dict) else detail
+        return {"available": False, "reason": str(reason)}
+    await db.commit()
+    return {"available": True}
