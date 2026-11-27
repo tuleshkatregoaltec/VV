@@ -25,6 +25,7 @@ _OUTCOME_CLAIM = re.compile(
     \b(?:i|i've|i\ have|i'll|we've|we\ have|it's|it\ is|it\ has|it\ was|this\ is|that's|
          (?:has|have|had)\ (?:now\ )?been|was|were|is\ now|are\ now|successfully|already\ been)\b
        [^.!?\n]*\b(?:{_DONE_WORDS})\b
+    | \b(?:is|are)\ now\b[^.!?\n]*\b(?:supervisors?|managers?|agents?|members?)\b
     | \b(?:nothing|not|n't|no\ event|no\ meeting|no\ changes?)\b[^.!?\n]*\b(?:{_DONE_WORDS}|changed)\b
     | \b(?:proposal|proposed|propose|awaiting|pending|queued|confirmation|confirm)\b
     | ^\s*(?:done|all\ set|all\ done|success(?:ful)?)\s*[.!]*\s*$

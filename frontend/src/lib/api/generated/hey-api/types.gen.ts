@@ -95,7 +95,7 @@ export type AcceptInviteResponse = {
 /**
  * ActionKind
  */
-export type ActionKind = 'create_lead' | 'update_lead' | 'assign_lead' | 'unassign_lead' | 'delete_lead' | 'log_contact' | 'release_to_pool' | 'add_note' | 'create_reminder' | 'update_reminder' | 'delete_reminder' | 'schedule_viewing' | 'cancel_viewing' | 'create_listing_draft' | 'update_listing_draft' | 'send_message' | 'publish_listing' | 'book_external_viewing' | 'book_calendar_meeting' | 'create_team' | 'delete_team' | 'add_team_agent' | 'remove_team_member' | 'set_team_manager' | 'move_team_agent' | 'reschedule_calendar_event' | 'cancel_calendar_event';
+export type ActionKind = 'create_lead' | 'update_lead' | 'assign_lead' | 'unassign_lead' | 'delete_lead' | 'log_contact' | 'release_to_pool' | 'add_note' | 'create_reminder' | 'update_reminder' | 'delete_reminder' | 'schedule_viewing' | 'cancel_viewing' | 'create_listing_draft' | 'update_listing_draft' | 'send_message' | 'publish_listing' | 'book_external_viewing' | 'book_calendar_meeting' | 'create_team' | 'delete_team' | 'add_team_agent' | 'remove_team_member' | 'set_team_manager' | 'update_team_members' | 'move_team_agent' | 'reschedule_calendar_event' | 'cancel_calendar_event';
 
 /**
  * ActionProposalRequest
@@ -109,7 +109,7 @@ export type ActionProposalRequest = {
     /**
      * Payload
      */
-    payload: CreateLead | UpdateLead | AssignLead | LeadTarget | AddNote | LogContact | CreateReminder | UpdateReminder | DeleteReminder | ScheduleViewing | CalendarMeeting | CancelViewing | CreateListingDraft | UpdateListingDraft | SendMessage | PublishListing | CreateTeam | TeamTransfer | RescheduleCalendarEvent | CalendarEventTarget | SetTeamManager | TeamMemberChange | TeamTarget;
+    payload: CreateLead | UpdateLead | AssignLead | LeadTarget | AddNote | LogContact | CreateReminder | UpdateReminder | DeleteReminder | ScheduleViewing | CalendarMeeting | CancelViewing | CreateListingDraft | UpdateListingDraft | SendMessage | PublishListing | CreateTeam | TeamTransfer | RescheduleCalendarEvent | CalendarEventTarget | SetTeamManager | TeamMembersChange | TeamMemberChange | TeamTarget;
     /**
      * Idempotency Key
      */
@@ -1779,8 +1779,10 @@ export type CalendarEventTarget = {
 export type CalendarMeeting = {
     /**
      * Title
+     *
+     * Only if the user gave one; otherwise leave it out (named by the server)
      */
-    title: string;
+    title?: string | null;
     /**
      * Starts At
      */
@@ -2541,6 +2543,10 @@ export type CreateTeam = {
      * Name
      */
     name: string;
+    /**
+     * Members
+     */
+    members?: Array<NewTeamMember>;
 };
 
 /**
@@ -10795,6 +10801,20 @@ export type MyTeam = {
 };
 
 /**
+ * NewTeamMember
+ */
+export type NewTeamMember = {
+    /**
+     * Member Id
+     */
+    member_id: string;
+    /**
+     * Role
+     */
+    role: 'agent' | 'supervisor';
+};
+
+/**
  * NewsArticleCreate
  */
 export type NewsArticleCreate = {
@@ -15017,6 +15037,20 @@ export type TeamMemberResponse = {
 };
 
 /**
+ * TeamMembersChange
+ */
+export type TeamMembersChange = {
+    /**
+     * Team Id
+     */
+    team_id: string;
+    /**
+     * Members
+     */
+    members: Array<NewTeamMember>;
+};
+
+/**
  * TeamMembersUpdateRequest
  *
  * The complete membership of a team; members left out are removed.
@@ -16711,7 +16745,12 @@ export type ChatDeleteConversationEndpointData = {
          */
         conversation_id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Assistant
+         */
+        assistant?: 'crm' | 'market';
+    };
     url: '/api/v1/chat/conversations/{conversation_id}';
 };
 
@@ -16741,7 +16780,12 @@ export type ChatUpdateConversationEndpointData = {
          */
         conversation_id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Assistant
+         */
+        assistant?: 'crm' | 'market';
+    };
     url: '/api/v1/chat/conversations/{conversation_id}';
 };
 
@@ -16808,7 +16852,7 @@ export type ChatGetConversationMessagesEndpointData = {
         /**
          * Assistant
          */
-        assistant?: 'crm' | 'market' | null;
+        assistant?: 'crm' | 'market';
     };
     url: '/api/v1/chat/conversations/{conversation_id}/messages';
 };

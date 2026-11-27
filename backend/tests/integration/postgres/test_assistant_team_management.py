@@ -245,7 +245,7 @@ async def test_add_and_remove_an_agent(pg_session, office):
         {"team_id": ids["north"], "member_id": ids["lina"]},
     )
     assert (action.preview["team"], action.preview["person"]) == ("JVC Sales", "User 2")
-    assert action.preview["current_managers"] == ["Nadia Manager"]
+    assert action.preview["current_supervisors"] == ["Nadia Manager"]
     assert "changes" not in action.preview  # Names, never the raw IDs.
     assert (ids["lina"], "agent") not in await roster(pg_session, ids["north"])
     done = await confirm(pg_session, ids, "owner", action.id)
@@ -293,7 +293,7 @@ async def test_set_or_change_a_manager(pg_session, office):
     done = await confirm(pg_session, ids, "owner", action.id)
     assert (done.status, done.result["message"]) == (
         "succeeded",
-        "Track 8 is now a manager of JVC Sales",
+        "Track 8 is now a supervisor of JVC Sales",
     )
     assert {(ids["nadia"], "supervisor"), (ids["omar"], "supervisor")} <= await roster(
         pg_session, ids["north"]
@@ -307,7 +307,7 @@ async def test_set_or_change_a_manager(pg_session, office):
         ActionKind.SET_TEAM_MANAGER,
         {"team_id": ids["south"], "member_id": ids["lina"], "replace_existing": True},
     )
-    assert action.preview["managers_leaving_the_team"] == ["Karim South"]
+    assert action.preview["supervisors_leaving_the_team"] == ["Karim South"]
     await confirm(pg_session, ids, "owner", action.id)
     assert await roster(pg_session, ids["south"]) == {(ids["lina"], "supervisor")}
     # Already the manager: nothing to do.
@@ -319,7 +319,7 @@ async def test_set_or_change_a_manager(pg_session, office):
             ActionKind.SET_TEAM_MANAGER,
             {"team_id": ids["south"], "member_id": ids["lina"]},
         )
-    assert refused.value.detail == "This person already manages this team"
+    assert refused.value.detail == "This person is already a supervisor of this team"
 
 
 # --- Confirmation rechecks permission and state ----------------------------------------------

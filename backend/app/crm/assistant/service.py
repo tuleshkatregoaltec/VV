@@ -222,7 +222,10 @@ async def _current_pending_action(db, messages, user_id, organization_id):
 
 
 async def _current_record_handles(db, messages, user_id, organization_id):
-    """Reauthorize at most twenty handles from the latest relevant private answer.
+    """Reauthorize at most twenty handles from the latest answer that used CRM evidence.
+
+    That answer is the follow-up's subject: when it held no record handles (a team lookup, a
+    team question), an older answer's handles are stale and none are carried.
 
     Fact changes invalidate historical prose without invalidating a still-owned
     resource's identity. Never carry names, values or search strings in this context.
@@ -231,13 +234,15 @@ async def _current_record_handles(db, messages, user_id, organization_id):
         return None, []
     for index in range(len(messages) - 1, -1, -1):
         metadata = messages[index].meta_data or {}
+        if not metadata.get("evidence"):
+            continue
         references = [
             ref
             for evidence in metadata.get("evidence", [])
             for ref in evidence.get("resource_refs", [])
         ][:20]
         if not references:
-            continue
+            return None, []
         current = []
         seen = set()
         for ref in references:

@@ -98,6 +98,22 @@ async def actions(db, *, user_id, organization_id, conversation_id):
     ).all()
 
 
+async def awaiting_actions(db, *, user_id, organization_id, kinds):
+    """This user's proposals of these kinds still awaiting confirmation, locked."""
+    return (
+        await db.exec(
+            _locked(
+                select(AssistantAction).where(
+                    AssistantAction.user_id == user_id,
+                    AssistantAction.organization_id == organization_id,
+                    AssistantAction.status == "awaiting_confirmation",
+                    AssistantAction.kind.in_([kind.value for kind in kinds]),
+                )
+            )
+        )
+    ).all()
+
+
 async def visible_lead(db, *, user_id, organization_id, lead_id, lock=False):
     """The lead when the user's CRM role lets them see it (crm/assignment.py), else None."""
     from fastapi import HTTPException

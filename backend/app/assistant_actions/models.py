@@ -44,6 +44,8 @@ class ActionKind(StrEnum):
     ADD_TEAM_AGENT = "add_team_agent"
     REMOVE_TEAM_MEMBER = "remove_team_member"
     SET_TEAM_MANAGER = "set_team_manager"
+    # Several people's roles in one team, saved together as the Teams page saves its roster.
+    UPDATE_TEAM_MEMBERS = "update_team_members"
     # Moves an agent from one team to another (organization owners and administrators only).
     MOVE_TEAM_AGENT = "move_team_agent"
     # The user's own CRM calendar events, as CRM › Calendar moves and deletes them.
@@ -191,9 +193,25 @@ class PublishListing(StrictPayload):
     listing_id: int = Field(gt=0)
 
 
+class NewTeamMember(StrictPayload):
+    # As the CRM's TeamMemberInput: the stored roles, which the Teams page calls Supervisor
+    # (manages the team, imports leads and assigns them) and Agent.
+    member_id: str = Field(min_length=1, max_length=200)
+    role: Literal["agent", "supervisor"]
+
+
 class CreateTeam(StrictPayload):
-    # As the CRM's TeamWriteRequest.
+    # As the CRM's TeamWriteRequest, then its members (TeamMembersUpdateRequest), applied
+    # together on confirmation.
     name: str = Field(min_length=1, max_length=120)
+    members: list[NewTeamMember] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def each_person_once(self):
+        people = [member.member_id for member in self.members]
+        if len(set(people)) != len(people):
+            raise ValueError("A person is listed twice")
+        return self
 
 
 class TeamTarget(StrictPayload):
@@ -204,6 +222,20 @@ class TeamMemberChange(TeamTarget):
     # An organization member's ID (from the team people lookup). Not named user_id: the
     # answer guard treats that name as an internal identifier.
     member_id: str = Field(min_length=1, max_length=200)
+
+
+class TeamMembersChange(TeamTarget):
+    # Each person joins the team, or changes role in it, as given; everyone else stays as is.
+    # One proposal for the whole request: separate ones would each preview the same roster,
+    # and confirming one would leave the others stale.
+    members: list[NewTeamMember] = Field(min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def each_person_once(self):
+        people = [member.member_id for member in self.members]
+        if len(set(people)) != len(people):
+            raise ValueError("A person is listed twice")
+        return self
 
 
 class SetTeamManager(TeamMemberChange):
@@ -256,6 +288,7 @@ Payload = (
     | RescheduleCalendarEvent
     | CalendarEventTarget
     | SetTeamManager
+    | TeamMembersChange
     | TeamMemberChange
     | TeamTarget
 )
@@ -284,6 +317,7 @@ PAYLOAD_TYPES = {
     ActionKind.ADD_TEAM_AGENT: TeamMemberChange,
     ActionKind.REMOVE_TEAM_MEMBER: TeamMemberChange,
     ActionKind.SET_TEAM_MANAGER: SetTeamManager,
+    ActionKind.UPDATE_TEAM_MEMBERS: TeamMembersChange,
     ActionKind.MOVE_TEAM_AGENT: TeamTransfer,
     ActionKind.RESCHEDULE_CALENDAR_EVENT: RescheduleCalendarEvent,
     ActionKind.CANCEL_CALENDAR_EVENT: CalendarEventTarget,

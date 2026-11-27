@@ -77,7 +77,7 @@ def _response(row):
         id=row.id,
         kind=row.kind,
         status=row.status,
-        title=row.kind.replace("_", " ").capitalize(),
+        title=TITLES.get(row.kind, row.kind.replace("_", " ").capitalize()),
         preview=row.preview,
         created_at=row.created_at,
         expires_at=row.expires_at,
@@ -85,6 +85,8 @@ def _response(row):
     )
 
 
+# The CRM's own name for a team's managers: its Teams page calls the role Supervisor.
+TITLES = {ActionKind.SET_TEAM_MANAGER: "Set team supervisor"}
 REASSIGN_KINDS = {ActionKind.ASSIGN_LEAD, ActionKind.UNASSIGN_LEAD, ActionKind.RELEASE_TO_POOL}
 NO_LEAD_DELETION = (
     "The CRM does not support deleting leads, so the assistant cannot delete one. "
@@ -98,14 +100,21 @@ TEAM_KINDS = {
     ActionKind.ADD_TEAM_AGENT,
     ActionKind.REMOVE_TEAM_MEMBER,
     ActionKind.SET_TEAM_MANAGER,
+    ActionKind.UPDATE_TEAM_MEMBERS,
     ActionKind.MOVE_TEAM_AGENT,
 }
+# Every proposal for an existing team previews its whole roster and is refused on confirmation
+# once that roster changed; so only one may await confirmation per team at a time.
+PENDING_TEAM_CHANGE = (
+    "Another change to this team is already awaiting your confirmation. Confirm or cancel it "
+    "first; to change several members at once, propose them together as one change."
+)
 CALENDAR_EVENT_KINDS = {ActionKind.RESCHEDULE_CALENDAR_EVENT, ActionKind.CANCEL_CALENDAR_EVENT}
 TEAM_ADMIN_ONLY = (
     "Only the organization's owner or an administrator can create or delete teams or change "
     "their members and managers, as on the CRM's Teams page."
 )
-ROLE_NAMES = {"supervisor": "manager", "agent": "agent"}
+ROLE_NAMES = {"supervisor": "supervisor", "agent": "agent"}
 # A role said after a colleague's name ("Track 6 agent"); never a name on its own.
 _ROLE_WORDS = {"agent", "manager", "supervisor"}
 
@@ -118,7 +127,13 @@ async def _team_resources(db, request, scope, organization_id, *, pending):
         raise HTTPException(403, TEAM_ADMIN_ONLY)
     payload = request.payload
     if request.kind == ActionKind.CREATE_TEAM:
-        return {}  # A taken name is refused by the CRM when the team is created.
+        # A taken name is refused by the CRM when the team is created; its members must each
+        # still belong to the organization, now and again on confirmation.
+        if payload.members:
+            members = await repository.member_ids(db, organization_id=organization_id)
+            if any(member.member_id not in members for member in payload.members):
+                raise HTTPException(409, "That person is not a member of your organization")
+        return {}
     if request.kind == ActionKind.MOVE_TEAM_AGENT:
         return await _transfer_resources(db, payload, organization_id, pending=pending)
     team = await repository.team(db, organization_id=organization_id, team_id=payload.team_id)
@@ -127,6 +142,17 @@ async def _team_resources(db, request, scope, organization_id, *, pending):
             return {}  # Deleted, as confirmed.
         raise HTTPException(404, "Team not found in your organization")
     members = await repository.team_members(db, organization_id=organization_id, team_id=team.id)
+    if request.kind == ActionKind.UPDATE_TEAM_MEMBERS and pending:
+        in_organization = await repository.member_ids(db, organization_id=organization_id)
+        roles = {member.user_id: member.role for member in members}
+        for change in payload.members:
+            name = await _person_name(change.member_id)
+            if change.member_id not in in_organization:
+                raise HTTPException(409, f"{name} is not a member of your organization")
+            if roles.get(change.member_id) == change.role:
+                raise HTTPException(
+                    409, f"{name} is already in this team as {ROLE_NAMES[change.role]}"
+                )
     person = getattr(payload, "member_id", None)
     if person is not None:
         if person not in await repository.member_ids(db, organization_id=organization_id):
@@ -139,7 +165,7 @@ async def _team_resources(db, request, scope, organization_id, *, pending):
         if pending and request.kind == ActionKind.SET_TEAM_MANAGER and role == "supervisor":
             others = [m for m in members if m.role == "supervisor" and m.user_id != person]
             if not (payload.replace_existing and others):
-                raise HTTPException(409, "This person already manages this team")
+                raise HTTPException(409, "This person is already a supervisor of this team")
     return {"team": team, "team_members": list(members)}
 
 
@@ -357,15 +383,22 @@ def _target_preview(request, resources):
         ActionKind.PUBLISH_LISTING: "Records a disconnected publication request for this draft; nothing is published.",
         ActionKind.BOOK_EXTERNAL_VIEWING: "Records a disconnected booking request for this lead; no external booking or invitation is made.",
         ActionKind.BOOK_CALENDAR_MEETING: "Adds this meeting to your own calendar. Named colleagues appear in its details only; no invitations are sent.",
-        ActionKind.CREATE_TEAM: "Creates this team with no members, as the CRM's Teams page does. Add its manager and agents afterwards.",
+        ActionKind.CREATE_TEAM: "Creates this team with no members, as the CRM's Teams page does. Add its supervisors and agents afterwards.",
         ActionKind.DELETE_TEAM: "Deletes this team. Its members stay in the organization. The CRM refuses if leads or routing rules still use the team.",
         ActionKind.ADD_TEAM_AGENT: "Adds this person to the team as an agent.",
         ActionKind.REMOVE_TEAM_MEMBER: "Removes this person from the team; they stay in the organization and keep the leads assigned to them.",
-        ActionKind.SET_TEAM_MANAGER: "Makes this person a manager of the team (added, or promoted from agent).",
+        ActionKind.UPDATE_TEAM_MEMBERS: "Saves these people's roles in the team together, as the CRM's Teams page saves its members: all of them or, if the CRM refuses, none. Everyone else in the team stays as they are.",
+        ActionKind.SET_TEAM_MANAGER: "Makes this person a supervisor of the team, who manages it, imports leads and assigns them (added, or promoted from agent).",
         ActionKind.MOVE_TEAM_AGENT: "Moves this agent out of the first team and into the second as an agent. They stay in the organization and keep the leads assigned to them; those leads stay with the team that owns them.",
     }
     if request.kind in consequences:
         preview["consequence"] = consequences[request.kind]
+    if request.kind == ActionKind.CREATE_TEAM and request.payload.members:
+        preview["consequence"] = (
+            "Creates this team with the supervisors and agents listed, together, as the CRM's "
+            "Teams page sets them: supervisors manage the team, import leads and assign them; "
+            "agents receive leads and work on them."
+        )
     return preview
 
 
@@ -398,7 +431,13 @@ async def _team_preview(request, resources):
     """Names, never IDs: the team, the person and the team's current managers and agents."""
     payload = request.payload
     if request.kind == ActionKind.CREATE_TEAM:
-        return {"team": payload.name}
+        preview = {"team": payload.name}
+        if payload.members:
+            for role, label in (("supervisor", "supervisors"), ("agent", "agents")):
+                preview[label] = [
+                    await _person_name(m.member_id) for m in payload.members if m.role == role
+                ]
+        return preview
     if request.kind == ActionKind.MOVE_TEAM_AGENT:
         return {
             "person": await _person_name(payload.member_id),
@@ -408,11 +447,25 @@ async def _team_preview(request, resources):
     members = resources["team_members"]
     preview = {
         "team": resources["team"].name,
-        "current_managers": [
+        "current_supervisors": [
             await _person_name(m.user_id) for m in members if m.role == "supervisor"
         ],
         "current_agents": [await _person_name(m.user_id) for m in members if m.role == "agent"],
     }
+    if request.kind == ActionKind.UPDATE_TEAM_MEMBERS:
+        current = {member.user_id: member.role for member in members}
+        for role, label in (("supervisor", "becoming_supervisors"), ("agent", "becoming_agents")):
+            names = [await _person_name(m.member_id) for m in payload.members if m.role == role]
+            if names:
+                preview[label] = names
+        changing = [
+            f"{await _person_name(m.member_id)} ({ROLE_NAMES[current[m.member_id]]} to "
+            f"{ROLE_NAMES[m.role]})"
+            for m in payload.members
+            if current.get(m.member_id) not in (None, m.role)
+        ]
+        if changing:
+            preview["changing_role"] = changing
     if getattr(payload, "member_id", None):
         preview["person"] = await _person_name(payload.member_id)
     if request.kind == ActionKind.SET_TEAM_MANAGER and payload.replace_existing:
@@ -422,7 +475,7 @@ async def _team_preview(request, resources):
             if m.role == "supervisor" and m.user_id != payload.member_id
         ]
         if leaving:
-            preview["managers_leaving_the_team"] = leaving
+            preview["supervisors_leaving_the_team"] = leaving
     return preview
 
 
@@ -472,6 +525,8 @@ async def propose_action(
         return response
     resources, snapshot = await _resources(db, request, user_id, organization_id)
     payload = request.payload.model_dump(mode="json", exclude_unset=True)
+    if request.kind in TEAM_KINDS:
+        await _one_pending_change_per_team(db, payload, user_id, organization_id)
     preview = {**_target_preview(request, resources), "changes": payload}
     if request.kind in REASSIGN_KINDS:
         preview["current_assignee"] = await _person_name(resources["lead"].assigned_user_id)
@@ -566,6 +621,31 @@ async def _load(db, user_id, organization_id, action_id):
     ):
         raise HTTPException(404, "Conversation not found")
     return row
+
+
+def _team_ids(payload: dict) -> set[str]:
+    return {payload[key] for key in ("team_id", "from_team_id", "to_team_id") if payload.get(key)}
+
+
+async def _one_pending_change_per_team(db, payload: dict, user_id, organization_id):
+    """Refuse a team proposal while another of this user's proposals for the same team still
+    awaits confirmation and could succeed; both preview the same roster, so confirming one
+    would make the other stale. An expired, stale or inaccessible one is settled instead."""
+    teams = _team_ids(payload)
+    if not teams:
+        return  # A new team has no roster yet.
+    waiting = await repository.awaiting_actions(
+        db, user_id=user_id, organization_id=organization_id, kinds=TEAM_KINDS
+    )
+    for row in waiting:
+        if not teams & _team_ids(row.payload or {}):
+            continue
+        _expire(row)
+        if row.status == "awaiting_confirmation":
+            await _visible_response(db, row, user_id, organization_id)
+        if row.status == "awaiting_confirmation":
+            await db.commit()
+            raise HTTPException(409, PENDING_TEAM_CHANGE)
 
 
 def _expire(row):
@@ -911,7 +991,17 @@ async def _execute_team(db, row, request, resources):
     kind, payload, organization_id = request.kind, request.payload, row.organization_id
     if kind == ActionKind.CREATE_TEAM:
         team = await org_teams.stage_team(db, organization_id, payload.name)
-        return {"team_id": team.id, "message": f"Team {team.name} created"}
+        if not payload.members:
+            return {"team_id": team.id, "message": f"Team {team.name} created"}
+        # Its roster in the same savepoint, through the CRM's own write: all or nothing.
+        await _save_roster(
+            db, organization_id, team, {m.member_id: m.role for m in payload.members}
+        )
+        count = len(payload.members)
+        return {
+            "team_id": team.id,
+            "message": f"Team {team.name} created with {count} member{'s' * (count != 1)}",
+        }
     team = resources["team"]
     name = team.name
     if kind == ActionKind.DELETE_TEAM:
@@ -939,6 +1029,20 @@ async def _execute_team(db, row, request, resources):
             )
         return {"team_id": target.id, "message": f"{person} moved from {name} to {target.name}"}
     roles = {member.user_id: member.role for member in resources["team_members"]}
+    if kind == ActionKind.UPDATE_TEAM_MEMBERS:
+        for change in payload.members:
+            roles[change.member_id] = change.role
+        await _save_roster(db, organization_id, team, roles)
+        parts = []
+        for role, plural in (("supervisor", "supervisors"), ("agent", "agents")):
+            names = [await _person_name(m.member_id) for m in payload.members if m.role == role]
+            if names:
+                who = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+                parts.append(
+                    f"{who} {'is' if len(names) == 1 else 'are'} now "
+                    f"{'a ' + role if len(names) == 1 else plural} of {name}"
+                )
+        return {"team_id": team.id, "message": "; ".join(parts)}
     person = await _person_name(payload.member_id)
     if kind == ActionKind.ADD_TEAM_AGENT:
         roles[payload.member_id] = "agent"
@@ -950,7 +1054,14 @@ async def _execute_team(db, row, request, resources):
         if payload.replace_existing:
             roles = {user: role for user, role in roles.items() if role != "supervisor"}
         roles[payload.member_id] = "supervisor"
-        message = f"{person} is now a manager of {name}"
+        message = f"{person} is now a supervisor of {name}"
+    await _save_roster(db, organization_id, team, roles)
+    return {"team_id": team.id, "message": message}
+
+
+async def _save_roster(db, organization_id, team, roles: dict[str, str]) -> None:
+    """The team's members through the CRM's own write, then read back: a change is reported
+    only when the stored roster is exactly the one confirmed, else nothing is kept."""
     await org_teams.stage_team_members(
         db,
         organization_id,
@@ -961,7 +1072,9 @@ async def _execute_team(db, row, request, resources):
             ]
         ),
     )
-    return {"team_id": team.id, "message": message}
+    stored = await repository.team_members(db, organization_id=organization_id, team_id=team.id)
+    if {member.user_id: member.role for member in stored} != roles:
+        raise HTTPException(409, "The team's members were not saved as confirmed; nothing changed")
 
 
 async def _list_records(db, model, response_model, user_id, organization_id):
@@ -1372,6 +1485,20 @@ async def lookup_colleagues(db, *, user_id: str, organization_id: str, search: s
 async def _team_scope(db, user_id, organization_id):
     await _authorize(db, user_id, organization_id)
     return await assignment.load_scope(db, organization_id, user_id)
+
+
+async def has_other_supervisors(
+    db, *, user_id: str, organization_id: str, team_id: str, people: set[str]
+) -> bool:
+    """Whether the team has a supervisor other than `people`: only then is replacing its
+    supervisors, rather than adding one beside them (the CRM's default), a choice to make."""
+    scope = await _team_scope(db, user_id, organization_id)
+    if not scope.organization_admin:
+        await db.commit()
+        return True  # Not this user's to change; the proposal explains the refusal.
+    members = await repository.team_members(db, organization_id=organization_id, team_id=team_id)
+    await db.commit()
+    return any(m.role == "supervisor" and m.user_id not in people for m in members)
 
 
 async def lookup_teams(db, *, user_id: str, organization_id: str, search: str):

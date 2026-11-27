@@ -1657,6 +1657,20 @@
               "type": "integer",
               "title": "Conversation Id"
             }
+          },
+          {
+            "name": "assistant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "crm",
+                "market"
+              ],
+              "type": "string",
+              "default": "crm",
+              "title": "Assistant"
+            }
           }
         ],
         "requestBody": {
@@ -1708,6 +1722,20 @@
             "schema": {
               "type": "integer",
               "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "assistant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "crm",
+                "market"
+              ],
+              "type": "string",
+              "default": "crm",
+              "title": "Assistant"
             }
           }
         ],
@@ -1824,18 +1852,12 @@
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "crm",
-                    "market"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "enum": [
+                "crm",
+                "market"
               ],
+              "type": "string",
+              "default": "crm",
               "title": "Assistant"
             }
           }
@@ -16680,6 +16702,7 @@
           "add_team_agent",
           "remove_team_member",
           "set_team_manager",
+          "update_team_members",
           "move_team_agent",
           "reschedule_calendar_event",
           "cancel_calendar_event"
@@ -16760,6 +16783,9 @@
               },
               {
                 "$ref": "#/components/schemas/SetTeamManager"
+              },
+              {
+                "$ref": "#/components/schemas/TeamMembersChange"
               },
               {
                 "$ref": "#/components/schemas/TeamMemberChange"
@@ -19781,10 +19807,18 @@
       "CalendarMeeting": {
         "properties": {
           "title": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Title"
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Only if the user gave one; otherwise leave it out (named by the server)"
           },
           "starts_at": {
             "type": "string",
@@ -19832,7 +19866,6 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "title",
           "starts_at",
           "ends_at"
         ],
@@ -21162,6 +21195,14 @@
             "maxLength": 120,
             "minLength": 1,
             "title": "Name"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/NewTeamMember"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Members"
           }
         },
         "additionalProperties": false,
@@ -36194,6 +36235,31 @@
         "title": "MyTeam",
         "description": "A team the signed-in user belongs to (any role): its shared pool is theirs to claim from."
       },
+      "NewTeamMember": {
+        "properties": {
+          "member_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Member Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "supervisor"
+            ],
+            "title": "Role"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "member_id",
+          "role"
+        ],
+        "title": "NewTeamMember"
+      },
       "NewsArticleCreate": {
         "properties": {
           "url": {
@@ -43636,6 +43702,32 @@
           "role"
         ],
         "title": "TeamMemberResponse"
+      },
+      "TeamMembersChange": {
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Team Id"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/NewTeamMember"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Members"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "team_id",
+          "members"
+        ],
+        "title": "TeamMembersChange"
       },
       "TeamMembersUpdateRequest": {
         "properties": {

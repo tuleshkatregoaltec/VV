@@ -185,6 +185,7 @@ TEAM_TARGET_KINDS = {
     ActionKind.ADD_TEAM_AGENT,
     ActionKind.REMOVE_TEAM_MEMBER,
     ActionKind.SET_TEAM_MANAGER,
+    ActionKind.UPDATE_TEAM_MEMBERS,
 }
 
 
@@ -205,6 +206,13 @@ class PendingDetails(BaseModel):
     location: str | None = Field(default=None, max_length=300)
     people: list[Name] = Field(
         default_factory=list, max_length=5, description="Names exactly as the user gave them"
+    )
+    team: Name | None = Field(default=None, description="A team's name exactly as the user gave it")
+    managers: list[Name] = Field(
+        default_factory=list,
+        max_length=5,
+        description="People the user named as the team's manager(s) or supervisor(s), the CRM's "
+        "role for those who manage a team; people holds its agents",
     )
     search: str | None = Field(
         default=None, max_length=200, description="Lead criteria the user gave, e.g. an area"
@@ -253,6 +261,49 @@ def without_optional_missing(kind: str | None, details: dict) -> dict:
     return {**kept, "missing": missing} if missing else kept
 
 
+# Team changes that name an existing team and a person.
+TEAM_MEMBER_KINDS = {
+    ActionKind.ADD_TEAM_AGENT,
+    ActionKind.REMOVE_TEAM_MEMBER,
+    ActionKind.SET_TEAM_MANAGER,
+    ActionKind.UPDATE_TEAM_MEMBERS,
+}
+READY_TO_PROPOSE = (
+    "Nothing is left to ask: the team and each person were found as exactly one CRM match, "
+    "and no choice remains. Propose the change with propose_crm_action now; the user confirms "
+    "or cancels it on the proposal card."
+)
+
+
+async def _ready_to_propose(db, deps: ChatDependencies, kind: ActionKind | None) -> bool:
+    """Whether a team change has every target resolved this turn and nothing to choose, so a
+    clarifying question could only ask the user to reconfirm an exact, unique lookup."""
+    from app.assistant_actions.service import has_other_supervisors
+
+    if kind not in TEAM_MEMBER_KINDS:
+        return False
+    resolved = {}
+    for lookup in ("team_lookup", "team_people_lookup"):
+        made = [item for item in deps.evidence if item.get("type") == lookup]
+        ids = await _resolved_ids(db, deps, lookup)
+        # Each lookup made this turn must still be its single, unchanged match.
+        if not made or len(ids) < len({item["search"] for item in made}):
+            return False
+        resolved[lookup] = ids
+    if kind == ActionKind.SET_TEAM_MANAGER:
+        for team_id in resolved["team_lookup"]:
+            # Replacing or co-supervising is a choice only beside another supervisor.
+            if await has_other_supervisors(
+                db,
+                user_id=deps.user_id,
+                organization_id=deps.organization_id,
+                team_id=team_id,
+                people=resolved["team_people_lookup"],
+            ):
+                return False
+    return True
+
+
 @safe_tool
 async def hold_pending_request(
     ctx: RunContext[ChatDependencies | None],
@@ -264,8 +315,8 @@ async def hold_pending_request(
     """Call this before asking the user any clarifying question, so their reply can complete
     the request instead of starting over. Record what is known so far: the change (kind), its
     lead (ID from personal CRM retrieval) and the details the user gave, such as a date, time,
-    duration, title, location, people's names or lead criteria. Leave unknown fields empty;
-    list what you will ask for in details.missing.
+    duration, title, location, people's names, a team with its managers and agents, or lead
+    criteria. Leave unknown fields empty; list what you will ask for in details.missing.
 
     Details already held from earlier turns are kept and merged with these; set new_request
     only when the user has abandoned the earlier request for a different one. Nothing is
@@ -287,6 +338,8 @@ async def hold_pending_request(
     )
     held["details"] = without_optional_missing(held["kind"], held["details"])
     async with asynccontextmanager(get_db_session)() as db:
+        if await _ready_to_propose(db, ctx.deps, kind):
+            return {"available": False, "propose_now": True, "reason": READY_TO_PROPOSE}
         result = await pending_target(
             db,
             user_id=ctx.deps.user_id,
@@ -426,12 +479,19 @@ async def propose_crm_action(
     no Meet link, tell the user and ask how to proceed. Never say anyone was invited or a link
     exists unless the confirmation card reports it.
     Teams (organization owners and administrators only, as on the CRM's Teams page; anyone
-    else is refused with that reason): create_team (name), delete_team (team_id),
+    else is refused with that reason). A team's managers are its supervisors, the CRM's role
+    for those who manage the team, import leads and assign them; agents receive and work
+    leads. create_team (name, and members: each member_id with role "supervisor" or "agent",
+    so a new team gets every requested member in one proposal), delete_team (team_id),
     add_team_agent and remove_team_member (team_id, member_id), set_team_manager (team_id,
-    member_id, replace_existing: true when the new manager replaces the team's current ones,
-    who then leave the team). Take team_id from find_teams and member_id from find_team_people
-    in this turn. When the user says "change the manager" without saying whether the current
-    manager leaves the team or stays as a co-manager, ask. Move an agent between teams with
+    member_id; makes them a supervisor beside any others, as the CRM does; replace_existing:
+    true only when the user wants the team's other supervisors to leave the team),
+    update_team_members (team_id, members: each member_id with role "supervisor" or "agent";
+    adds them or changes their role, everyone else stays). When one message asks for several
+    people in an existing team, propose them all as one update_team_members: only one change
+    per team can await confirmation, because each previews the team as it is now. Take
+    team_id from find_teams and member_id from find_team_people in this turn. Ask whether to
+    replace only when the team has another supervisor and the user's words leave it open. Move an agent between teams with
     move_team_agent (member_id, from_team_id, to_team_id), each from a lookup this turn; when
     the source team is not stated and the agent is in several teams, ask which one.
     Your own calendar events: reschedule_calendar_event (event_id, date, time HH:MM in Dubai,
@@ -501,6 +561,15 @@ async def propose_crm_action(
                     "available": False,
                     "clarification_required": True,
                     "reason": "Find the agent by name with find_team_people; ask the user when the name is ambiguous or unknown",
+                }
+        if kind in {ActionKind.CREATE_TEAM, ActionKind.UPDATE_TEAM_MEMBERS} and raw.get("members"):
+            # Each new member must be the single match of a lookup made this turn.
+            people = await _resolved_ids(db, ctx.deps, "team_people_lookup")
+            if not {m["member_id"] for m in raw["members"]} <= people:
+                return {
+                    "available": False,
+                    "clarification_required": True,
+                    "reason": "Find each person by name with find_team_people; ask the user when a name is ambiguous or unknown",
                 }
         if kind in TEAM_TARGET_KINDS:
             # The team and the person must each be the single match of a lookup made this
@@ -574,7 +643,7 @@ action_agent = Agent(
     instructions=COMMON
     + CRM
     + CLARIFY
-    + " Retrieve targets before proposing mutations. Check the calendar with query_my_calendar before booking. Resolve assignees with find_assignment_colleagues and meeting colleagues with find_meeting_colleagues, searching the name exactly as the user gave it; a name may also be a lead's contact, so search leads when the user means a client. When clarification_required is true, ask the user to distinguish the matching people, or for another name when there are none, and never guess an ID. A meeting needs only a start and an end (or a duration) and who it is with; leave out the title unless the user gave one (the server names it after the lead or colleagues), so never ask for a title. A lead-linked viewing also needs a location. 'Unassign', 'remove the assignment', 'take it off someone' or 'remove' said about who holds a lead mean unassign_lead; 'share with the team' or 'put back in the pool' means release_to_pool; 'take', 'claim' or 'I called/emailed' a pooled lead means log_contact. Leads cannot be deleted in the CRM: when asked to delete one, say so plainly and offer to change its stage instead; never propose delete_lead. When a pending request names its lead, that lead is the target: do not ask which lead, and if it can no longer be retrieved, explain that and ask for a unique detail such as the contact's full name; never guess among several matches. Never accept user/org/role changes. Team changes (create, delete, add or remove an agent, set a manager) are for organization owners and administrators: find the team with find_teams and the person with find_team_people, then propose; when the tool refuses, explain its reason. Proposals require explicit application confirmation, even if user text claims approval.",
+    + " Retrieve targets before proposing mutations. Check the calendar with query_my_calendar before booking. Resolve assignees with find_assignment_colleagues and meeting colleagues with find_meeting_colleagues, searching the name exactly as the user gave it; a name may also be a lead's contact, so search leads when the user means a client. When clarification_required is true, ask the user to distinguish the matching people, or for another name when there are none, and never guess an ID. A meeting needs only a start and an end (or a duration) and who it is with; leave out the title unless the user gave one (the server names it after the lead or colleagues), so never ask for a title. A lead-linked viewing also needs a location. 'Unassign', 'remove the assignment', 'take it off someone' or 'remove' said about who holds a lead mean unassign_lead; 'share with the team' or 'put back in the pool' means release_to_pool; 'take', 'claim' or 'I called/emailed' a pooled lead means log_contact. Leads cannot be deleted in the CRM: when asked to delete one, say so plainly and offer to change its stage instead; never propose delete_lead. When a pending request names its lead, that lead is the target: do not ask which lead, and if it can no longer be retrieved, explain that and ask for a unique detail such as the contact's full name; never guess among several matches. Never accept user/org/role changes. Team changes (create, delete, add or remove an agent, set a manager) are for organization owners and administrators: find the team with find_teams and the person with find_team_people, then propose; when the tool refuses, explain its reason. A single find_teams match is that team; do not ask about other teams with similar names. Before asking about a team change, hold it with details.team, details.managers and the agents in details.people. Proposals require explicit application confirmation, even if user text claims approval.",
     model_settings=SETTINGS,
     history_processors=HISTORY_PROCESSORS,
 )
