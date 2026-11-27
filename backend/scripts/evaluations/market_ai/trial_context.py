@@ -7,29 +7,24 @@ from pathlib import Path
 
 
 def execution_context():
-    from app.market_ai import routing, workflows
-    from app.market_ai.agent import agent as orchestrator
+    from app.market_ai import routing as market_routing
+    from app.market_ai import workflows as market_workflows
+    from app.market_ai.agent import agent as market_orchestrator
     from app.market_ai.capabilities import CAPABILITY_CONTEXT_VERSION
-    from app.whatsapp import customer_agent
 
     agents = (
-        orchestrator,
-        routing.router_agent,
-        routing.coordinator_agent,
-        workflows.market_agent,
-        workflows.pricing_agent,
-        workflows.crm_agent,
-        workflows.followup_agent,
-        workflows.action_agent,
-        customer_agent.classifier(),
-        customer_agent.drafter(),
+        market_orchestrator,
+        market_routing.router_agent,
+        market_routing.coordinator_agent,
+        market_workflows.market_agent,
+        market_workflows.pricing_agent,
     )
     value = {
         "capability_context_version": CAPABILITY_CONTEXT_VERSION,
         "pydantic_ai_version": importlib.metadata.version("pydantic-ai"),
         "source_sha256": {
             name: hashlib.sha256(
-                (Path(__file__).resolve().parents[2] / name).read_bytes()
+                (Path(__file__).resolve().parents[3] / name).read_bytes()
             ).hexdigest()
             for name in (
                 "app/market_ai/agent.py",
@@ -37,13 +32,7 @@ def execution_context():
                 "app/market_ai/workflows.py",
                 "app/market_ai/capabilities.py",
                 "app/market_ai/tools.py",
-                "app/crm/assistant/workflows.py",
-                "app/crm/assistant/crm_tools.py",
                 "app/chat/security.py",
-                "app/whatsapp/customer_agent.py",
-                "app/whatsapp/customer_policy.py",
-                "app/whatsapp/customer_evidence.py",
-                "app/whatsapp/customer_access.py",
             )
         },
         "harness_sha256": {

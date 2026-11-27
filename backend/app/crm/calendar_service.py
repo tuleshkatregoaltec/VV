@@ -4,6 +4,7 @@ import json
 import secrets
 from collections.abc import Callable
 from datetime import date, datetime, time, timedelta, timezone
+from typing import get_args
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -16,13 +17,15 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.core.decorators import cache
-from app.crm.calendar_models import CrmCalendarConnection, CrmCalendarEvent
+from app.crm.calendar_models import CalendarKind, CrmCalendarConnection, CrmCalendarEvent
 
 GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 GOOGLE_API = "https://www.googleapis.com/calendar/v3"
 GOOGLE_SCOPES = "openid email https://www.googleapis.com/auth/calendar.events"
-VALID_KINDS = {"viewing", "call", "follow_up", "deal_date", "deadline"}
+# The kinds the calendar accepts, from its one definition: a kind missing here would turn
+# into a follow-up whenever an event comes back from Google.
+VALID_KINDS = set(get_args(CalendarKind))
 BUSINESS_TZ = ZoneInfo("Asia/Dubai")
 
 

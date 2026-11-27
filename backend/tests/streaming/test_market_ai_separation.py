@@ -32,6 +32,8 @@ def turn(monkeypatch):
     monkeypatch.setattr(service.admission, "finish", AsyncMock())
     monkeypatch.setattr(service, "get_conversation", AsyncMock(return_value=SimpleNamespace(id=3)))
     monkeypatch.setattr(service, "get_conversation_messages", AsyncMock(return_value=[]))
+    # The turn reads the user's CRM role from the database; these turns have none.
+    monkeypatch.setattr(service, "role_context", AsyncMock(return_value=""))
     saved = AsyncMock()
     monkeypatch.setattr(service, "add_message", saved)
     return saved

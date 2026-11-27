@@ -38,6 +38,7 @@
 	--l-a2a: var(--color-chart-line-alt);
 	--e-view: var(--color-accent-text);
 	--e-call: var(--color-success);
+	--e-meet: var(--color-chart-line-alt);
 	--e-fu: var(--color-warning);
 	--e-deal: var(--color-chart-line-tertiary);
 	--e-dead: var(--color-error);

@@ -18159,7 +18159,7 @@
 					},
 					"kind": {
 						"type": "string",
-						"enum": ["viewing", "call", "follow_up", "deal_date", "deadline"],
+						"enum": ["viewing", "call", "meeting", "follow_up", "deal_date", "deadline"],
 						"title": "Kind"
 					},
 					"detail": {
@@ -18327,7 +18327,7 @@
 					},
 					"kind": {
 						"type": "string",
-						"enum": ["viewing", "call", "follow_up", "deal_date", "deadline"],
+						"enum": ["viewing", "call", "meeting", "follow_up", "deal_date", "deadline"],
 						"title": "Kind"
 					},
 					"title": {

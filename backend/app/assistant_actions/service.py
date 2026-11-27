@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import re
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
@@ -105,6 +106,8 @@ TEAM_ADMIN_ONLY = (
     "their members and managers, as on the CRM's Teams page."
 )
 ROLE_NAMES = {"supervisor": "manager", "agent": "agent"}
+# A role said after a colleague's name ("Track 6 agent"); never a name on its own.
+_ROLE_WORDS = {"agent", "manager", "supervisor"}
 
 
 async def _team_resources(db, request, scope, organization_id, *, pending):
@@ -305,12 +308,21 @@ async def _resources(db, request, user_id, organization_id, *, pending=True):
                 409, "A named colleague is not a current member of your organization"
             )
         resources["colleagues"] = sorted(payload.colleague_ids)
+    if request.kind == ActionKind.BOOK_CALENDAR_MEETING:
+        # Who Google Calendar would invite, and whether it makes a Meet link: rechecked on
+        # confirmation, so a disconnected calendar or a changed email never sends an
+        # invitation, or promises a link, the user did not see.
+        resources["invitations"] = await meeting_invitations(
+            db, payload, user_id=user_id, organization_id=organization_id
+        )
     snapshot = {}
     for key, record in resources.items():
         if key == "scope":
             continue
         if key == "colleagues":
             snapshot[key] = record
+        elif key == "invitations":
+            snapshot[key] = _hash(record)
         elif key in {"team_members", "to_team_members"}:
             snapshot[key] = sorted([member.user_id, member.role] for member in record)
         else:
@@ -414,10 +426,37 @@ async def _team_preview(request, resources):
     return preview
 
 
+async def _with_meeting_title(db, request, user_id, organization_id):
+    """A meeting without a title is named after whom it is with: "Meeting with Mariam Ali",
+    from the lead (only one this user can see) and the colleagues' verified names. Applied
+    before hashing, so the stored request, its confirmation and any retry carry the same title."""
+    payload = request.payload
+    if request.kind != ActionKind.BOOK_CALENDAR_MEETING or payload.title:
+        return request
+    names = []
+    if payload.lead_id is not None:
+        lead = await repository.visible_lead(
+            db, user_id=user_id, organization_id=organization_id, lead_id=payload.lead_id
+        )
+        contact = (
+            await repository.lead_contact(
+                db, organization_id=organization_id, contact_id=lead.contact_id
+            )
+            if lead
+            else None
+        )
+        if contact and contact.full_name.strip():
+            names.append(contact.full_name.strip())
+    names += [await _person_name(item) for item in payload.colleague_ids]
+    title = ("Meeting with " + " and ".join(names))[:200] if names else "Meeting"
+    return request.model_copy(update={"payload": payload.model_copy(update={"title": title})})
+
+
 async def propose_action(
     db, *, user_id: str, organization_id: str, request: ActionProposalRequest
 ) -> ActionProposalResponse:
     await _authorize(db, user_id, organization_id, request.conversation_id)
+    request = await _with_meeting_title(db, request, user_id, organization_id)
     request_hash = _request_hash(request, user_id, organization_id)
     existing = await repository.action_by_key(
         db,
@@ -454,6 +493,14 @@ async def propose_action(
         preview["when"] = connectors.dubai_span(request.payload.starts_at, request.payload.ends_at)
         if request.payload.colleague_ids:
             preview["with"] = [await _person_name(item) for item in request.payload.colleague_ids]
+        invitations = await _invitation_lines(request.payload, resources)
+        if invitations:
+            preview["invitations"] = invitations
+        preview["video"] = (
+            "A Google Meet link will be created and sent with the invitation"
+            if resources["invitations"]["meet"]
+            else "No Google Meet link: Google Calendar is not connected"
+        )
     if request.kind in EXTERNAL_KINDS:
         ready, delivery, consequence = await connectors.readiness(
             db,
@@ -466,6 +513,13 @@ async def propose_action(
         preview["delivery"] = delivery
         if ready and consequence:
             preview["consequence"] = consequence
+        plan = resources.get("invitations") or {}
+        if plan.get("invited") or (plan.get("lead") or {}).get("email"):
+            preview["consequence"] = (
+                "Adds this meeting to your own calendar. Google Calendar emails an invitation, "
+                "with the Google Meet link, to each person listed as invited; nobody else is "
+                "invited."
+            )
         if ready and request.kind == ActionKind.SEND_MESSAGE:
             preview["recipient"] = resources["contact"].email.strip()
     elif request.kind in {ActionKind.SCHEDULE_VIEWING, ActionKind.CANCEL_VIEWING}:
@@ -529,7 +583,7 @@ async def _visible_response(db, row, user_id, organization_id):
             payload=row.payload,
             idempotency_key=row.idempotency_key,
         )
-        _, snapshot = await _resources(
+        resources, snapshot = await _resources(
             db, request, user_id, organization_id, pending=row.status == "awaiting_confirmation"
         )
         if row.status == "awaiting_confirmation" and snapshot != row.snapshot:
@@ -569,7 +623,31 @@ async def _visible_response(db, row, user_id, organization_id):
         response.preview = {"available": False, "message": "Target is no longer accessible"}
         response.result = {"message": "Target is no longer accessible"}
         return response
-    return _response(row)
+    response = _response(row)
+    if row.status == "succeeded" and row.kind in REASSIGN_KINDS and "lead" in resources:
+        await _show_assignment_outcome(response, row, resources["lead"])
+    return response
+
+
+async def _show_assignment_outcome(response, row, lead) -> None:
+    """A confirmed (re)assignment's card states who holds the lead now, read from the CRM; the
+    proposal's "new assignee" was only what was asked for. The stored preview is unchanged."""
+    preview = dict(response.preview)
+    previous = preview.pop("current_assignee", None)
+    preview.pop("new_assignee", None)
+    if lead.assigned_user_id is None:
+        holder = "Team pool" if lead.pool_released_at is not None else "Unassigned"
+    else:
+        holder = await _person_name(lead.assigned_user_id)
+    response.preview = {**preview, "previous_assignee": previous, "current_assignee": holder}
+    if row.kind == ActionKind.ASSIGN_LEAD:
+        asked = (row.payload or {}).get("assignee_id")
+        message = (
+            f"Lead assigned to {holder}"
+            if lead.assigned_user_id == asked
+            else f"Lead assigned; it is now with {holder}"
+        )
+        response.result = {**(response.result or {}), "message": message}
 
 
 async def get_action(db, *, user_id, organization_id, action_id):
@@ -670,6 +748,7 @@ async def confirm_action(db, *, user_id, organization_id, action_id):
                 user_id=user_id,
                 organization_id=organization_id,
                 person_name=_person_name,
+                invitations=meeting_invitations,
             ),
         )
         return await get_action(
@@ -1012,6 +1091,97 @@ def _display_name(first_name, last_name):
     return name[:200] or None
 
 
+async def _person_email(user_id: str) -> str | None:
+    """A verified member's email from the directory, for a calendar invitation only."""
+    try:
+        async with asyncio.timeout(3):
+            person = await get_user_by_id(user_id)
+        email = (getattr(person, "email", None) or "").strip() if person else ""
+    except Exception:
+        email = ""
+    return email or None
+
+
+# An address Google Calendar can invite: one word, an @, a dotted domain.
+_USABLE_EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
+
+async def meeting_invitations(db, payload, *, user_id: str, organization_id: str) -> dict:
+    """Whom a meeting's invitation would reach, and whether it gets a Google Meet link.
+
+    The CRM's only invitation channel is the user's connected Google Calendar: attendees,
+    with Google sending the emails and the Meet link. Colleagues need an email on file. The
+    linked lead is invited only at a usable address on a lead this user can see, and never
+    when marked do not contact."""
+    connection = await connectors.google_connection(
+        db, user_id=user_id, organization_id=organization_id
+    )
+    google = connection is not None
+    emails = {item: await _person_email(item) for item in payload.colleague_ids}
+    invited = [item for item in payload.colleague_ids if google and emails[item]]
+    lead = None
+    if payload.lead_id is not None:
+        visible = await repository.visible_lead(
+            db, user_id=user_id, organization_id=organization_id, lead_id=payload.lead_id
+        )
+        contact = (
+            await repository.lead_contact(
+                db, organization_id=organization_id, contact_id=visible.contact_id
+            )
+            if visible
+            else None
+        )
+        if contact is not None:
+            email = (contact.email or "").strip()
+            reason = None
+            if contact.do_not_contact:
+                reason = "marked do not contact"
+            elif not _USABLE_EMAIL.fullmatch(email):
+                reason = "no usable email on file"
+            elif not google:
+                reason = "Google Calendar is not connected, so no invitations can be sent"
+            lead = {
+                "name": contact.full_name.strip()[:200] or "The lead",
+                "email": None if reason else email,
+                "reason": reason,
+            }
+    return {
+        "google": google,
+        "meet": google,
+        "invited": invited,
+        "emails": {item: emails[item] for item in invited},
+        "lead": lead,
+    }
+
+
+async def _invitation_lines(payload, resources) -> list[str]:
+    """What the proposal says about invitations, person by person, with the address each
+    invitation goes to; the linked lead is invited only as `meeting_invitations` decides."""
+    plan = resources.get("invitations") or {"google": False, "invited": [], "lead": None}
+    lines = []
+    for item in payload.colleague_ids:
+        name = await _person_name(item)
+        if item in plan["invited"]:
+            lines.append(
+                f"Google Calendar will email an invitation to {name} at {plan['emails'][item]}"
+            )
+        elif not plan["google"]:
+            lines.append(
+                f"{name} is not invited: Google Calendar is not connected, so no invitations "
+                "can be sent"
+            )
+        else:
+            lines.append(f"{name} is not invited: no email on file")
+    lead = plan.get("lead")
+    if lead and lead["email"]:
+        lines.append(
+            f"Google Calendar will email an invitation to {lead['name']} (lead) at {lead['email']}"
+        )
+    elif lead:
+        lines.append(f"{lead['name']} (lead) is not invited: {lead['reason']}")
+    return lines
+
+
 async def _person_name(user_id: str | None) -> str:
     """A verified member's display name for a preview; never an ID or email."""
     if user_id is None:
@@ -1093,6 +1263,10 @@ async def lookup_assignees(db, *, user_id: str, organization_id: str, search: st
         return member_ids & current.eligible_user_ids
 
     matches = await _member_matches(db, organization_id, search, assignable)
+    words = search.split()
+    if matches == [] and len(words) > 1 and words[-1].casefold() in _ROLE_WORDS:
+        # "Track 6 agent": the person's name followed by their role, when no name has it.
+        matches = await _member_matches(db, organization_id, " ".join(words[:-1]), assignable)
     if matches is None:
         await _authorize(db, user_id, organization_id)
         await db.commit()
@@ -1114,8 +1288,61 @@ async def lookup_assignees(db, *, user_id: str, organization_id: str, search: st
                 f"{wanted} is a team, not a person. The CRM assigns a lead to one person and "
                 "the lead then belongs to their team: ask which member should handle it."
             )
+        else:
+            reason = await _not_an_assignee(db, scope, organization_id, wanted) or reason
     await db.commit()
     return _match_result(matches, reason)
+
+
+async def _all_members(db, organization_id, search):
+    """Members of the organization with this name (the directory's own matching)."""
+
+    async def everyone(member_ids):
+        return member_ids
+
+    return await _member_matches(db, organization_id, search, everyone) or []
+
+
+async def _not_an_assignee(db, scope, organization_id, wanted) -> str | None:
+    """Why a name that is not an eligible assignee was given: an existing colleague outside
+    the teams this user assigns into, or a lead they can see (the lead, not its new handler)."""
+    if await _all_members(db, organization_id, wanted):
+        teams = {team.id: team.name for team in await org_teams.list_org_teams(db, organization_id)}
+        allowed = ", ".join(sorted(teams[t] for t in scope.team_members if t in teams)) or "none"
+        return (
+            f"{wanted} is a member of your organization, but not in a team whose leads you can "
+            f"assign (you assign to members of: {allowed}). Ask the user who in those teams "
+            "should handle the lead."
+        )
+    if await repository.visible_lead_named(db, scope, wanted):
+        return (
+            f"{wanted} is a lead you can see, not a colleague: a lead is given to a colleague. "
+            "Ask the user who should handle it."
+        )
+    return None
+
+
+async def _not_a_team(db, scope, organization_id, wanted) -> str | None:
+    """What a name given as a team really is: a colleague, or a lead this user can see."""
+    if await _all_members(db, organization_id, wanted):
+        return (
+            f"{wanted} is a person in your organization, not a team. To give a lead to them, "
+            "look them up with find_assignment_colleagues."
+        )
+    if await repository.visible_lead_named(db, scope, wanted):
+        return f"{wanted} is a lead you can see, not a team."
+    return None
+
+
+async def _not_a_member(db, scope, wanted) -> str | None:
+    """A name given as a team member that is a lead this user can see."""
+    if await repository.visible_lead_named(db, scope, wanted):
+        return (
+            f"{wanted} is a lead you can see, not a member of your organization. To give the "
+            "lead to someone, look up the colleague who should handle it with "
+            "find_assignment_colleagues."
+        )
+    return None
 
 
 async def lookup_colleagues(db, *, user_id: str, organization_id: str, search: str):
@@ -1142,10 +1369,9 @@ async def lookup_colleagues(db, *, user_id: str, organization_id: str, search: s
     return _match_result(matches, "No colleague in your organization has that name")
 
 
-async def _team_admin(db, user_id, organization_id):
+async def _team_scope(db, user_id, organization_id):
     await _authorize(db, user_id, organization_id)
-    scope = await assignment.load_scope(db, organization_id, user_id)
-    return scope.organization_admin
+    return await assignment.load_scope(db, organization_id, user_id)
 
 
 async def lookup_teams(db, *, user_id: str, organization_id: str, search: str):
@@ -1157,17 +1383,23 @@ async def lookup_teams(db, *, user_id: str, organization_id: str, search: str):
     from app.crm.assistant import same_team
 
     _check_search(search)
-    if not await _team_admin(db, user_id, organization_id):
+    scope = await _team_scope(db, user_id, organization_id)
+    wanted = " ".join(search.split())
+    if not scope.organization_admin:
+        hint = await _not_a_team(db, scope, organization_id, wanted)
         await db.commit()
-        return {"available": False, "reason": TEAM_ADMIN_ONLY}
+        return {
+            "available": False,
+            "reason": f"{hint} {TEAM_ADMIN_ONLY}" if hint else TEAM_ADMIN_ONLY,
+        }
     teams = await org_teams.list_org_teams(db, organization_id)
     await db.commit()
     exact = [team for team in teams if same_team(team.name, search)]
-    wanted = " ".join(search.split()).casefold()
+    folded = wanted.casefold()
     found = exact or [
         team
         for team in teams
-        if team.name.casefold().startswith(wanted) or wanted in team.name.casefold().split()
+        if team.name.casefold().startswith(folded) or folded in team.name.casefold().split()
     ]
     matches = [{"id": team.id, "name": team.name} for team in found]
     result = {
@@ -1177,7 +1409,11 @@ async def lookup_teams(db, *, user_id: str, organization_id: str, search: str):
         "truncated": len(matches) > 10,
     }
     if not matches:
-        result["reason"] = "Your organization has no team with that name"
+        result["reason"] = (
+            await _not_a_team(db, scope, organization_id, wanted)
+            or "Your organization has no team with that name"
+        )
+        await db.commit()
     return result
 
 
@@ -1185,9 +1421,15 @@ async def lookup_team_people(db, *, user_id: str, organization_id: str, search: 
     """Organization members by name, for the owner or an administrator to place in a team
     (anyone in the organization may join a team, including the user)."""
     _check_search(search)
-    if not await _team_admin(db, user_id, organization_id):
+    scope = await _team_scope(db, user_id, organization_id)
+    wanted = " ".join(search.split())
+    if not scope.organization_admin:
+        hint = await _not_a_member(db, scope, wanted)
         await db.commit()
-        return {"available": False, "reason": TEAM_ADMIN_ONLY}
+        return {
+            "available": False,
+            "reason": f"{hint} {TEAM_ADMIN_ONLY}" if hint else TEAM_ADMIN_ONLY,
+        }
 
     async def members(member_ids):
         await _authorize(db, user_id, organization_id)
@@ -1200,8 +1442,9 @@ async def lookup_team_people(db, *, user_id: str, organization_id: str, search: 
             "available": False,
             "reason": "Organization member names are temporarily unavailable",
         }
+    reason = await _not_a_member(db, scope, wanted) if not matches else None
     await db.commit()
-    return _match_result(matches, "No one in your organization has that name")
+    return _match_result(matches, reason or "No one in your organization has that name")
 
 
 async def pending_target(

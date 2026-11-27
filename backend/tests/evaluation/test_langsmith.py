@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from scripts.evaluation.langsmith import export_payload, publish
+from scripts.evaluations.market_ai.langsmith import export_payload, publish
 
 
 def fixture(tmp_path):

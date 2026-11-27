@@ -26,7 +26,14 @@ from app.chat.security import (
     safe_data,
 )
 from app.config import settings
-from app.crm.assistant import has_current_access, query_my_records
+from app.crm.assistant import (
+    has_current_access,
+    query_my_records,
+    records_still_visible,
+    role_context,
+    teams_still_shown,
+    view_signature,
+)
 from app.crm.assistant.agent import _convert_to_pydantic_messages, agent
 from app.crm.assistant.connector_tools import CONNECTOR_EVIDENCE, evidence_still_accessible
 from app.crm.assistant.dependencies import ChatDependencies
@@ -46,7 +53,10 @@ LOOKUP_EVIDENCE = {
 }
 
 
-async def _evidence_accessible(db, evidence, user_id, organization_id) -> bool:
+async def _evidence_accessible(db, evidence, user_id, organization_id, *, exact=False) -> bool:
+    """Whether the user may still see what this evidence showed (access). With `exact`, also
+    whether its CRM reads still give the same result: the test for an action answer's prose,
+    written before confirmation, that the confirmed change itself may have made untrue."""
     if evidence and not await has_current_access(
         db, user_id=user_id, organization_id=organization_id
     ):
@@ -77,11 +87,40 @@ async def _evidence_accessible(db, evidence, user_id, organization_id) -> bool:
                 if fingerprint(result) != reference["fingerprint"]:
                     return False
                 continue
+            request = CrmAssistantQuery.model_validate(reference["query"])
+            # A CRM read stays shown while the user may still see what it showed: each record
+            # it returned, or the same team view. Later edits to those records do not hide it.
+            if "teams_shown" in reference and not exact:
+                if not await teams_still_shown(
+                    db,
+                    request.resource,
+                    reference["teams_shown"],
+                    user_id=user_id,
+                    organization_id=organization_id,
+                ):
+                    return False
+                continue
+            if "view" in reference and not exact:
+                # No rows (a count, an empty list): the role's view must be unchanged.
+                if reference["view"] != await view_signature(
+                    db, user_id=user_id, organization_id=organization_id
+                ):
+                    return False
+                continue
+            if reference.get("resource_refs") and not exact:
+                # Every record it listed must still be visible to this user.
+                if not await records_still_visible(
+                    db,
+                    reference["resource_refs"],
+                    user_id=user_id,
+                    organization_id=organization_id,
+                ):
+                    return False
+                continue
+            # The exact result, as it was: evidence stored before records were referenced, or
+            # whether an action answer's prose still holds.
             result = await query_my_records(
-                db,
-                CrmAssistantQuery.model_validate(reference["query"]),
-                user_id=user_id,
-                organization_id=organization_id,
+                db, request, user_id=user_id, organization_id=organization_id
             )
             payload = safe_data(result.model_dump(mode="json"))
             payload["source"] = "Your CRM records"
@@ -113,7 +152,9 @@ def _pending_details(reference) -> dict:
     raw = details.model_dump(mode="json", exclude_defaults=True)
     if not safe_answer(json.dumps(raw)):
         raise ValueError("Pending details are not permitted")
-    return raw
+    from app.crm.assistant.workflows import without_optional_missing
+
+    return without_optional_missing(reference.get("kind"), raw)
 
 
 # A pending request survives turns that neither replace nor settle it (a further clarifying
@@ -250,13 +291,16 @@ async def get_conversation_messages(
             )
             evidence = metadata.get("evidence", [])
             permitted = permitted and bool(evidence or metadata.get("actions"))
-            current = await _evidence_accessible(db, evidence, user_id, organization_id)
             if metadata.get("actions"):
                 # Each action is rechecked below and states its own status. Changed evidence,
                 # often the confirmed action's own effect, makes only the model's prose stale.
-                stale_prose = not current
+                stale_prose = not await _evidence_accessible(
+                    db, evidence, user_id, organization_id, exact=True
+                )
             else:
-                permitted = permitted and current
+                permitted = permitted and await _evidence_accessible(
+                    db, evidence, user_id, organization_id
+                )
             if metadata.get("actions"):
                 from app.assistant_actions.service import get_action
 
@@ -401,6 +445,9 @@ async def stream_chat_response(
                 ),
                 None,
             )
+            # The CRM assistant's models are told the role the server derives for every
+            # permission check, so they never guess it; Market AI has no CRM role to state.
+            crm_role = await role_context(db, **scope) if runtime is None else ""
             # Release the read transaction and pool connection before nested tools
             # open their own sessions during provider latency.
             await db.commit()
@@ -412,6 +459,7 @@ async def stream_chat_response(
             usage_limits=limits,
             progress=progress.put_nowait,
             pending=dict(prior_pending or {}),
+            crm_role=crm_role,
         )
         typed = settings.ASSISTANT_TYPED_ROUTING_ENABLED
         if runtime is None:

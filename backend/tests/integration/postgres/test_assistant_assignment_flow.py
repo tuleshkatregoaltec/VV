@@ -93,11 +93,20 @@ async def test_same_exact_name_twice_asks_which_one(pg_session, office):
 
 async def test_unknown_or_unassignable_names_ask_for_clarification(pg_session, office):
     ids = office.ids
-    # Karim exists, but outside Nadia's teams: answered exactly like a name nobody has.
-    for typed in ("User 1 Khan", "User 7"):
+    # Neither can be proposed. Karim exists outside Nadia's teams, which the reply says (so the
+    # model asks for someone in her teams instead of claiming nobody has the name; any member
+    # may already find colleagues by name); User 7 is nobody.
+    for typed, reason in (
+        (
+            "User 1 Khan",
+            "User 1 Khan is a member of your organization, but not in a team whose "
+            "leads you can assign (you assign to members of: North).",
+        ),
+        ("User 7", "No one you can assign this lead to has that name"),
+    ):
         result = await _lookup(pg_session, ids, "nadia", typed)
         assert result["matches"] == [] and result["clarification_required"] is True, typed
-        assert result["reason"] == "No one you can assign this lead to has that name"
+        assert result["reason"].startswith(reason), typed
 
 
 # --- The pending request survives the clarifying turn -----------------------------------

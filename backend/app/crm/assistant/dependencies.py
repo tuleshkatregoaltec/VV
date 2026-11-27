@@ -22,6 +22,9 @@ class ChatDependencies:
     # The request the previous answer left waiting for the user's reply (rechecked when the
     # history loaded), then whatever this turn holds instead: kind, lead_id and typed details.
     pending: dict[str, Any] = field(default_factory=dict, compare=False)
+    # The signed-in user's CRM role and team scope, derived by the server at the turn's start
+    # (records.role_context) and stated to the models; never used to authorize anything.
+    crm_role: str = field(default="", compare=False)
     # The admitted turn's cumulative limits, shared by nested workflow runs.
     usage_limits: UsageLimits | None = field(default=None, compare=False)
     # Receives tool progress events (names only, never arguments or model text).

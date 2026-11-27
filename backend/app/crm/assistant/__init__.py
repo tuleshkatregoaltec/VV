@@ -10,6 +10,22 @@ specialists and change proposals), ``agent``/``routing`` (the turn's coordinator
 ``capabilities`` (shared instructions), ``service``/``router`` (the chat turn and its API).
 """
 
-from app.crm.assistant.records import has_current_access, query_my_records, same_team
+from app.crm.assistant.records import (
+    has_current_access,
+    query_my_records,
+    records_still_visible,
+    role_context,
+    same_team,
+    teams_still_shown,
+    view_signature,
+)
 
-__all__ = ["has_current_access", "query_my_records", "same_team"]
+__all__ = [
+    "has_current_access",
+    "query_my_records",
+    "records_still_visible",
+    "role_context",
+    "same_team",
+    "teams_still_shown",
+    "view_signature",
+]

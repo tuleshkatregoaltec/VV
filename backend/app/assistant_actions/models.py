@@ -141,12 +141,19 @@ class ScheduleViewing(LeadTarget):
 
 
 class CalendarMeeting(StrictPayload):
-    title: str = Field(min_length=1, max_length=200)
+    # Optional: without one the server names the meeting after its lead or colleagues.
+    title: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="Only if the user gave one; otherwise leave it out (named by the server)",
+    )
     starts_at: AwareDatetime
     ends_at: AwareDatetime
     location: str | None = Field(default=None, max_length=500)
     lead_id: int | None = Field(default=None, gt=0)
-    # Organization members named in the event details only; they are not invited.
+    # Organization members named in the event details. Google Calendar invites those with an
+    # email on file when the user's calendar is connected; otherwise nobody is invited.
     colleague_ids: list[str] = Field(default_factory=list, max_length=5)
 
     @model_validator(mode="after")

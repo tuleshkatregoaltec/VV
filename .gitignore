@@ -281,6 +281,7 @@ projects-*.png
 /test-data/inbound-intelligence-demo.csv
 /test-data/inbound-intelligence-raw-contacts-demo.csv
 /test-data/inbound-intelligence-demo-expected.md
+/test-data/crm-lead-import-demo-*.csv
 
 # Firecrawl local cache
 .firecrawl/

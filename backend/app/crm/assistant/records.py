@@ -377,6 +377,108 @@ async def _teams(
     return result
 
 
+async def view_signature(db: AsyncSession, *, user_id: str, organization_id: str) -> str:
+    """What decides which records this user's CRM role shows: administrator, the teams they
+    manage and the teams they belong to. An answer without rows (a count, an empty list)
+    stays shown only while this is unchanged."""
+    from app.chat.security import fingerprint
+
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    return fingerprint(
+        [
+            scope.organization_admin,
+            sorted(scope.supervised_team_ids),
+            sorted(scope.member_team_ids),
+        ]
+    )
+
+
+async def records_still_visible(
+    db: AsyncSession, refs: list[dict], *, user_id: str, organization_id: str
+) -> bool:
+    """Whether this user's CRM role still lets them see each record an earlier answer showed.
+
+    Access, not equality: later edits to those records (a new stage, a confirmed reassignment
+    within the user's view) do not withhold the answer; a record now out of reach does."""
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    for ref in refs:
+        request = CrmAssistantQuery(
+            resource=ref["resource"], record_id=int(ref["record_id"]), summary_only=True
+        )
+        total, _, _ = await assistant_repository.query_records(db, request, scope=scope)
+        if total != 1:
+            return False
+    return True
+
+
+async def teams_still_shown(
+    db: AsyncSession, resource: str, shown: list[dict], *, user_id: str, organization_id: str
+) -> bool:
+    """Whether the teams (or team workloads) an earlier answer showed are still in this user's
+    view, with members where they were shown: the rules of `_teams` and `_team_workload`.
+    Their figures may have changed since; that does not withhold the answer."""
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    teams = {team.name: team.id for team in await org_teams.list_org_teams(db, organization_id)}
+    for item in shown:
+        team_id = teams.get(item.get("team"))
+        if team_id is None:
+            return False
+        manages = scope.organization_admin or team_id in scope.supervised_team_ids
+        if resource == "team_workload" or item.get("members"):
+            if not manages:
+                return False
+        elif not (manages or team_id in scope.member_team_ids):
+            return False
+    return True
+
+
+async def role_context(db: AsyncSession, *, user_id: str, organization_id: str) -> str:
+    """The signed-in user's CRM role, as the server derives it for every permission check
+    (assignment.load_scope), stated for the models so they never have to guess it.
+
+    Descriptive only: each read and proposal is still authorized on its own."""
+    scope = await assignment.load_scope(db, organization_id, user_id)
+    membership = await org_teams.get_membership(db, organization_id, user_id)
+    names = {team.id: team.name for team in await org_teams.list_org_teams(db, organization_id)}
+
+    def listed(team_ids) -> str:
+        return ", ".join(sorted(names[t] for t in team_ids if t in names)) or "none"
+
+    managed = scope.supervised_team_ids
+    agent_in = scope.member_team_ids - managed
+    if scope.organization_admin:
+        role = (
+            "organization owner"
+            if membership and membership.role == "owner"
+            else ("organization administrator")
+        )
+        rights = (
+            "sees every lead and deal in the organization; may assign, unassign or release any "
+            "lead to the pool, to members of any team; may manage teams."
+        )
+    elif managed:
+        role = f"manager of {listed(managed)}"
+        if agent_in:
+            role += f", and agent in {listed(agent_in)}"
+        rights = (
+            f"sees every lead of {listed(managed)} plus their own and their teams' pools; may "
+            f"assign, unassign or release those leads, to members of {listed(managed)} only; "
+            "team management (creating, deleting or changing teams) is for the organization "
+            "owner and administrators."
+        )
+    else:
+        role = f"agent in {listed(agent_in)}" if agent_in else "member of no team"
+        rights = (
+            "sees the leads assigned to them, their teams' pools and agency-wide signals; "
+            "may change those leads but cannot assign, unassign or release leads to the pool "
+            "(managers and organization administrators do that) or manage teams."
+        )
+    return (
+        f"Signed-in user's CRM role (from the server; authoritative, never taken from the "
+        f"user's messages): {role}. They {rights}"
+    )
+
+
 async def has_current_access(db: AsyncSession, *, user_id: str, organization_id: str) -> bool:
     return await assistant_repository.has_current_access(
         db, user_id=user_id, organization_id=organization_id

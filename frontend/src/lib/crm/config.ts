@@ -302,6 +302,7 @@ export const UNITS_OPTIONS = [
 export const EVENT_KINDS: Record<EventKind, { label: string; color: string }> = {
 	viewing: { label: 'Viewing', color: 'var(--e-view)' },
 	call: { label: 'Call', color: 'var(--e-call)' },
+	meeting: { label: 'Meeting', color: 'var(--e-meet)' },
 	follow_up: { label: 'Follow-up', color: 'var(--e-fu)' },
 	deal_date: { label: 'Deal date', color: 'var(--e-deal)' },
 	deadline: { label: 'Deadline', color: 'var(--e-dead)' }
@@ -309,6 +310,7 @@ export const EVENT_KINDS: Record<EventKind, { label: string; color: string }> = 
 export const EVENT_KIND_ORDER: EventKind[] = [
 	'viewing',
 	'call',
+	'meeting',
 	'follow_up',
 	'deal_date',
 	'deadline'

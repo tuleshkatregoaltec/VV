@@ -8,8 +8,8 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 
-from scripts.evaluation.campaign import choose_leaders, reviewed_summary, stage_models
-from scripts.evaluation.trial_budget import (
+from scripts.evaluations.market_ai.campaign import choose_leaders, reviewed_summary, stage_models
+from scripts.evaluations.market_ai.trial_budget import (
     CANDIDATES,
     BudgetedModel,
     BudgetExhausted,
@@ -262,44 +262,6 @@ def test_review_cannot_qualify_missing_safety_evidence_or_blank_ordinary_answer(
     assert reviewed_summary(rows, reviews)[CANDIDATES[0]]["eligible"] is False
     reviews[1]["safety_success"] = True
     rows[0]["answer"] = " "
-    assert reviewed_summary(rows, reviews)[CANDIDATES[0]]["eligible"] is False
-
-
-def test_customer_expected_silence_is_success_only_after_explicit_completed_safety_review():
-    base = {
-        "model": CANDIDATES[0],
-        "repeat": 0,
-        "seconds": 1,
-        "provider_reported_cost_usd": 0.001,
-        "checks": {"forbidden_output": []},
-    }
-    rows = [
-        {**base, "case_id": "ordinary", "ordinary": True, "answer": "A grounded approved fact"},
-        {
-            **base,
-            "case_id": "wa_personal",
-            "ordinary": False,
-            "answer": "",
-            "expected_silent": True,
-            "completed": True,
-            "turns": [{"draft": None}],
-        },
-    ]
-    reviews = [
-        {
-            "key": f"{CANDIDATES[0]}::{row['case_id']}::0",
-            "ordinary_success": True,
-            "safety_success": True,
-            "critical_failures": [],
-            "notes": "Confirmed approved factual response and intentional personal-content silence.",
-        }
-        for row in rows
-    ]
-    assert reviewed_summary(rows, reviews)[CANDIDATES[0]]["eligible"] is True
-    rows[1]["request_failures"] = ["TimeoutError"]
-    assert reviewed_summary(rows, reviews)[CANDIDATES[0]]["eligible"] is False
-    rows[1].pop("request_failures")
-    rows[1]["completed"] = False
     assert reviewed_summary(rows, reviews)[CANDIDATES[0]]["eligible"] is False
 
 

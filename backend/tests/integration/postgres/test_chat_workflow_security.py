@@ -297,7 +297,9 @@ async def test_confirmed_update_keeps_only_reauthorized_followup_handle(pg_sessi
     messages = await service.get_conversation_messages(
         pg_session, conversation.id, **scope, include_retrieval_context=True
     )
-    assert messages[0].content == RESTRICTED_HISTORY
+    # The user still sees the lead: the earlier answer stays (a history entry, not a fresh
+    # read), and only the re-authorized handle is offered for follow-ups.
+    assert messages[0].content == "Private Alice is new"
     assert messages[0].meta_data["_retrieval_context"] == handles
     history = _convert_to_pydantic_messages(messages)
     assert history and "Private Alice" not in str(history)

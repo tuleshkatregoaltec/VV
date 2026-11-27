@@ -21,6 +21,8 @@ def offline_admission(monkeypatch):
         AsyncMock(return_value=service.admission.TurnLease("lease", 160_000)),
     )
     monkeypatch.setattr(service.admission, "finish", AsyncMock())
+    # The turn reads the user's CRM role from the database; these turns have none.
+    monkeypatch.setattr(service, "role_context", AsyncMock(return_value=""))
 
 
 async def test_disabled_rollout_never_reserves_quota_or_saves_a_message(monkeypatch):

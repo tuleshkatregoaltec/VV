@@ -16,6 +16,7 @@ from app.crm.assistant.workflows import (
     plan_followups,
     prepare_action,
     retrieve_personal_crm,
+    signed_in_role,
 )
 from app.market.periods import business_today
 
@@ -38,6 +39,7 @@ agent = Agent(
 agent.tool(retrieve_personal_crm)
 agent.tool(plan_followups)
 agent.tool(prepare_action)
+agent.instructions(signed_in_role)
 
 
 @agent.instructions

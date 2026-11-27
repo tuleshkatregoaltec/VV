@@ -1590,7 +1590,7 @@ export type CalendarEventCreate = {
     /**
      * Kind
      */
-    kind: 'viewing' | 'call' | 'follow_up' | 'deal_date' | 'deadline';
+    kind: 'viewing' | 'call' | 'meeting' | 'follow_up' | 'deal_date' | 'deadline';
     /**
      * Detail
      */
@@ -1698,7 +1698,7 @@ export type CalendarEventResponse = {
     /**
      * Kind
      */
-    kind: 'viewing' | 'call' | 'follow_up' | 'deal_date' | 'deadline';
+    kind: 'viewing' | 'call' | 'meeting' | 'follow_up' | 'deal_date' | 'deadline';
     /**
      * Title
      */

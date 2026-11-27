@@ -32,6 +32,7 @@ _BULK_CONTACT_REQUEST = re.compile(
 )
 _EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
 _PHONE = re.compile(r"(?<!\w)(?:\+\d[\d ()-]{6,}\d|(?:00971|971|05)\d{7,11})(?!\w)")
+_TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$")
 _CONTACT_FIELD = re.compile(
     r"\b(?:name|contact|customer|lead|owner|email|phone|mobile|address)\b", re.I
 )
@@ -71,8 +72,11 @@ def bulk_record_output(text: str) -> bool:
     """
     if max(len(_EMAIL.findall(text)), len(_PHONE.findall(text))) > MAX_DETAIL_ROWS:
         return True
+    # A Markdown table's separator row ("|---|---|") is layout, not a record.
     lines = [
-        line.strip() for line in text.splitlines() if line.strip() and not line.startswith("```")
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.startswith("```") and not _TABLE_RULE.match(line)
     ]
     if len(lines) > MAX_DETAIL_ROWS + 1:
         # CSV/TSV/Markdown tables bearing contact fields represent individual records.

@@ -177,36 +177,51 @@ test-backend-infrastructure *args:
 
 # Read-only AI capability discovery; does not call model providers or upload data.
 ai-inventory:
-	cd backend && uv run python -m scripts.evaluation inventory
+	cd backend && uv run python -m scripts.evaluations.market_ai inventory
 
 ai-benchmark:
-	cd backend && uv run python -m scripts.evaluation dataset
+	cd backend && uv run python -m scripts.evaluations.market_ai dataset
+
+crm-ai-benchmark:
+	cd backend && uv run python -m scripts.evaluations.crm_assistant
+
+# CRM Assistant offline checks: cases, CRM-only tools, scoring, opt-in gates. No database, model or network.
+crm-eval-offline *args:
+	set -a && source backend/tests/evaluation/offline.env && set +a && cd backend && uv run pytest tests/evaluation/test_crm_dataset.py tests/evaluation/test_crm_scoring.py "$@"
+
+# Every CRM case's probe on a disposable LOCAL database (TEST_POSTGRES_URL); dummy settings, never .env.dev; no model.
+crm-eval-db *args:
+	set -a && source backend/tests/evaluation/offline.env && set +a && test -n "${TEST_POSTGRES_URL:-}" || { echo "Set TEST_POSTGRES_URL to a local PostgreSQL" >&2; exit 2; }; cd backend && uv run pytest tests/integration/postgres/test_crm_assistant_evaluation.py "$@"
+
+# Preview by default. --live also needs CRM_EVAL_ALLOW_MODEL_CALLS=1 and a local CRM_EVAL_POSTGRES_URL (paid model calls).
+crm-eval-live *args:
+	cd backend && POSTGRES_URL="${CRM_EVAL_POSTGRES_URL:-}" uv run python -m scripts.evaluations.crm_assistant live "$@"
 
 test-evaluation *args:
 	just test-backend tests/evaluation {{args}}
 
 # Explicit live model execution, private evidence, local authenticated application.
 ai-evaluate *args:
-	cd backend && uv run python -m scripts.evaluation run {{args}}
+	cd backend && uv run python -m scripts.evaluations.market_ai run {{args}}
 
 # Opt-in isolated fixture creation/verification/cleanup; never call models or create auth users.
 ai-evaluation-snapshot *args:
-	cd backend && uv run python -m scripts.evaluation.fixture_snapshot {{args}}
+	cd backend && uv run python -m scripts.evaluations.market_ai.fixture_snapshot {{args}}
 
 # Preview by default; --live compares models using synthetic tools, never live records/actions.
 ai-model-trial *args:
-	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation.model_trial {{args}}
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluations.market_ai.model_trial {{args}}
 
 # Local trace assessment and comparison; never call models or export evidence.
 ai-assess *args:
-	cd backend && uv run python -m scripts.evaluation assess {{args}}
+	cd backend && uv run python -m scripts.evaluations.market_ai assess {{args}}
 
 ai-compare *args:
-	cd backend && uv run python -m scripts.evaluation compare {{args}}
+	cd backend && uv run python -m scripts.evaluations.market_ai compare {{args}}
 
 # Preview by default. --upload explicitly sends only allowlisted metadata to LangSmith.
 ai-export *args:
-	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation export {{args}}
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluations.market_ai export {{args}}
 
 # Read-only proposals from retained DXBI report evidence; no warehouse writes.
 audit-dxbi-name-repairs *args:

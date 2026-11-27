@@ -116,15 +116,39 @@ async def _read(deps: ChatDependencies, request: CrmAssistantQuery) -> dict:
             deps.retrieval_budget["crm_detail_rows"] += max(0, reserved_rows - len(result.records))
         payload = safe_data(result.model_dump(mode="json"))
         payload["source"] = "Your CRM records"
+        refs = [
+            {"resource": request.resource, "record_id": row["id"]}
+            for row in result.records
+            if isinstance(row.get("id"), int)
+        ][:20]
+        # An answer without rows (a count, an empty list) is kept while the role's view is.
+        view = (
+            {
+                "view": await assistant.view_signature(
+                    db, user_id=deps.user_id, organization_id=deps.organization_id
+                )
+            }
+            if not refs and request.resource not in {"teams", "team_workload"}
+            else {}
+        )
         deps.evidence.append(
             {
                 "query": request.model_dump(mode="json"),
                 "fingerprint": fingerprint(payload),
-                "resource_refs": [
-                    {"resource": request.resource, "record_id": row["id"]}
-                    for row in result.records
-                    if isinstance(row.get("id"), int)
-                ][:20],
+                "resource_refs": refs,
+                **view,
+                # Team views carry no record IDs: the teams shown, and whether their members
+                # were, so the answer is withheld only if that view is lost.
+                **(
+                    {
+                        "teams_shown": [
+                            {"team": row["team"], "members": "agents" in row}
+                            for row in result.records
+                        ]
+                    }
+                    if request.resource in {"teams", "team_workload"}
+                    else {}
+                ),
             }
         )
         if not request.summary_only and isinstance(result.total, int):

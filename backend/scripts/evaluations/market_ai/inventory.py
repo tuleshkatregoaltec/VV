@@ -10,7 +10,7 @@ import hashlib
 import re
 from pathlib import Path
 
-APP = Path(__file__).resolve().parents[2] / "app"
+APP = Path(__file__).resolve().parents[3] / "app"
 
 
 def digest(value: str) -> str:

@@ -2,8 +2,8 @@ import json
 
 import httpx
 
-from scripts.evaluation.dataset import Case
-from scripts.evaluation.run import execute_case
+from scripts.evaluations.market_ai.dataset import Case
+from scripts.evaluations.market_ai.run import execute_case
 
 
 async def test_explicit_binding_reaches_stream_and_persistence_without_changing_template():
@@ -64,9 +64,9 @@ async def test_stream_failure_still_cleans_up_only_its_created_conversation():
 
 
 async def test_http_flow_reuses_conversation_for_fresh_followup_and_persisted_history():
-    from scripts.evaluation.http_trial import load_http_flow_cases
+    from scripts.evaluations.market_ai.http_trial import load_http_flow_cases
 
-    case = load_http_flow_cases(["route_multiturn"])[0]
+    case = load_http_flow_cases(["route_market_multiturn"])[0]
     questions, created, deleted = [], [], []
 
     def handle(request):
@@ -74,7 +74,7 @@ async def test_http_flow_reuses_conversation_for_fresh_followup_and_persisted_hi
             deleted.append(request.url.path)
             return httpx.Response(204)
         if request.url.path.endswith("/stream"):
-            assert request.headers["x-vv-evaluation-case"] == "route_multiturn"
+            assert request.headers["x-vv-evaluation-case"] == "route_market_multiturn"
             assert "/77/messages/stream" in request.url.path
             questions.append(json.loads(request.content)["message"])
             return httpx.Response(

@@ -26,7 +26,7 @@ def create_app():
     from pydantic_ai import Agent
     from pydantic_ai.models.instrumented import InstrumentationSettings
 
-    from scripts.evaluation.tracing import (
+    from scripts.evaluations.market_ai.tracing import (
         LocalExporter,
         TraceMiddleware,
         fingerprint,
@@ -38,7 +38,7 @@ def create_app():
     )
 
     directory = private_directory(Path(os.environ["VV_EVALUATION_DIRECTORY"]))
-    from scripts.evaluation.http_trial import CaseBudgetContext, install_http_budget
+    from scripts.evaluations.market_ai.http_trial import CaseBudgetContext, install_http_budget
 
     plan = install_http_budget(directory, settings)
     secrets = tuple(
@@ -98,9 +98,6 @@ def create_app():
         (
             workflows.market_agent,
             workflows.pricing_agent,
-            workflows.crm_agent,
-            workflows.followup_agent,
-            workflows.action_agent,
         )
         if typed
         else (agent,)
@@ -118,6 +115,7 @@ def create_app():
             "campaign_stage": "flows",
             "snapshot_sha256": plan["snapshot_sha256"],
             "provider": "openrouter",
+            "assistant": "market",
             "agent": "app.market_ai.routing.run_routed_turn"
             if typed
             else "app.market_ai.agent.agent",

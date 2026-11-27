@@ -19,9 +19,8 @@ from pydantic_ai.models.openrouter import OpenRouterModelSettings
 from pydantic_ai.usage import UsageLimits
 
 from app.config import settings
-from app.crm.assistant.dependencies import ChatDependencies
-from app.market_ai.workflows import crm_agent, market_agent, pricing_agent
-from scripts.evaluation.dataset import load_benchmark
+from app.market_ai.workflows import market_agent, pricing_agent
+from scripts.evaluations.market_ai.dataset import load_benchmark
 
 FIXTURES = Path(__file__).with_name("model_trial_cases.json")
 MAX_TOKENS = 24000
@@ -38,10 +37,8 @@ def load_cases():
 
 
 def selected_workflow(case):
-    """Synthetic trials screen a specialist; orchestrator routing has separate offline tests."""
+    """Synthetic leaf trials screen the same Market AI specialist as runtime."""
     names = set(case.get("tools", {}))
-    if "query_my_crm_records" in names:
-        return crm_agent
     if names & {"get_listing_inventory", "get_similar_projects"}:
         return pricing_agent
     return market_agent
@@ -70,38 +67,6 @@ def synthetic_tools(case, calls):
                     return copy.deepcopy(
                         evidence["by_bedrooms"].get(str(arguments.get("bedrooms")), {"total": 0})
                     )
-                if name == "query_my_crm_records":
-                    evidence = copy.deepcopy(evidence)
-                    if arguments.get("resource") != evidence.get("resource"):
-                        return {
-                            "available": False,
-                            "limitation": "No evidence available for this resource",
-                        }
-                    records = evidence.get("records", [])
-                    for field in ("status", "record_id", "search"):
-                        if arguments.get(field) is not None:
-                            value = arguments[field]
-                            if field == "status":
-                                records = [row for row in records if row.get("status") == value]
-                            elif field == "record_id":
-                                records = [row for row in records if row.get("id") == value]
-                            else:
-                                records = [
-                                    row
-                                    for row in records
-                                    if str(value).lower() in row.get("contact_name", "").lower()
-                                ]
-                    evidence["total"] = len(records)
-                    evidence["counts_by_status"] = {
-                        status: sum(row.get("status") == status for row in records)
-                        for status in {row.get("status") for row in records}
-                    }
-                    evidence["records"] = (
-                        []
-                        if arguments.get("summary_only")
-                        else records[: arguments.get("limit", 20)]
-                    )
-                    return evidence
                 return copy.deepcopy(evidence)
 
             return execute
@@ -162,7 +127,7 @@ async def run_case(case, model, *, timeout=90):
             ):
                 async with workflow.iter(
                     case["question"],
-                    deps=ChatDependencies("synthetic-agent", "synthetic-organization"),
+                    deps=None,
                     usage_limits=UsageLimits(
                         request_limit=5, tool_calls_limit=8, total_tokens_limit=MAX_TOKENS
                     ),
@@ -229,13 +194,13 @@ def summarise(records):
 
 
 async def live_trial(args):
-    from scripts.evaluation.campaign import live_trial as run_campaign
+    from scripts.evaluations.market_ai.campaign import live_trial as run_campaign
 
     return await run_campaign(args)
 
 
 def main():
-    from scripts.evaluation.campaign import main as campaign_main
+    from scripts.evaluations.market_ai.campaign import main as campaign_main
 
     campaign_main()
 

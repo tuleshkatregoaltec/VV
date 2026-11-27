@@ -1,12 +1,16 @@
 # AI evaluation and observability
 
+> CRM evaluation cases and their current automation status are documented in
+> [CRM_EVALUATION.md](CRM_EVALUATION.md). `scripts/evaluations/market_ai/benchmark.json`
+> remains the Market AI benchmark; do not treat its run/campaign as CRM evaluation.
+
 Discovery base: `9b3303f`, branch `refactor/backend-domain-boundaries`.
 The completed migration and `ARCHITECTURE.md` remain authoritative.
 
 ## Implemented system and private execution evidence
 
 The user explicitly approved the live OpenRouter question/tool-result flow on
-2026-09-28, with full evidence restricted to local storage. All 15 cases have now
+2026-09-28, with full evidence restricted to local storage. The original 15 cases have
 executed through real loopback HTTP, GoTrue authentication, FastAPI guards,
 conversation creation, the existing SSE service, message reload and deletion of
 only the evaluation-created conversations. The first run preceded production instrumentation; later changes add optional observation only.
@@ -84,7 +88,8 @@ CRM imports/contacts/leads and saved feasibility studies under owning repositori
 
 ## Canonical benchmark and execution matrix
 
-The checked-in dataset preserves the user's exact 15 questions. Placeholders are
+The checked-in Market AI benchmark contains 15 questions (q01–q15), preserving
+the original questions. Placeholders are
 literal templates, not inferred entities. Unbound cases can later be run as
 clarification tests; bound variants require explicitly supplied parameter values
 and separate identity/fingerprints. There is no current chat-side entity resolver
@@ -139,12 +144,12 @@ AI invocation. Cost and routed-provider identity are not uniformly captured.
 ## Integration decision and implementation sequence
 
 1. Preserve canonical inputs and produce a source-derived capability inventory.
-   Keep evaluation orchestration in `backend/scripts/evaluation`, outside domain
+   Keep evaluation orchestration in `backend/scripts/evaluations/market_ai`, outside domain
    modules. Generate tool declarations, callable edges, source/table references,
    model configuration and source fingerprints from code. Label unresolved dynamic
    calls and distinguish static reachability from observed execution. No parallel
    manually maintained tool registry.
-2. With execution approval, run all 15 through local authenticated HTTP, collecting
+2. With execution approval, run the canonical cases through local authenticated HTTP, collecting
    local OpenTelemetry/Pydantic AI evidence. Preserve exact production prompts,
    reasoning settings, streaming and authorization. Do not substitute direct
    `agent.run` for the streaming path. Record date/time, dataset digest, code SHA,
@@ -271,7 +276,7 @@ were not rerun for this read-only tooling/documentation checkpoint. At that disc
 ## Observed execution baseline, 2026-09-28
 
 Run `3aea3e90-1905-4832-a6ca-2df124995702` is stored privately in `.evaluation/20260928T161314Z`.
-All 15 streams completed and their assistant messages persisted; all 15 evaluation
+The 15 original streams completed and their assistant messages persisted; all 15 evaluation
 conversations were subsequently deleted through the authorized API (204). Token
 accounting was preserved. There are 621 local spans and 22 model requests, with
 26,162 input / 8,411 output tokens reported on model spans. Downstream OpenRouter
@@ -464,7 +469,7 @@ Two separate adapters serve different purposes:
   small wrappers add public operation, ClickHouse query hash/row count, PostgreSQL
   statement hash and actual direct CRM provider request spans. CRM early returns
   do not create fictitious model calls. HTTP roots encompass streaming completion.
-- `scripts/evaluation/langsmith.py` publishes an already assessed local experiment
+- `scripts/evaluations/market_ai/langsmith.py` publishes an already assessed local experiment
   through the official SDK. A versioned dataset contains case IDs and question/
   parameter digests, not the questions. Examples link to nested recorded runs and
   categorical per-dimension feedback. Each assessment revision gets distinct run
@@ -724,17 +729,12 @@ silently merged into a new model ranking.
 
 ### Synthetic application call graphs
 
-The `flows` catalog exercises the actual typed router, single specialists, mixed
-coordination, CRM retrieval, follow-up planning, proposal boundaries, ambiguity,
-private-history follow-ups, injection and customer classification/drafting. Every
-registered leaf tool is replaced; no tool can fall back to its production function.
-Customer drafts use synthetic approved evidence, an isolated usage context and a
-temporary enable flag within this evaluation process. There are no sends or real
-record operations. The multi-turn fixture changes a buyer's budget between turns,
-with a fresh deep copy for every candidate/repeat. Customer policy cases cover
-qualification, approved facts, missing facts, negotiation, personal/mixed content,
-injection and contextless short answers. These are synthetic application call-graph
-checks, **not** authenticated HTTP/database acceptance.
+The Market AI `flows` catalog exercises only its typed router and market/pricing
+specialists. Every registered market leaf tool is replaced with synthetic evidence;
+there is no fallback to production data operations. Multi-turn cases exercise market
+context continuity. These are synthetic application call-graph checks, **not**
+authenticated HTTP/database acceptance. CRM behavior is evaluated separately under
+`scripts/evaluations/crm_assistant/`; WhatsApp is not part of either assistant suite.
 
 ### Authenticated application comparison
 
@@ -748,25 +748,23 @@ enable flags affect only this evaluation subprocess.
 
 The snapshot creator is local-only and uses uniquely named databases and ownership
 markers. Supply a synthetic local auth identity; it never creates auth users or
-calls a model. It seeds q01/q04 market positives and negative rows, three own CRM
-leads plus other-owner/tenant records, and immutable market releases. It verifies
-canonical queries against hand-computed references. The HTTP runner verifies actual
-snapshot contents before/after execution and in its subprocess, pins each request
-to the expected immutable release IDs, and rejects changed snapshots.
+calls a model. It seeds q01/q04 market positives and negative rows plus the minimum
+organization, membership, subscription and token-usage rows needed for authenticated
+HTTP. It creates no CRM records. It verifies canonical queries against hand-computed
+references. The HTTP runner verifies snapshot contents before/after execution and
+in its subprocess, pins each request to the expected immutable release IDs, and
+rejects changed snapshots.
 
 ```sh
 just ai-evaluation-snapshot create --user-id SYNTHETIC_AUTH_USER_UUID --output /absolute/private/snapshot
 # Set process POSTGRES_URL, CLICKHOUSE_DATABASE, FIRST_SUPERUSER and
 # FIRST_SUPERUSER_PASSWORD to the isolated snapshot/local synthetic identity.
 # Settings loads .env.dev defaults; explicit process overrides win.
-just ai-evaluate --model QUALIFIED_MODEL_ID --prior /absolute/private/challenge --snapshot /absolute/private/snapshot/snapshot.json --data-context pinned:SNAPSHOT_ID --routing-mode existing --case q01 --case q04 --flow-case route_crm --flow-case route_multiturn --directory /absolute/private/http-existing
-just ai-evaluate --model QUALIFIED_MODEL_ID --prior /absolute/private/challenge --snapshot /absolute/private/snapshot/snapshot.json --data-context pinned:SNAPSHOT_ID --routing-mode typed --case q01 --case q04 --flow-case route_crm --flow-case route_multiturn --directory /absolute/private/http-typed
+just ai-evaluate --model QUALIFIED_MODEL_ID --prior /absolute/private/challenge --snapshot /absolute/private/snapshot/snapshot.json --data-context pinned:SNAPSHOT_ID --routing-mode typed --case q01 --case q04 --flow-case route_market --flow-case route_market_multiturn --directory /absolute/private/http-market
 ```
 
-If a second model qualifies, repeat the same pinned cases for it. HTTP multi-turn CRM
-checks read the unchanged seeded AED 1.2m budget; the synthetic mutation to AED 1.5m
-is not applied to real databases. Review continuity and fresh private retrieval
-against the actual snapshot oracle. Each case artifact records complete nested
+If a second model qualifies, repeat the same pinned cases for it. Review market
+workflow routing and context continuity against the pinned snapshot oracle. Each case artifact records complete nested
 model requests, input/output/detail token usage, latency, reported cost and any
 conservative reservation bound. `request-costs.jsonl` and the shared ledger retain
 failure/cancellation evidence. Initial snapshot verification adds evaluation

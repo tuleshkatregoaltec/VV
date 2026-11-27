@@ -6,14 +6,14 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 
-from scripts.evaluation.http_trial import (
+from scripts.evaluations.market_ai.http_trial import (
     CURRENT_CASE,
     HTTPBudgetedModel,
     application_plan,
     load_http_flow_cases,
 )
-from scripts.evaluation.trial_budget import CANDIDATES, TrialLedger
-from scripts.evaluation.trial_context import execution_context, historical_compatibility
+from scripts.evaluations.market_ai.trial_budget import CANDIDATES, TrialLedger
+from scripts.evaluations.market_ai.trial_context import execution_context, historical_compatibility
 
 
 async def test_http_nested_model_calls_require_case_context_and_same_global_ledger(tmp_path):
@@ -55,7 +55,7 @@ async def test_http_nested_model_calls_require_case_context_and_same_global_ledg
 
 
 def test_http_runner_cannot_bypass_selection_or_pinned_database_boundaries(tmp_path, monkeypatch):
-    from scripts.evaluation import http_trial
+    from scripts.evaluations.market_ai import http_trial
 
     with pytest.raises(ValueError, match="--model"):
         application_plan(
@@ -109,10 +109,10 @@ def test_http_runner_cannot_bypass_selection_or_pinned_database_boundaries(tmp_p
 def test_http_multiturn_cases_are_explicit_and_historical_missing_context_is_not_equivalent(
     tmp_path,
 ):
-    cases = load_http_flow_cases(["route_multiturn"])
+    cases = load_http_flow_cases(["route_market_multiturn"])
     assert len(cases[0].turns) == 2
-    with pytest.raises(ValueError, match="customer"):
-        load_http_flow_cases(["wa_qualify"])
+    with pytest.raises(ValueError, match="Market AI"):
+        load_http_flow_cases(["unknown_crm_case"])
     first, second = tmp_path / "first", tmp_path / "second"
     first.mkdir()
     second.mkdir()
@@ -140,8 +140,8 @@ async def test_http_release_pin_failure_blocks_app_before_any_model_call(tmp_pat
     from unittest.mock import AsyncMock
 
     from app.market import releases
-    from scripts.evaluation import fixture_snapshot
-    from scripts.evaluation.http_trial import CaseBudgetContext
+    from scripts.evaluations.market_ai import fixture_snapshot
+    from scripts.evaluations.market_ai.http_trial import CaseBudgetContext
 
     verification = AsyncMock(return_value={"verified": True})
     monkeypatch.setattr(fixture_snapshot, "use_snapshot", verification)

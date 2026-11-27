@@ -42,7 +42,7 @@ export type ListingStatus = 'live' | 'pocket' | 'expired'
 export type ListingScope = 'mine' | 'company'
 /** Own contact · Agency file · DLD/Ejari event (7 Oct; Vitevue never supplies an owner). */
 export type OwnerSource = 'agent_contact' | 'agency_import' | 'dld_event'
-export type EventKind = 'viewing' | 'call' | 'follow_up' | 'deal_date' | 'deadline'
+export type EventKind = 'viewing' | 'call' | 'meeting' | 'follow_up' | 'deal_date' | 'deadline'
 export type Origin = 'human' | 'rule' | 'model' | 'voice'
 export type InvoiceStatus = 'not_invoiced' | 'due' | 'received' | 'overdue'
 /** `none`: manager approvals are not set up yet (which steps need one is still being decided). */

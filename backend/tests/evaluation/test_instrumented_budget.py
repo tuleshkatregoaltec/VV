@@ -13,8 +13,8 @@ from pydantic_ai.providers.openrouter import OpenRouterProvider
 
 from app.core.openrouter import CompatibleOpenRouterModel
 from app.market_ai.workflows import SETTINGS
-from scripts.evaluation.http_trial import CURRENT_CASE, HTTPBudgetedModel
-from scripts.evaluation.trial_budget import BudgetedModel, TrialLedger
+from scripts.evaluations.market_ai.http_trial import CURRENT_CASE, HTTPBudgetedModel
+from scripts.evaluations.market_ai.trial_budget import BudgetedModel, TrialLedger
 
 MODEL = "openai/gpt-6-luna"
 ENTRY = {

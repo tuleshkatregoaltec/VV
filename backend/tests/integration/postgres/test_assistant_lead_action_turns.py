@@ -277,14 +277,22 @@ async def test_stale_private_answer_keeps_the_rechecked_pending_request(pg_sessi
     chat = await Chat(pg_session, office, "nadia").start()
 
     async def select_priya():
-        await chat.search("Priya Rossi")
+        # Both JVC leads are listed: Priya's and Omar Buyer's.
+        await chat.search("JVC")
         await chat.hold(priya.id, ActionKind.ASSIGN_LEAD)
         return "Who should Priya Rossi's lead be assigned to?"
 
     await chat.turn("Assign Priya's lead", select_priya)
-    # The lead changes: the stored answer's search evidence no longer matches.
+    # A change to the lead itself leaves the answer shown: Nadia still sees it.
     await pg_session.execute(
         update(CrmInboundEnquiry).where(CrmInboundEnquiry.id == priya.id).values(status="contacted")
+    )
+    await pg_session.commit()
+    assert (await chat.visible())[-1].content != RESTRICTED_HISTORY
+    # Omar Buyer's lead moves to South, out of Nadia's reach: the answer listing it is withheld.
+    owner = await assignment.load_scope(pg_session, office.ids["org"], office.ids["owner"])
+    await assignment.reassign(
+        pg_session, owner, [office.other.id], office.ids["lina"], team_id=office.ids["south"]
     )
     await pg_session.commit()
     messages = await chat.visible()

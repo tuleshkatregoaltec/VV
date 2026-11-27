@@ -6,7 +6,7 @@ import httpx
 import pytest
 from pydantic_ai.models.test import TestModel
 
-from scripts.evaluation.model_trial import (
+from scripts.evaluations.market_ai.model_trial import (
     checks,
     load_cases,
     run_case,
@@ -17,7 +17,7 @@ from scripts.evaluation.model_trial import (
 
 
 def test_trial_preserves_canonical_questions_and_replaces_every_production_tool():
-    from scripts.evaluation.dataset import load_benchmark
+    from scripts.evaluations.market_ai.dataset import load_benchmark
 
     canonical = {case.id: case.question for case in load_benchmark().cases}
     for case in load_cases():
@@ -43,20 +43,11 @@ async def test_trial_runs_registered_tool_shapes_without_any_database(monkeypatc
     assert result["calls"][0]["valid"] is True
 
 
-async def test_synthetic_crm_queries_do_not_return_filtered_out_colleagues():
-    case = next(case for case in load_cases() if case["id"] == "crm01")
-    tools = {tool.name: tool for tool in synthetic_tools(case, [])}
-    result = await tools["query_my_crm_records"].function(
-        resource="leads", search="Unknown Colleague"
-    )
-    assert result["total"] == 0 and result["records"] == []
-
-
 async def test_trial_preserves_safe_provider_diagnostics_without_credential(monkeypatch):
     from pydantic_ai.exceptions import ModelHTTPError
     from pydantic_ai.models.function import FunctionModel
 
-    from scripts.evaluation.model_trial import settings
+    from scripts.evaluations.market_ai.model_trial import settings
 
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "synthetic-secret")
 
@@ -85,9 +76,9 @@ def test_trial_market_fixtures_follow_real_tool_response_contracts():
 
 
 def test_trial_scoring_does_not_confuse_execution_with_semantic_quality():
-    case = next(case for case in load_cases() if case["id"] == "injection01")
-    result = checks(case, [], "TRIAL_PRIVATE_CANARY_9F")
-    assert result["forbidden_output"] == ["TRIAL_PRIVATE_CANARY_9F"]
+    case = next(case for case in load_cases() if case["id"] == "boundary01")
+    result = checks(case, [], "crm_inbound_enquiries")
+    assert result["forbidden_output"] == ["crm_inbound_enquiries"]
     assert result["semantic_review"] == "required"
     summary = summarise([{"model": "test", "seconds": 1, "checks": result}])
     assert summary["test"]["completed"] == 0
@@ -96,9 +87,9 @@ def test_trial_scoring_does_not_confuse_execution_with_semantic_quality():
 
 
 async def test_expired_key_stops_the_trial_before_other_model_calls(tmp_path, monkeypatch):
-    from scripts.evaluation import campaign, model_trial
-    from scripts.evaluation.trial_budget import CANDIDATES, TrialLedger
-    from scripts.evaluation.trial_context import execution_context
+    from scripts.evaluations.market_ai import campaign, model_trial
+    from scripts.evaluations.market_ai.trial_budget import CANDIDATES, TrialLedger
+    from scripts.evaluations.market_ai.trial_context import execution_context
 
     execution_context()  # Initialize real agents before replacing the HTTP constructor.
     original_client = httpx.AsyncClient
@@ -145,9 +136,9 @@ async def test_expired_key_stops_the_trial_before_other_model_calls(tmp_path, mo
 async def test_unavailable_endpoint_is_attempted_once_and_resume_does_not_replay(
     tmp_path, monkeypatch
 ):
-    from scripts.evaluation import campaign, model_trial
-    from scripts.evaluation.trial_budget import CANDIDATES, TrialLedger
-    from scripts.evaluation.trial_context import execution_context
+    from scripts.evaluations.market_ai import campaign, model_trial
+    from scripts.evaluations.market_ai.trial_budget import CANDIDATES, TrialLedger
+    from scripts.evaluations.market_ai.trial_context import execution_context
 
     execution_context()  # Initialize real agents before replacing the HTTP constructor.
     original_client = httpx.AsyncClient

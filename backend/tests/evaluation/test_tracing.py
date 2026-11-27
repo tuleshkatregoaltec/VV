@@ -5,7 +5,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from scripts.evaluation.tracing import (
+from scripts.evaluations.market_ai.tracing import (
     LocalExporter,
     TraceMiddleware,
     observe_query,
@@ -95,7 +95,7 @@ def test_private_files_refuse_symlinks(tmp_path):
 def test_redaction_handles_nested_json_escaped_credentials():
     import json
 
-    from scripts.evaluation.tracing import scrub_secrets
+    from scripts.evaluations.market_ai.tracing import scrub_secrets
 
     secret = 'key"with\\escape'
     nested = json.dumps({"message": json.dumps({"password": secret})})

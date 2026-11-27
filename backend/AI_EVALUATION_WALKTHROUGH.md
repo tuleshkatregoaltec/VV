@@ -123,18 +123,18 @@ flowchart LR
 > market-chat capability boundary.”
 
 **Distinction:** inventory and optional instrumentation also cover feasibility,
-news and direct CRM model calls. The 15-question live benchmark exercises market
-chat, not every AI capability in the application.
+news and direct CRM model calls. The canonical Market AI benchmark now has 100
+questions; the recorded live run covered the original 15, not every AI capability.
 
 ## 2:30–4:00 — Define inputs separately from expectations
 
-**Open:** [canonical q02](/home/maan3/vv/VV-git/backend/scripts/evaluation/benchmark.json:11),
-[Case.bind](/home/maan3/vv/VV-git/backend/scripts/evaluation/dataset.py:26), and
-[q02 criteria](/home/maan3/vv/VV-git/backend/scripts/evaluation/criteria.json:14).
+**Open:** [canonical q02](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/benchmark.json:11),
+[Case.bind](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/dataset.py:26), and
+[q02 criteria](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/criteria.json:14).
 
 **Point out:**
 
-- `benchmark.json` contains the exact 15 questions, stable case IDs and explicit
+- `benchmark.json` contains 100 questions, stable case IDs and explicit
   placeholder names. It contains no fabricated expected market numbers.
 - `Case.bind(None)` preserves the original template. Explicit bindings must
   contain all and only the declared parameters. We do not invent a building.
@@ -150,7 +150,7 @@ chat, not every AI capability in the application.
 > and parameter fingerprints.”
 
 Run **Demo A** from the appendix. Then point to
-[inventory limitations](/home/maan3/vv/VV-git/backend/scripts/evaluation/inventory.py:187).
+[inventory limitations](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/inventory.py:187).
 
 > “The inventory parses source with ASTs without importing the application. It
 > maps declarations, registrations, resolvable calls and source candidates.
@@ -162,8 +162,8 @@ captures the real compiled schemas into `runtime.json`.
 
 ## 4:00–6:15 — Execute through real authentication and SSE
 
-**Open:** [run_benchmark](/home/maan3/vv/VV-git/backend/scripts/evaluation/run.py:82),
-then [execute_case](/home/maan3/vv/VV-git/backend/scripts/evaluation/run.py:22).
+**Open:** [run_benchmark](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/run.py:82),
+then [execute_case](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/run.py:22).
 
 Trace the lifecycle in this order:
 
@@ -201,8 +201,8 @@ real model invocation with ordinary billing and authorized tool-result data flow
 
 ## 6:15–8:00 — Capture a trace that can be reconstructed
 
-**Open:** [server setup](/home/maan3/vv/VV-git/backend/scripts/evaluation/server.py:7),
-then [stream-spanning middleware](/home/maan3/vv/VV-git/backend/scripts/evaluation/tracing.py:171).
+**Open:** [server setup](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/server.py:7),
+then [stream-spanning middleware](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/tracing.py:171).
 
 **Point out four concrete mechanisms:**
 
@@ -297,7 +297,7 @@ three-tool contract; three cases retained unbound parameters. This is not a
 
 ## 10:45–13:00 — Read how a result is produced
 
-**Open:** [evaluate_case](/home/maan3/vv/VV-git/backend/scripts/evaluation/evaluate.py:123).
+**Open:** [evaluate_case](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/evaluate.py:123).
 Scroll through these decisions rather than reading every condition:
 
 - Execution requires HTTP 200, exactly one terminal `done`, and no error events.
@@ -318,19 +318,19 @@ Scroll through these decisions rather than reading every condition:
 > cannot manufacture an authoritative numerical reference, so we have not added
 > an automatic LLM judge.”
 
-**Point to:** [assess_run](/home/maan3/vv/VV-git/backend/scripts/evaluation/evaluate.py:317).
+**Point to:** [assess_run](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/evaluate.py:317).
 It ties reviews to a run, fingerprints evaluator/criteria/reference/review inputs,
 and emits a review template. Capability judgments depend on the reviewed tool
 contract fingerprint; changed schemas invalidate that assumption.
 
-Briefly show [apply_references](/home/maan3/vv/VV-git/backend/scripts/evaluation/evaluate.py:282).
+Briefly show [apply_references](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/evaluate.py:282).
 Exact values, ranges and record sets apply to structured tool/query evidence.
 They do not exact-match prose or automatically award numerical correctness to
 an answer. References must match the run's dataset, execution date and data context.
 
 ## 13:00–14:30 — Demonstrate the regression gate
 
-**Open:** [compare](/home/maan3/vv/VV-git/backend/scripts/evaluation/evaluate.py:412)
+**Open:** [compare](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/evaluate.py:412)
 and [its regression test](/home/maan3/vv/VV-git/backend/tests/evaluation/test_evaluate.py:143).
 
 **Say:**
@@ -399,13 +399,13 @@ PostgreSQL bind values are omitted even from the dedicated local capture.
    because they do not pass through Pydantic AI. Early returns create no fictitious
    model request.
 2. **Publication of an assessed benchmark:**
-   [export_payload](/home/maan3/vv/VV-git/backend/scripts/evaluation/langsmith.py:21)
-   reconstructs sanitized records; [publish](/home/maan3/vv/VV-git/backend/scripts/evaluation/langsmith.py:187)
+   [export_payload](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/langsmith.py:21)
+   reconstructs sanitized records; [publish](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/langsmith.py:187)
    links dataset examples, experiments, nested runs and categorical feedback.
    Example identity is stable for the same dataset/question/bindings. Reassessment
    creates distinct run/experiment IDs. SDK runtime/environment metadata is disabled.
 
-**Open:** [export_run](/home/maan3/vv/VV-git/backend/scripts/evaluation/langsmith.py:261).
+**Open:** [export_run](/home/maan3/vv/VV-git/backend/scripts/evaluations/market_ai/langsmith.py:261).
 Show the `if not upload` return before client creation. `just ai-export` writes
 only a local preview by default; `--upload` explicitly opts into remote publication.
 The benchmark server disables remote telemetry independently of production flags.
@@ -437,18 +437,17 @@ just test-backend tests/evaluation tests/architecture tests/agents tests/streami
 Mention only briefly that unrelated frontend/Holocron broad-check failures are
 explicitly documented; avoid a detour into those systems.
 
-**How to add question 16:**
+**How to add another question:**
 
-1. Add `q16` to `benchmark.json`, preserving existing questions; declare placeholders.
+1. Add the next sequential ID to `benchmark.json`, preserving existing questions; declare placeholders.
 2. Add criteria only when source requirements and capability gaps are understood.
 3. Run with explicit parameters when needed, through the same authenticated path.
 4. Inspect actual evidence; add trustworthy references or attributed review.
 5. Compare compatible experiments. Changing the dataset makes old/new datasets
    incomparable, so establish a new baseline for the expanded benchmark.
 
-`test_canonical_questions_remain_verbatim_and_all_fifteen_are_present` intentionally
-protects the initial dataset. Expanding it requires an explicit test update that
-continues to preserve q01–q15; do not blindly replace their expected text/hash.
+The canonical dataset has 100 cases. Its test intentionally preserves q01–q15;
+do not blindly replace their expected text/hash when extending the set.
 Schema changes also require revisiting capability criteria, not copying an old
 fingerprint to obtain a favorable status.
 
@@ -562,8 +561,9 @@ truth. Attributed review and structured references make that uncertainty explici
 
 **“Are we evaluating news, feasibility and CRM too?”**
 They are discovered and have observation coverage appropriate to their model-call
-paths. The canonical 15-case live benchmark currently evaluates market chat.
-Those other capabilities need their own representative cases and references.
+paths. Market AI has a 100-case canonical benchmark; the CRM prompt set is separate
+and has no live-model runner yet. Other capabilities need their own representative
+cases and references.
 
 **“Can we compare a new model today?”**
 We can record another model's behavior, but the current mutable warehouse prevents

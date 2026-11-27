@@ -2,7 +2,12 @@ from copy import deepcopy
 
 import pytest
 
-from scripts.evaluation.evaluate import apply_references, compare, evaluate_case, observation
+from scripts.evaluations.market_ai.evaluate import (
+    apply_references,
+    compare,
+    evaluate_case,
+    observation,
+)
 
 
 def inputs():

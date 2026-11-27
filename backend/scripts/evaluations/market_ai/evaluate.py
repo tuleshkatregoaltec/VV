@@ -8,7 +8,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from scripts.evaluation.tracing import fingerprint, private_write
+from scripts.evaluations.market_ai.tracing import fingerprint, private_write
 
 CRITERIA = Path(__file__).with_name("criteria.json")
 SOURCE_TABLES = {

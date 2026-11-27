@@ -10,6 +10,16 @@ from app.crm.assistant.models import CrmAssistantQuery
 from app.crm.assistant.workflows import crm_agent as agent
 
 
+@pytest.fixture(autouse=True)
+def fixed_view(monkeypatch):
+    """Reads without rows record the role's view from the database; these sessions are fakes."""
+
+    async def view(db, **identity):
+        return "view"
+
+    monkeypatch.setattr(crm_tools.assistant, "view_signature", view)
+
+
 @pytest.mark.parametrize("identity", ["user_id", "organization_id", "role", "sql"])
 def test_crm_tool_rejects_identity_role_and_sql_overrides(identity):
     tool = agent._function_toolset.tools["query_my_crm_records"]

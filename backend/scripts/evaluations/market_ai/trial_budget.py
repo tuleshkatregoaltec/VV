@@ -15,7 +15,7 @@ from pathlib import Path
 
 from pydantic_ai.models.wrapper import WrapperModel
 
-from scripts.evaluation.tracing import private_directory
+from scripts.evaluations.market_ai.tracing import private_directory
 
 CANDIDATES = (
     "qwen/qwen3.8-flash",

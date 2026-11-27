@@ -64,7 +64,7 @@ def write_report(directory: Path, assessment: dict) -> Path:
             "Deterministic: transport, persistence, schema, observed sources, finite evidence and recognized date predicates. Semantic review: grounding, limitation disclosure, completeness and unsupported promises. Human/reference review: market truth, ambiguous units, scope and exact values. Missing references leave numerical correctness unassessed.",
             "",
         ]
-    from scripts.evaluation.tracing import fingerprint
+    from scripts.evaluations.market_ai.tracing import fingerprint
 
     version = fingerprint(
         {

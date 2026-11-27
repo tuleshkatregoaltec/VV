@@ -179,11 +179,15 @@ class GoogleCalendarAdapter:
 
 
 class CalendarMeetingAdapter:
-    def __init__(self, db, *, user_id: str, organization_id: str, person_name=None):
+    def __init__(
+        self, db, *, user_id: str, organization_id: str, person_name=None, invitations=None
+    ):
         self.db, self.user_id, self.organization_id = db, user_id, organization_id
-        # The actions service's verified display-name lookup, passed in (this module must not
-        # import the service that dispatches it).
+        # The actions service's verified display-name lookup and its invitation plan
+        # (meeting_invitations), passed in: this module must not import the service that
+        # dispatches it.
         self.person_name = person_name
+        self.invitations = invitations
 
     async def dispatch(self, *, payload: CalendarMeeting, idempotency_key: str) -> DeliveryOutcome:
         start = payload.starts_at.astimezone(DUBAI)
@@ -192,6 +196,22 @@ class CalendarMeetingAdapter:
             await self.person_name(item) if self.person_name else "A colleague"
             for item in payload.colleague_ids
         ]
+        # Exactly the confirmed plan: its colleagues and the lead at a usable address become
+        # attendees, and Meet is requested, only through a connected Google Calendar.
+        plan = (
+            await self.invitations(
+                self.db, payload, user_id=self.user_id, organization_id=self.organization_id
+            )
+            if self.invitations
+            else {"invited": [], "emails": {}, "lead": None, "meet": False}
+        )
+        guests = [
+            (names[payload.colleague_ids.index(item)], plan["emails"][item])
+            for item in plan["invited"]
+        ]
+        lead = plan.get("lead") or {}
+        if lead.get("email"):
+            guests.append((lead["name"], lead["email"]))
         event = await calendar_service.create_event(
             self.db,
             user_id=self.user_id,
@@ -201,12 +221,35 @@ class CalendarMeetingAdapter:
             event_time=start.strftime("%H:%M"),
             end_date=end.date(),
             end_time=end.strftime("%H:%M"),
-            kind="call",
+            kind="meeting",
             detail=f"With {', '.join(names)}" if names else "",
             location=payload.location or "",
             lead_id=payload.lead_id,
+            guests=[email for _, email in guests],
+            meet=plan["meet"],
         )
-        return calendar_outcome(event, dubai_span(payload.starts_at, payload.ends_at))
+        outcome = calendar_outcome(event, dubai_span(payload.starts_at, payload.ends_at))
+        synced = event.get("google_sync_status") == "synced"
+        notes = []
+        if guests:
+            invited = ", ".join(name for name, _ in guests)
+            notes.append(
+                f"Google Calendar sent an invitation to {invited}."
+                if synced
+                else f"No invitation has been sent to {invited}; Google Calendar sends it only "
+                "once the event syncs."
+            )
+        if plan["meet"]:
+            # Only a link Google returned is a Meet link.
+            link = event.get("meet_link")
+            notes.append(
+                f"Google Meet link: {link}"
+                if synced and link
+                else "No Google Meet link was created."
+            )
+        if not notes:
+            return outcome
+        return DeliveryOutcome(status=outcome.status, message=" ".join([outcome.message, *notes]))
 
 
 class CalendarEventAdapter:
@@ -272,7 +315,9 @@ class CalendarEventAdapter:
         )
 
 
-def adapter_for(db, kind, *, user_id: str, organization_id: str, person_name=None):
+def adapter_for(
+    db, kind, *, user_id: str, organization_id: str, person_name=None, invitations=None
+):
     owner = {"user_id": user_id, "organization_id": organization_id}
     if kind in {ActionKind.RESCHEDULE_CALENDAR_EVENT, ActionKind.CANCEL_CALENDAR_EVENT}:
         return CalendarEventAdapter(db, kind, **owner)
@@ -281,5 +326,5 @@ def adapter_for(db, kind, *, user_id: str, organization_id: str, person_name=Non
     if kind == ActionKind.BOOK_EXTERNAL_VIEWING:
         return GoogleCalendarAdapter(db, **owner)
     if kind == ActionKind.BOOK_CALENDAR_MEETING:
-        return CalendarMeetingAdapter(db, **owner, person_name=person_name)
+        return CalendarMeetingAdapter(db, **owner, person_name=person_name, invitations=invitations)
     raise ValueError(f"No connector for {kind}")

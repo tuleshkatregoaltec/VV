@@ -13,8 +13,8 @@ from uuid import uuid4
 
 import httpx
 
-from scripts.evaluation.dataset import load_benchmark
-from scripts.evaluation.tracing import private_directory, private_write, scrub_secrets
+from scripts.evaluations.market_ai.dataset import load_benchmark
+from scripts.evaluations.market_ai.tracing import private_directory, private_write, scrub_secrets
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -34,7 +34,8 @@ async def execute_case(client, case, timeout, parameters=None):
     conversation_id = None
     try:
         response = await client.post(
-            "/api/v1/chat/conversations", json={"title": f"Evaluation {case.id}"}
+            "/api/v1/chat/conversations",
+            json={"title": f"Market AI evaluation {case.id}", "assistant": "market"},
         )
         response.raise_for_status()
         conversation_id = response.json()["id"]
@@ -47,7 +48,7 @@ async def execute_case(client, case, timeout, parameters=None):
                 turn_events = []
                 async with client.stream(
                     "POST",
-                    f"/api/v1/chat/conversations/{conversation_id}/messages/stream",
+                    f"/api/v1/market-chat/conversations/{conversation_id}/messages/stream",
                     json={"message": question},
                     headers={"x-vv-evaluation-case": case.id},
                 ) as response:
@@ -78,7 +79,9 @@ async def execute_case(client, case, timeout, parameters=None):
             turn["completed"] for turn in record["turns"]
         )
         record["answer"] = "\n\n".join(turn["answer"] for turn in record["turns"])
-        response = await client.get(f"/api/v1/chat/conversations/{conversation_id}/messages")
+        response = await client.get(
+            f"/api/v1/chat/conversations/{conversation_id}/messages?assistant=market"
+        )
         response.raise_for_status()
         # Keep user/assistant content and usage; not database message IDs or timestamps.
         record["persisted_messages"] = [
@@ -92,7 +95,9 @@ async def execute_case(client, case, timeout, parameters=None):
         # Preserve normal persistence. Only delete this run's conversation through the authorized API.
         if conversation_id is not None:
             try:
-                response = await client.delete(f"/api/v1/chat/conversations/{conversation_id}")
+                response = await client.delete(
+                    f"/api/v1/chat/conversations/{conversation_id}?assistant=market"
+                )
                 record["cleanup_status"] = response.status_code
                 record["trace_ids"]["delete"] = response.headers.get("x-evaluation-trace-id")
             except Exception as exc:
@@ -114,8 +119,12 @@ async def run_benchmark(
     routing_mode="typed",
 ):
     from app.config import settings
-    from scripts.evaluation.fixture_snapshot import use_snapshot
-    from scripts.evaluation.http_trial import application_plan, case_costs, load_http_flow_cases
+    from scripts.evaluations.market_ai.fixture_snapshot import use_snapshot
+    from scripts.evaluations.market_ai.http_trial import (
+        application_plan,
+        case_costs,
+        load_http_flow_cases,
+    )
 
     plan = application_plan(
         model=model,
@@ -195,7 +204,7 @@ async def run_benchmark(
                 sys.executable,
                 "-m",
                 "uvicorn",
-                "scripts.evaluation.server:create_app",
+                "scripts.evaluations.market_ai.server:create_app",
                 "--factory",
                 "--fd",
                 str(listener.fileno()),

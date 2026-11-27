@@ -7,7 +7,7 @@ transaction boundaries, provider arguments, and frontend behavior.
 
 The migration checkpoints below end at `9b3303f`. The subsequent evaluation and
 observability implementation is documented in [EVALUATION.md](EVALUATION.md).
-Its developer CLI lives outside the application domains in `scripts/evaluation`;
+Its developer CLI lives outside the application domains in `scripts/evaluations/market_ai`;
 optional observation hooks live in infrastructure. It introduces no evaluation
 HTTP domain and does not change the placement or dependency rules below.
 

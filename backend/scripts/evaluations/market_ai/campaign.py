@@ -14,8 +14,8 @@ from pydantic_ai.providers.openrouter import OpenRouterProvider
 
 from app.config import settings
 from app.core.openrouter import CompatibleOpenRouterModel
-from scripts.evaluation.tracing import private_directory, private_write
-from scripts.evaluation.trial_budget import (
+from scripts.evaluations.market_ai.tracing import private_directory, private_write
+from scripts.evaluations.market_ai.trial_budget import (
     CANDIDATES,
     DEFAULT_LEDGER,
     STAGE_LIMITS,
@@ -205,10 +205,10 @@ def preview(args):
 
 
 def stage_cases(stage):
-    from scripts.evaluation.model_trial import load_cases
+    from scripts.evaluations.market_ai.model_trial import load_cases
 
     if stage == "flows":
-        from scripts.evaluation.flow_trial import load_flow_cases
+        from scripts.evaluations.market_ai.flow_trial import load_flow_cases
 
         return load_flow_cases()
     return load_cases()
@@ -245,7 +245,12 @@ def empty_record(case, error_type):
 
 async def live_trial(args):
     from app.market_ai.capabilities import CAPABILITY_CONTEXT_VERSION
-    from scripts.evaluation.model_trial import FIXTURES, run_case, selected_workflow, summarise
+    from scripts.evaluations.market_ai.model_trial import (
+        FIXTURES,
+        run_case,
+        selected_workflow,
+        summarise,
+    )
 
     if settings.ENVIRONMENT != "local":
         raise ValueError("Model trials require ENVIRONMENT=local")
@@ -257,7 +262,7 @@ async def live_trial(args):
             "Per-run budgets were removed; all runs use the fixed shared USD 10 ledger"
         )
     models = stage_models(args)
-    from scripts.evaluation.trial_context import execution_context
+    from scripts.evaluations.market_ai.trial_context import execution_context
 
     context = execution_context()
     if stage != "screen":
@@ -276,13 +281,13 @@ async def live_trial(args):
     resume = getattr(args, "resume", False)
     if directory.exists() != resume:
         raise ValueError("Use --resume for existing evidence; use a fresh directory for a new run")
-    from scripts.evaluation.dataset import load_benchmark
+    from scripts.evaluations.market_ai.dataset import load_benchmark
 
     resolved_case_digest = hashlib.sha256(json.dumps(cases, sort_keys=True).encode()).hexdigest()
     benchmark_digest = load_benchmark().digest
     fixture_digest = hashlib.sha256(FIXTURES.read_bytes()).hexdigest()
     if stage == "flows":
-        from scripts.evaluation.flow_trial import FLOW_FIXTURES, run_flow_case
+        from scripts.evaluations.market_ai.flow_trial import FLOW_FIXTURES, run_flow_case
 
         fixture_digest = hashlib.sha256(
             FIXTURES.read_bytes() + FLOW_FIXTURES.read_bytes()
@@ -531,7 +536,7 @@ def main():
         private_write(directory / "reviewed-summary.json", result)
         print(json.dumps(result, indent=2))
         if args.historical:
-            from scripts.evaluation.trial_context import historical_compatibility
+            from scripts.evaluations.market_ai.trial_context import historical_compatibility
 
             print(json.dumps(historical_compatibility(args.review, args.historical), indent=2))
     elif args.live:

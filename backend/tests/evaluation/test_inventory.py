@@ -1,4 +1,4 @@
-from scripts.evaluation.inventory import build_inventory
+from scripts.evaluations.market_ai.inventory import build_inventory
 
 
 def test_actual_chat_registration_links_to_public_capabilities_and_warehouse():

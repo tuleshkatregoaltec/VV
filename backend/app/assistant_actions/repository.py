@@ -111,6 +111,30 @@ async def visible_lead(db, *, user_id, organization_id, lead_id, lock=False):
         return None
 
 
+async def visible_lead_named(db, scope, name: str) -> bool:
+    """Whether a lead this user's CRM role lets them see has exactly this contact name (case
+    and spacing aside). Only the user's own visibility: nothing about other leads is told."""
+    from sqlalchemy import func
+
+    from app.crm.assignment import visible_clause
+    from app.crm.inbound_models import CrmInboundContact, CrmInboundEnquiry
+
+    wanted = " ".join(name.split()).casefold()
+    if not wanted:
+        return False
+    found = await db.exec(
+        select(CrmInboundEnquiry.id)
+        .join(CrmInboundContact, CrmInboundContact.id == CrmInboundEnquiry.contact_id)
+        .where(
+            CrmInboundContact.organization_id == scope.organization_id,
+            visible_clause(scope),
+            func.lower(func.trim(CrmInboundContact.full_name)) == wanted,
+        )
+        .limit(1)
+    )
+    return found.first() is not None
+
+
 async def own_record(db, model, *, user_id, organization_id, record_id):
     return (
         await db.exec(

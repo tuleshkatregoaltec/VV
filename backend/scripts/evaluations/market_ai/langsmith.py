@@ -7,9 +7,9 @@ from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.core.observability import safe_span_fields
-from scripts.evaluation.evaluate import STATUSES
-from scripts.evaluation.inventory import build_inventory
-from scripts.evaluation.tracing import fingerprint, private_write
+from scripts.evaluations.market_ai.evaluate import STATUSES
+from scripts.evaluations.market_ai.inventory import build_inventory
+from scripts.evaluations.market_ai.tracing import fingerprint, private_write
 
 
 def identifier(value, pattern, label):
@@ -123,7 +123,7 @@ def export_payload(directory: Path, assessment: dict):
         checks = []
         for dimension, check in case["checks"].items():
             # Explicit dimension names, not arbitrary reviewer-supplied keys/comments.
-            from scripts.evaluation.evaluate import REVIEW_DIMENSIONS
+            from scripts.evaluations.market_ai.evaluate import REVIEW_DIMENSIONS
 
             known = REVIEW_DIMENSIONS | {
                 "execution",

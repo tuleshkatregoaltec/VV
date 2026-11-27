@@ -3,14 +3,15 @@
 import argparse
 import json
 
-from scripts.evaluation.dataset import load_benchmark
-from scripts.evaluation.inventory import build_inventory
+from scripts.evaluations.market_ai.dataset import load_benchmark
+from scripts.evaluations.market_ai.inventory import build_inventory
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "command", choices=["inventory", "dataset", "run", "assess", "compare", "export"]
+        "command",
+        choices=["inventory", "dataset", "run", "assess", "compare", "export"],
     )
     parser.add_argument("--directory")
     parser.add_argument("--case", action="append", dest="case_ids")
@@ -31,7 +32,7 @@ def main():
     if args.command == "export":
         from pathlib import Path
 
-        from scripts.evaluation.langsmith import export_run
+        from scripts.evaluations.market_ai.langsmith import export_run
 
         if not args.directory or not args.assessment:
             parser.error("export requires --directory and --assessment")
@@ -44,12 +45,12 @@ def main():
     if args.command == "assess":
         from pathlib import Path
 
-        from scripts.evaluation.evaluate import assess_run
+        from scripts.evaluations.market_ai.evaluate import assess_run
 
         if not args.directory:
             parser.error("assess requires --directory")
         path, result = assess_run(Path(args.directory), args.references, args.reviews)
-        from scripts.evaluation.report import write_report
+        from scripts.evaluations.market_ai.report import write_report
 
         print(f"Private assessment: {path}")
         print(f"Private report: {write_report(Path(args.directory), result)}")
@@ -66,7 +67,7 @@ def main():
     if args.command == "compare":
         from pathlib import Path
 
-        from scripts.evaluation.evaluate import compare
+        from scripts.evaluations.market_ai.evaluate import compare
 
         if not args.baseline or not args.candidate:
             parser.error("compare requires --baseline and --candidate")
@@ -79,7 +80,7 @@ def main():
     if args.command == "run":
         import asyncio
 
-        from scripts.evaluation.run import run_benchmark
+        from scripts.evaluations.market_ai.run import run_benchmark
 
         asyncio.run(
             run_benchmark(

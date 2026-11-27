@@ -1,0 +1,39 @@
+[
+  {
+    "id": "route_market",
+    "assistant": "market",
+    "fixture": "q01",
+    "category": "routing",
+    "flow": "routed",
+    "expected_routes": [
+      "market"
+    ],
+    "rubric": "Route to market only; report 2/5/3 transactions and 20/50/30 percent, no invented totals."
+  },
+  {
+    "id": "route_pricing",
+    "assistant": "market",
+    "fixture": "q09",
+    "category": "routing",
+    "flow": "routed",
+    "expected_routes": [
+      "pricing"
+    ],
+    "rubric": "Asking inventory must remain distinct from achieved sales; evidence per bedroom."
+  },
+  {
+    "id": "route_market_multiturn",
+    "assistant": "market",
+    "fixture": "q01",
+    "category": "routing",
+    "flow": "routed",
+    "expected_routes": [
+      "market"
+    ],
+    "rubric": "Keep the market context across turns and answer from market evidence.",
+    "turns": [
+      "Break down apartment sales in JVC over the last 90 days into under AED 1 million, AED 1\u20132 million, and above AED 2 million. Show transaction counts and each bracket\u2019s market share.",
+      "Show that same breakdown again."
+    ]
+  }
+]

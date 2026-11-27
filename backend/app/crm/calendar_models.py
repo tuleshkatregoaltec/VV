@@ -6,7 +6,7 @@ from sqlalchemy import DateTime, ForeignKey, Index, Integer, Text, UniqueConstra
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
-CalendarKind = Literal["viewing", "call", "follow_up", "deal_date", "deadline"]
+CalendarKind = Literal["viewing", "call", "meeting", "follow_up", "deal_date", "deadline"]
 CalendarRepeat = Literal["none", "daily", "weekly", "monthly", "yearly"]
 CalendarShowAs = Literal["busy", "free"]
 CalendarVisibility = Literal["default", "public", "private", "confidential"]

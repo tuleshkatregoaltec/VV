@@ -1,6 +1,6 @@
-"""Opt-in, local-only real database fixtures for authenticated assistant evaluation.
+"""Opt-in, local-only real database fixtures for authenticated Market AI evaluation.
 
-Run from backend: python -m scripts.evaluation.fixture_snapshot create --user-id UUID
+Run from backend: python -m scripts.evaluations.market_ai.fixture_snapshot create --user-id UUID
 --output /private/path [--postgres-url postgresql://...]. This never creates an auth
 user or calls a model. The caller supplies a synthetic local GoTrue identity with an
 adequate daily_token_limit. Keep the snapshot until HTTP evaluation finishes, then
@@ -22,16 +22,15 @@ from uuid import UUID, uuid4
 import clickhouse_connect
 import psycopg2
 from psycopg2 import sql
-from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from scripts.evaluation.tracing import fingerprint, private_directory, private_write
+from scripts.evaluations.market_ai.tracing import fingerprint, private_directory, private_write
 
-BACKEND = Path(__file__).resolve().parents[2]
+BACKEND = Path(__file__).resolve().parents[3]
 SCHEMA = BACKEND.parent / "holocron/holocron/lib/sql/clickhouse_schema.sql"
-VERSION = "assistant-local-fixture-1"
+VERSION = "market-ai-local-fixture-1"
 REFERENCE = date(2026, 10, 31)
 RUNTIME_REFERENCE = date(2026, 11, 4)
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -42,12 +41,6 @@ ORACLE = {
         "total": 20,
         "New": {"count": 8, "median_aed": 120000},
         "Renewed": {"count": 12, "median_aed": 100000},
-    },
-    "crm01": {
-        "total": 3,
-        "counts_by_status": {"new": 2, "qualified": 1},
-        "qualified_name": "Leena Demo",
-        "qualified_budget_aed": 1200000,
     },
 }
 
@@ -293,12 +286,11 @@ async def seed_warehouse(client, rows, releases):
 
 async def seed_postgres(url, user_id, organization_id):
     from app.billing.models import Subscription
-    from app.crm.inbound_models import CrmInboundContact, CrmInboundEnquiry
     from app.organization.models import Organization, OrganizationMembership
     from app.token_usage.models import UserTokenUsage
 
     engine = create_async_engine(url)
-    now, colleague, other_org = datetime.now(UTC), str(uuid4()), str(uuid4())
+    now = datetime.now(UTC)
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
             session.add_all(
@@ -307,9 +299,6 @@ async def seed_postgres(url, user_id, organization_id):
                         id=organization_id,
                         name="Synthetic assistant evaluation",
                         subscription_status="active",
-                    ),
-                    Organization(
-                        id=other_org, name="Synthetic other tenant", subscription_status="active"
                     ),
                 ]
             )
@@ -333,47 +322,6 @@ async def seed_postgres(url, user_id, organization_id):
                 )
             )
             session.add(UserTokenUsage(user_id=user_id, date=now.date()))
-            for identity, name, status, intent, owner, tenant in [
-                (101, "Leena Demo", "qualified", "buy", user_id, organization_id),
-                (102, "Omar Demo", "new", "rent", user_id, organization_id),
-                (103, "Nora Demo", "new", "buy", user_id, organization_id),
-                (201, "Colleague Secret", "qualified", "buy", colleague, organization_id),
-                (301, "Other Tenant Secret", "qualified", "buy", user_id, other_org),
-            ]:
-                session.add(
-                    CrmInboundContact(
-                        id=identity,
-                        organization_id=tenant,
-                        full_name=name,
-                        email=f"fixture-{identity}@example.test",
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
-                await session.flush()
-                session.add(
-                    CrmInboundEnquiry(
-                        id=identity,
-                        contact_id=identity,
-                        organization_id=tenant,
-                        created_by_user_id=owner,
-                        assigned_user_id=owner,
-                        record_kind="opportunity",
-                        intent=intent,
-                        status=status,
-                        enquiry_date=now,
-                        created_at=now,
-                        updated_at=now,
-                        criteria={
-                            "locations": ["JVC"],
-                            "bedrooms_min": 1,
-                            "budget_max_aed": 1200000,
-                        }
-                        if identity == 101
-                        else {},
-                        next_follow_up=REFERENCE if identity == 101 else None,
-                    )
-                )
             await session.commit()
     finally:
         await engine.dispose()
@@ -415,56 +363,9 @@ def stable_payload(value):
     return value
 
 
-def validate_seeded_crm(rows, snapshot):
-    """Check known seed values before accepting a baseline digest; never bless mutations."""
-    identities = [
-        (101, "Leena Demo", "qualified", "buy"),
-        (102, "Omar Demo", "new", "rent"),
-        (103, "Nora Demo", "new", "buy"),
-        (201, "Colleague Secret", "qualified", "buy"),
-        (301, "Other Tenant Secret", "qualified", "buy"),
-    ]
-    expected = []
-    for identity, name, status, intent in identities:
-        expected.append(
-            {
-                "id": identity,
-                "contact_id": identity,
-                "full_name": name,
-                "status": status,
-                "intent": intent,
-                "record_kind": "opportunity",
-                "source": "Manual",
-                "source_lead_id": None,
-                "email": f"fixture-{identity}@example.test",
-                "phone": None,
-                "criteria": {"locations": ["JVC"], "bedrooms_min": 1, "budget_max_aed": 1200000}
-                if identity == 101
-                else {},
-                "next_follow_up": REFERENCE.isoformat() if identity == 101 else None,
-                "organization_id": "other" if identity == 301 else "current",
-                "contact_organization_id": "other" if identity == 301 else "current",
-                "created_by_user_id": "other" if identity == 201 else "self",
-                "assigned_user_id": "other" if identity == 201 else "self",
-            }
-        )
-    normalized = []
-    for original in rows:
-        row = dict(original)
-        for field in ("organization_id", "contact_organization_id"):
-            UUID(row[field])
-            row[field] = "current" if row[field] == snapshot["organization_id"] else "other"
-        for field in ("created_by_user_id", "assigned_user_id"):
-            UUID(row[field])
-            row[field] = "self" if row[field] == snapshot["user_id"] else "other"
-        normalized.append(row)
-    if stable_payload(normalized) != expected:
-        raise ValueError("Snapshot CRM payload differs from the exact seeded business fields")
-
-
-async def snapshot_payload(snapshot, url, client):
+async def snapshot_payload(snapshot, client):
     """Read and validate stable data; HTTP conversation/usage writes are deliberately absent."""
-    name = validate_manifest(snapshot)
+    validate_manifest(snapshot)
     fixtures = fixture_rows()
     releases = snapshot.get("release_ids", {})
     if set(releases) != {"sales", "rentals"} or any(
@@ -492,39 +393,18 @@ async def snapshot_payload(snapshot, url, client):
             if stable_payload(actual) != stable_payload(selected):
                 raise ValueError(f"Snapshot market payload differs from exact seed in {target}")
             payload[target] = actual
-    engine = create_async_engine(url.set(drivername="postgresql+asyncpg", database=name))
-    try:
-        async with AsyncSession(engine) as session:
-            result = await session.execute(
-                text("""
-                SELECT e.id, e.contact_id, e.organization_id, e.created_by_user_id,
-                       e.assigned_user_id, e.record_kind, e.intent, e.status, e.source,
-                       e.source_lead_id, e.criteria, e.next_follow_up,
-                       c.organization_id AS contact_organization_id, c.full_name, c.email, c.phone
-                FROM crm_inbound_enquiries e
-                JOIN crm_inbound_contacts c ON c.id = e.contact_id ORDER BY e.id
-            """)
-            )
-            rows = [dict(row) for row in result.mappings()]
-            validate_seeded_crm(rows, snapshot)
-            payload["crm_leads"] = rows
-    finally:
-        await engine.dispose()
     return stable_payload(payload)
 
 
-async def verify_snapshot(snapshot, url, client):
-    from app.crm.assistant_models import CrmAssistantQuery
-
+async def verify_snapshot(snapshot, client):
     from app.analytics.market_metrics import get_market_metrics
     from app.analytics.models import MarketMetricsRequest
     from app.analytics.service import get_project_search
     from app.clickhouse import client as warehouse
-    from app.crm.assistant import query_my_records
     from app.market.releases import pin_market_release
 
-    name = validate_manifest(snapshot)
-    payload = await snapshot_payload(snapshot, url, client)
+    validate_manifest(snapshot)
+    payload = await snapshot_payload(snapshot, client)
     if snapshot.get("payload_sha256") != fingerprint(payload):
         raise ValueError("Snapshot stable payload digest does not match the recorded baseline")
     previous = warehouse._client
@@ -592,36 +472,9 @@ async def verify_snapshot(snapshot, url, client):
                     raise ValueError("Snapshot coverage is incomplete")
     finally:
         warehouse._client = previous
-    engine = create_async_engine(url.set(drivername="postgresql+asyncpg", database=name))
-    try:
-        async with AsyncSession(engine) as session:
-            result = await query_my_records(
-                session,
-                CrmAssistantQuery(resource="leads"),
-                user_id=snapshot["user_id"],
-                organization_id=snapshot["organization_id"],
-            )
-            if (
-                result.total != 3
-                or result.counts_by_status != {"new": 2, "qualified": 1}
-                or {row["id"] for row in result.records} != {101, 102, 103}
-            ):
-                raise ValueError(
-                    "Personal CRM scope differs from the oracle or exposes another owner"
-                )
-            if (
-                next(row for row in result.records if row["id"] == 101)["criteria"][
-                    "budget_max_aed"
-                ]
-                != 1200000
-            ):
-                raise ValueError("Qualified buyer budget differs from the oracle")
-    finally:
-        await engine.dispose()
     return {
         "sales": 10,
         "rentals": 20,
-        "personal_leads": 3,
         "immutable_releases": 2,
         "negative_rows_excluded": True,
         "payload_sha256": fingerprint(payload),
@@ -685,8 +538,8 @@ async def create_snapshot(*, user_id, output, postgres_url=None):
         )
         await isolated.insert("evaluation_snapshot_owner", [[token]], column_names=["token"])
         await seed_warehouse(isolated, rows, snapshot["release_ids"])
-        snapshot["payload_sha256"] = fingerprint(await snapshot_payload(snapshot, url, isolated))
-        snapshot["verification"] = await verify_snapshot(snapshot, url, isolated)
+        snapshot["payload_sha256"] = fingerprint(await snapshot_payload(snapshot, isolated))
+        snapshot["verification"] = await verify_snapshot(snapshot, isolated)
         private_write(output / "snapshot.json", snapshot)
     except BaseException:
         if created_ch:
@@ -738,7 +591,7 @@ async def use_snapshot(*, path, postgres_url=None, cleanup=False):
             if found is None or not has_warehouse:
                 raise ValueError("Snapshot databases are missing")
             isolated = await clickhouse_connect.get_async_client(**options, database=name)
-            return await verify_snapshot(snapshot, url, isolated)
+            return await verify_snapshot(snapshot, isolated)
         # Verify ownership in both databases before dropping either.
         if has_warehouse:
             await client.command(f"DROP DATABASE {name} SYNC")

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from scripts.evaluation.dataset import Benchmark, Case, load_benchmark
+from scripts.evaluations.market_ai.dataset import Benchmark, Case, load_benchmark
 
 
 def test_canonical_questions_remain_verbatim_and_all_fifteen_are_present():

@@ -1,0 +1,748 @@
+{
+  "version": 1,
+  "capability_tools_sha256": "0c40345dce4aedf5fafc7c891e40102b5b41d8e1db18826ecf732c1ab0168ffd",
+  "cases": {
+    "q01": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [
+        "price bracket and apartment filters"
+      ],
+      "calendar_window": null
+    },
+    "q02": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [
+        "building/bedroom grouping and calendar quarter"
+      ],
+      "calendar_window": "previous_quarter"
+    },
+    "q03": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [
+        "bedroom filter and quartiles"
+      ],
+      "calendar_window": null
+    },
+    "q04": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [
+        "rental contract type and bedroom filters"
+      ],
+      "calendar_window": null
+    },
+    "q05": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [
+        "rental term and annualization evidence"
+      ],
+      "calendar_window": null
+    },
+    "q06": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [
+        "studio rental monthly time series"
+      ],
+      "calendar_window": "six_complete_months"
+    },
+    "q07": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [
+        "developer delivery concentration"
+      ],
+      "calendar_window": null
+    },
+    "q08": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [
+        "project completion-date status counts"
+      ],
+      "calendar_window": null
+    },
+    "q09": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [
+        "bedroom listing inventory aggregates"
+      ],
+      "calendar_window": null
+    },
+    "q10": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [
+        "listing age-at-capture and comparables"
+      ],
+      "calendar_window": null
+    },
+    "q11": {
+      "required_sources": [
+        "listings",
+        "registered_rents"
+      ],
+      "missing_capabilities": [
+        "listing-to-rental yield evidence"
+      ],
+      "calendar_window": null
+    },
+    "q12": {
+      "required_sources": [
+        "registered_rents",
+        "listings"
+      ],
+      "missing_capabilities": [
+        "building appraisal and competing rental evidence"
+      ],
+      "calendar_window": null
+    },
+    "q13": {
+      "required_sources": [
+        "listings",
+        "transactions"
+      ],
+      "missing_capabilities": [
+        "building competition and achieved sales report"
+      ],
+      "calendar_window": null
+    },
+    "q14": {
+      "required_sources": [
+        "transactions",
+        "registered_rents",
+        "listings",
+        "projects"
+      ],
+      "missing_capabilities": [
+        "multi-source calendar-month report"
+      ],
+      "calendar_window": "previous_month"
+    },
+    "q15": {
+      "required_sources": [
+        "projects",
+        "transactions"
+      ],
+      "missing_capabilities": [
+        "project prices/payment plans/progress/delivery comparison"
+      ],
+      "calendar_window": null
+    },
+    "q16": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q17": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q18": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q19": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_month"
+    },
+    "q20": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q21": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_year"
+    },
+    "q22": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q23": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q24": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q25": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_month"
+    },
+    "q26": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q27": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_year"
+    },
+    "q28": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "six_complete_months"
+    },
+    "q29": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_year"
+    },
+    "q30": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q31": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q32": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q33": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q34": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_month"
+    },
+    "q35": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q36": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_month"
+    },
+    "q37": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q38": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q39": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_year"
+    },
+    "q40": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q41": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q42": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "six_complete_months"
+    },
+    "q43": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q44": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_month"
+    },
+    "q45": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q46": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q47": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_year"
+    },
+    "q48": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q49": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q50": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_month"
+    },
+    "q51": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q52": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q53": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q54": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q55": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_month"
+    },
+    "q56": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q57": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q58": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q59": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q60": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q61": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q62": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q63": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q64": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q65": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q66": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q67": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q68": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q69": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q70": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q71": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q72": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q73": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q74": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q75": {
+      "required_sources": [
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q76": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q77": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q78": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q79": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q80": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q81": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q82": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q83": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q84": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q85": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q86": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q87": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q88": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q89": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q90": {
+      "required_sources": [
+        "projects"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q91": {
+      "required_sources": [
+        "transactions",
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    },
+    "q92": {
+      "required_sources": [
+        "listings",
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q93": {
+      "required_sources": [
+        "listings",
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q94": {
+      "required_sources": [
+        "transactions",
+        "registered_rents",
+        "listings"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_month"
+    },
+    "q95": {
+      "required_sources": [
+        "projects",
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q96": {
+      "required_sources": [
+        "listings",
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q97": {
+      "required_sources": [
+        "registered_rents"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_month"
+    },
+    "q98": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q99": {
+      "required_sources": [],
+      "missing_capabilities": [],
+      "calendar_window": null
+    },
+    "q100": {
+      "required_sources": [
+        "transactions"
+      ],
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter"
+    }
+  }
+}

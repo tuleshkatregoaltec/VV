@@ -14,9 +14,9 @@ from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 from sqlalchemy.engine import make_url
 
-from scripts.evaluation.campaign import choose_leaders
-from scripts.evaluation.tracing import private_write
-from scripts.evaluation.trial_budget import (
+from scripts.evaluations.market_ai.campaign import choose_leaders
+from scripts.evaluations.market_ai.tracing import private_write
+from scripts.evaluations.market_ai.trial_budget import (
     BudgetedModel,
     TrialLedger,
     price_bound,
@@ -32,7 +32,7 @@ def application_plan(*, model, prior, snapshot_path, data_context, settings, rou
     if not model or not prior or not snapshot_path:
         raise ValueError("Live HTTP evaluation requires --model, --prior and --snapshot")
     manifest, leaders = choose_leaders(prior)
-    from scripts.evaluation.trial_context import execution_context
+    from scripts.evaluations.market_ai.trial_context import execution_context
 
     context = execution_context()
     if not manifest.get("execution_context") or manifest["execution_context"] != context:
@@ -152,7 +152,7 @@ class CaseBudgetContext:
             else:
                 from app.config import settings
                 from app.market.releases import pin_market_release
-                from scripts.evaluation.fixture_snapshot import use_snapshot
+                from scripts.evaluations.market_ai.fixture_snapshot import use_snapshot
 
                 if not self.verified:
                     await use_snapshot(
@@ -234,7 +234,7 @@ def case_costs(directory, *, run_id, case_id):
 def load_http_flow_cases(case_ids):
     from dataclasses import dataclass, field
 
-    from scripts.evaluation.flow_trial import load_flow_cases
+    from scripts.evaluations.market_ai.flow_trial import load_flow_cases
 
     @dataclass
     class FlowCase:
@@ -249,12 +249,12 @@ def load_http_flow_cases(case_ids):
             return self.question
 
     selected = [
-        case for case in load_flow_cases() if case["id"] in case_ids and case["flow"] == "routed"
+        case
+        for case in load_flow_cases()
+        if case["id"] in case_ids and case["flow"] == "routed" and case.get("assistant") == "market"
     ]
     if {case["id"] for case in selected} != set(case_ids):
-        raise ValueError(
-            "HTTP flow cases must be known routed cases; customer drafting has a separate runner"
-        )
+        raise ValueError("HTTP flow cases must be routed Market AI cases")
     return [
         FlowCase(case["id"], case["question"], case.get("turns", [case["question"]]))
         for case in selected

@@ -5,10 +5,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy.engine import make_url
 
 from app.config import settings
-from scripts.evaluation import fixture_snapshot as snapshot
+from scripts.evaluations.market_ai import fixture_snapshot as snapshot
 
 
 def manifest():
@@ -118,50 +117,8 @@ async def test_exact_payload_rejects_sale_mutation_that_preserves_count_and_pric
         )
     )
     with pytest.raises(ValueError, match="market payload differs"):
-        await snapshot.snapshot_payload(value, make_url("postgresql://localhost/postgres"), client)
+        await snapshot.snapshot_payload(value, client)
     assert client.query.await_count == 1  # Stop before PostgreSQL or any model can run.
-
-
-def test_exact_crm_payload_rejects_name_change_with_unchanged_count_status_and_budget():
-    value = {
-        "organization_id": "11111111-1111-1111-1111-111111111111",
-        "user_id": "22222222-2222-2222-2222-222222222222",
-    }
-    other = "33333333-3333-3333-3333-333333333333"
-    rows = []
-    for identity, name, status, intent in [
-        (101, "Leena Demo", "qualified", "buy"),
-        (102, "Omar Demo", "new", "rent"),
-        (103, "Nora Demo", "new", "buy"),
-        (201, "Colleague Secret", "qualified", "buy"),
-        (301, "Other Tenant Secret", "qualified", "buy"),
-    ]:
-        rows.append(
-            {
-                "id": identity,
-                "contact_id": identity,
-                "full_name": name,
-                "status": status,
-                "intent": intent,
-                "record_kind": "opportunity",
-                "source": "Manual",
-                "source_lead_id": None,
-                "phone": None,
-                "email": f"fixture-{identity}@example.test",
-                "criteria": {"locations": ["JVC"], "bedrooms_min": 1, "budget_max_aed": 1200000}
-                if identity == 101
-                else {},
-                "next_follow_up": snapshot.REFERENCE if identity == 101 else None,
-                "organization_id": other if identity == 301 else value["organization_id"],
-                "contact_organization_id": other if identity == 301 else value["organization_id"],
-                "created_by_user_id": other if identity == 201 else value["user_id"],
-                "assigned_user_id": other if identity == 201 else value["user_id"],
-            }
-        )
-    snapshot.validate_seeded_crm(rows, value)
-    rows[0]["full_name"] = "Different customer"
-    with pytest.raises(ValueError, match="CRM payload differs"):
-        snapshot.validate_seeded_crm(rows, value)
 
 
 def test_payload_timestamp_normalization_preserves_exact_business_values():
