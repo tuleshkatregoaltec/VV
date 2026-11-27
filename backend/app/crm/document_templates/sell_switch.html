@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block body %}
+{% set s = sell_switch %}
+{% set c = calculations %}
+<style>
+  .eyebrow { color: #52667a; font-size: 8pt; letter-spacing: 2pt; text-transform: uppercase; }
+  .hero { margin: 8mm 0; padding: 8mm; background: #edf3f6; border-left: 4px solid #157f88; }
+  .hero strong { display: block; font-size: 24pt; color: #123044; }
+  .tiles { display: flex; gap: 4mm; margin: 5mm 0; }
+  .tile { flex: 1; border: 1px solid #d7dfe4; padding: 4mm; }
+  .tile b { display: block; margin-top: 2mm; font-size: 15pt; }
+  .page { break-before: page; }
+  .note { padding: 4mm; background: #f3f6f8; color: #334; white-space: pre-wrap; }
+  .disclaimer { margin-top: 8mm; padding: 4mm; border: 1px solid #c8d1d8; font-size: 8.5pt; }
+  .positive { color: #166534; } .negative { color: #991b1b; }
+  .small { font-size: 8.5pt; color: #555; }
+  .nowrap { white-space: nowrap; }
+  @page { margin: 17mm 16mm 21mm; }
+</style>
+
+<p class="eyebrow">Private property strategy · Indicative study</p>
+<h1>Sell &amp; Switch Study</h1>
+<p class="sub">Prepared for <bdi>{{ s.owner_name or "Property owner" }}</bdi> · {{ listing.title }} · {{ listing.area_name }}</p>
+<div class="hero">
+  <span>Proposed sale proceeds after stated selling costs and mortgage payoff</span>
+  <strong>AED {{ "{:,}".format(c.net_sale_proceeds_aed) }}</strong>
+  <span>Illustrative reinvestment in <bdi>{{ s.target_project_name }}</bdi>; all project and market assumptions below are agent-entered.</span>
+</div>
+<div class="tiles">
+  <div class="tile"><span class="eyebrow">Current proposed sale</span><b>AED {{ "{:,}".format(s.sale_price_aed) }}</b><span>{{ c.current_yield_pct }}% gross rent yield</span></div>
+  <div class="tile"><span class="eyebrow">Target investment</span><b>AED {{ "{:,}".format(c.target_price_aed) }}</b><span><bdi>{{ s.target_project_name }}</bdi></span></div>
+  <div class="tile"><span class="eyebrow">Base handover equity</span><b>AED {{ "{:,}".format(c.scenarios.base.equity_aed) }}</b><span>{{ s.handover_date }}</span></div>
+</div>
+<h2>At a glance</h2>
+<table class="kv">
+  <tr><th>Keep the current property</th><td>AED {{ "{:,}".format(c.keep_total_aed) }} illustrative property value plus rent over {{ s.holding_months }} months</td></tr>
+  <tr><th>Switch to the target project</th><td>AED {{ "{:,}".format(c.scenarios.base.equity_aed) }} illustrative base-case equity at handover, before selling costs</td></tr>
+  <tr><th>Cash after stated purchase costs</th><td class="{{ 'positive' if c.cash_surplus_aed >= 0 else 'negative' }}">AED {{ "{:,}".format(c.cash_surplus_aed) }}</td></tr>
+</table>
+<p class="small">This is a scenario comparison from the assumptions entered for this listing. It is not a valuation, forecast, recommendation, or financial advice.</p>
+
+<section class="page">
+  <p class="eyebrow">01 · Current asset and market evidence</p>
+  <h2>{{ listing.title }} today</h2>
+  <table class="kv">
+    <tr><th>Building / unit</th><td>{{ listing.building_name or "Not recorded" }}{% if listing.unit_number %} · {{ listing.unit_number }}{% endif %}</td></tr>
+    <tr><th>Area and size</th><td>{{ listing.area_name }} · {{ "{:,}".format(listing.size_sqft) }} sqft</td></tr>
+    <tr><th>Proposed sale price</th><td>AED {{ "{:,}".format(s.sale_price_aed) }} · AED {{ "{:,}".format(c.sale_price_per_sqft_aed) }} / sqft</td></tr>
+    <tr><th>Annual rent used</th><td>AED {{ "{:,}".format(s.annual_rent_aed) }}</td></tr>
+    <tr><th>Mortgage payoff entered</th><td>AED {{ "{:,}".format(s.mortgage_payoff_aed) }}</td></tr>
+    <tr><th>Gross yield at proposed price</th><td>{{ c.current_yield_pct }}%</td></tr>
+  </table>
+  <h2>Market context</h2>
+  <div class="note">{{ s.market_context }}</div>
+  <h2>Evidence sources</h2>
+  <div class="note">{{ s.evidence_sources }}</div>
+  <p class="small">The market narrative and sources above were supplied by the preparer. The system does not independently verify them.</p>
+</section>
+
+<section class="page">
+  <p class="eyebrow">02 · The switch</p>
+  <h2>Proposed purchase and cash required</h2>
+  <p>Illustrative target: <bdi>{{ s.target_project_name }}</bdi>, {{ s.target_project_area }}, {{ s.target_unit_size_sqft }} sqft at AED {{ "{:,}".format(s.target_price_per_sqft_aed) }} / sqft.</p>
+  <table class="kv">
+    <tr><th>Sale of current property</th><td>AED {{ "{:,}".format(s.sale_price_aed) }}</td></tr>
+    <tr><th>Selling fee ({{ s.selling_fee_pct }}%)</th><td>(AED {{ "{:,}".format(c.sale_fee_aed) }})</td></tr>
+    <tr><th>Mortgage payoff</th><td>(AED {{ "{:,}".format(s.mortgage_payoff_aed) }})</td></tr>
+    <tr><th>Net sale proceeds</th><td><b>AED {{ "{:,}".format(c.net_sale_proceeds_aed) }}</b></td></tr>
+  </table>
+  <table class="kv">
+    <tr><th>Target purchase price</th><td>AED {{ "{:,}".format(c.target_price_aed) }}</td></tr>
+    <tr><th>Pre-handover payments ({{ s.pre_handover_payment_pct }}%)</th><td>AED {{ "{:,}".format(c.pre_handover_cash_aed) }}</td></tr>
+    <tr><th>DLD fee ({{ s.dld_fee_pct }}%)</th><td>AED {{ "{:,}".format(c.dld_fee_aed) }}</td></tr>
+    <tr><th>Mortgage at handover ({{ s.mortgage_pct }}%)</th><td>AED {{ "{:,}".format(c.mortgage_aed) }}</td></tr>
+    <tr><th>Bank fee and valuation</th><td>AED {{ "{:,}".format(c.bank_fee_aed) }}</td></tr>
+    <tr><th>Cash required from sale proceeds</th><td>AED {{ "{:,}".format(c.cash_required_aed) }}</td></tr>
+    <tr><th>Indicative cash remaining / shortfall</th><td class="{{ 'positive' if c.cash_surplus_aed >= 0 else 'negative' }}">AED {{ "{:,}".format(c.cash_surplus_aed) }}</td></tr>
+  </table>
+  <h2>Illustrative sequence</h2>
+  <table class="kv">
+    <tr><th>Now</th><td>Sell the current property at the proposed price and reserve the target unit.</td></tr>
+    <tr><th>Before handover</th><td>Pay the stated {{ s.pre_handover_payment_pct }}% developer share.</td></tr>
+    <tr><th>Handover · {{ s.handover_date }}</th><td>Assume the stated mortgage covers {{ s.mortgage_pct }}% of the target price.</td></tr>
+    <tr><th>After handover</th><td>Illustrative rent and mortgage figures are shown in the next section.</td></tr>
+  </table>
+</section>
+
+<section class="page">
+  <p class="eyebrow">03 · Handover scenarios</p>
+  <h2>Illustrative value and equity at handover</h2>
+  <p>These per-square-foot outcomes are assumptions entered by the preparer, not market predictions. Equity is estimated value less the mortgage principal entered above.</p>
+  <table class="kv">
+    <tr><th>Scenario</th><th>AED / sqft</th><th>Illustrative value</th><th>Mortgage</th><th>Illustrative equity</th><th>Vs. net sale proceeds</th></tr>
+    {% for label, scenario in [("Conservative", c.scenarios.conservative), ("Base", c.scenarios.base), ("Upside", c.scenarios.upside)] %}
+    <tr><td>{{ label }}</td><td>AED {{ "{:,}".format(scenario.psf_aed) }}</td><td>AED {{ "{:,}".format(s.target_unit_size_sqft * scenario.psf_aed) }}</td><td>(AED {{ "{:,}".format(c.mortgage_aed) }})</td><td>AED {{ "{:,}".format(scenario.equity_aed) }}</td><td>{{ "—" if scenario.change_pct is none else "{}%".format(scenario.change_pct) }}</td></tr>
+    {% endfor %}
+  </table>
+  <h2>Keep versus switch over {{ s.holding_months }} months</h2>
+  <table class="kv">
+    <tr><th>Keep · assumed annual value change</th><td>{{ s.keep_annual_change_pct }}%</td></tr>
+    <tr><th>Keep · illustrative future property value</th><td>AED {{ "{:,}".format(c.keep_value_aed) }}</td></tr>
+    <tr><th>Keep · rent at the entered current annual rent</th><td>AED {{ "{:,}".format(c.keep_rent_aed) }}</td></tr>
+    <tr><th>Keep · value plus gross rent</th><td>AED {{ "{:,}".format(c.keep_total_aed) }}</td></tr>
+    <tr><th>Switch · base-case equity at handover</th><td>AED {{ "{:,}".format(c.scenarios.base.equity_aed) }}</td></tr>
+  </table>
+  <p class="small">The comparison excludes tax, service charges, vacancy, maintenance, transaction timing, and the time value of money. The two totals are not equivalent measures of net wealth.</p>
+</section>
+
+<section class="page">
+  <p class="eyebrow">04 · Income after handover</p>
+  <h2>Illustrative first-year rental and mortgage</h2>
+  <table class="kv">
+    <tr><th>Target annual rent</th><td>AED {{ "{:,}".format(c.target_annual_rent_aed) }} ({{ s.target_annual_rent_psf_aed }} / sqft)</td></tr>
+    <tr><th>Mortgage rate and term</th><td>{{ s.mortgage_rate_pct }}% · {{ s.mortgage_term_years }} years</td></tr>
+    <tr><th>Estimated first-year mortgage payments</th><td>(AED {{ "{:,}".format(c.year_one_debt_service_aed) }})</td></tr>
+    <tr><th>Gross cash after mortgage payments</th><td>AED {{ "{:,}".format(c.year_one_cash_after_debt_aed) }}</td></tr>
+    <tr><th>Estimated first-year principal repaid</th><td>AED {{ "{:,}".format(c.year_one_principal_aed) }}</td></tr>
+    <tr><th>Gross rent yield on target purchase price</th><td>{{ c.target_yield_pct }}%</td></tr>
+    <tr><th>Indicative cash plus principal / initial equity</th><td>{{ "Not applicable" if c.year_one_total_return_pct is none else "{}%".format(c.year_one_total_return_pct) }}</td></tr>
+  </table>
+  <p class="small">The mortgage calculation assumes fixed monthly amortization at the entered rate and term, with payments starting at handover. It excludes service charges, vacancy, insurance, and lender-specific fees beyond those entered.</p>
+  {% if s.risks_and_notes %}<h2>Risks and notes</h2><div class="note">{{ s.risks_and_notes }}</div>{% endif %}
+</section>
+
+<section class="page">
+  <p class="eyebrow">05 · Assumptions and important notice</p>
+  <h2>Inputs used</h2>
+  <table class="kv">
+    <tr><th>Proposed sale price / selling fee</th><td>AED {{ "{:,}".format(s.sale_price_aed) }} / {{ s.selling_fee_pct }}%</td></tr>
+    <tr><th>Mortgage payoff / current annual rent</th><td>AED {{ "{:,}".format(s.mortgage_payoff_aed) }} / AED {{ "{:,}".format(s.annual_rent_aed) }}</td></tr>
+    <tr><th>Holding period / keep change</th><td>{{ s.holding_months }} months / {{ s.keep_annual_change_pct }}% yearly</td></tr>
+    <tr><th>Project payment / DLD</th><td>{{ s.pre_handover_payment_pct }}% before handover / {{ s.dld_fee_pct }}%</td></tr>
+    <tr><th>Mortgage / rate / term</th><td>{{ s.mortgage_pct }}% / {{ s.mortgage_rate_pct }}% / {{ s.mortgage_term_years }} years</td></tr>
+    <tr><th>Project size and purchase rate</th><td>{{ s.target_unit_size_sqft }} sqft / AED {{ "{:,}".format(s.target_price_per_sqft_aed) }} per sqft</td></tr>
+  </table>
+  {% if s.prepared_by %}<p>Prepared by <bdi>{{ s.prepared_by }}</bdi> · {{ listing.broker_name }}</p>{% endif %}
+  <div class="disclaimer"><b>Indicative analysis only.</b> This study uses the listing information and assumptions entered by the preparer. It is not an independent valuation, offer, guarantee of future performance, mortgage approval, or financial advice. Actual prices, rents, costs, financing terms, project availability, and handover timing may differ. Confirm all evidence and assumptions with their original sources and obtain independent professional advice before making a decision.</div>
+  <p class="small">Evidence and source notes are reproduced as supplied. Calculations are illustrative and rounded to the nearest AED.</p>
+</section>
+{% endblock %}

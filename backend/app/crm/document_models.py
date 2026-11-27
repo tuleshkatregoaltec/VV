@@ -18,10 +18,10 @@ from sqlmodel import Field as SQLField
 
 from app.crm.models import CrmCompanyListingDetail
 
-DocType = Literal["noc", "lease", "a2a"]
+DocType = Literal["noc", "lease", "a2a", "sell_switch"]
 DocStatus = Literal["generating", "ready", "failed"]
 Source = Literal["property_finder"]
-DOC_TYPES: tuple[str, ...] = ("noc", "lease", "a2a")
+DOC_TYPES: tuple[str, ...] = ("noc", "lease", "a2a", "sell_switch")
 DOC_STATUSES: tuple[str, ...] = ("generating", "ready", "failed")
 # Property Finder listing ids: 26 letters and digits today; bounded, no separators.
 LISTING_KEY_PATTERN = r"^[A-Za-z0-9]{1,40}$"
@@ -61,12 +61,45 @@ class A2AFields(_Group):
     valid_until: date | None = None
 
 
+class SellSwitchFields(_Group):
+    """Agent-entered assumptions for an indicative keep-versus-reinvest study."""
+
+    owner_name: Text | None = None
+    sale_price_aed: int | None = Field(default=None, gt=0)
+    mortgage_payoff_aed: int | None = Field(default=None, ge=0)
+    annual_rent_aed: int | None = Field(default=None, ge=0)
+    selling_fee_pct: Decimal | None = Field(default=None, ge=0, le=100)
+    holding_months: int | None = Field(default=None, ge=1, le=360)
+    keep_annual_change_pct: Decimal | None = Field(default=None, ge=-100, le=100)
+    target_project_name: Text | None = None
+    target_project_area: Text | None = None
+    target_unit_size_sqft: Decimal | None = Field(default=None, gt=0, le=1_000_000)
+    target_price_per_sqft_aed: int | None = Field(default=None, gt=0)
+    pre_handover_payment_pct: Decimal | None = Field(default=None, ge=0, le=100)
+    dld_fee_pct: Decimal | None = Field(default=None, ge=0, le=100)
+    mortgage_pct: Decimal | None = Field(default=None, ge=0, le=100)
+    mortgage_rate_pct: Decimal | None = Field(default=None, ge=0, le=100)
+    mortgage_term_years: int | None = Field(default=None, ge=1, le=50)
+    bank_fee_pct: Decimal | None = Field(default=None, ge=0, le=100)
+    valuation_fee_aed: int | None = Field(default=None, ge=0)
+    handover_date: date | None = None
+    conservative_handover_psf_aed: int | None = Field(default=None, gt=0)
+    base_handover_psf_aed: int | None = Field(default=None, gt=0)
+    upside_handover_psf_aed: int | None = Field(default=None, gt=0)
+    target_annual_rent_psf_aed: int | None = Field(default=None, ge=0)
+    market_context: str | None = Field(default=None, max_length=6_000)
+    evidence_sources: str | None = Field(default=None, max_length=2_000)
+    risks_and_notes: str | None = Field(default=None, max_length=4_000)
+    prepared_by: Text | None = None
+
+
 class DocumentFields(_Group):
     """Everything the Documents tab collects for one listing (all optional until a template needs it)."""
 
     owner: OwnerFields = Field(default_factory=OwnerFields)
     lease: LeaseFields = Field(default_factory=LeaseFields)
     a2a: A2AFields = Field(default_factory=A2AFields)
+    sell_switch: SellSwitchFields = Field(default_factory=SellSwitchFields)
 
     @model_validator(mode="before")
     @classmethod
@@ -108,9 +141,10 @@ class CrmGeneratedDocument(SQLModel, table=True):
         UniqueConstraint(
             "organization_id", "idempotency_key", name="uq_crm_generated_document_idempotency"
         ),
-        # Mirrors the database, which still allows the retired "brochure" type for old rows.
+        # Mirrors the database; brochure remains allowed for old rows but is no longer generated.
         CheckConstraint(
-            "doc_type IN ('noc', 'brochure', 'lease', 'a2a')", name="ck_crm_generated_document_type"
+            "doc_type IN ('noc', 'brochure', 'lease', 'a2a', 'sell_switch')",
+            name="ck_crm_generated_document_type",
         ),
         CheckConstraint(
             "status IN ('generating', 'ready', 'failed')", name="ck_crm_generated_document_status"

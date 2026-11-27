@@ -311,6 +311,7 @@ export const crmQueries = {
 		queryFn: crm.portfolio.get
 	}),
 	documentInfo: (listingKey: string) => ({
+		enabled: crmIdentityKnown(),
 		queryKey: crmKeys.documentInfo(listingKey),
 		queryFn: () => crm.documents.info(listingKey)
 	}),

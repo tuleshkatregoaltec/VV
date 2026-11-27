@@ -13,7 +13,8 @@ import type { DocType } from '../../api/types'
 export const DOC_TYPES: { type: DocType; label: string }[] = [
 	{ type: 'noc', label: 'NOC' },
 	{ type: 'lease', label: 'Lease Agreement' },
-	{ type: 'a2a', label: 'A2A Agreement' }
+	{ type: 'a2a', label: 'A2A Agreement' },
+	{ type: 'sell_switch', label: 'Sell & Switch Study' }
 ]
 
 export const docLabel = (type: string): string =>
@@ -41,7 +42,34 @@ export const FIELD_LABELS: Record<string, string> = {
 	'a2a.other_broker_name': 'Co-broking agent',
 	'a2a.other_broker_brn': 'Agent BRN',
 	'a2a.commission_split_pct': 'Commission split (%)',
-	'a2a.valid_until': 'Agreement valid until'
+	'a2a.valid_until': 'Agreement valid until',
+	'sell_switch.owner_name': 'Owner name',
+	'sell_switch.sale_price_aed': 'Proposed sale price (AED)',
+	'sell_switch.mortgage_payoff_aed': 'Mortgage payoff (AED)',
+	'sell_switch.annual_rent_aed': 'Current annual rent (AED)',
+	'sell_switch.selling_fee_pct': 'Selling fee (%)',
+	'sell_switch.holding_months': 'Keep-versus-switch period (months)',
+	'sell_switch.keep_annual_change_pct': 'Assumed annual value change if kept (%)',
+	'sell_switch.target_project_name': 'Target project',
+	'sell_switch.target_project_area': 'Target project area',
+	'sell_switch.target_unit_size_sqft': 'Target unit size (sqft)',
+	'sell_switch.target_price_per_sqft_aed': 'Target purchase price (AED/sqft)',
+	'sell_switch.pre_handover_payment_pct': 'Paid before handover (%)',
+	'sell_switch.dld_fee_pct': 'DLD fee (%)',
+	'sell_switch.mortgage_pct': 'Mortgage at handover (%)',
+	'sell_switch.mortgage_rate_pct': 'Mortgage annual rate (%)',
+	'sell_switch.mortgage_term_years': 'Mortgage term (years)',
+	'sell_switch.bank_fee_pct': 'Bank fee (%)',
+	'sell_switch.valuation_fee_aed': 'Valuation fee (AED)',
+	'sell_switch.handover_date': 'Expected handover date',
+	'sell_switch.conservative_handover_psf_aed': 'Conservative handover value (AED/sqft)',
+	'sell_switch.base_handover_psf_aed': 'Base handover value (AED/sqft)',
+	'sell_switch.upside_handover_psf_aed': 'Upside handover value (AED/sqft)',
+	'sell_switch.target_annual_rent_psf_aed': 'Target annual rent (AED/sqft)',
+	'sell_switch.market_context': 'Market context and comparison notes',
+	'sell_switch.evidence_sources': 'Evidence sources and dates',
+	'sell_switch.risks_and_notes': 'Risks and additional notes',
+	'sell_switch.prepared_by': 'Prepared by'
 }
 
 export const fieldLabel = (path: string): string => FIELD_LABELS[path] ?? path

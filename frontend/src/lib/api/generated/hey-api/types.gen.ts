@@ -6609,6 +6609,7 @@ export type DocumentFieldsInput = {
     owner?: OwnerFields;
     lease?: LeaseFields;
     a2a?: A2aFieldsInput;
+    sell_switch?: SellSwitchFieldsInput;
 };
 
 /**
@@ -6620,6 +6621,7 @@ export type DocumentFieldsOutput = {
     owner?: OwnerFields;
     lease?: LeaseFields;
     a2a?: A2aFieldsOutput;
+    sell_switch?: SellSwitchFieldsOutput;
 };
 
 /**
@@ -7938,7 +7940,7 @@ export type GenerateDocumentRequest = {
     /**
      * Doc Type
      */
-    doc_type: 'noc' | 'lease' | 'a2a';
+    doc_type: 'noc' | 'lease' | 'a2a' | 'sell_switch';
     /**
      * Expected Revision
      */
@@ -8042,7 +8044,7 @@ export type GeneratedDocumentResponse = {
     /**
      * Doc Type
      */
-    doc_type: 'noc' | 'lease' | 'a2a';
+    doc_type: 'noc' | 'lease' | 'a2a' | 'sell_switch';
     /**
      * Template Version
      */
@@ -14147,6 +14149,238 @@ export type ScheduleViewing = {
 };
 
 /**
+ * SellSwitchFields
+ *
+ * Agent-entered assumptions for an indicative keep-versus-reinvest study.
+ */
+export type SellSwitchFieldsInput = {
+    /**
+     * Owner Name
+     */
+    owner_name?: string | null;
+    /**
+     * Sale Price Aed
+     */
+    sale_price_aed?: number | null;
+    /**
+     * Mortgage Payoff Aed
+     */
+    mortgage_payoff_aed?: number | null;
+    /**
+     * Annual Rent Aed
+     */
+    annual_rent_aed?: number | null;
+    /**
+     * Selling Fee Pct
+     */
+    selling_fee_pct?: number | string | null;
+    /**
+     * Holding Months
+     */
+    holding_months?: number | null;
+    /**
+     * Keep Annual Change Pct
+     */
+    keep_annual_change_pct?: number | string | null;
+    /**
+     * Target Project Name
+     */
+    target_project_name?: string | null;
+    /**
+     * Target Project Area
+     */
+    target_project_area?: string | null;
+    /**
+     * Target Unit Size Sqft
+     */
+    target_unit_size_sqft?: number | string | null;
+    /**
+     * Target Price Per Sqft Aed
+     */
+    target_price_per_sqft_aed?: number | null;
+    /**
+     * Pre Handover Payment Pct
+     */
+    pre_handover_payment_pct?: number | string | null;
+    /**
+     * Dld Fee Pct
+     */
+    dld_fee_pct?: number | string | null;
+    /**
+     * Mortgage Pct
+     */
+    mortgage_pct?: number | string | null;
+    /**
+     * Mortgage Rate Pct
+     */
+    mortgage_rate_pct?: number | string | null;
+    /**
+     * Mortgage Term Years
+     */
+    mortgage_term_years?: number | null;
+    /**
+     * Bank Fee Pct
+     */
+    bank_fee_pct?: number | string | null;
+    /**
+     * Valuation Fee Aed
+     */
+    valuation_fee_aed?: number | null;
+    /**
+     * Handover Date
+     */
+    handover_date?: string | null;
+    /**
+     * Conservative Handover Psf Aed
+     */
+    conservative_handover_psf_aed?: number | null;
+    /**
+     * Base Handover Psf Aed
+     */
+    base_handover_psf_aed?: number | null;
+    /**
+     * Upside Handover Psf Aed
+     */
+    upside_handover_psf_aed?: number | null;
+    /**
+     * Target Annual Rent Psf Aed
+     */
+    target_annual_rent_psf_aed?: number | null;
+    /**
+     * Market Context
+     */
+    market_context?: string | null;
+    /**
+     * Evidence Sources
+     */
+    evidence_sources?: string | null;
+    /**
+     * Risks And Notes
+     */
+    risks_and_notes?: string | null;
+    /**
+     * Prepared By
+     */
+    prepared_by?: string | null;
+};
+
+/**
+ * SellSwitchFields
+ *
+ * Agent-entered assumptions for an indicative keep-versus-reinvest study.
+ */
+export type SellSwitchFieldsOutput = {
+    /**
+     * Owner Name
+     */
+    owner_name?: string | null;
+    /**
+     * Sale Price Aed
+     */
+    sale_price_aed?: number | null;
+    /**
+     * Mortgage Payoff Aed
+     */
+    mortgage_payoff_aed?: number | null;
+    /**
+     * Annual Rent Aed
+     */
+    annual_rent_aed?: number | null;
+    /**
+     * Selling Fee Pct
+     */
+    selling_fee_pct?: string | null;
+    /**
+     * Holding Months
+     */
+    holding_months?: number | null;
+    /**
+     * Keep Annual Change Pct
+     */
+    keep_annual_change_pct?: string | null;
+    /**
+     * Target Project Name
+     */
+    target_project_name?: string | null;
+    /**
+     * Target Project Area
+     */
+    target_project_area?: string | null;
+    /**
+     * Target Unit Size Sqft
+     */
+    target_unit_size_sqft?: string | null;
+    /**
+     * Target Price Per Sqft Aed
+     */
+    target_price_per_sqft_aed?: number | null;
+    /**
+     * Pre Handover Payment Pct
+     */
+    pre_handover_payment_pct?: string | null;
+    /**
+     * Dld Fee Pct
+     */
+    dld_fee_pct?: string | null;
+    /**
+     * Mortgage Pct
+     */
+    mortgage_pct?: string | null;
+    /**
+     * Mortgage Rate Pct
+     */
+    mortgage_rate_pct?: string | null;
+    /**
+     * Mortgage Term Years
+     */
+    mortgage_term_years?: number | null;
+    /**
+     * Bank Fee Pct
+     */
+    bank_fee_pct?: string | null;
+    /**
+     * Valuation Fee Aed
+     */
+    valuation_fee_aed?: number | null;
+    /**
+     * Handover Date
+     */
+    handover_date?: string | null;
+    /**
+     * Conservative Handover Psf Aed
+     */
+    conservative_handover_psf_aed?: number | null;
+    /**
+     * Base Handover Psf Aed
+     */
+    base_handover_psf_aed?: number | null;
+    /**
+     * Upside Handover Psf Aed
+     */
+    upside_handover_psf_aed?: number | null;
+    /**
+     * Target Annual Rent Psf Aed
+     */
+    target_annual_rent_psf_aed?: number | null;
+    /**
+     * Market Context
+     */
+    market_context?: string | null;
+    /**
+     * Evidence Sources
+     */
+    evidence_sources?: string | null;
+    /**
+     * Risks And Notes
+     */
+    risks_and_notes?: string | null;
+    /**
+     * Prepared By
+     */
+    prepared_by?: string | null;
+};
+
+/**
  * SendMessage
  */
 export type SendMessage = {
@@ -19180,7 +19414,7 @@ export type CrmCrmDocumentsData = {
         /**
          * Doc Type
          */
-        doc_type?: 'noc' | 'lease' | 'a2a' | null;
+        doc_type?: 'noc' | 'lease' | 'a2a' | 'sell_switch' | null;
         /**
          * Search
          */
